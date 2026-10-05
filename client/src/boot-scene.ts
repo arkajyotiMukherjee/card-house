@@ -19,6 +19,8 @@ const STATUS = ex.Color.fromHex('#f4e4b3');
 
 const nearest = { filtering: ex.ImageFiltering.Pixel };
 
+export const PIXEL_FONT_FAMILY = 'Press Start 2P';
+
 export const heartsImage = new ex.ImageSource(
   '/assets/cards-hearts.png',
   nearest,
@@ -35,8 +37,23 @@ export const tableImage = new ex.ImageSource(
   '/assets/table-green.png',
   nearest,
 );
+export const pixelFont = new ex.FontSource(
+  '/assets/press-start-2p.ttf',
+  PIXEL_FONT_FAMILY,
+  {
+    filtering: ex.ImageFiltering.Pixel,
+    quality: 1,
+    size: 16,
+  },
+);
 
-export const demoImages = [heartsImage, cardBackImage, chipsImage, tableImage];
+export const bootAssets = [
+  heartsImage,
+  cardBackImage,
+  chipsImage,
+  tableImage,
+  pixelFont,
+];
 
 function pixelSprite(
   image: ex.ImageSource,
@@ -50,16 +67,27 @@ function pixelSprite(
 }
 
 export class BootScene extends ex.Scene {
-  private status = new ex.Text({
-    text: 'SpacetimeDB: starting',
-    font: new ex.Font({
-      family: 'sans-serif',
-      size: 16,
-      color: STATUS,
-    }),
-  });
+  private status!: ex.Text;
+
+  onPreLoad(loader: ex.DefaultLoader): void {
+    const alreadyAdded = new Set(loader.resources);
+    const missing = bootAssets.filter((asset) => !alreadyAdded.has(asset));
+    if (missing.length > 0) {
+      loader.addResources(missing);
+    }
+  }
 
   onInitialize(engine: ex.Engine): void {
+    this.status = new ex.Text({
+      text: 'Assets ready',
+      font: pixelFont.toFont({
+        size: 16,
+        color: STATUS,
+        filtering: ex.ImageFiltering.Pixel,
+        quality: 1,
+      }),
+    });
+
     engine.backgroundColor = FELT;
 
     const table = new ex.Actor({

@@ -1,5 +1,5 @@
 import * as ex from 'excalibur';
-import { BootScene, demoImages } from './boot-scene';
+import { BootScene, bootAssets } from './boot-scene';
 import { connectCardroom } from './connect';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH, integerScale } from './sheets';
 
@@ -30,16 +30,20 @@ function applyIntegerScale(): void {
 }
 
 const scene = new BootScene();
-engine.add('boot', scene);
+const loader = new ex.Loader(bootAssets);
+engine.add('boot', { scene, loader });
 
 window.addEventListener('resize', applyIntegerScale);
 applyIntegerScale();
 
-const loader = new ex.Loader(demoImages);
-void engine.start(loader).then(() => {
-  engine.goToScene('boot');
-  applyIntegerScale();
-  connectCardroom((line) => {
-    scene.setStatus(line);
+void engine
+  .start(loader)
+  .then(() => {
+    return engine.goToScene('boot');
+  })
+  .then(() => {
+    applyIntegerScale();
+    connectCardroom((line) => {
+      scene.setStatus(line);
+    });
   });
-});
