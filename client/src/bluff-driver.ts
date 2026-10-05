@@ -8,6 +8,7 @@ import {
   PLAY_BUTTON,
   cardLift,
   faceForCard,
+  finishedLine,
   handPositions,
   legalCard,
   opponentBackPositions,
@@ -18,6 +19,7 @@ import {
 import { pixelFont } from './boot-scene';
 import type { CardAtlas } from './card-atlas';
 import type { GameDriver, InputEvent, RenderContext } from './game-driver';
+import { LOGICAL_WIDTH } from './sheets';
 
 const GOLD = ex.Color.fromHex('#f4e4b3');
 const DIM = ex.Color.fromHex('#d7c08a');
@@ -125,6 +127,9 @@ export class BluffDriver implements GameDriver<BluffState> {
   handleInput(event: InputEvent, state: BluffState, ctx: RenderContext): void {
     this.state = state;
     this.ctx = ctx;
+    if (state.phase !== 'play') {
+      return;
+    }
     if (event.target === 'play' && event.type === 'pointerup') {
       this.sendPlay(state, ctx);
       return;
@@ -194,6 +199,11 @@ export class BluffDriver implements GameDriver<BluffState> {
     }
     this.labels = [];
     if (state.phase === 'lobby') {
+      return;
+    }
+    if (state.phase === 'finished') {
+      const line = finishedLine(state, ctx.seats) ?? 'Finished';
+      this.labels.push(this.banner(ctx, line));
       return;
     }
     const mine =
@@ -471,6 +481,26 @@ export class BluffDriver implements GameDriver<BluffState> {
     this.backTargets.clear();
     this.selected.clear();
     this.hover = null;
+  }
+
+  private banner(ctx: RenderContext, text: string): ex.Actor {
+    const width = text.length * 8 + 16;
+    const actor = new ex.Actor({
+      pos: ex.vec(Math.floor((LOGICAL_WIDTH - width) / 2), 112),
+      anchor: ex.vec(0, 0),
+      width,
+      height: 24,
+      z: 16,
+    });
+    actor.graphics.use(panelRect(width, 24, BUTTON, STROKE));
+    const caption = new ex.Actor({
+      pos: ex.vec(8, 8),
+      anchor: ex.vec(0, 0),
+    });
+    caption.graphics.use(canvasText(text, 8, GOLD));
+    actor.addChild(caption);
+    ctx.scene.add(actor);
+    return actor;
   }
 
   private textActor(

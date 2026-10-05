@@ -57,4 +57,17 @@ describe('BluffDriver input', () => {
     driver.handleInput({ type: 'pointerup', target: 'play' }, table, ctx);
     expect(sent).toEqual([]);
   });
+
+  it('does not send a move after the rules finish', () => {
+    const driver = new BluffDriver();
+    const sent: unknown[] = [];
+    const table = state();
+    table.phase = 'finished';
+    table.winnerSeatIndex = 0;
+    const ctx = context(sent, 0);
+    driver.handleInput({ type: 'pointerup', target: 'AS' }, table, ctx);
+    driver.handleInput({ type: 'pointerup', target: 'play' }, table, ctx);
+    driver.handleInput({ type: 'pointerup', target: 'challenge' }, table, ctx);
+    expect(sent).toEqual([]);
+  });
 });
