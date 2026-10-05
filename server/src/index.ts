@@ -5,13 +5,17 @@ import {
   t,
   table,
 } from 'spacetimedb/server';
-import type { GameSeat as RulesSeat } from '../../src/shared/games';
+import type {
+  GameSeat as RulesSeat,
+  GameTable as RulesTable,
+} from '../../src/shared/games';
 import { bluffGameDefinition, bluffRules } from '../../src/shared/games/bluff';
 import {
   dummyCounterRules,
   dummyGameDefinition,
 } from '../../src/shared/games/dummy-counter';
 import { stubGameDefinition } from '../../src/shared/games/stub';
+import { stateIfLobbyReady } from './lobby-deal';
 import { openingTableState } from './opening-state';
 import { registerGameRules, rulesByType } from './rules-by-type';
 import { stubIntentRules } from './stub-rules';
@@ -431,6 +435,26 @@ export const join_table = spacetimedb.reducer(
       joinedAt: ctx.timestamp,
       seatState: { tag: 'active' },
     });
+
+    const seatedNow: RulesSeat[] = [];
+    for (const seat of ctx.db.GameSeat.byTable.filter(gameTable.id)) {
+      seatedNow.push(rulesSeat(seat));
+    }
+    const rules = rulesByType[gameTable.gameType];
+    if (
+      rules &&
+      stateIfLobbyReady(
+        gameTable.stateJson,
+        seatedNow.length,
+        gameTable.minPlayers,
+      ) === 'deal'
+    ) {
+      const next = rules.initialState(seatedNow, rulesTable(gameTable));
+      ctx.db.GameTable.id.update({
+        ...gameTable,
+        stateJson: storedState(next),
+      });
+    }
   },
 );
 
@@ -482,6 +506,33 @@ export const leave_table = spacetimedb.reducer(
     }
   },
 );
+
+function rulesTable(row: {
+  id: string;
+  lobbyId: string;
+  gameType: string;
+  name: string;
+  status: { tag: string };
+  minPlayers: number;
+  maxPlayers: number;
+  stateJson: string;
+  createdAt: { toMillis(): bigint };
+}): RulesTable {
+  const tag = row.status.tag;
+  const status =
+    tag === 'in_progress' || tag === 'finished' ? tag : 'waiting_for_players';
+  return {
+    id: row.id,
+    lobbyId: row.lobbyId,
+    gameType: row.gameType,
+    name: row.name,
+    status,
+    minPlayers: row.minPlayers,
+    maxPlayers: row.maxPlayers,
+    stateJson: row.stateJson,
+    createdAt: Number(row.createdAt.toMillis()),
+  };
+}
 
 function rulesSeat(seat: {
   id: string;

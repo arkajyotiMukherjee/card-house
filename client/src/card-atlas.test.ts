@@ -13,6 +13,9 @@ import {
 const sheetPath = fileURLToPath(
   new URL('../public/assets/cards-hearts.png', import.meta.url),
 );
+const diamondsPath = fileURLToPath(
+  new URL('../public/assets/cards-diamonds.png', import.meta.url),
+);
 
 function cellBytes(png: PNG, col: number, row: number): Buffer {
   const out = Buffer.alloc(CARD_SIZE * CARD_SIZE * 4);
@@ -91,5 +94,26 @@ describe('CardAtlas', () => {
     const back = atlas.back();
     expect(back).toBeInstanceOf(ex.Sprite);
     expect(back.sourceView).toEqual({ x: 0, y: 0, width: 64, height: 64 });
+
+    const suited = new CardAtlas(
+      new ex.ImageSource('/assets/cards-hearts.png', {
+        filtering: ex.ImageFiltering.Pixel,
+      }),
+      new ex.ImageSource('/assets/card-back-01.png', {
+        filtering: ex.ImageFiltering.Pixel,
+      }),
+      {
+        diamonds: new ex.ImageSource('/assets/cards-diamonds.png', {
+          filtering: ex.ImageFiltering.Pixel,
+        }),
+      },
+    );
+    const diamondAce = suited.sprite({ rank: 'A', suit: 'diamonds' });
+    expect(diamondAce.sourceView).toEqual(cellRect(ACE_HEART));
+    const diamonds = PNG.sync.read(readFileSync(diamondsPath));
+    const heartBytes = cellBytes(png, ACE_HEART.col, ACE_HEART.row);
+    const diamondBytes = cellBytes(diamonds, ACE_HEART.col, ACE_HEART.row);
+    expect(diamondBytes.equals(heartBytes)).toBe(false);
+    expect(() => suited.sprite({ rank: 'A', suit: 'clubs' })).toThrow(/clubs/);
   });
 });

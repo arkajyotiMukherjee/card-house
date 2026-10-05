@@ -1,9 +1,11 @@
 import * as ex from 'excalibur';
-import { greenTable, pixelFont } from './boot-scene';
+import { readBluffState, type BluffState } from '../../src/shared/games/bluff';
 import {
   DUMMY_INCREMENT,
   type DummyIntent,
 } from '../../src/shared/games/dummy-counter';
+import { BluffDriver } from './bluff-driver';
+import { cardAtlas, greenTable, pixelFont } from './boot-scene';
 import {
   COUNTER_BUTTON,
   dummyIntentPayload,
@@ -13,8 +15,10 @@ import {
   seatLabels,
   tableSubscriptionQueries,
   type MemberRef,
+  type PlacedSeat,
   type SeatRef,
 } from './game-scene';
+import type { RenderContext } from './game-driver';
 import type { DbConnection, SubscriptionHandle } from './module_bindings';
 import {
   LOGICAL_HEIGHT,
@@ -80,6 +84,10 @@ export class GameScene extends ex.Scene {
   private subscription: SubscriptionHandle | undefined;
   private subscribedTableId = '';
   private dummy = false;
+  private readonly bluffDriver = new BluffDriver();
+  private lastRow: { id: string; gameType: string; stateJson: string } | null =
+    null;
+  private placed: PlacedSeat[] = [];
   private countText!: ex.Text;
   private countValue!: ex.Actor;
   private counterPlate!: ex.Actor;
@@ -96,8 +104,10 @@ export class GameScene extends ex.Scene {
     this.tableId = tableId;
     this.lobbyMemberId = lobbyMemberId;
     this.leaving = false;
+    this.lastRow = null;
     if (this.ready) {
       this.errorText.text = '';
+      this.bluffDriver.destroy(this.driverContext());
     }
   }
 
@@ -227,10 +237,12 @@ export class GameScene extends ex.Scene {
         this.clientId,
       ),
     );
+    this.placed = placed;
     this.waitingText.text = placed.length === 0 ? 'Waiting for seats' : '';
     for (const seat of placed) {
       this.addSeat(seat.name, seat.x, seat.y, seat.self);
     }
+    this.paintGame();
   }
 
   private addSeat(name: string, x: number, y: number, self: boolean): void {
@@ -292,10 +304,17 @@ export class GameScene extends ex.Scene {
 
   /**
    * Sends one intent through `handle_game_intent`.
-   * The painted count changes only when `stateJson` arrives.
+   * The painted table changes only when `stateJson` arrives.
    */
   sendIntent(intent: DummyIntent): void {
     if (!this.dummy || this.tableId.length === 0) {
+      return;
+    }
+    this.sendPayload(dummyIntentPayload(intent));
+  }
+
+  private sendPayload(intentPayload: string): void {
+    if (this.tableId.length === 0) {
       return;
     }
     const tableId = this.tableId;
@@ -304,7 +323,7 @@ export class GameScene extends ex.Scene {
       .handleGameIntent({
         tableId,
         clientId,
-        intentPayload: dummyIntentPayload(intent),
+        intentPayload,
       })
       .catch((error: unknown) => {
         this.showError(
@@ -321,7 +340,12 @@ export class GameScene extends ex.Scene {
     if (!this.ready || row.id !== this.tableId) {
       return;
     }
-    this.paintCounter(row.gameType, row.stateJson);
+    this.lastRow = {
+      id: row.id,
+      gameType: row.gameType,
+      stateJson: row.stateJson,
+    };
+    this.paintGame();
   }
 
   private readSubscribedState(): void {
@@ -330,10 +354,55 @@ export class GameScene extends ex.Scene {
     }
     for (const row of this.connection.db.gameTable.iter()) {
       if (row.id === this.tableId) {
-        this.paintCounter(row.gameType, row.stateJson);
+        this.applySubscribedState(row);
         return;
       }
     }
+  }
+
+  private paintGame(): void {
+    const row = this.lastRow;
+    if (!this.ready || !row || row.id !== this.tableId) {
+      return;
+    }
+    if (row.gameType !== this.bluffDriver.gameType) {
+      this.bluffDriver.destroy(this.driverContext());
+      this.paintCounter(row.gameType, row.stateJson);
+      return;
+    }
+    this.dummy = false;
+    this.placeCounter(false);
+    let state: BluffState;
+    try {
+      state = readBluffState(JSON.parse(row.stateJson));
+    } catch (error: unknown) {
+      this.showError(
+        error instanceof Error ? error.message : 'Invalid table state',
+      );
+      return;
+    }
+    this.errorText.text = '';
+    this.waitingText.text =
+      state.phase === 'lobby' ? 'Waiting for players' : '';
+    this.bluffDriver.render(state, this.driverContext());
+  }
+
+  private driverContext(): RenderContext {
+    let meSeatIndex: number | null = null;
+    for (const seat of this.placed) {
+      if (seat.self) {
+        meSeatIndex = seat.seatIndex;
+      }
+    }
+    return {
+      scene: this,
+      seats: this.placed,
+      meSeatIndex,
+      cards: cardAtlas,
+      sendIntent: (intent) => {
+        this.sendPayload(JSON.stringify(intent));
+      },
+    };
   }
 
   private paintCounter(gameType: string, stateJson: string): void {
