@@ -13,25 +13,45 @@ export function connectionLine(
   return `SpacetimeDB: ${state} ${target}`;
 }
 
-export function connectCardroom(onStatus: (line: string) => void): void {
+export interface CardroomHandlers {
+  onStatus: (line: string) => void;
+  onSubscribed: (connection: DbConnection) => void;
+}
+
+export function connectCardroom(handlers: CardroomHandlers): void {
   const host = __SPACETIMEDB_HOST__;
   const database = __SPACETIMEDB_DB__;
-  onStatus(connectionLine('connecting', host, database));
+  handlers.onStatus(connectionLine('connecting', host, database));
   DbConnection.builder()
     .withUri(host)
     .withDatabaseName(database)
-    .onConnect(() => {
-      onStatus(connectionLine('connected', host, database));
+    .onConnect((connection) => {
+      handlers.onStatus(connectionLine('connected', host, database));
+      connection
+        .subscriptionBuilder()
+        .onApplied(() => {
+          handlers.onSubscribed(connection);
+        })
+        .onError((ctx) => {
+          const detail =
+            ctx.event instanceof Error
+              ? ctx.event.message
+              : 'subscription failed';
+          handlers.onStatus(connectionLine('error', host, database, detail));
+        })
+        .subscribe((query) => [query.lobby, query.lobbyMember]);
     })
     .onConnectError((_ctx, error) => {
-      onStatus(connectionLine('error', host, database, error.message));
+      handlers.onStatus(connectionLine('error', host, database, error.message));
     })
     .onDisconnect((_ctx, error) => {
       if (error) {
-        onStatus(connectionLine('error', host, database, error.message));
+        handlers.onStatus(
+          connectionLine('error', host, database, error.message),
+        );
         return;
       }
-      onStatus(connectionLine('disconnected', host, database));
+      handlers.onStatus(connectionLine('disconnected', host, database));
     })
     .build();
 }
