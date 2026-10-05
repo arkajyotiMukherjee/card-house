@@ -84,7 +84,7 @@ Vite `8` (`client/vite.config.ts`): `host` `0.0.0.0`, port `5173`, `strictPort: 
 
 ## SpacetimeDB
 
-`spacetimedb` `2.10.2` is the source of truth for lobby membership and table rows. The client renders and will send intents. It does not decide whether a move is legal. The module today implements `create_lobby` and `join_lobby` only.
+`spacetimedb` `2.10.2` is the source of truth for lobby membership and table rows. The client renders and will send intents. It does not decide whether a move is legal. The module today implements `create_lobby`, `join_lobby`, and `create_game_table`.
 
 Schema and reducers are `server/src/index.ts`. `CaseConversionPolicy.None` keeps names as written: PascalCase tables (`Lobby`, `LobbyMember`, `GameTable`, `GameSeat`, `GameEvent`), camelCase columns, snake_case reducers. Tables are `public: true`.
 

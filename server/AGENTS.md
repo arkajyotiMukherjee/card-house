@@ -18,7 +18,7 @@ Tables, all `public: true`:
 - `GameSeat` — `byTable`, optional `chips` and `seatState`
 - `GameEvent` — `byTable`, `lobbyMemberId`, `type`, `payloadJson`, `createdAt`
 
-Reducers: `create_lobby` (no arguments) and `join_lobby` (`lobbyCode`, `clientId`, `name`). `CaseConversionPolicy.None` keeps those names. Lobby codes are four characters from `CODE_ALPHABET` (no I, O, 0, 1).
+Reducers: `create_lobby` (no arguments), `join_lobby` (`lobbyCode`, `clientId`, `name`), and `create_game_table` (`lobbyId`, `gameType`, optional `settings`). `CaseConversionPolicy.None` keeps those names. Lobby codes are four characters from `CODE_ALPHABET` (no I, O, 0, 1).
 
 ## Changes
 
@@ -26,7 +26,7 @@ Edit `src/index.ts`. Reject a bad call with `SenderError`. Keep table names Pasc
 
 Then publish and regenerate `client/src/module_bindings/`. `scripts/bootstrap.sh` is the path that already does this. Run `pnpm --filter server typecheck` after a type change.
 
-`create_lobby` inserts a lobby and does not join the caller. `join_lobby` reuses a `LobbyMember` for the same `(lobbyId, clientId)` and updates the name.
+`create_lobby` inserts a lobby and does not join the caller. `join_lobby` reuses a `LobbyMember` for the same `(lobbyId, clientId)` and updates the name. `create_game_table` inserts a `GameTable` in an open lobby with `status` `waiting_for_players`. Optional `settings` is a JSON object with `name`, `minPlayers`, and `maxPlayers`.
 
 ## Leave alone
 
