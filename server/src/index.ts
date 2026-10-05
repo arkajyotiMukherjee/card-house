@@ -334,3 +334,76 @@ export const create_game_table = spacetimedb.reducer(
     });
   },
 );
+
+export const join_table = spacetimedb.reducer(
+  { name: 'join_table' },
+  {
+    tableId: t.string(),
+    lobbyMemberId: t.string(),
+  },
+  (ctx, { tableId: rawTableId, lobbyMemberId: rawLobbyMemberId }) => {
+    const tableId = rawTableId.trim();
+    const lobbyMemberId = rawLobbyMemberId.trim();
+    if (tableId.length === 0) {
+      throw new SenderError('Table id is required');
+    }
+    if (lobbyMemberId.length === 0) {
+      throw new SenderError('Lobby member id is required');
+    }
+
+    const gameTable = ctx.db.GameTable.id.find(tableId);
+    if (!gameTable) {
+      throw new SenderError('Table not found');
+    }
+
+    const lobby = ctx.db.Lobby.id.find(gameTable.lobbyId);
+    if (!lobby) {
+      throw new SenderError('Room not found');
+    }
+    if (lobby.status.tag !== 'open') {
+      throw new SenderError('Room closed');
+    }
+
+    const member = ctx.db.LobbyMember.id.find(lobbyMemberId);
+    if (!member) {
+      throw new SenderError('Member not found');
+    }
+    if (member.lobbyId !== gameTable.lobbyId) {
+      throw new SenderError('Member is not in this room');
+    }
+
+    for (const seat of ctx.db.GameSeat.iter()) {
+      if (seat.lobbyMemberId === member.id) {
+        throw new SenderError('Already seated');
+      }
+    }
+
+    const taken: number[] = [];
+    let seated = 0;
+    for (const seat of ctx.db.GameSeat.byTable.filter(gameTable.id)) {
+      taken.push(seat.seatIndex);
+      seated += 1;
+    }
+    if (seated >= gameTable.maxPlayers) {
+      throw new SenderError('Table is full');
+    }
+
+    let seatIndex = 0;
+    while (seatIndex < gameTable.maxPlayers && taken.includes(seatIndex)) {
+      seatIndex += 1;
+    }
+    if (seatIndex >= gameTable.maxPlayers) {
+      throw new SenderError('Table is full');
+    }
+
+    ctx.db.GameSeat.insert({
+      id: `seat_${gameTable.id}_${member.id}`,
+      tableId: gameTable.id,
+      lobbyMemberId: member.id,
+      seatIndex,
+      chips: undefined,
+      joinedAt: ctx.timestamp,
+      seatState: { tag: 'active' },
+    });
+  },
+);
