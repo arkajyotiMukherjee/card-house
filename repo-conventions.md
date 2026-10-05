@@ -32,7 +32,7 @@ The space and the spelling in `card-assest -pack` are the folder name. Leave it.
 - `pnpm dev` — Vite client on `0.0.0.0:5173`
 - `pnpm build` — client production build
 - `pnpm lint` — `eslint .` and `prettier --check .`
-- `pnpm test` — client Vitest suite
+- `pnpm test` — client Vitest suite, then the server rules tests
 - `pnpm typecheck` — `tsc --noEmit` in `client`, `server`, and `src/shared`
 
 `scripts/bootstrap.sh` installs with `pnpm install --frozen-lockfile` when `pnpm-lock.yaml` is present.
@@ -112,7 +112,7 @@ Copy a new sheet into `client/public/assets/` when the client needs it. Keep the
 
 Vitest `3` (`client/vitest.config.ts`): environment `node`, include `src/**/*.test.ts`, setup file `src/test-setup.ts`. That setup file stubs `window` because Excalibur's ESM build reads it while the module loads. `table-atlas.test.ts` opts into `@vitest-environment happy-dom`.
 
-Tests sit next to the unit (`sheets.test.ts`, `card-atlas.test.ts`, `chip-atlas.test.ts`, `table-atlas.test.ts`). They read the PNGs in `client/public/assets/` with `pngjs` and compare pixel buffers. `pnpm test` runs the client package only. `pnpm --filter server test` registers the shared stub `gameType` on `rulesByType` and checks that an unknown `gameType` does not return those rules.
+Tests sit next to the unit (`sheets.test.ts`, `card-atlas.test.ts`, `chip-atlas.test.ts`, `table-atlas.test.ts`). They read the PNGs in `client/public/assets/` with `pngjs` and compare pixel buffers. `pnpm test` runs that client suite, then the server rules tests. `pnpm --filter server test` registers the shared stub `gameType` on `rulesByType`, checks that an unknown `gameType` does not return those rules, checks the dummy counter, and checks Bluff dealing and intents.
 
 ## Docs
 
