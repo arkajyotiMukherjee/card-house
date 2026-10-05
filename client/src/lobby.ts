@@ -1,7 +1,5 @@
-import {
-  DUMMY_GAME_TYPE,
-  dummyGameDefinition,
-} from '../../src/shared/games/dummy-counter';
+import { bluffGameDefinition } from '../../src/shared/games/bluff';
+import type { GameDefinition } from '../../src/shared/games/game-definition';
 
 export const NAME_MAX = 12;
 export const CODE_MAX = 6;
@@ -39,35 +37,22 @@ export interface GameOption {
   name: string;
   minPlayers: number;
   maxPlayers: number;
+  howToPlay: string;
 }
 
+function catalogEntry(definition: GameDefinition): GameOption {
+  return {
+    gameType: definition.gameType,
+    name: definition.displayName,
+    minPlayers: definition.minPlayers,
+    maxPlayers: definition.maxPlayers,
+    howToPlay: definition.howToPlay,
+  };
+}
+
+/** Games Create Table can offer. Sourced from each shared `GameDefinition`. */
 export const GAME_CATALOG = [
-  { gameType: 'bluff', name: 'Bluff', minPlayers: 2, maxPlayers: 8 },
-  { gameType: 'president', name: 'President', minPlayers: 3, maxPlayers: 8 },
-  {
-    gameType: 'crazy_eights',
-    name: 'Crazy Eights',
-    minPlayers: 2,
-    maxPlayers: 6,
-  },
-  { gameType: 'poker_holdem', name: "Hold'em", minPlayers: 2, maxPlayers: 8 },
-  {
-    gameType: 'poker_five_card_draw',
-    name: 'Five-Card Draw',
-    minPlayers: 2,
-    maxPlayers: 6,
-  },
-  { gameType: 'blackjack', name: 'Blackjack', minPlayers: 1, maxPlayers: 5 },
-  { gameType: 'hearts', name: 'Hearts', minPlayers: 4, maxPlayers: 4 },
-  { gameType: 'spades', name: 'Spades', minPlayers: 4, maxPlayers: 4 },
-  { gameType: 'rummy', name: 'Rummy', minPlayers: 2, maxPlayers: 6 },
-  { gameType: 'go_fish', name: 'Go Fish', minPlayers: 2, maxPlayers: 6 },
-  {
-    gameType: DUMMY_GAME_TYPE,
-    name: dummyGameDefinition.displayName,
-    minPlayers: dummyGameDefinition.minPlayers,
-    maxPlayers: dummyGameDefinition.maxPlayers,
-  },
+  catalogEntry(bluffGameDefinition),
 ] as const satisfies readonly GameOption[];
 
 export interface TableRow {
