@@ -5,7 +5,7 @@ description: Use when the user says milestone-builder, "build the next milestone
 
 # Milestone builder
 
-Playbook for one milestone in `arkajyotiMukherjee/discordcardgames`. Follow the steps in order. Stop only when that milestone is closed, or when a real blocker is reported.
+Playbook for one milestone in `arkajyotiMukherjee/discordcardgames`. Follow the steps in order. Stop only when that milestone is closed, or when a real blocker is reported. When editing the repo, follow `repo-conventions.md` and the nearest `AGENTS.md`.
 
 This run implements the lowest open milestone only. Do not start the next one. Do not implement tickets from a later milestone. Do not close a milestone that still has open issues.
 
