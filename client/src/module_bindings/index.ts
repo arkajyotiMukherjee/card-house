@@ -40,6 +40,7 @@ import JoinLobbyReducer from "./join_lobby_reducer";
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import GameEventRow from "./game_event_table";
 import GameSeatRow from "./game_seat_table";
 import GameTableRow from "./game_table_table";
 import LobbyRow from "./lobby_table";
@@ -49,6 +50,20 @@ import LobbyMemberRow from "./lobby_member_table";
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
+  gameEvent: __table({
+    name: 'GameEvent',
+    indexes: [
+      { accessor: 'id', name: 'GameEvent_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'byTable', name: 'GameEvent_table_id_idx_btree', algorithm: 'btree', columns: [
+        'tableId',
+      ] },
+    ],
+    constraints: [
+      { name: 'GameEvent_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, GameEventRow),
   gameSeat: __table({
     name: 'GameSeat',
     indexes: [
@@ -124,6 +139,8 @@ const proceduresSchema = __procedures(
 
 type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "tables"> & {
   tables: typeof tablesSchema.schemaType.tables & {
+    /** @deprecated Use `gameEvent` instead. This alias will be removed in the next major version. */
+    readonly "GameEvent": Omit<typeof tablesSchema.schemaType.tables["gameEvent"], "accessorName"> & { readonly accessorName: "GameEvent" };
     /** @deprecated Use `gameSeat` instead. This alias will be removed in the next major version. */
     readonly "GameSeat": Omit<typeof tablesSchema.schemaType.tables["gameSeat"], "accessorName"> & { readonly accessorName: "GameSeat" };
     /** @deprecated Use `gameTable` instead. This alias will be removed in the next major version. */
@@ -150,6 +167,7 @@ const REMOTE_MODULE = {
 >;
 
 const tableAccessorAliases = {
+  "GameEvent": "gameEvent",
   "GameSeat": "gameSeat",
   "GameTable": "gameTable",
   "Lobby": "lobby",
@@ -174,6 +192,8 @@ function __withTableAccessorAliases<T extends object>(target: T, freeze = false)
 
 type __DbViewBase = __DbConnectionImpl<typeof REMOTE_MODULE>["db"];
 export type DbView = __DbViewBase & {
+  /** @deprecated Use `gameEvent` instead. This alias will be removed in the next major version. */
+  readonly "GameEvent": __DbViewBase["gameEvent"];
   /** @deprecated Use `gameSeat` instead. This alias will be removed in the next major version. */
   readonly "GameSeat": __DbViewBase["gameSeat"];
   /** @deprecated Use `gameTable` instead. This alias will be removed in the next major version. */
@@ -186,6 +206,8 @@ export type DbView = __DbViewBase & {
 
 type __TablesBase = __QueryBuilder<typeof tablesSchema.schemaType>;
 export type Tables = __TablesBase & {
+  /** @deprecated Use `gameEvent` instead. This alias will be removed in the next major version. */
+  readonly "GameEvent": __TablesBase["gameEvent"];
   /** @deprecated Use `gameSeat` instead. This alias will be removed in the next major version. */
   readonly "GameSeat": __TablesBase["gameSeat"];
   /** @deprecated Use `gameTable` instead. This alias will be removed in the next major version. */

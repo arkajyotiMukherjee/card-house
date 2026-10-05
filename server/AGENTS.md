@@ -16,6 +16,7 @@ Tables, all `public: true`:
 - `LobbyMember` — unique per lobby and `clientId` via `byLobbyAndClient`
 - `GameTable` — `byLobby`, plus `gameType`, seat limits, `stateJson`
 - `GameSeat` — `byTable`, optional `chips` and `seatState`
+- `GameEvent` — `byTable`, `lobbyMemberId`, `type`, `payloadJson`, `createdAt`
 
 Reducers: `create_lobby` (no arguments) and `join_lobby` (`lobbyCode`, `clientId`, `name`). `CaseConversionPolicy.None` keeps those names. Lobby codes are four characters from `CODE_ALPHABET` (no I, O, 0, 1).
 
