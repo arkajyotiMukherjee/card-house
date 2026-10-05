@@ -8,7 +8,7 @@ Conventions: [../repo-conventions.md](../repo-conventions.md).
 
 `src/index.ts` is the SpacetimeDB module: tables and reducers. `package.json` depends on `spacetimedb` `2.10.2` and exposes `typecheck` and `test`. `tsconfig.json` includes `src`.
 
-`src/rules-by-type.ts` is the `rulesByType` registry. It starts empty. `registerGameRules` stores a shared `GameRules` value under that game's `GameDefinition.gameType`. Lookup is `rulesByType[gameType]`. An unregistered `gameType` is absent.
+`src/rules-by-type.ts` is the `rulesByType` registry. It starts empty. `registerGameRules` stores a shared `GameRules` value under that game's `GameDefinition.gameType`. Lookup is `rulesByType[gameType]`. An unregistered `gameType` is absent. `src/opening-state.ts` asks that registry for `initialState` when a table is created. The dummy counter rules live in `src/shared/games/dummy-counter.ts`.
 
 Tables, all `public: true`:
 
@@ -28,7 +28,7 @@ Register a game in `src/rules-by-type.ts` with `GameRules` and `GameDefinition` 
 
 Then publish and regenerate `client/src/module_bindings/`. `scripts/bootstrap.sh` is the path that already does this. Run `pnpm --filter server typecheck` after a type change.
 
-`create_lobby` inserts a lobby and does not join the caller. `join_lobby` reuses a `LobbyMember` for the same `(lobbyId, clientId)` and updates the name. `create_game_table` inserts a `GameTable` in an open lobby with `status` `waiting_for_players`. Optional `settings` is a JSON object with `name`, `minPlayers`, and `maxPlayers`. `join_table` seats that member until `maxPlayers` is reached, inserting a `GameSeat` at the lowest free `seatIndex`. `leave_table` deletes that member's `GameSeat` at the table. The member stays in the lobby, and the other seats stay. `handle_game_intent` loads that table, resolves `LobbyMember` and `GameSeat` from `clientId`, looks up `rulesByType[gameType]`, deserializes `stateJson`, calls `rules.applyIntent`, and writes the new state back onto the `GameTable` row. That row update is what subscribers receive. The module registers stub rules for gameType `stub`. It does not insert `GameEvent` rows.
+`create_lobby` inserts a lobby and does not join the caller. `join_lobby` reuses a `LobbyMember` for the same `(lobbyId, clientId)` and updates the name. `create_game_table` inserts a `GameTable` in an open lobby with `status` `waiting_for_players`. Optional `settings` is a JSON object with `name`, `minPlayers`, and `maxPlayers`. When `rulesByType` has that `gameType`, `stateJson` is `initialState`. Otherwise it is `{}`. `join_table` seats that member until `maxPlayers` is reached, inserting a `GameSeat` at the lowest free `seatIndex`. `leave_table` deletes that member's `GameSeat` at the table. The member stays in the lobby, and the other seats stay. `handle_game_intent` loads that table, resolves `LobbyMember` and `GameSeat` from `clientId`, looks up `rulesByType[gameType]`, deserializes `stateJson`, calls `rules.applyIntent`, and writes the new state back onto the `GameTable` row. That row update is what subscribers receive. The module registers stub rules for gameType `stub` and counter rules for gameType `dummy` (`{ count }` plus an `increment` intent). It does not insert `GameEvent` rows.
 
 ## Leave alone
 

@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --experimental-strip-types src/rules-by-type.test.ts"
+    "test": "node --experimental-strip-types src/rules-by-type.test.ts && node --experimental-strip-types src/dummy-counter.test.ts"
   },
   "dependencies": {
     "spacetimedb": "2.10.2"
