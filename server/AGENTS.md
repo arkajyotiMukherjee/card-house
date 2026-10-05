@@ -6,9 +6,9 @@ Conventions: [../repo-conventions.md](../repo-conventions.md).
 
 ## Files
 
-`src/index.ts` is the whole module. `package.json` depends on `spacetimedb` `2.10.2` and exposes `typecheck`. `tsconfig.json` includes `src` only.
+`src/index.ts` is the SpacetimeDB module: tables and reducers. `package.json` depends on `spacetimedb` `2.10.2` and exposes `typecheck` and `test`. `tsconfig.json` includes `src`.
 
-`src/` is that one file, so this guide covers it.
+`src/rules-by-type.ts` is the `rulesByType` registry. It starts empty. `registerGameRules` stores a shared `GameRules` value under that game's `GameDefinition.gameType`. Lookup is `rulesByType[gameType]`. An unregistered `gameType` is absent.
 
 Tables, all `public: true`:
 
@@ -22,7 +22,9 @@ Reducers: `create_lobby` (no arguments), `join_lobby` (`lobbyCode`, `clientId`, 
 
 ## Changes
 
-Edit `src/index.ts`. Reject a bad call with `SenderError`. Keep table names PascalCase, columns camelCase, and reducer names snake_case.
+Edit `src/index.ts` for tables and reducers. Reject a bad call with `SenderError`. Keep table names PascalCase, columns camelCase, and reducer names snake_case.
+
+Register a game in `src/rules-by-type.ts` with `GameRules` and `GameDefinition` from `src/shared/games`. Do not declare a second copy of those types.
 
 Then publish and regenerate `client/src/module_bindings/`. `scripts/bootstrap.sh` is the path that already does this. Run `pnpm --filter server typecheck` after a type change.
 

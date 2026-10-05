@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --experimental-strip-types src/rules-by-type.test.ts"
   },
   "dependencies": {
     "spacetimedb": "2.10.2"
