@@ -28,6 +28,18 @@ export const heartsImage = new ex.ImageSource(
   '/assets/cards-hearts.png',
   nearest,
 );
+export const diamondsImage = new ex.ImageSource(
+  '/assets/cards-diamonds.png',
+  nearest,
+);
+export const clubsImage = new ex.ImageSource(
+  '/assets/cards-clubs.png',
+  nearest,
+);
+export const spadesImage = new ex.ImageSource(
+  '/assets/cards-spades.png',
+  nearest,
+);
 export const cardBackImage = new ex.ImageSource(
   '/assets/card-back-01.png',
   nearest,
@@ -38,7 +50,11 @@ export const chipsImage = new ex.ImageSource(
 );
 
 const tables = new TableAtlas();
-const cardAtlas = new CardAtlas(heartsImage, cardBackImage);
+export const cardAtlas = new CardAtlas(heartsImage, cardBackImage, {
+  diamonds: diamondsImage,
+  clubs: clubsImage,
+  spades: spadesImage,
+});
 const chipAtlas = new ChipAtlas(chipsImage);
 
 export const greenTable = tables.sprite('green');
@@ -51,6 +67,9 @@ export const pixelFont = new ex.FontSource(
 
 export const demoImages = [
   heartsImage,
+  diamondsImage,
+  clubsImage,
+  spadesImage,
   cardBackImage,
   chipsImage,
   greenTable.image,

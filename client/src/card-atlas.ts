@@ -26,7 +26,8 @@ export interface CardFace {
 }
 
 /**
- * Light hearts sheet, five columns by four rows.
+ * Light suit sheets, five columns by four rows. Diamonds, clubs, and spades
+ * use this same grid.
  * Row 0 is blank, Ace, 2, 3, 4.
  * Row 1 is 5, 6, 7, 8, 9.
  * Row 2 starts with 10, Jack, then a joker, King, and Queen.
@@ -49,16 +50,27 @@ const HEART_CELLS: Record<Rank, GridCell> = {
 };
 
 export class CardAtlas {
+  private readonly sheets: Record<Suit, ex.ImageSource | undefined>;
+
   constructor(
-    private readonly hearts: ex.ImageSource,
+    hearts: ex.ImageSource,
     private readonly cardBack: ex.ImageSource,
-  ) {}
+    others: Partial<Record<Exclude<Suit, 'hearts'>, ex.ImageSource>> = {},
+  ) {
+    this.sheets = {
+      hearts,
+      diamonds: others.diamonds,
+      clubs: others.clubs,
+      spades: others.spades,
+    };
+  }
 
   sprite(card: CardFace): ex.Sprite {
-    if (card.suit !== 'hearts') {
+    const sheet = this.sheets[card.suit];
+    if (!sheet) {
       throw new Error(`CardAtlas has no sheet for ${card.suit}`);
     }
-    return this.hearts.toSprite({
+    return sheet.toSprite({
       sourceView: cellRect(HEART_CELLS[card.rank], CARD_SIZE),
     });
   }
