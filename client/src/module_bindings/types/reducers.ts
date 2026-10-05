@@ -8,12 +8,14 @@ import { type Infer as __Infer } from "spacetimedb";
 // Import all reducer arg schemas
 import CreateGameTableReducer from "../create_game_table_reducer";
 import CreateLobbyReducer from "../create_lobby_reducer";
+import HandleGameIntentReducer from "../handle_game_intent_reducer";
 import JoinLobbyReducer from "../join_lobby_reducer";
 import JoinTableReducer from "../join_table_reducer";
 import LeaveTableReducer from "../leave_table_reducer";
 
 export type CreateGameTableParams = __Infer<typeof CreateGameTableReducer>;
 export type CreateLobbyParams = __Infer<typeof CreateLobbyReducer>;
+export type HandleGameIntentParams = __Infer<typeof HandleGameIntentReducer>;
 export type JoinLobbyParams = __Infer<typeof JoinLobbyReducer>;
 export type JoinTableParams = __Infer<typeof JoinTableReducer>;
 export type LeaveTableParams = __Infer<typeof LeaveTableReducer>;

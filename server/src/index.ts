@@ -5,6 +5,12 @@ import {
   t,
   table,
 } from 'spacetimedb/server';
+import type { GameSeat as RulesSeat } from '../../src/shared/games';
+import { stubGameDefinition } from '../../src/shared/games/stub';
+import { registerGameRules, rulesByType } from './rules-by-type';
+import { stubIntentRules } from './stub-rules';
+
+registerGameRules(stubGameDefinition, stubIntentRules);
 
 const LobbyStatus = t.enum('LobbyStatus', ['open', 'closed']);
 const TableStatus = t.enum('TableStatus', [
@@ -454,5 +460,142 @@ export const leave_table = spacetimedb.reducer(
     for (const seatId of seatIds) {
       ctx.db.GameSeat.id.delete(seatId);
     }
+  },
+);
+
+function rulesSeat(seat: {
+  id: string;
+  tableId: string;
+  lobbyMemberId: string;
+  seatIndex: number;
+  chips: number | undefined;
+  joinedAt: { toMillis(): bigint };
+  seatState: { tag: string } | undefined;
+}): RulesSeat {
+  const tag = seat.seatState?.tag;
+  const seatState =
+    tag === 'active' || tag === 'folded' || tag === 'disconnected' ? tag : null;
+  return {
+    id: seat.id,
+    tableId: seat.tableId,
+    lobbyMemberId: seat.lobbyMemberId,
+    seatIndex: seat.seatIndex,
+    chips: seat.chips ?? null,
+    joinedAt: Number(seat.joinedAt.toMillis()),
+    seatState,
+  };
+}
+
+function storedState(next: unknown): string {
+  let stateJson: string;
+  try {
+    const encoded = JSON.stringify(next);
+    if (typeof encoded !== 'string') {
+      throw new SenderError('Could not store table state');
+    }
+    stateJson = encoded;
+  } catch (err) {
+    if (err instanceof SenderError) {
+      throw err;
+    }
+    throw new SenderError('Could not store table state');
+  }
+  return stateJson;
+}
+
+export const handle_game_intent = spacetimedb.reducer(
+  { name: 'handle_game_intent' },
+  {
+    tableId: t.string(),
+    clientId: t.string(),
+    intentPayload: t.string(),
+  },
+  (ctx, { tableId: rawTableId, clientId: rawClientId, intentPayload }) => {
+    const tableId = rawTableId.trim();
+    const clientId = rawClientId.trim();
+    if (tableId.length === 0) {
+      throw new SenderError('Table id is required');
+    }
+    if (clientId.length === 0) {
+      throw new SenderError('Client id is required');
+    }
+    if (intentPayload.trim().length === 0) {
+      throw new SenderError('Intent payload is required');
+    }
+
+    const gameTable = ctx.db.GameTable.id.find(tableId);
+    if (!gameTable) {
+      throw new SenderError('Table not found');
+    }
+
+    const lobby = ctx.db.Lobby.id.find(gameTable.lobbyId);
+    if (!lobby) {
+      throw new SenderError('Room not found');
+    }
+    if (lobby.status.tag !== 'open') {
+      throw new SenderError('Room closed');
+    }
+
+    const members = [];
+    for (const row of ctx.db.LobbyMember.byLobbyAndClient.filter([
+      gameTable.lobbyId,
+      clientId,
+    ])) {
+      members.push(row);
+    }
+    const member = members[0];
+    if (!member) {
+      throw new SenderError('Member not found');
+    }
+
+    const seats = [];
+    for (const row of ctx.db.GameSeat.byTable.filter(gameTable.id)) {
+      if (row.lobbyMemberId === member.id) {
+        seats.push(row);
+      }
+    }
+    const seat = seats[0];
+    if (!seat) {
+      throw new SenderError('Not seated');
+    }
+
+    const rules = rulesByType[gameTable.gameType];
+    if (!rules) {
+      throw new SenderError('Unknown game type');
+    }
+
+    let prev: unknown;
+    try {
+      prev = JSON.parse(gameTable.stateJson);
+    } catch {
+      throw new SenderError('Invalid table state');
+    }
+
+    let intent: unknown;
+    try {
+      intent = JSON.parse(intentPayload);
+    } catch {
+      throw new SenderError('Intent must be JSON');
+    }
+
+    let next: unknown;
+    try {
+      next = rules.applyIntent(prev, intent, {
+        seat: rulesSeat(seat),
+        now: Number(ctx.timestamp.toMillis()),
+      });
+    } catch (err) {
+      if (err instanceof SenderError) {
+        throw err;
+      }
+      const message = err instanceof Error ? err.message : 'Intent rejected';
+      throw new SenderError(message);
+    }
+
+    const stateJson = storedState(next);
+    ctx.db.GameTable.id.update({
+      ...gameTable,
+      stateJson,
+    });
   },
 );

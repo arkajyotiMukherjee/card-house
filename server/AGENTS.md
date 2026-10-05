@@ -18,7 +18,7 @@ Tables, all `public: true`:
 - `GameSeat` — `byTable`, optional `chips` and `seatState`
 - `GameEvent` — `byTable`, `lobbyMemberId`, `type`, `payloadJson`, `createdAt`
 
-Reducers: `create_lobby` (no arguments), `join_lobby` (`lobbyCode`, `clientId`, `name`), `create_game_table` (`lobbyId`, `gameType`, optional `settings`), `join_table` (`tableId`, `lobbyMemberId`), and `leave_table` (`tableId`, `lobbyMemberId`). `CaseConversionPolicy.None` keeps those names. Lobby codes are four characters from `CODE_ALPHABET` (no I, O, 0, 1).
+Reducers: `create_lobby` (no arguments), `join_lobby` (`lobbyCode`, `clientId`, `name`), `create_game_table` (`lobbyId`, `gameType`, optional `settings`), `join_table` (`tableId`, `lobbyMemberId`), `leave_table` (`tableId`, `lobbyMemberId`), and `handle_game_intent` (`tableId`, `clientId`, `intentPayload`). `CaseConversionPolicy.None` keeps those names. The generated client calls `handle_game_intent` as `handleGameIntent`. Lobby codes are four characters from `CODE_ALPHABET` (no I, O, 0, 1).
 
 ## Changes
 
@@ -28,7 +28,7 @@ Register a game in `src/rules-by-type.ts` with `GameRules` and `GameDefinition` 
 
 Then publish and regenerate `client/src/module_bindings/`. `scripts/bootstrap.sh` is the path that already does this. Run `pnpm --filter server typecheck` after a type change.
 
-`create_lobby` inserts a lobby and does not join the caller. `join_lobby` reuses a `LobbyMember` for the same `(lobbyId, clientId)` and updates the name. `create_game_table` inserts a `GameTable` in an open lobby with `status` `waiting_for_players`. Optional `settings` is a JSON object with `name`, `minPlayers`, and `maxPlayers`. `join_table` seats that member until `maxPlayers` is reached, inserting a `GameSeat` at the lowest free `seatIndex`. `leave_table` deletes that member's `GameSeat` at the table. The member stays in the lobby, and the other seats stay.
+`create_lobby` inserts a lobby and does not join the caller. `join_lobby` reuses a `LobbyMember` for the same `(lobbyId, clientId)` and updates the name. `create_game_table` inserts a `GameTable` in an open lobby with `status` `waiting_for_players`. Optional `settings` is a JSON object with `name`, `minPlayers`, and `maxPlayers`. `join_table` seats that member until `maxPlayers` is reached, inserting a `GameSeat` at the lowest free `seatIndex`. `leave_table` deletes that member's `GameSeat` at the table. The member stays in the lobby, and the other seats stay. `handle_game_intent` loads that table, resolves `LobbyMember` and `GameSeat` from `clientId`, looks up `rulesByType[gameType]`, deserializes `stateJson`, calls `rules.applyIntent`, and writes the new state back onto the `GameTable` row. That row update is what subscribers receive. The module registers stub rules for gameType `stub`. It does not insert `GameEvent` rows.
 
 ## Leave alone
 

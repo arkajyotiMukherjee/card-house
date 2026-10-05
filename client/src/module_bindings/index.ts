@@ -36,6 +36,7 @@ import {
 // Import all reducer arg schemas
 import CreateGameTableReducer from "./create_game_table_reducer";
 import CreateLobbyReducer from "./create_lobby_reducer";
+import HandleGameIntentReducer from "./handle_game_intent_reducer";
 import JoinLobbyReducer from "./join_lobby_reducer";
 import JoinTableReducer from "./join_table_reducer";
 import LeaveTableReducer from "./leave_table_reducer";
@@ -134,6 +135,7 @@ const tablesSchema = __schema({
 const reducersSchema = __reducers(
   __reducerSchema("create_game_table", CreateGameTableReducer),
   __reducerSchema("create_lobby", CreateLobbyReducer),
+  __reducerSchema("handle_game_intent", HandleGameIntentReducer),
   __reducerSchema("join_lobby", JoinLobbyReducer),
   __reducerSchema("join_table", JoinTableReducer),
   __reducerSchema("leave_table", LeaveTableReducer),

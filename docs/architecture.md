@@ -203,9 +203,9 @@ const rulesByType: Record<string, GameRules<any, any>> = {
 
 For each incoming client action:
 
-1. Client sends an intent to SpacetimeDB: `handleGameIntent(tableId, intentPayload)`.
+1. Client sends an intent to SpacetimeDB: `handleGameIntent(tableId, clientId, intentPayload)`.
 2. Backend:
-   - Authenticates sender → resolves to a `LobbyMember` and then `GameSeat`.
+   - Resolves `LobbyMember` and `GameSeat` from `clientId`.
    - Looks up `GameTable` for `tableId`.
    - Finds `rules = rulesByType[table.gameType]`.
    - Deserializes `table.stateJson` → `prevState`.
