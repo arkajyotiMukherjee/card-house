@@ -14,6 +14,7 @@ client/                    Vite + Excalibur app
     module_bindings/       generated; do not edit
 server/                    SpacetimeDB module
   src/index.ts             tables and reducers
+  src/rules-by-type.ts     rulesByType registry
 src/shared/games/          GameRules and GameDefinition
 docs/                      architecture, milestones, UI spec
 scripts/bootstrap.sh       local tools, publish, generate bindings
@@ -22,7 +23,7 @@ card-assest -pack/         Pixel Poker Pack source art
 
 The space and the spelling in `card-assest -pack` are the folder name. Leave it.
 
-`src/shared/games/` holds `GameRules<State, Intent>` and `GameDefinition`. It is not a workspace package. `pnpm typecheck` checks it with `src/shared/tsconfig.json`. The module source is `server/src/index.ts`.
+`src/shared/games/` holds `GameRules<State, Intent>` and `GameDefinition`. It is not a workspace package. `pnpm typecheck` checks it with `src/shared/tsconfig.json`. The module source is `server/src/index.ts`. `server/src/rules-by-type.ts` looks those shared types up by `gameType` and does not declare a second copy.
 
 ## Package manager
 
@@ -111,7 +112,7 @@ Copy a new sheet into `client/public/assets/` when the client needs it. Keep the
 
 Vitest `3` (`client/vitest.config.ts`): environment `node`, include `src/**/*.test.ts`, setup file `src/test-setup.ts`. That setup file stubs `window` because Excalibur's ESM build reads it while the module loads. `table-atlas.test.ts` opts into `@vitest-environment happy-dom`.
 
-Tests sit next to the unit (`sheets.test.ts`, `card-atlas.test.ts`, `chip-atlas.test.ts`, `table-atlas.test.ts`). They read the PNGs in `client/public/assets/` with `pngjs` and compare pixel buffers. `pnpm test` runs the client package only. The server package has no test script.
+Tests sit next to the unit (`sheets.test.ts`, `card-atlas.test.ts`, `chip-atlas.test.ts`, `table-atlas.test.ts`). They read the PNGs in `client/public/assets/` with `pngjs` and compare pixel buffers. `pnpm test` runs the client package only. `pnpm --filter server test` registers the shared stub `gameType` on `rulesByType` and checks that an unknown `gameType` does not return those rules.
 
 ## Docs
 
