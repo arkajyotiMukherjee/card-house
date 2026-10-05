@@ -90,6 +90,10 @@ export class LobbyScene {
     private readonly scene: ex.Scene,
     private readonly connection: DbConnection,
     private readonly clientId: string,
+    private readonly onSeated: (
+      tableId: string,
+      lobbyMemberId: string,
+    ) => void = () => {},
   ) {}
 
   mount(): void {
@@ -345,12 +349,30 @@ export class LobbyScene {
         lobbyMemberId: member.id,
       });
     } catch (error: unknown) {
-      this.setError(errorMessage(error));
+      const message = errorMessage(error);
+      if (
+        message === 'Already seated' &&
+        this.memberSeatedHere(tableId, member.id)
+      ) {
+        this.onSeated(tableId, member.id);
+        return;
+      }
+      this.setError(message);
       return;
     } finally {
       this.busy = false;
     }
     this.render();
+    this.onSeated(tableId, member.id);
+  }
+
+  private memberSeatedHere(tableId: string, lobbyMemberId: string): boolean {
+    for (const seat of this.connection.db.gameSeat.iter()) {
+      if (seat.tableId === tableId && seat.lobbyMemberId === lobbyMemberId) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private render(): void {

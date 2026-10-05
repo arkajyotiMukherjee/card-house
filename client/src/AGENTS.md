@@ -6,17 +6,19 @@ Style, resolution, and pixel filtering: [../../repo-conventions.md](../../repo-c
 
 ## Files
 
-- `main.ts` — reads or creates `clientId`, then the engine at 960×540, fixed display, integer scale, loader, and `connectCardroom`. After the lobby subscription applies, it mounts the lobby panel and `LobbyScene` with that `clientId`.
+- `main.ts` — reads or creates `clientId`, then the engine at 960×540, fixed display, integer scale, loader, and `connectCardroom`. After the lobby subscription applies, it mounts the lobby panel, `LobbyScene`, and `GameScene` with that `clientId`. Joining a table opens `GameScene`. Leave returns to the lobby.
 - `client-id.ts` — `getOrCreateClientId` reads `clientId` from `localStorage` or stores a new UUID. The key name is `clientId`.
 - `boot-scene.ts` — boot scene. Draws the green table, two hearts, the card back, one chip, and a status line.
 - `sheets.ts` — pixel sizes and grid math (`CARD_SIZE` 64, chip 32×44, table 129×80, logical 960×540).
 - `card-atlas.ts` — `{ rank, suit }` to a sprite. Hearts only. Other suits throw.
 - `chip-atlas.ts` — color or table value to a face sprite and a stack sprite on `chips-no-outline.png`.
 - `table-atlas.ts` — `green`, `purple`, or `red` to a table sprite. Green is the default.
-- `connect.ts` — `DbConnection.builder()`, the status string, and the `Lobby` / `LobbyMember` subscription. `subscribeLobbyTables` adds `GameTable` and `GameSeat` for one lobby. Host and database come from `__SPACETIMEDB_HOST__` and `__SPACETIMEDB_DB__`.
+- `connect.ts` — `DbConnection.builder()`, the status string, and the `Lobby`, `LobbyMember`, and `GameTable` subscription. `subscribeLobbyTables` adds `GameTable` and `GameSeat` for one lobby. Host and database come from `__SPACETIMEDB_HOST__` and `__SPACETIMEDB_DB__`.
+- `game-scene.ts` — seat names for one table, the known table in the joined lobby, and that table's `GameTable` / `GameSeat` subscription queries.
+- `game-scene-view.ts` — placeholder `GameScene`. Green table, seat labels, and Leave Table.
 - `lobby.ts` — name and room-code field editing, which `LobbyMember.name` rows belong to the joined lobby, and the table-list rows for that lobby.
 - `lobby-panel.ts` — canvas name field, optional room code, and the joined room. It tells `LobbyScene` which lobby was joined.
-- `lobby-scene.ts` — `LobbyScene` on the boot scene. Lists game name, table name, `currentSeats/maxPlayers`, and status. Create Table picks a game and max players. A table click calls `joinTable` and stays on this list.
+- `lobby-scene.ts` — `LobbyScene` on the boot scene. Lists game name, table name, `currentSeats/maxPlayers`, and status. Create Table picks a game and max players. A table click calls `joinTable` and opens `GameScene`.
 - `vite-env.d.ts` — those two compile-time globals.
 - `test-setup.ts` — Node stubs so Excalibur can load under Vitest.
 - `*.test.ts` — Vitest. Pixel checks read `../public/assets/` with `pngjs`. `table-atlas.test.ts` uses `@vitest-environment happy-dom`.
