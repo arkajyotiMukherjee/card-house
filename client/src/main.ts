@@ -3,6 +3,7 @@ import { BootScene, demoImages } from './boot-scene';
 import { getOrCreateClientId } from './client-id';
 import { connectCardroom } from './connect';
 import { GameScene } from './game-scene-view';
+import { LobbyScene } from './lobby-scene';
 import { mountLobbyPanel } from './lobby-panel';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH, integerScale } from './sheets';
 
@@ -53,9 +54,20 @@ void engine.start(loader).then(() => {
         engine.goToScene('boot');
       });
       engine.add('game', game);
-      mountLobbyPanel(scene, connection, clientId, (tableId, lobbyMemberId) => {
-        game.open(tableId, lobbyMemberId);
-        engine.goToScene('game');
+      const lobbyScene = new LobbyScene(
+        scene,
+        connection,
+        clientId,
+        (tableId, lobbyMemberId) => {
+          game.open(tableId, lobbyMemberId);
+          engine.goToScene('game');
+        },
+      );
+      lobbyScene.mount();
+      mountLobbyPanel(scene, connection, clientId, {
+        onJoined: (lobby) => {
+          lobbyScene.openLobby(lobby.id);
+        },
       });
     },
   });

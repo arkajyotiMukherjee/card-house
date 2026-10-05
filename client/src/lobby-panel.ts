@@ -1,12 +1,6 @@
 import * as ex from 'excalibur';
 import { pixelFont } from './boot-scene';
 import {
-  knownTableId,
-  memberForClient,
-  type MemberRef,
-  type TableRef,
-} from './game-scene';
-import {
   applyCodeKey,
   applyFieldKey,
   findCreatedLobby,
@@ -92,7 +86,7 @@ export function mountLobbyPanel(
   scene: ex.Scene,
   connection: DbConnection,
   clientId: string,
-  onEnterTable: (tableId: string, lobbyMemberId: string) => void,
+  handlers: { onJoined?: (lobby: LobbyRow) => void } = {},
 ): void {
   const backdrop = new ex.Actor({
     pos: ex.vec(8, 44),
@@ -111,7 +105,6 @@ export function mountLobbyPanel(
   const nameText = labelActor(scene, 22, 76, '_', 8, GOLD);
   const codeText = labelActor(scene, 22, 124, 'optional', 8, DIM);
   const errorText = labelActor(scene, 16, 222, '', 8, DANGER);
-  const tableMessage = labelActor(scene, 16, 424, '', 8, DANGER);
   const roomLabel = labelActor(scene, 16, 52, '', 8, DIM);
   const roomCode = labelActor(scene, 16, 70, '', 16, GOLD);
   const playersLabel = labelActor(scene, 16, 100, '', 8, DIM);
@@ -126,7 +119,6 @@ export function mountLobbyPanel(
   let focused: FieldId = 'name';
   let busy = false;
   let joinedCode = '';
-  let joinTableButton: ex.Actor | undefined;
   const nameActors: ex.Actor[] = [];
 
   const paintFields = (): void => {
@@ -197,7 +189,6 @@ export function mountLobbyPanel(
       scene.add(actor);
       nameActors.push(actor);
     }
-    ensureJoinButton();
   };
 
   const syncJoinedLobby = (): void => {
@@ -212,6 +203,7 @@ export function mountLobbyPanel(
       lobby.code,
       memberLines(readMembers(connection), lobby.id, clientId),
     );
+    handlers.onJoined?.(lobby);
   };
 
   const fail = (message: string): void => {
@@ -313,65 +305,6 @@ export function mountLobbyPanel(
     syncJoinedLobby();
   });
 
-  const sit = (): void => {
-    if (busy || joinedCode.length === 0) {
-      return;
-    }
-    const lobby = lobbyByCode(readLobbies(connection), joinedCode);
-    if (!lobby) {
-      tableMessage.text = 'Waiting for room';
-      return;
-    }
-    const member = memberForClient(
-      readMemberRefs(connection),
-      lobby.id,
-      clientId,
-    );
-    if (!member) {
-      tableMessage.text = 'Waiting for seat';
-      return;
-    }
-    const tableId = knownTableId(readTables(connection), lobby.id);
-    if (!tableId) {
-      tableMessage.text = 'No table';
-      return;
-    }
-    errorText.text = '';
-    tableMessage.text = '';
-    busy = true;
-    void connection.reducers
-      .joinTable({ tableId, lobbyMemberId: member.id })
-      .then(() => {
-        onEnterTable(tableId, member.id);
-      })
-      .catch((error: unknown) => {
-        const message =
-          error instanceof Error ? error.message : 'Could not sit';
-        if (message === 'Already seated') {
-          onEnterTable(tableId, member.id);
-          return;
-        }
-        tableMessage.text = message;
-      })
-      .finally(() => {
-        busy = false;
-      });
-  };
-
-  function ensureJoinButton(): void {
-    if (joinTableButton) {
-      return;
-    }
-    joinTableButton = buttonActor(
-      scene,
-      LOBBY_PANEL.joinTableButton,
-      'Join Table',
-    );
-    joinTableButton.on('pointerup', () => {
-      sit();
-    });
-  }
-
   paintFields();
 
   function writeField(key: string): void {
@@ -444,31 +377,6 @@ function readLobbies(connection: DbConnection): LobbyRow[] {
   const rows: LobbyRow[] = [];
   for (const lobby of connection.db.lobby.iter()) {
     rows.push({ id: lobby.id, code: lobby.code });
-  }
-  return rows;
-}
-
-function readTables(connection: DbConnection): TableRef[] {
-  const rows: TableRef[] = [];
-  for (const table of connection.db.gameTable.iter()) {
-    rows.push({
-      id: table.id,
-      lobbyId: table.lobbyId,
-      createdAtMicros: table.createdAt.microsSinceUnixEpoch,
-    });
-  }
-  return rows;
-}
-
-function readMemberRefs(connection: DbConnection): MemberRef[] {
-  const rows: MemberRef[] = [];
-  for (const member of connection.db.lobbyMember.iter()) {
-    rows.push({
-      id: member.id,
-      lobbyId: member.lobbyId,
-      clientId: member.clientId,
-      name: member.name,
-    });
   }
   return rows;
 }
