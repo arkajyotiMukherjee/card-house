@@ -6,6 +6,7 @@ import {
   table,
 } from 'spacetimedb/server';
 import type { GameSeat as RulesSeat } from '../../src/shared/games';
+import { bluffGameDefinition, bluffRules } from '../../src/shared/games/bluff';
 import {
   dummyCounterRules,
   dummyGameDefinition,
@@ -17,6 +18,7 @@ import { stubIntentRules } from './stub-rules';
 
 registerGameRules(stubGameDefinition, stubIntentRules);
 registerGameRules(dummyGameDefinition, dummyCounterRules);
+registerGameRules(bluffGameDefinition, bluffRules);
 
 const LobbyStatus = t.enum('LobbyStatus', ['open', 'closed']);
 const TableStatus = t.enum('TableStatus', [
