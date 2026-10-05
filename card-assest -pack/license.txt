@@ -1,0 +1,218 @@
+PIXEL POKER PACK ASSET LICENSE
+Version 1.0
+Copyright © 2026 SoapBoy. All rights reserved.
+
+This license applies to the artwork, sprite sheets, source files, and other materials
+included in the Pixel Poker Pack, collectively referred to as the “Assets.”
+
+By purchasing, downloading, accessing, or using the Assets, you agree to
+the terms of this license.
+
+1. LICENSE GRANT
+
+The copyright owner grants the purchaser or authorized downloader
+(the “Licensee”) a non-exclusive, worldwide, perpetual, and royalty-free
+license to use the Assets subject to the terms below.
+
+This license grants permission to use the Assets. Ownership and copyright
+of the original Assets remain with SoapBoy.
+
+2. PERMITTED USE
+
+The Licensee may:
+
+a. Use the Assets in an unlimited number of personal or commercial
+   projects, including video games, applications, interactive media,
+   websites, videos, streams, printed promotional material, and other
+   completed works.
+
+b. Modify the Assets, including editing, recoloring, resizing, cropping,
+   combining, animating, or adapting them to suit a project.
+
+c. Distribute completed projects that contain the Assets, including
+   commercial products, without paying royalties or additional license
+   fees.
+
+d. Use images or recordings of completed projects containing the Assets
+   for advertising, store pages, trailers, social media, portfolios, and
+   other promotional purposes.
+
+e. Share the Assets privately with employees, team members, publishers,
+   and contractors only when they require access to work on the
+   Licensee’s project and are bound not to reuse or redistribute the
+   Assets outside that project.
+
+f. Store the Assets in private source-control repositories and private
+   project-management systems used by the Licensee’s development team.
+
+3. ATTRIBUTION
+
+Attribution is not required.
+
+Credit is appreciated and may be written as:
+
+“Pixel Poker Pack by SoapBoy”
+
+Attribution does not grant additional rights and must not imply that the
+copyright owner endorses or sponsors the Licensee’s project.
+
+4. PROHIBITED USE
+
+The Licensee may not:
+
+a. Sell, sublicense, redistribute, share, upload, publish, or give away
+   the Assets in their original form.
+
+b. Sell, sublicense, redistribute, share, upload, publish, or give away
+   modified versions of the Assets as standalone assets.
+
+c. Include the Assets in another asset pack, graphics collection,
+   template, game-development kit, starter project, website builder,
+   card-construction tool, or similar product whose purpose is to provide
+   reusable assets to other users.
+
+d. Make the Assets available through a public repository, shared drive,
+   file-hosting service, download page, or other location where people
+   outside the authorized project team can access them.
+
+e. Use the Assets in a project where the Assets themselves are the
+   principal product being sold or distributed rather than components
+   of a larger original work.
+
+f. Extract isolated artwork, card components, icons, templates, or other
+   materials from the pack and sell or distribute them separately.
+
+g. Claim authorship, ownership, or copyright over the original Assets.
+
+h. Register the original Assets or substantially unmodified versions of
+   them as trademarks.
+
+i. Use the Assets to train, fine-tune, validate, benchmark, or create a
+   dataset for a generative artificial-intelligence or machine-learning
+   system.
+
+j. Mint, tokenize, sell, or distribute the Assets themselves as NFTs,
+   cryptocurrency-linked items, or blockchain collectibles.
+
+5. COMPLETED PROJECTS
+
+The Assets may be included in a completed project provided that:
+
+a. The Assets are incorporated into a larger original work;
+
+b. End users receive the project for its intended experience or
+   functionality, not for access to the reusable Assets; and
+
+c. Reasonable steps are taken to prevent the Assets from being offered
+   as directly reusable standalone files.
+
+Normal distribution of compiled games and applications is permitted even
+when technically skilled users may be capable of extracting resources
+from them. The Licensee is not required to implement encryption or
+specialized copy protection.
+
+6. MODIFICATIONS
+
+Modifying the Assets does not transfer ownership of the original Assets
+to the Licensee.
+
+The Licensee owns any independently created material they add, but the
+original Assets and derivative artwork substantially based on them
+remain subject to this license.
+
+Modified Assets may be distributed only as part of a permitted completed
+project and may not be distributed as standalone resources.
+
+7. TEAM AND CONTRACTOR USE
+
+A Licensee may provide the Assets to members of its internal development
+team and to contractors working on its behalf.
+
+Those people may use the Assets only for the Licensee’s authorized
+projects. They may not retain, reuse, sell, or redistribute the Assets
+for unrelated projects unless they obtain their own license.
+
+If an organization purchases the pack, the organization is considered
+the Licensee, and its employees may use the Assets for projects owned or
+controlled by that organization.
+
+8. CLIENT WORK
+
+The Licensee may use the Assets in work created for a client.
+
+The completed project may be delivered to the client. The client may
+maintain and distribute that completed project but does not receive the
+right to extract or reuse the Assets in unrelated projects unless the
+client obtains a separate license.
+
+9. REFUNDS AND TERMINATION
+
+Any refund is governed by the storefront’s applicable refund policy.
+
+This license automatically terminates if the Licensee materially violates
+its terms. Upon termination, the Licensee must stop using the Assets and
+remove all standalone copies under its control.
+
+The copyright owner may restore the license after the violation has been
+corrected, but is not required to do so.
+
+Termination does not require already distributed compliant projects to be
+withdrawn unless continued distribution itself violates this license.
+
+10. NO WARRANTY
+
+The Assets are provided “as is” without warranties of any kind, express
+or implied, including warranties of merchantability, fitness for a
+particular purpose, compatibility, or non-infringement.
+
+The Licensee is responsible for determining whether the Assets are
+suitable for their intended project and technical environment.
+
+11. LIMITATION OF LIABILITY
+
+To the maximum extent permitted by applicable law, the copyright owner
+will not be liable for indirect, incidental, special, consequential, or
+punitive damages arising from use of or inability to use the Assets.
+
+The copyright owner’s total liability relating to the Assets will not
+exceed the amount paid by the Licensee for the Assets.
+
+Nothing in this section excludes liability that cannot legally be
+excluded under applicable law.
+
+12. THIRD-PARTY MATERIAL
+
+This license applies only to materials identified as part of the Pixel
+Poker Pack and owned by [CREATOR OR STUDIO NAME].
+
+Any separately identified third-party fonts, software, or other materials
+remain subject to their respective licenses.
+
+13. GOVERNING LAW
+
+This license is governed by the laws of Canada,
+excluding its conflict-of-law rules.
+
+Any dispute relating to this license will be subject to the courts located
+in [PROVINCE/STATE AND COUNTRY], unless applicable consumer law requires
+otherwise.
+
+14. CONTACT
+
+Questions about this license or requests for permissions beyond its scope
+may be sent to:
+
+SoapBoy
+soapboydevelopment@gmail.com
+https://soapboyy.itch.io/
+
+END OF LICENSE
+
+Notice(s) //
+  The items in this asset library do not represent any brands 
+  and/or persons. Any likeness to a brand or person that may 
+  exsist are coincidental. 
+
+  I, and/or any artists who contributed, can not be held 
+  responsible for any issues/damages caused by using any of the 
+  files in this asset library. 
