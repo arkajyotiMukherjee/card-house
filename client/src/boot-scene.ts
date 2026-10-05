@@ -97,7 +97,7 @@ export class BootScene extends ex.Scene {
       engine.add(actor);
     }
 
-    this.addChipStack(engine, 680, cardY + 48);
+    this.addChipStack(engine, 680, 188);
 
     const label = new ex.Actor({
       pos: ex.vec(16, 14),
