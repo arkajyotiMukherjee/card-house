@@ -1,3 +1,4 @@
+import { lobbyTableQueries } from './lobby';
 import { DbConnection } from './module_bindings';
 
 export function connectionLine(
@@ -54,4 +55,25 @@ export function connectCardroom(handlers: CardroomHandlers): void {
       handlers.onStatus(connectionLine('disconnected', host, database));
     })
     .build();
+}
+
+export function subscribeLobbyTables(
+  connection: DbConnection,
+  lobbyId: string,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    connection
+      .subscriptionBuilder()
+      .onApplied(() => {
+        resolve();
+      })
+      .onError((ctx) => {
+        const detail =
+          ctx.event instanceof Error
+            ? ctx.event.message
+            : 'subscription failed';
+        reject(new Error(detail));
+      })
+      .subscribe(lobbyTableQueries(lobbyId));
+  });
 }

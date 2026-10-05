@@ -86,6 +86,7 @@ export function mountLobbyPanel(
   scene: ex.Scene,
   connection: DbConnection,
   clientId: string,
+  handlers: { onJoined?: (lobby: LobbyRow) => void } = {},
 ): void {
   const backdrop = new ex.Actor({
     pos: ex.vec(8, 44),
@@ -202,6 +203,7 @@ export function mountLobbyPanel(
       lobby.code,
       memberLines(readMembers(connection), lobby.id, clientId),
     );
+    handlers.onJoined?.(lobby);
   };
 
   const fail = (message: string): void => {
