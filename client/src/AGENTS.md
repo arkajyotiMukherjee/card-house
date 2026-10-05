@@ -6,7 +6,8 @@ Style, resolution, and pixel filtering: [../../repo-conventions.md](../../repo-c
 
 ## Files
 
-- `main.ts` — engine at 960×540, fixed display, integer scale, loader, then `connectCardroom`.
+- `main.ts` — reads or creates `clientId`, then the engine at 960×540, fixed display, integer scale, loader, and `connectCardroom`.
+- `client-id.ts` — `getOrCreateClientId` reads `clientId` from `localStorage` or stores a new UUID. The key name is `clientId`.
 - `boot-scene.ts` — boot scene. Draws the green table, two hearts, the card back, one chip, and a status line.
 - `sheets.ts` — pixel sizes and grid math (`CARD_SIZE` 64, chip 32×44, table 129×80, logical 960×540).
 - `card-atlas.ts` — `{ rank, suit }` to a sprite. Hearts only. Other suits throw.
