@@ -44,11 +44,17 @@ const chipAtlas = new ChipAtlas(chipsImage);
 const greenTable = tables.sprite('green');
 greenTable.scale = ex.vec(TABLE_SCALE, TABLE_SCALE);
 
+export const pixelFont = new ex.FontSource(
+  '/assets/press-start-2p.ttf',
+  'Press Start 2P',
+);
+
 export const demoImages = [
   heartsImage,
   cardBackImage,
   chipsImage,
   greenTable.image,
+  pixelFont,
 ];
 
 const HEARTS: Array<{ card: CardFace; x: number }> = [
@@ -64,10 +70,11 @@ function scaled(sprite: ex.Sprite, scale: number): ex.Sprite {
 export class BootScene extends ex.Scene {
   private status = new ex.Text({
     text: 'SpacetimeDB: starting',
-    font: new ex.Font({
-      family: 'sans-serif',
+    font: pixelFont.toFont({
       size: 16,
       color: STATUS,
+      quality: 1,
+      filtering: ex.ImageFiltering.Pixel,
     }),
   });
 
