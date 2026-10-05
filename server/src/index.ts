@@ -96,8 +96,30 @@ const GameSeat = table(
   },
 );
 
+const GameEvent = table(
+  {
+    name: 'GameEvent',
+    public: true,
+    indexes: [
+      {
+        accessor: 'byTable',
+        algorithm: 'btree',
+        columns: ['tableId'],
+      },
+    ],
+  },
+  {
+    id: t.string().primaryKey(),
+    tableId: t.string(),
+    lobbyMemberId: t.string(),
+    type: t.string(),
+    payloadJson: t.string(),
+    createdAt: t.timestamp(),
+  },
+);
+
 const spacetimedb = schema(
-  { Lobby, LobbyMember, GameTable, GameSeat },
+  { Lobby, LobbyMember, GameTable, GameSeat, GameEvent },
   { CASE_CONVERSION_POLICY: CaseConversionPolicy.None },
 );
 
