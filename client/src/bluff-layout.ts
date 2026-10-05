@@ -132,6 +132,29 @@ export function faceForCard(cardId: string): CardFace | null {
   return { rank, suit };
 }
 
+/**
+ * End-of-game line from the subscribed state.
+ * The seat index is the rules winner, and the name is that seated player.
+ */
+export function finishedLine(
+  state: BluffState,
+  seats: readonly { seatIndex: number; name: string }[],
+): string | null {
+  if (state.phase !== 'finished') {
+    return null;
+  }
+  const seatIndex = state.winnerSeatIndex;
+  if (seatIndex === null) {
+    return 'Finished';
+  }
+  const seat = seats.find((row) => row.seatIndex === seatIndex);
+  const name = seat?.name ?? '';
+  if (name.length > 0) {
+    return `Winner seat ${seatIndex} ${name}`;
+  }
+  return `Winner seat ${seatIndex}`;
+}
+
 /** True when this pile card is one the local seat just played. */
 export function pileFaceUp(
   state: BluffState,

@@ -12,8 +12,8 @@ Style, resolution, and pixel filtering: [../../repo-conventions.md](../../repo-c
 - `sheets.ts` — pixel sizes and grid math (`CARD_SIZE` 64, chip 32×44, table 129×80, logical 960×540).
 - `card-atlas.ts` — `{ rank, suit }` to a sprite. Hearts, diamonds, clubs, and spades share one grid. A suit with no sheet throws.
 - `game-driver.ts` — `GameDriver<State>`, the render context, and pointer input.
-- `bluff-layout.ts` — hand, pile, and opponent-back positions, plus which card can lift.
-- `bluff-driver.ts` — Bluff `GameDriver`. Your hand is face up along the bottom, other hands are card backs, and the discard pile is in the center. Play and Challenge call `sendIntent`. A legal card lifts on hover. A dealt or played card tweens.
+- `bluff-layout.ts` — hand, pile, and opponent-back positions, plus which card can lift. `finishedLine` names the subscribed winner seat.
+- `bluff-driver.ts` — Bluff `GameDriver`. Your hand is face up along the bottom, other hands are card backs, and the discard pile is in the center. Play and Challenge call `sendIntent`. A legal card lifts on hover. A dealt or played card tweens. Phase `finished` draws `finishedLine` and sends no further move.
 - `chip-atlas.ts` — color or table value to a face sprite and a stack sprite on `chips-no-outline.png`.
 - `table-atlas.ts` — `green`, `purple`, or `red` to a table sprite. Green is the default.
 - `connect.ts` — `DbConnection.builder()`, the status string, and the `Lobby`, `LobbyMember`, and `GameTable` subscription. `subscribeLobbyTables` adds `GameTable` and `GameSeat` for one lobby. Host and database come from `__SPACETIMEDB_HOST__` and `__SPACETIMEDB_DB__`.

@@ -6,6 +6,7 @@ import {
   PILE_Y,
   cardLift,
   faceForCard,
+  finishedLine,
   handPositions,
   legalCard,
   opponentBackPositions,
@@ -74,5 +75,25 @@ describe('bluff layout', () => {
     };
     expect(pileFaceUp(state, 'AS', 0)).toBe(true);
     expect(pileFaceUp(state, 'AS', 1)).toBe(false);
+  });
+
+  it('names the subscribed winner seat when the rules finish', () => {
+    const seats = [
+      { seatIndex: 0, name: 'Ada' },
+      { seatIndex: 1, name: 'Bea' },
+    ];
+    expect(finishedLine(playState(0), seats)).toBeNull();
+    expect(
+      finishedLine(
+        { ...playState(1), phase: 'finished', winnerSeatIndex: 0 },
+        seats,
+      ),
+    ).toBe('Winner seat 0 Ada');
+    expect(
+      finishedLine(
+        { ...playState(null), phase: 'finished', winnerSeatIndex: null },
+        seats,
+      ),
+    ).toBe('Finished');
   });
 });

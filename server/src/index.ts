@@ -17,6 +17,7 @@ import {
 import { stubGameDefinition } from '../../src/shared/games/stub';
 import { stateIfLobbyReady } from './lobby-deal';
 import { openingTableState } from './opening-state';
+import { statusTagForState, type TableStatusTag } from './table-status';
 import { registerGameRules, rulesByType } from './rules-by-type';
 import { stubIntentRules } from './stub-rules';
 
@@ -453,6 +454,9 @@ export const join_table = spacetimedb.reducer(
       ctx.db.GameTable.id.update({
         ...gameTable,
         stateJson: storedState(next),
+        status: storedStatus(
+          statusTagForState(next, currentStatusTag(gameTable.status.tag)),
+        ),
       });
     }
   },
@@ -555,6 +559,25 @@ function rulesSeat(seat: {
     joinedAt: Number(seat.joinedAt.toMillis()),
     seatState,
   };
+}
+
+function currentStatusTag(tag: string): TableStatusTag {
+  if (tag === 'in_progress' || tag === 'finished') {
+    return tag;
+  }
+  return 'waiting_for_players';
+}
+
+function storedStatus(tag: TableStatusTag): {
+  tag: 'waiting_for_players' | 'in_progress' | 'finished';
+} {
+  if (tag === 'in_progress') {
+    return { tag: 'in_progress' };
+  }
+  if (tag === 'finished') {
+    return { tag: 'finished' };
+  }
+  return { tag: 'waiting_for_players' };
 }
 
 function storedState(next: unknown): string {
@@ -698,6 +721,9 @@ export const handle_game_intent = spacetimedb.reducer(
     ctx.db.GameTable.id.update({
       ...gameTable,
       stateJson,
+      status: storedStatus(
+        statusTagForState(next, currentStatusTag(gameTable.status.tag)),
+      ),
     });
 
     let order = 0;
