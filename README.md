@@ -12,7 +12,7 @@ A browser card room. One Excalibur canvas draws the table. SpacetimeDB holds lob
 
 Sprites are SoapBoy's [Pixel Poker Pack](https://soapboyy.itch.io/pixelpokerpack), checked in under [`card-assest -pack`](card-assest%20-pack). The license allows the pack in a private team repository and forbids publishing the raw files where people outside the team can download them. Keep this GitHub repository private.
 
-The client copies only the sheets it draws into `client/public/assets/`.
+The client copies the sheets it draws into `client/public/assets/`: hearts card fronts (`cards-hearts.png`), card back 01 (`card-back-01.png`), chips without an outline (`chips-no-outline.png`), and the green table (`table-green.png`). The pack has no pixel font. `press-start-2p.ttf` is Press Start 2P by Cody Boisclair, under the SIL Open Font License 1.1, which allows storing it in this private repository. The license note is `press-start-2p-LICENSE.txt` beside the font.
 
 ## Scripts
 
