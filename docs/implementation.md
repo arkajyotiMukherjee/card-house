@@ -1,4 +1,4 @@
-# implementation.md
+# [implementation.md](http://implementation.md)
 
 ## Overview
 
@@ -300,10 +300,9 @@ These aren’t needed for v1, but the architecture supports them cleanly:
 - **Persistent soft profiles**:
   - saved preferred name,
   - color theme,
+  - card customizations (assest pack already has variations)
   - simple stats (hands played, games won).
 - **Tournaments**:
   - structures composed of multiple tables and rounds.
-- **Replay system**:
-  - reconstruct games from `GameEvent` logs.
 
 You can schedule these after the core loop (lobby → tables → play → back to lobby) is rock solid.

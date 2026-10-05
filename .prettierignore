@@ -1,0 +1,7 @@
+node_modules
+dist
+pnpm-lock.yaml
+card-assest -pack
+client/src/module_bindings
+client/public
+docs

@@ -1,0 +1,4 @@
+{
+  "install": "bash scripts/bootstrap.sh --deps-only",
+  "start": "bash scripts/bootstrap.sh && if timeout 1 bash -c 'echo >/dev/tcp/127.0.0.1/5173' >/dev/null 2>&1; then echo 'Vite already listening on 5173'; exec tail -f /dev/null; else exec pnpm dev; fi"
+}
