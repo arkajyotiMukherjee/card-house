@@ -15,7 +15,7 @@ Style and asset rules: [../repo-conventions.md](../repo-conventions.md). Source 
 
 ## Changes
 
-Add a runtime image by copying it into `public/assets/` from `card-assest -pack`. Load it with `ex.ImageFiltering.Pixel`. Root `pnpm dev`, `pnpm build`, `pnpm test`, and `pnpm typecheck` already target this package.
+Add a runtime image by copying it into `public/assets/` from `card-assest -pack`. Load it with `ex.ImageFiltering.Pixel`. Root `pnpm dev`, `pnpm build`, `pnpm test`, and `pnpm typecheck` already include this package. `pnpm test` also runs the server rules tests.
 
 `SPACETIMEDB_HOST` and `SPACETIMEDB_DB` are read in `vite.config.ts` when Vite starts. Defaults are `ws://127.0.0.1:3000` and `cardroom`. Do not commit an auth token.
 

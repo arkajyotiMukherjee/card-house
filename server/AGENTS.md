@@ -8,7 +8,7 @@ Conventions: [../repo-conventions.md](../repo-conventions.md).
 
 `src/index.ts` is the SpacetimeDB module: tables and reducers. `package.json` depends on `spacetimedb` `2.10.2` and exposes `typecheck` and `test`. `tsconfig.json` includes `src`.
 
-`src/rules-by-type.ts` is the `rulesByType` registry. It starts empty. `registerGameRules` stores a shared `GameRules` value under that game's `GameDefinition.gameType`. Lookup is `rulesByType[gameType]`. An unregistered `gameType` is absent. `src/opening-state.ts` asks that registry for `initialState` when a table is created. `src/table-status.ts` maps a stored `phase` onto the table status and leaves a state with no phase unchanged. The dummy counter rules live in `src/shared/games/dummy-counter.ts`. Bluff rules live in `src/shared/games/bluff.ts`.
+`src/rules-by-type.ts` is the `rulesByType` registry. It starts empty. `registerGameRules` stores a shared `GameRules` value under that game's `GameDefinition.gameType`. Lookup is `rulesByType[gameType]`. An unregistered `gameType` is absent. `src/opening-state.ts` asks that registry for `initialState` when a table is created. `src/table-status.ts` maps a stored `phase` onto the table status and leaves a state with no phase unchanged. The dummy counter rules live in `src/shared/games/dummy-counter.ts`. Bluff rules live in `src/shared/games/bluff.ts`. `src/bluff.test.ts` checks a six-seat deal, an empty table, a legal play, a rejected turn, and a last-card win.
 
 Tables, all `public: true`:
 
