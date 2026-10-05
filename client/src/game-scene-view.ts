@@ -1,6 +1,13 @@
 import * as ex from 'excalibur';
 import { greenTable, pixelFont } from './boot-scene';
 import {
+  DUMMY_INCREMENT,
+  type DummyIntent,
+} from '../../src/shared/games/dummy-counter';
+import {
+  COUNTER_BUTTON,
+  dummyIntentPayload,
+  dummyStateFromJson,
   LEAVE_TABLE_BUTTON,
   placeSeats,
   seatLabels,
@@ -72,6 +79,10 @@ export class GameScene extends ex.Scene {
   private waitingText!: ex.Text;
   private subscription: SubscriptionHandle | undefined;
   private subscribedTableId = '';
+  private dummy = false;
+  private countText!: ex.Text;
+  private countValue!: ex.Actor;
+  private counterPlate!: ex.Actor;
 
   constructor(
     private readonly connection: DbConnection,
@@ -124,6 +135,7 @@ export class GameScene extends ex.Scene {
     this.add(error);
 
     this.addLeaveButton();
+    this.addCounterButton();
     this.watchRows();
     this.ready = true;
   }
@@ -149,6 +161,12 @@ export class GameScene extends ex.Scene {
     this.connection.db.lobbyMember.onUpdate(() => {
       this.paintSeats();
     });
+    this.connection.db.gameTable.onInsert((_ctx, row) => {
+      this.applySubscribedState(row);
+    });
+    this.connection.db.gameTable.onUpdate((_ctx, _old, row) => {
+      this.applySubscribedState(row);
+    });
   }
 
   private bindTable(): void {
@@ -158,6 +176,7 @@ export class GameScene extends ex.Scene {
     }
     if (this.subscription && this.subscribedTableId === tableId) {
       this.paintSeats();
+      this.readSubscribedState();
       return;
     }
     this.endSubscription();
@@ -168,6 +187,7 @@ export class GameScene extends ex.Scene {
       .onApplied(() => {
         if (this.subscribedTableId === tableId) {
           this.paintSeats();
+          this.readSubscribedState();
         }
       })
       .onError((ctx) => {
@@ -268,6 +288,127 @@ export class GameScene extends ex.Scene {
       this.leave();
     });
     this.add(actor);
+  }
+
+  /**
+   * Sends one intent through `handle_game_intent`.
+   * The painted count changes only when `stateJson` arrives.
+   */
+  sendIntent(intent: DummyIntent): void {
+    if (!this.dummy || this.tableId.length === 0) {
+      return;
+    }
+    const tableId = this.tableId;
+    const clientId = this.clientId;
+    void this.connection.reducers
+      .handleGameIntent({
+        tableId,
+        clientId,
+        intentPayload: dummyIntentPayload(intent),
+      })
+      .catch((error: unknown) => {
+        this.showError(
+          error instanceof Error ? error.message : 'Intent rejected',
+        );
+      });
+  }
+
+  private applySubscribedState(row: {
+    id: string;
+    gameType: string;
+    stateJson: string;
+  }): void {
+    if (!this.ready || row.id !== this.tableId) {
+      return;
+    }
+    this.paintCounter(row.gameType, row.stateJson);
+  }
+
+  private readSubscribedState(): void {
+    if (!this.ready || this.tableId.length === 0) {
+      return;
+    }
+    for (const row of this.connection.db.gameTable.iter()) {
+      if (row.id === this.tableId) {
+        this.paintCounter(row.gameType, row.stateJson);
+        return;
+      }
+    }
+  }
+
+  private paintCounter(gameType: string, stateJson: string): void {
+    let state: ReturnType<typeof dummyStateFromJson>;
+    try {
+      state = dummyStateFromJson(gameType, stateJson);
+    } catch (error: unknown) {
+      this.dummy = false;
+      this.placeCounter(false);
+      this.showError(
+        error instanceof Error ? error.message : 'Invalid table state',
+      );
+      return;
+    }
+    if (!state) {
+      this.dummy = false;
+      this.placeCounter(false);
+      return;
+    }
+    this.dummy = true;
+    this.placeCounter(true);
+    const label = String(state.count);
+    this.countText.text = label;
+    const width = label.length * 24;
+    this.countValue.pos = ex.vec((COUNTER_BUTTON.w - width) / 2, 34);
+    this.errorText.text = '';
+  }
+
+  private placeCounter(visible: boolean): void {
+    const box = COUNTER_BUTTON;
+    this.counterPlate.pos = visible
+      ? ex.vec(box.x, box.y)
+      : ex.vec(box.x, -200);
+  }
+
+  private addCounterButton(): void {
+    const box = COUNTER_BUTTON;
+    const actor = new ex.Actor({
+      pos: ex.vec(box.x, -200),
+      anchor: ex.vec(0, 0),
+      width: box.w,
+      height: box.h,
+      z: 8,
+    });
+    const face = panelRect(box.w, box.h, PLATE, STROKE);
+    actor.graphics.use(face);
+    const caption = new ex.Actor({
+      pos: ex.vec(68, 10),
+      anchor: ex.vec(0, 0),
+    });
+    caption.graphics.use(canvasText('Count', 8, DIM));
+    actor.addChild(caption);
+    this.countText = canvasText('0', 24, GOLD);
+    this.countValue = new ex.Actor({
+      pos: ex.vec(76, 34),
+      anchor: ex.vec(0, 0),
+    });
+    this.countValue.graphics.use(this.countText);
+    actor.addChild(this.countValue);
+    actor.on('pointerenter', () => {
+      face.strokeColor = STROKE_HOT;
+    });
+    actor.on('pointerleave', () => {
+      face.strokeColor = STROKE;
+      face.color = PLATE;
+    });
+    actor.on('pointerdown', () => {
+      face.color = BUTTON_DOWN;
+    });
+    actor.on('pointerup', () => {
+      face.color = PLATE;
+      this.sendIntent({ type: DUMMY_INCREMENT });
+    });
+    this.add(actor);
+    this.counterPlate = actor;
   }
 
   private leave(): void {

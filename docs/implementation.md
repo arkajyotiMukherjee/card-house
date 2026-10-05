@@ -125,6 +125,8 @@ This document breaks the build into clear milestones so you can move from a blan
 
 **Deliverable:** A test “dummy” game that just increments a counter on each click, fully wired through backend rules and intents.
 
+The wired game is `gameType` `dummy`. `GameTable.stateJson` is `{ "count": number }`, starting at `0`. A click sends `{ "type": "increment" }` through `handle_game_intent`. GameScene paints `count` from that subscribed row.
+
 ## Milestone 6 – First Real Game End-to-End
 
 **Goal:** Implement one actual card game from rules to visuals (start with something manageable like Five-Card Draw Poker or Bluff).

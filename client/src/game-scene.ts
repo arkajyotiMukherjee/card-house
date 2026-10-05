@@ -1,4 +1,14 @@
+import {
+  DUMMY_GAME_TYPE,
+  readDummyState,
+  type DummyIntent,
+  type DummyState,
+} from '../../src/shared/games/dummy-counter';
+
 export const LEAVE_TABLE_BUTTON = { x: 16, y: 16, w: 168, h: 28 } as const;
+
+/** Click target on a dummy table. The number painted here is the subscribed count. */
+export const COUNTER_BUTTON = { x: 392, y: 220, w: 176, h: 72 } as const;
 
 /**
  * Clockwise from the local seat at bottom center.
@@ -118,6 +128,24 @@ export function placeSeats(labels: readonly NamedSeat[]): PlacedSeat[] {
     const anchor = SEAT_ANCHORS[slot % SEAT_ANCHORS.length] ?? SEAT_ANCHORS[0];
     return { ...seat, x: anchor.x, y: anchor.y };
   });
+}
+
+/**
+ * Counter state from a subscribed `GameTable` row.
+ * Other game types have no dummy state. Invalid JSON throws.
+ */
+export function dummyStateFromJson(
+  gameType: string,
+  stateJson: string,
+): DummyState | undefined {
+  if (gameType !== DUMMY_GAME_TYPE) {
+    return undefined;
+  }
+  return readDummyState(JSON.parse(stateJson));
+}
+
+export function dummyIntentPayload(intent: DummyIntent): string {
+  return JSON.stringify(intent);
 }
 
 function quoteSqlString(value: string): string {

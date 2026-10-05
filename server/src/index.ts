@@ -6,11 +6,17 @@ import {
   table,
 } from 'spacetimedb/server';
 import type { GameSeat as RulesSeat } from '../../src/shared/games';
+import {
+  dummyCounterRules,
+  dummyGameDefinition,
+} from '../../src/shared/games/dummy-counter';
 import { stubGameDefinition } from '../../src/shared/games/stub';
+import { openingTableState } from './opening-state';
 import { registerGameRules, rulesByType } from './rules-by-type';
 import { stubIntentRules } from './stub-rules';
 
 registerGameRules(stubGameDefinition, stubIntentRules);
+registerGameRules(dummyGameDefinition, dummyCounterRules);
 
 const LobbyStatus = t.enum('LobbyStatus', ['open', 'closed']);
 const TableStatus = t.enum('TableStatus', [
@@ -327,15 +333,27 @@ export const create_game_table = spacetimedb.reducer(
     }
 
     const micros = ctx.timestamp.microsSinceUnixEpoch;
+    const id = `table_${lobby.id}_${micros.toString()}_${existing}`;
+    const name = settings.name ?? `${gameType} #${sameType + 1}`;
+    const stateJson = storedState(
+      openingTableState(gameType, {
+        id,
+        lobbyId: lobby.id,
+        name,
+        minPlayers,
+        maxPlayers,
+        createdAt: Number(ctx.timestamp.toMillis()),
+      }),
+    );
     ctx.db.GameTable.insert({
-      id: `table_${lobby.id}_${micros.toString()}_${existing}`,
+      id,
       lobbyId: lobby.id,
       gameType,
-      name: settings.name ?? `${gameType} #${sameType + 1}`,
+      name,
       status: { tag: 'waiting_for_players' },
       minPlayers,
       maxPlayers,
-      stateJson: '{}',
+      stateJson,
       createdAt: ctx.timestamp,
     });
   },

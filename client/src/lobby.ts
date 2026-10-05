@@ -1,3 +1,8 @@
+import {
+  DUMMY_GAME_TYPE,
+  dummyGameDefinition,
+} from '../../src/shared/games/dummy-counter';
+
 export const NAME_MAX = 12;
 export const CODE_MAX = 6;
 
@@ -57,6 +62,12 @@ export const GAME_CATALOG = [
   { gameType: 'spades', name: 'Spades', minPlayers: 4, maxPlayers: 4 },
   { gameType: 'rummy', name: 'Rummy', minPlayers: 2, maxPlayers: 6 },
   { gameType: 'go_fish', name: 'Go Fish', minPlayers: 2, maxPlayers: 6 },
+  {
+    gameType: DUMMY_GAME_TYPE,
+    name: dummyGameDefinition.displayName,
+    minPlayers: dummyGameDefinition.minPlayers,
+    maxPlayers: dummyGameDefinition.maxPlayers,
+  },
 ] as const satisfies readonly GameOption[];
 
 export interface TableRow {

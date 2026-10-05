@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  dummyIntentPayload,
+  dummyStateFromJson,
   knownTableId,
   memberForClient,
   placeSeats,
@@ -69,6 +71,19 @@ describe('seat labels', () => {
     const ada = placed.find((seat) => seat.name === 'Ada');
     expect(bea).toMatchObject({ x: SEAT_ANCHORS[0].x, y: SEAT_ANCHORS[0].y });
     expect(ada).toMatchObject({ x: SEAT_ANCHORS[1].x, y: SEAT_ANCHORS[1].y });
+  });
+});
+
+describe('dummy counter state', () => {
+  it('deserializes stateJson for the dummy table only', () => {
+    expect(dummyStateFromJson('dummy', '{"count":4}')).toEqual({ count: 4 });
+    expect(dummyStateFromJson('bluff', '{"count":4}')).toBeUndefined();
+  });
+
+  it('builds an increment intent without changing a count', () => {
+    expect(dummyIntentPayload({ type: 'increment' })).toBe(
+      '{"type":"increment"}',
+    );
   });
 });
 

@@ -147,6 +147,12 @@ describe('lobby tables', () => {
     expect(clampPlayerCount(hearts, 9)).toBe(4);
     expect(clampPlayerCount(gameOption(0), 2)).toBe(2);
     expect(nextTableName(tables, 'lobby_1', gameOption(0))).toBe('Bluff #2');
+    expect(gameOption(-1)).toMatchObject({
+      gameType: 'dummy',
+      name: 'Dummy',
+      minPlayers: 1,
+      maxPlayers: 8,
+    });
   });
 
   it('finds this browser in the joined lobby', () => {
