@@ -15,6 +15,9 @@ const TableStatus = t.enum('TableStatus', [
 const SeatState = t.enum('SeatState', ['active', 'folded', 'disconnected']);
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const DEFAULT_MIN_PLAYERS = 2;
+const DEFAULT_MAX_PLAYERS = 8;
+const TABLE_SETTING_KEYS = ['name', 'minPlayers', 'maxPlayers'] as const;
 
 const Lobby = table(
   { name: 'Lobby', public: true },
@@ -209,6 +212,125 @@ export const join_lobby = spacetimedb.reducer(
       name: playerName,
       connected: true,
       lastSeenAt: ctx.timestamp,
+    });
+  },
+);
+
+function playerLimit(value: unknown, label: string): number {
+  if (
+    typeof value !== 'number' ||
+    !Number.isInteger(value) ||
+    value < 1 ||
+    value > 4_294_967_295
+  ) {
+    throw new SenderError(`${label} must be a positive integer`);
+  }
+  return value;
+}
+
+function tableSettings(raw: string | undefined): {
+  name?: string;
+  minPlayers?: number;
+  maxPlayers?: number;
+} {
+  if (raw === undefined || raw.trim().length === 0) {
+    return {};
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new SenderError('Settings must be a JSON object');
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new SenderError('Settings must be a JSON object');
+  }
+
+  const record = parsed as Record<string, unknown>;
+  for (const key of Object.keys(record)) {
+    if (
+      !TABLE_SETTING_KEYS.includes(key as (typeof TABLE_SETTING_KEYS)[number])
+    ) {
+      throw new SenderError(`Unknown setting: ${key}`);
+    }
+  }
+
+  const settings: {
+    name?: string;
+    minPlayers?: number;
+    maxPlayers?: number;
+  } = {};
+  if ('name' in record) {
+    if (typeof record.name !== 'string' || record.name.trim().length === 0) {
+      throw new SenderError('Table name is required');
+    }
+    settings.name = record.name.trim();
+  }
+  if ('minPlayers' in record) {
+    settings.minPlayers = playerLimit(record.minPlayers, 'minPlayers');
+  }
+  if ('maxPlayers' in record) {
+    settings.maxPlayers = playerLimit(record.maxPlayers, 'maxPlayers');
+  }
+  return settings;
+}
+
+export const create_game_table = spacetimedb.reducer(
+  { name: 'create_game_table' },
+  {
+    lobbyId: t.string(),
+    gameType: t.string(),
+    settings: t.option(t.string()),
+  },
+  (
+    ctx,
+    { lobbyId: rawLobbyId, gameType: rawGameType, settings: rawSettings },
+  ) => {
+    const lobbyId = rawLobbyId.trim();
+    const gameType = rawGameType.trim();
+    if (lobbyId.length === 0) {
+      throw new SenderError('Lobby id is required');
+    }
+    if (gameType.length === 0) {
+      throw new SenderError('Game type is required');
+    }
+
+    const lobby = ctx.db.Lobby.id.find(lobbyId);
+    if (!lobby) {
+      throw new SenderError('Room not found');
+    }
+    if (lobby.status.tag !== 'open') {
+      throw new SenderError('Room closed');
+    }
+
+    const settings = tableSettings(rawSettings);
+    const minPlayers = settings.minPlayers ?? DEFAULT_MIN_PLAYERS;
+    const maxPlayers = settings.maxPlayers ?? DEFAULT_MAX_PLAYERS;
+    if (maxPlayers < minPlayers) {
+      throw new SenderError('maxPlayers must be at least minPlayers');
+    }
+
+    let existing = 0;
+    let sameType = 0;
+    for (const table of ctx.db.GameTable.byLobby.filter(lobby.id)) {
+      existing += 1;
+      if (table.gameType === gameType) {
+        sameType += 1;
+      }
+    }
+
+    const micros = ctx.timestamp.microsSinceUnixEpoch;
+    ctx.db.GameTable.insert({
+      id: `table_${lobby.id}_${micros.toString()}_${existing}`,
+      lobbyId: lobby.id,
+      gameType,
+      name: settings.name ?? `${gameType} #${sameType + 1}`,
+      status: { tag: 'waiting_for_players' },
+      minPlayers,
+      maxPlayers,
+      stateJson: '{}',
+      createdAt: ctx.timestamp,
     });
   },
 );
