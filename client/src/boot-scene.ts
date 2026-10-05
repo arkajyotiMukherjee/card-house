@@ -1,23 +1,28 @@
 import * as ex from 'excalibur';
+import { CardAtlas, type CardFace } from './card-atlas';
+import { ChipAtlas } from './chip-atlas';
 import {
-  ACE_HEART,
-  CARD_BACK,
   CARD_SIZE,
-  CHIP_HEIGHT,
-  CHIP_WIDTH,
   LOGICAL_HEIGHT,
   LOGICAL_WIDTH,
-  NUMBER_HEART,
   TABLE_HEIGHT,
   TABLE_SCALE,
   TABLE_WIDTH,
-  chipRect,
 } from './sheets';
+import { TableAtlas } from './table-atlas';
 
 const FELT = ex.Color.fromHex('#145c38');
 const STATUS = ex.Color.fromHex('#f4e4b3');
 
 const nearest = { filtering: ex.ImageFiltering.Pixel };
+
+const CARD_SCALE = 2;
+const CHIP_SCALE = 4;
+/** Face top to stack top on chips-no-outline.png, in source pixels. */
+const CHIP_BODY_OFFSET = 21;
+/** How far each extra chip sits above the one below it. */
+const CHIP_STACK_STEP = 6;
+const CHIP_STACK_COUNT = 3;
 
 export const heartsImage = new ex.ImageSource(
   '/assets/cards-hearts.png',
@@ -31,22 +36,29 @@ export const chipsImage = new ex.ImageSource(
   '/assets/chips-no-outline.png',
   nearest,
 );
-export const tableImage = new ex.ImageSource(
-  '/assets/table-green.png',
-  nearest,
-);
 
-export const demoImages = [heartsImage, cardBackImage, chipsImage, tableImage];
+const tables = new TableAtlas();
+const cardAtlas = new CardAtlas(heartsImage, cardBackImage);
+const chipAtlas = new ChipAtlas(chipsImage);
 
-function pixelSprite(
-  image: ex.ImageSource,
-  rect: { x: number; y: number; width: number; height: number },
-  scale: number,
-): ex.Sprite {
-  return image.toSprite({
-    sourceView: rect,
-    scale: ex.vec(scale, scale),
-  });
+const greenTable = tables.sprite('green');
+greenTable.scale = ex.vec(TABLE_SCALE, TABLE_SCALE);
+
+export const demoImages = [
+  heartsImage,
+  cardBackImage,
+  chipsImage,
+  greenTable.image,
+];
+
+const HEARTS: Array<{ card: CardFace; x: number }> = [
+  { card: { rank: 'A', suit: 'hearts' }, x: 390 },
+  { card: { rank: '5', suit: 'hearts' }, x: 530 },
+];
+
+function scaled(sprite: ex.Sprite, scale: number): ex.Sprite {
+  sprite.scale = ex.vec(scale, scale);
+  return sprite;
 }
 
 export class BootScene extends ex.Scene {
@@ -65,75 +77,32 @@ export class BootScene extends ex.Scene {
     const table = new ex.Actor({
       pos: ex.vec(LOGICAL_WIDTH / 2, LOGICAL_HEIGHT / 2 + 16),
       anchor: ex.vec(0.5, 0.5),
-      width: TABLE_WIDTH,
-      height: TABLE_HEIGHT,
+      width: TABLE_WIDTH * TABLE_SCALE,
+      height: TABLE_HEIGHT * TABLE_SCALE,
+      z: 0,
     });
-    table.graphics.use(
-      pixelSprite(
-        tableImage,
-        {
-          x: 0,
-          y: 0,
-          width: TABLE_WIDTH,
-          height: TABLE_HEIGHT,
-        },
-        TABLE_SCALE,
-      ),
-    );
+    table.graphics.use(greenTable);
     engine.add(table);
 
-    const cardScale = 2;
     const cardY = LOGICAL_HEIGHT / 2 + 8;
-    const cards: Array<{
-      image: ex.ImageSource;
-      col: number;
-      row: number;
-      x: number;
-    }> = [
-      { image: heartsImage, col: ACE_HEART.col, row: ACE_HEART.row, x: 360 },
-      {
-        image: heartsImage,
-        col: NUMBER_HEART.col,
-        row: NUMBER_HEART.row,
-        x: 500,
-      },
-      { image: cardBackImage, col: CARD_BACK.col, row: CARD_BACK.row, x: 640 },
-    ];
-    for (const card of cards) {
+    for (const heart of HEARTS) {
       const actor = new ex.Actor({
-        pos: ex.vec(card.x, cardY),
+        pos: ex.vec(heart.x, cardY),
         anchor: ex.vec(0.5, 0.5),
-        width: CARD_SIZE,
-        height: CARD_SIZE,
+        width: CARD_SIZE * CARD_SCALE,
+        height: CARD_SIZE * CARD_SCALE,
+        z: 1,
       });
-      actor.graphics.use(
-        pixelSprite(
-          card.image,
-          {
-            x: card.col * CARD_SIZE,
-            y: card.row * CARD_SIZE,
-            width: CARD_SIZE,
-            height: CARD_SIZE,
-          },
-          cardScale,
-        ),
-      );
+      actor.graphics.use(scaled(cardAtlas.sprite(heart.card), CARD_SCALE));
       engine.add(actor);
     }
 
-    const chip = chipRect();
-    const chipActor = new ex.Actor({
-      pos: ex.vec(760, cardY + 8),
-      anchor: ex.vec(0.5, 0.5),
-      width: CHIP_WIDTH,
-      height: CHIP_HEIGHT,
-    });
-    chipActor.graphics.use(pixelSprite(chipsImage, chip, 2));
-    engine.add(chipActor);
+    this.addChipStack(engine, 680, 188);
 
     const label = new ex.Actor({
       pos: ex.vec(16, 14),
       anchor: ex.vec(0, 0),
+      z: 10,
     });
     label.graphics.use(this.status);
     engine.add(label);
@@ -141,5 +110,29 @@ export class BootScene extends ex.Scene {
 
   setStatus(text: string): void {
     this.status.text = text;
+  }
+
+  private addChipStack(engine: ex.Engine, x: number, top: number): void {
+    const step = CHIP_STACK_STEP * CHIP_SCALE;
+    const body = CHIP_BODY_OFFSET * CHIP_SCALE;
+    for (let index = 0; index < CHIP_STACK_COUNT; index += 1) {
+      const faceTop = top + index * step;
+      const depth = (CHIP_STACK_COUNT - index) * 2;
+      const stack = new ex.Actor({
+        pos: ex.vec(x, faceTop + body),
+        anchor: ex.vec(0.5, 0),
+        z: depth,
+      });
+      stack.graphics.use(scaled(chipAtlas.stackSprite('red'), CHIP_SCALE));
+      engine.add(stack);
+
+      const face = new ex.Actor({
+        pos: ex.vec(x, faceTop),
+        anchor: ex.vec(0.5, 0),
+        z: depth + 1,
+      });
+      face.graphics.use(scaled(chipAtlas.sprite('red'), CHIP_SCALE));
+      engine.add(face);
+    }
   }
 }
