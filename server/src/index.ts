@@ -503,6 +503,37 @@ function storedState(next: unknown): string {
   return stateJson;
 }
 
+function appliedIntentType(intent: unknown): string {
+  if (
+    typeof intent === 'object' &&
+    intent !== null &&
+    !Array.isArray(intent) &&
+    'type' in intent &&
+    typeof intent.type === 'string' &&
+    intent.type.length > 0
+  ) {
+    return intent.type;
+  }
+  return 'intent';
+}
+
+function appliedIntentPayload(order: number, intent: unknown): string {
+  const encoded = JSON.stringify({ order, intent });
+  if (typeof encoded !== 'string') {
+    throw new SenderError('Could not store game event');
+  }
+  return encoded;
+}
+
+/** Zero-padded so event ids sort in apply order for one table. */
+function eventId(tableId: string, order: number): string {
+  let suffix = order.toString();
+  while (suffix.length < 6) {
+    suffix = `0${suffix}`;
+  }
+  return `event_${tableId}_${suffix}`;
+}
+
 export const handle_game_intent = spacetimedb.reducer(
   { name: 'handle_game_intent' },
   {
@@ -596,6 +627,19 @@ export const handle_game_intent = spacetimedb.reducer(
     ctx.db.GameTable.id.update({
       ...gameTable,
       stateJson,
+    });
+
+    let order = 0;
+    for (const _event of ctx.db.GameEvent.byTable.filter(gameTable.id)) {
+      order += 1;
+    }
+    ctx.db.GameEvent.insert({
+      id: eventId(gameTable.id, order),
+      tableId: gameTable.id,
+      lobbyMemberId: member.id,
+      type: appliedIntentType(intent),
+      payloadJson: appliedIntentPayload(order, intent),
+      createdAt: ctx.timestamp,
     });
   },
 );

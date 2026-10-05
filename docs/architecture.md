@@ -143,18 +143,18 @@ A `LobbyMember`:
 - can be in **zero or one** `GameSeat` at a time (to start simple),
 - always remains a `LobbyMember` in the lobby even after leaving a table.
 
-### GameEvent (Optional)
+### GameEvent
 
-Useful but not required initially.
+An applied intent appends one row. A rejected intent does not.
 
-- `id: string`.
+- `id: string` — `event_<tableId>_<order>`, with `order` zero-padded so ids sort in apply order.
 - `tableId: string`.
 - `lobbyMemberId: string`.
-- `type: string` – `"play_card"`, `"bet"`, `"fold"`, etc.
-- `payloadJson: string`.
+- `type: string` – the intent type, such as `"play_card"`, `"bet"`, or `"fold"`.
+- `payloadJson: string` – `{ order, intent }`, enough for a replay to sort and reapply that action.
 - `createdAt: number`.
 
-Helps debugging, analytics, and potentially replay.
+A later replay reads `GameEvent` for that table in `order`.
 
 ## Game Rules Abstraction (Server)
 
@@ -211,7 +211,8 @@ For each incoming client action:
    - Deserializes `table.stateJson` → `prevState`.
    - Calls `rules.applyIntent(prevState, intent, { seat, now })`.
    - Serializes new state and updates `table.stateJson`.
-3. SpacetimeDB broadcasts updated `GameTable` (+ `GameSeat` changes if needed) to subscribers.
+   - Appends one `GameEvent` for that table with the apply order and the intent payload.
+3. SpacetimeDB broadcasts updated `GameTable` (+ `GameSeat` changes if needed) and the new `GameEvent` to subscribers. A rejected intent adds no `GameEvent`.
 
 Game rules are pure functions from state + intent → new state.
 
