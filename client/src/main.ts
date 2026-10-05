@@ -1,7 +1,10 @@
 import * as ex from 'excalibur';
 import { BootScene, demoImages } from './boot-scene';
+import { getOrCreateClientId } from './client-id';
 import { connectCardroom } from './connect';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH, integerScale } from './sheets';
+
+getOrCreateClientId();
 
 const canvas = document.createElement('canvas');
 document.querySelector('#app')?.append(canvas);
