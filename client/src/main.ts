@@ -2,6 +2,7 @@ import * as ex from 'excalibur';
 import { BootScene, demoImages } from './boot-scene';
 import { getOrCreateClientId } from './client-id';
 import { connectCardroom } from './connect';
+import { LobbyScene } from './lobby-scene';
 import { mountLobbyPanel } from './lobby-panel';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH, integerScale } from './sheets';
 
@@ -48,7 +49,13 @@ void engine.start(loader).then(() => {
       scene.setStatus(line);
     },
     onSubscribed: (connection) => {
-      mountLobbyPanel(scene, connection, clientId);
+      const lobbyScene = new LobbyScene(scene, connection, clientId);
+      lobbyScene.mount();
+      mountLobbyPanel(scene, connection, clientId, {
+        onJoined: (lobby) => {
+          lobbyScene.openLobby(lobby.id);
+        },
+      });
     },
   });
 });
