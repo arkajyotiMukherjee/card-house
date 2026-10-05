@@ -2,6 +2,7 @@ import * as ex from 'excalibur';
 import { BootScene, demoImages } from './boot-scene';
 import { getOrCreateClientId } from './client-id';
 import { connectCardroom } from './connect';
+import { GameScene } from './game-scene-view';
 import { mountLobbyPanel } from './lobby-panel';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH, integerScale } from './sheets';
 
@@ -48,7 +49,14 @@ void engine.start(loader).then(() => {
       scene.setStatus(line);
     },
     onSubscribed: (connection) => {
-      mountLobbyPanel(scene, connection, clientId);
+      const game = new GameScene(connection, clientId, () => {
+        engine.goToScene('boot');
+      });
+      engine.add('game', game);
+      mountLobbyPanel(scene, connection, clientId, (tableId, lobbyMemberId) => {
+        game.open(tableId, lobbyMemberId);
+        engine.goToScene('game');
+      });
     },
   });
 });

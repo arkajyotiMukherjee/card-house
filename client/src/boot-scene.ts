@@ -41,7 +41,7 @@ const tables = new TableAtlas();
 const cardAtlas = new CardAtlas(heartsImage, cardBackImage);
 const chipAtlas = new ChipAtlas(chipsImage);
 
-const greenTable = tables.sprite('green');
+export const greenTable = tables.sprite('green');
 greenTable.scale = ex.vec(TABLE_SCALE, TABLE_SCALE);
 
 export const pixelFont = new ex.FontSource(

@@ -6,6 +6,7 @@ export const LOBBY_PANEL = {
   codeField: { x: 16, y: 116, w: 128, h: 24 },
   createButton: { x: 16, y: 152, w: 128, h: 26 },
   joinButton: { x: 16, y: 186, w: 128, h: 26 },
+  joinTableButton: { x: 16, y: 448, w: 128, h: 26 },
 } as const;
 
 export interface LobbyRow {

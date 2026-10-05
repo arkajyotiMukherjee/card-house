@@ -39,7 +39,11 @@ export function connectCardroom(handlers: CardroomHandlers): void {
               : 'subscription failed';
           handlers.onStatus(connectionLine('error', host, database, detail));
         })
-        .subscribe((query) => [query.lobby, query.lobbyMember]);
+        .subscribe((query) => [
+          query.lobby,
+          query.lobbyMember,
+          query.gameTable,
+        ]);
     })
     .onConnectError((_ctx, error) => {
       handlers.onStatus(connectionLine('error', host, database, error.message));
