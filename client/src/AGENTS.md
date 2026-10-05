@@ -16,7 +16,7 @@ Style, resolution, and pixel filtering: [../../repo-conventions.md](../../repo-c
 - `connect.ts` — `DbConnection.builder()`, the status string, and the `Lobby`, `LobbyMember`, and `GameTable` subscription. `subscribeLobbyTables` adds `GameTable` and `GameSeat` for one lobby. Host and database come from `__SPACETIMEDB_HOST__` and `__SPACETIMEDB_DB__`.
 - `game-scene.ts` — seat names for one table, the known table in the joined lobby, that table's `GameTable` / `GameSeat` subscription queries, and `dummyStateFromJson` for the dummy counter.
 - `game-scene-view.ts` — `GameScene`. Green table, seat labels, Leave Table, and the dummy counter. `sendIntent` calls `handleGameIntent`. The count text is the subscribed `stateJson`.
-- `lobby.ts` — name and room-code field editing, which `LobbyMember.name` rows belong to the joined lobby, the table-list rows for that lobby, and the `dummy` entry in `GAME_CATALOG`.
+- `lobby.ts` — name and room-code field editing, which `LobbyMember.name` rows belong to the joined lobby, the table-list rows for that lobby, and `GAME_CATALOG`. That catalog offers Bluff from `bluffGameDefinition` (`gameType`, display name, min and max players, how-to-play). Stub and dummy stay on the rules registry and are not Create Table choices.
 - `lobby-panel.ts` — canvas name field, optional room code, and the joined room. It tells `LobbyScene` which lobby was joined.
 - `lobby-scene.ts` — `LobbyScene` on the boot scene. Lists game name, table name, `currentSeats/maxPlayers`, and status. Create Table picks a game and max players. A table click calls `joinTable` and opens `GameScene`.
 - `vite-env.d.ts` — those two compile-time globals.
