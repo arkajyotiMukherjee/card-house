@@ -10,9 +10,11 @@ import CreateGameTableReducer from "../create_game_table_reducer";
 import CreateLobbyReducer from "../create_lobby_reducer";
 import JoinLobbyReducer from "../join_lobby_reducer";
 import JoinTableReducer from "../join_table_reducer";
+import LeaveTableReducer from "../leave_table_reducer";
 
 export type CreateGameTableParams = __Infer<typeof CreateGameTableReducer>;
 export type CreateLobbyParams = __Infer<typeof CreateLobbyReducer>;
 export type JoinLobbyParams = __Infer<typeof JoinLobbyReducer>;
 export type JoinTableParams = __Infer<typeof JoinTableReducer>;
+export type LeaveTableParams = __Infer<typeof LeaveTableReducer>;
 
