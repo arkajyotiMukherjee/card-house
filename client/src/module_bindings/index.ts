@@ -38,6 +38,7 @@ import CreateGameTableReducer from "./create_game_table_reducer";
 import CreateLobbyReducer from "./create_lobby_reducer";
 import JoinLobbyReducer from "./join_lobby_reducer";
 import JoinTableReducer from "./join_table_reducer";
+import LeaveTableReducer from "./leave_table_reducer";
 
 // Import all procedure arg schemas
 
@@ -135,6 +136,7 @@ const reducersSchema = __reducers(
   __reducerSchema("create_lobby", CreateLobbyReducer),
   __reducerSchema("join_lobby", JoinLobbyReducer),
   __reducerSchema("join_table", JoinTableReducer),
+  __reducerSchema("leave_table", LeaveTableReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */

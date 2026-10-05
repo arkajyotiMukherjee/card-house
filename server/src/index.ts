@@ -407,3 +407,52 @@ export const join_table = spacetimedb.reducer(
     });
   },
 );
+
+export const leave_table = spacetimedb.reducer(
+  { name: 'leave_table' },
+  {
+    tableId: t.string(),
+    lobbyMemberId: t.string(),
+  },
+  (ctx, { tableId: rawTableId, lobbyMemberId: rawLobbyMemberId }) => {
+    const tableId = rawTableId.trim();
+    const lobbyMemberId = rawLobbyMemberId.trim();
+    if (tableId.length === 0) {
+      throw new SenderError('Table id is required');
+    }
+    if (lobbyMemberId.length === 0) {
+      throw new SenderError('Lobby member id is required');
+    }
+
+    const gameTable = ctx.db.GameTable.id.find(tableId);
+    if (!gameTable) {
+      throw new SenderError('Table not found');
+    }
+
+    const lobby = ctx.db.Lobby.id.find(gameTable.lobbyId);
+    if (!lobby) {
+      throw new SenderError('Room not found');
+    }
+
+    const member = ctx.db.LobbyMember.id.find(lobbyMemberId);
+    if (!member) {
+      throw new SenderError('Member not found');
+    }
+    if (member.lobbyId !== gameTable.lobbyId) {
+      throw new SenderError('Member is not in this room');
+    }
+
+    const seatIds: string[] = [];
+    for (const seat of ctx.db.GameSeat.byTable.filter(gameTable.id)) {
+      if (seat.lobbyMemberId === member.id) {
+        seatIds.push(seat.id);
+      }
+    }
+    if (seatIds.length === 0) {
+      throw new SenderError('Not seated');
+    }
+    for (const seatId of seatIds) {
+      ctx.db.GameSeat.id.delete(seatId);
+    }
+  },
+);
