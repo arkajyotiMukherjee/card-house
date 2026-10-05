@@ -2,9 +2,10 @@ import * as ex from 'excalibur';
 import { BootScene, demoImages } from './boot-scene';
 import { getOrCreateClientId } from './client-id';
 import { connectCardroom } from './connect';
+import { mountLobbyPanel } from './lobby-panel';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH, integerScale } from './sheets';
 
-getOrCreateClientId();
+const clientId = getOrCreateClientId();
 
 const canvas = document.createElement('canvas');
 document.querySelector('#app')?.append(canvas);
@@ -42,7 +43,12 @@ const loader = new ex.Loader(demoImages);
 void engine.start(loader).then(() => {
   engine.goToScene('boot');
   applyIntegerScale();
-  connectCardroom((line) => {
-    scene.setStatus(line);
+  connectCardroom({
+    onStatus: (line) => {
+      scene.setStatus(line);
+    },
+    onSubscribed: (connection) => {
+      mountLobbyPanel(scene, connection, clientId);
+    },
   });
 });
