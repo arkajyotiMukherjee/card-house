@@ -22,7 +22,7 @@ From the repo root, after `./scripts/bootstrap.sh`:
 - `pnpm build` — production client build
 - `pnpm lint` — ESLint and Prettier
 - `pnpm test` — hearts sheet slice test
-- `pnpm typecheck` — TypeScript for the client and the SpacetimeDB module
+- `pnpm typecheck` — TypeScript for the client, the SpacetimeDB module, and `src/shared`
 
 ## Local SpacetimeDB
 

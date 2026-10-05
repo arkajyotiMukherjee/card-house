@@ -14,6 +14,7 @@ client/                    Vite + Excalibur app
     module_bindings/       generated; do not edit
 server/                    SpacetimeDB module
   src/index.ts             tables and reducers
+src/shared/games/          GameRules and GameDefinition
 docs/                      architecture, milestones, UI spec
 scripts/bootstrap.sh       local tools, publish, generate bindings
 card-assest -pack/         Pixel Poker Pack source art
@@ -21,7 +22,7 @@ card-assest -pack/         Pixel Poker Pack source art
 
 The space and the spelling in `card-assest -pack` are the folder name. Leave it.
 
-`docs/implementation.md` mentions a future `src/shared/games/` tree. That folder is not in the repo. Game rules are not a package yet. The module source is `server/src/index.ts`.
+`src/shared/games/` holds `GameRules<State, Intent>` and `GameDefinition`. It is not a workspace package. `pnpm typecheck` checks it with `src/shared/tsconfig.json`. The module source is `server/src/index.ts`.
 
 ## Package manager
 
@@ -31,7 +32,7 @@ The space and the spelling in `card-assest -pack` are the folder name. Leave it.
 - `pnpm build` — client production build
 - `pnpm lint` — `eslint .` and `prettier --check .`
 - `pnpm test` — client Vitest suite
-- `pnpm typecheck` — `tsc --noEmit` in `client` and `server`
+- `pnpm typecheck` — `tsc --noEmit` in `client`, `server`, and `src/shared`
 
 `scripts/bootstrap.sh` installs with `pnpm install --frozen-lockfile` when `pnpm-lock.yaml` is present.
 
