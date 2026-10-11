@@ -66,7 +66,7 @@ void engine.start(loader).then(() => {
       lobbyScene.mount();
       mountLobbyPanel(scene, connection, clientId, {
         onJoined: (lobby) => {
-          lobbyScene.openLobby(lobby.id);
+          lobbyScene.openLobby(lobby.id, lobby.code);
         },
       });
     },

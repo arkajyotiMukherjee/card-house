@@ -66,23 +66,50 @@ export interface TableRow {
 
 export interface SeatRef {
   tableId: string;
+  lobbyMemberId?: string;
 }
 
 export interface TableLine {
   id: string;
+  gameType: string;
   gameName: string;
   tableName: string;
   currentSeats: number;
   maxPlayers: number;
   statusLabel: string;
   seatsLabel: string;
+  seated: boolean;
+}
+
+export interface TableGroup {
+  gameType: string;
+  gameName: string;
+  lines: TableLine[];
+}
+
+export type ListSlot =
+  | { kind: 'header'; y: number; group: TableGroup }
+  | { kind: 'row'; y: number; line: TableLine };
+
+export interface ListLayout {
+  slots: ListSlot[];
+  hidden: number;
 }
 
 export const TABLE_LIST = {
   panel: { x: 800, y: 44, w: 152, h: 460 },
   create: { x: 808, y: 70, w: 136, h: 26 },
-  row: { x: 808, y: 104, w: 136, h: 42, gap: 4 },
-  error: { x: 808, y: 480 },
+  list: { x: 808, y: 108, bottom: 468 },
+  header: { h: 14, gap: 4 },
+  row: { w: 136, h: 30, gap: 4 },
+  more: { x: 808, y: 468 },
+  error: { x: 808, y: 484 },
+} as const;
+
+export const ROOM_BANNER = {
+  panel: { x: 380, y: 6, w: 200, h: 54 },
+  title: { size: 8, y: 12 },
+  code: { size: 24, y: 28 },
 } as const;
 
 export const CREATE_TABLE = {
@@ -279,10 +306,27 @@ export function nextTableName(
   return `${game.name} #${sameType + 1}`;
 }
 
+export function seatedTableIds(
+  seats: Iterable<SeatRef>,
+  lobbyMemberId: string,
+): Set<string> {
+  const ids = new Set<string>();
+  if (lobbyMemberId.length === 0) {
+    return ids;
+  }
+  for (const seat of seats) {
+    if (seat.lobbyMemberId === lobbyMemberId) {
+      ids.add(seat.tableId);
+    }
+  }
+  return ids;
+}
+
 export function tableLines(
   tables: Iterable<TableRow>,
   seats: Iterable<SeatRef>,
   lobbyId: string,
+  seatedIds: ReadonlySet<string> = new Set(),
 ): TableLine[] {
   const counts = new Map<string, number>();
   for (const seat of seats) {
@@ -296,12 +340,14 @@ export function tableLines(
     const currentSeats = counts.get(table.id) ?? 0;
     lines.push({
       id: table.id,
+      gameType: table.gameType,
       gameName: gameDisplayName(table.gameType),
       tableName: table.name,
       currentSeats,
       maxPlayers: table.maxPlayers,
       statusLabel: tableStatusLabel(table.statusTag),
       seatsLabel: seatsLabel(currentSeats, table.maxPlayers),
+      seated: seatedIds.has(table.id),
     });
   }
   lines.sort((a, b) => {
@@ -312,6 +358,74 @@ export function tableLines(
     return a.id.localeCompare(b.id);
   });
   return lines;
+}
+
+function catalogRank(gameType: string): number {
+  const index = GAME_CATALOG.findIndex((game) => game.gameType === gameType);
+  return index < 0 ? GAME_CATALOG.length : index;
+}
+
+/** One group per game type: catalog games first, then the rest by name. */
+export function tableGroups(lines: Iterable<TableLine>): TableGroup[] {
+  const byType = new Map<string, TableGroup>();
+  for (const line of lines) {
+    const group = byType.get(line.gameType);
+    if (group) {
+      group.lines.push(line);
+    } else {
+      byType.set(line.gameType, {
+        gameType: line.gameType,
+        gameName: line.gameName,
+        lines: [line],
+      });
+    }
+  }
+  const groups = [...byType.values()];
+  groups.sort((a, b) => {
+    const byRank = catalogRank(a.gameType) - catalogRank(b.gameType);
+    if (byRank !== 0) {
+      return byRank;
+    }
+    const byName = a.gameName.localeCompare(b.gameName);
+    if (byName !== 0) {
+      return byName;
+    }
+    return a.gameType.localeCompare(b.gameType);
+  });
+  for (const group of groups) {
+    group.lines.sort((a, b) => {
+      const byName = a.tableName.localeCompare(b.tableName);
+      return byName !== 0 ? byName : a.id.localeCompare(b.id);
+    });
+  }
+  return groups;
+}
+
+/** Stacks group headers and rows from the list top. Rows that would run past `bottom` are counted in `hidden`. */
+export function listLayout(groups: readonly TableGroup[]): ListLayout {
+  const { list, header, row } = TABLE_LIST;
+  const slots: ListSlot[] = [];
+  let y: number = list.y;
+  let hidden = 0;
+  for (const group of groups) {
+    const room = y + header.h + header.gap + row.h <= list.bottom;
+    if (!room) {
+      hidden += group.lines.length;
+      continue;
+    }
+    slots.push({ kind: 'header', y, group });
+    y += header.h + header.gap;
+    for (const line of group.lines) {
+      if (y + row.h > list.bottom) {
+        hidden += 1;
+        continue;
+      }
+      slots.push({ kind: 'row', y, line });
+      y += row.h + row.gap;
+    }
+    y += header.gap;
+  }
+  return { slots, hidden };
 }
 
 export function lobbyTableQueries(lobbyId: string): [string, string] {

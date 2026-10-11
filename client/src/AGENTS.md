@@ -8,7 +8,7 @@ Style, resolution, and pixel filtering: [../../repo-conventions.md](../../repo-c
 
 - `main.ts` — reads or creates `clientId`, then the engine at 960×540, fixed display, integer scale, loader, and `connectCardroom`. After the lobby subscription applies, it mounts the lobby panel, `LobbyScene`, and `GameScene` with that `clientId`. Joining a table opens `GameScene`. Leave returns to the lobby.
 - `client-id.ts` — `getOrCreateClientId` reads `clientId` from `localStorage` or stores a new UUID. The key name is `clientId`.
-- `boot-scene.ts` — boot scene. Draws the green table, two hearts, the card back, one chip, and a status line.
+- `boot-scene.ts` — boot scene. Draws the green table, two hearts, the card back, one chip, and a status line along the bottom edge.
 - `sheets.ts` — pixel sizes and grid math (`CARD_SIZE` 64, chip 32×44, table 129×80, logical 960×540).
 - `card-atlas.ts` — `{ rank, suit }` to a sprite. Hearts, diamonds, clubs, and spades share one grid. A suit with no sheet throws.
 - `game-driver.ts` — `GameDriver<State>`, the render context, and pointer input.
@@ -19,9 +19,10 @@ Style, resolution, and pixel filtering: [../../repo-conventions.md](../../repo-c
 - `connect.ts` — `DbConnection.builder()`, the status string, and the `Lobby`, `LobbyMember`, and `GameTable` subscription. `subscribeLobbyTables` adds `GameTable` and `GameSeat` for one lobby. Host and database come from `__SPACETIMEDB_HOST__` and `__SPACETIMEDB_DB__`.
 - `game-scene.ts` — seat names for one table, the known table in the joined lobby, that table's `GameTable` / `GameSeat` subscription queries, and `dummyStateFromJson` for the dummy counter.
 - `game-scene-view.ts` — `GameScene`. Green table, seat labels, Leave Table, and the dummy counter. Bluff tables use `BluffDriver` on the subscribed `stateJson`. `sendIntent` calls `handleGameIntent`. The count text is the subscribed dummy `stateJson`.
-- `lobby.ts` — name and room-code field editing, which `LobbyMember.name` rows belong to the joined lobby, the table-list rows for that lobby, and `GAME_CATALOG`. That catalog offers Bluff from `bluffGameDefinition` (`gameType`, display name, min and max players, how-to-play). Stub and dummy stay on the rules registry and are not Create Table choices.
+- `lobby.ts` — name and room-code field editing, which `LobbyMember.name` rows belong to the joined lobby, the table-list rows for that lobby (`tableLines`, which marks tables the member sits at), `tableGroups` and `listLayout` (one header per game type, catalog games first, rows past the panel counted as hidden), and `GAME_CATALOG`. That catalog offers Bluff from `bluffGameDefinition` (`gameType`, display name, min and max players, how-to-play). Stub and dummy stay on the rules registry and are not Create Table choices.
 - `lobby-panel.ts` — canvas name field, optional room code, and the joined room. It tells `LobbyScene` which lobby was joined.
-- `lobby-scene.ts` — `LobbyScene` on the boot scene. Lists game name, table name, `currentSeats/maxPlayers`, and status. Create Table picks a game and max players. A table click calls `joinTable` and opens `GameScene`.
+- `lobby-ambience.ts` — idle card positions behind the lobby and `idleCardPose`, a slow whole-pixel bob and small sway.
+- `lobby-scene.ts` — `LobbyScene` on the boot scene. A top-center banner shows the room code. The list groups tables by game type, with table name, `currentSeats/maxPlayers`, and status per row. A `YOU` badge marks the table this member sits at. Faint idle cards bob behind the felt. Create Table picks a game and max players. A table click calls `joinTable` and opens `GameScene`.
 - `vite-env.d.ts` — those two compile-time globals.
 - `test-setup.ts` — Node stubs so Excalibur can load under Vitest.
 - `*.test.ts` — Vitest. Pixel checks read `../public/assets/` with `pngjs`. `table-atlas.test.ts` uses `@vitest-environment happy-dom`.
