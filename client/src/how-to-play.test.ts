@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { bluffGameDefinition } from '../../src/shared/games/bluff';
+import { rummyGameDefinition } from '../../src/shared/games/rummy';
 import { HOW_TO_PLAY_TEXT } from './game-scene';
 import {
   clampScroll,
@@ -11,6 +12,19 @@ import {
 describe('definitionFor', () => {
   it('returns the Bluff definition for gameType bluff', () => {
     expect(definitionFor('bluff')).toBe(bluffGameDefinition);
+  });
+
+  it('returns the Rummy definition for gameType rummy', () => {
+    expect(definitionFor('rummy')).toBe(rummyGameDefinition);
+    const layout = layoutHowToPlay(
+      rummyGameDefinition,
+      HOW_TO_PLAY_TEXT.columns,
+    );
+    expect(layout.title).toBe('How to Play Rummy');
+    for (const line of layout.lines) {
+      expect(line.length).toBeLessThanOrEqual(HOW_TO_PLAY_TEXT.columns);
+    }
+    expect(layout.lines.length).toBeLessThanOrEqual(HOW_TO_PLAY_TEXT.rows);
   });
 
   it('has no definition for an unknown gameType', () => {

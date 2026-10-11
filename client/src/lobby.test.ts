@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { bluffGameDefinition } from '../../src/shared/games/bluff';
+import { rummyGameDefinition } from '../../src/shared/games/rummy';
 import {
   applyCodeKey,
   applyFieldKey,
@@ -156,6 +157,13 @@ describe('lobby tables', () => {
         maxPlayers: bluffGameDefinition.maxPlayers,
         howToPlay: bluffGameDefinition.howToPlay,
       },
+      {
+        gameType: rummyGameDefinition.gameType,
+        name: rummyGameDefinition.displayName,
+        minPlayers: rummyGameDefinition.minPlayers,
+        maxPlayers: rummyGameDefinition.maxPlayers,
+        howToPlay: rummyGameDefinition.howToPlay,
+      },
     ]);
     const gameTypes = GAME_CATALOG.map((game) => game.gameType);
     expect(gameTypes).not.toContain('dummy');
@@ -171,8 +179,16 @@ describe('lobby tables', () => {
       maxPlayers: 6,
     });
     expect(bluff.howToPlay).toBe(bluffGameDefinition.howToPlay);
-    expect(gameOption(1)).toBe(bluff);
-    expect(gameOption(-1)).toBe(bluff);
+    const rummy = gameOption(1);
+    expect(rummy).toMatchObject({
+      gameType: 'rummy',
+      name: 'Rummy',
+      minPlayers: 2,
+      maxPlayers: 6,
+    });
+    expect(rummy.howToPlay).toBe(rummyGameDefinition.howToPlay);
+    expect(gameOption(2)).toBe(bluff);
+    expect(gameOption(-1)).toBe(rummy);
     expect(clampPlayerCount(bluff, 9)).toBe(6);
     expect(clampPlayerCount(bluff, 2)).toBe(2);
     expect(nextTableName(tables, 'lobby_1', bluff)).toBe('Bluff #2');

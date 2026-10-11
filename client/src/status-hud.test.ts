@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BluffState } from '../../src/shared/games/bluff';
-import { bluffStatusHud } from './status-hud';
+import type { RummyState } from '../../src/shared/games/rummy';
+import { bluffStatusHud, rummyStatusHud } from './status-hud';
 
 const seats = [
   { seatIndex: 0, name: 'Ada' },
@@ -71,5 +72,48 @@ describe('bluffStatusHud', () => {
     );
     expect(lines.turn).toBe('Turn: -');
     expect(lines.phase).toBe('Phase: Finished');
+  });
+});
+
+function rummyState(overrides: Partial<RummyState>): RummyState {
+  return {
+    phase: 'play',
+    hands: { '0': ['AS'], '1': ['KH'] },
+    stock: ['2C', '3D'],
+    discardPile: ['4S'],
+    melds: [],
+    turnSeatIndex: 0,
+    drawn: false,
+    scores: {},
+    winnerSeatIndex: null,
+    ...overrides,
+  };
+}
+
+describe('rummyStatusHud', () => {
+  it('names the player on turn and the stock', () => {
+    expect(rummyStatusHud(rummyState({}), seats)).toEqual({
+      turn: 'Turn: Ada',
+      phase: 'Phase: Play',
+      round: 'Round: Stock 2',
+    });
+  });
+
+  it('shows the winner score when the hand is over', () => {
+    expect(
+      rummyStatusHud(
+        rummyState({
+          phase: 'finished',
+          turnSeatIndex: null,
+          winnerSeatIndex: 1,
+          scores: { '0': 1, '1': 0 },
+        }),
+        seats,
+      ),
+    ).toEqual({
+      turn: 'Turn: -',
+      phase: 'Phase: Finished',
+      round: 'Round: Score 0',
+    });
   });
 });

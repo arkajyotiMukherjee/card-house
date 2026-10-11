@@ -3,6 +3,7 @@ import {
   type BluffPhase,
   type BluffState,
 } from '../../src/shared/games/bluff';
+import type { RummyPhase, RummyState } from '../../src/shared/games/rummy';
 
 export const STATUS_HUD = { x: 668, y: 16, w: 240, h: 52 } as const;
 
@@ -51,6 +52,44 @@ export function bluffStatusHud(
   return {
     turn: `Turn: ${turn}`,
     phase: `Phase: ${PHASE_LABELS[state.phase]}`,
+    round: `Round: ${round}`,
+  };
+}
+
+const RUMMY_PHASE_LABELS = {
+  lobby: 'Waiting',
+  play: 'Play',
+  finished: 'Finished',
+} as const satisfies Record<RummyPhase, string>;
+
+/**
+ * Status lines from the subscribed Rummy `stateJson`.
+ * The round line is the stock count, or the winner's deadwood once the hand ends.
+ */
+export function rummyStatusHud(
+  state: RummyState,
+  seats: readonly { seatIndex: number; name: string }[],
+): StatusHudLines {
+  let turn = '-';
+  if (state.phase === 'play' && state.turnSeatIndex !== null) {
+    const seatIndex = state.turnSeatIndex;
+    const seat = seats.find((row) => row.seatIndex === seatIndex);
+    const name = seat?.name ?? '';
+    turn = name.length > 0 ? shortName(name) : `Seat ${seatIndex}`;
+  }
+  let round = '-';
+  if (state.phase === 'play') {
+    round = `Stock ${state.stock.length}`;
+  } else if (state.phase === 'finished') {
+    const winner = state.winnerSeatIndex;
+    const score = winner === null ? undefined : state.scores[String(winner)];
+    if (score !== undefined) {
+      round = `Score ${score}`;
+    }
+  }
+  return {
+    turn: `Turn: ${turn}`,
+    phase: `Phase: ${RUMMY_PHASE_LABELS[state.phase]}`,
     round: `Round: ${round}`,
   };
 }

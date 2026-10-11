@@ -2,6 +2,11 @@ import {
   BLUFF_GAME_TYPE,
   readBluffEventNote,
 } from '../../src/shared/games/bluff';
+import {
+  RUMMY_GAME_TYPE,
+  readRummyEventNote,
+  type RummyEventNote,
+} from '../../src/shared/games/rummy';
 
 const NAME_LIMIT = 10;
 const MESSAGE_LIMIT = 64;
@@ -52,6 +57,9 @@ export function eventMessage(
   note: unknown,
   seatName: (seatIndex: number) => string,
 ): string | null {
+  if (gameType === RUMMY_GAME_TYPE) {
+    return rummyMessage(readRummyEventNote(note), seatName);
+  }
   if (gameType !== BLUFF_GAME_TYPE) {
     return null;
   }
@@ -75,4 +83,43 @@ export function eventMessage(
   return clip(
     `${challenger} called bluff but ${accused} was honest. ${challenger} takes the pile`,
   );
+}
+
+function rummyMessage(
+  note: RummyEventNote | null,
+  seatName: (seatIndex: number) => string,
+): string | null {
+  if (!note) {
+    return null;
+  }
+  const name = shortName(seatName(note.seat));
+  if (note.kind === 'draw') {
+    return note.source === 'stock'
+      ? clip(`${name} drew from the stock`)
+      : clip(`${name} took the discard`);
+  }
+  if (note.kind === 'meld') {
+    return clip(
+      note.out
+        ? `${name} melded ${note.count} and went out`
+        : `${name} melded ${note.count} cards`,
+    );
+  }
+  if (note.kind === 'layoff') {
+    const cards = note.count === 1 ? 'card' : 'cards';
+    return clip(
+      note.out
+        ? `${name} laid off and went out`
+        : `${name} laid off ${note.count} ${cards}`,
+    );
+  }
+  if (note.out) {
+    return clip(`${name} discarded and went out`);
+  }
+  if (note.ended) {
+    const winner = note.winnerSeatIndex;
+    const who = winner === null ? 'Nobody' : shortName(seatName(winner));
+    return clip(`Stock is empty. ${who} has the low score`);
+  }
+  return clip(`${name} discarded`);
 }

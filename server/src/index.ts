@@ -10,6 +10,7 @@ import type {
   GameTable as RulesTable,
 } from '../../src/shared/games';
 import { bluffGameDefinition, bluffRules } from '../../src/shared/games/bluff';
+import { rummyGameDefinition, rummyRules } from '../../src/shared/games/rummy';
 import {
   dummyCounterRules,
   dummyGameDefinition,
@@ -24,6 +25,7 @@ import { stubIntentRules } from './stub-rules';
 registerGameRules(stubGameDefinition, stubIntentRules);
 registerGameRules(dummyGameDefinition, dummyCounterRules);
 registerGameRules(bluffGameDefinition, bluffRules);
+registerGameRules(rummyGameDefinition, rummyRules);
 
 const LobbyStatus = t.enum('LobbyStatus', ['open', 'closed']);
 const TableStatus = t.enum('TableStatus', [
