@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BluffState } from '../../src/shared/games/bluff';
-import { bluffStatusHud } from './status-hud';
+import type { PresidentState } from '../../src/shared/games/president';
+import { bluffStatusHud, presidentStatusHud } from './status-hud';
 
 const seats = [
   { seatIndex: 0, name: 'Ada' },
@@ -71,5 +72,65 @@ describe('bluffStatusHud', () => {
     );
     expect(lines.turn).toBe('Turn: -');
     expect(lines.phase).toBe('Phase: Finished');
+  });
+});
+
+function presidentState(overrides: Partial<PresidentState>): PresidentState {
+  return {
+    phase: 'play',
+    hands: { '0': ['3C'], '1': ['4S'] },
+    playPile: ['KS'],
+    currentRank: 'K',
+    currentCount: 1,
+    passes: 0,
+    turnSeatIndex: 1,
+    lastPlay: { seat: 0, cards: ['KS'], rank: 'K' },
+    openingLead: false,
+    finishOrder: [],
+    rankOrder: [],
+    winnerSeatIndex: null,
+    ...overrides,
+  };
+}
+
+describe('presidentStatusHud', () => {
+  it('names the player on turn and the rank to beat', () => {
+    expect(presidentStatusHud(presidentState({}), seats)).toEqual({
+      turn: 'Turn: Bea',
+      phase: 'Phase: Play',
+      round: 'Round: 1xK',
+    });
+  });
+
+  it('shows a lead, then the President title when the hand ends', () => {
+    expect(
+      presidentStatusHud(
+        presidentState({
+          turnSeatIndex: 0,
+          currentRank: null,
+          currentCount: 0,
+          playPile: [],
+          lastPlay: null,
+        }),
+        seats,
+      ).round,
+    ).toBe('Round: Lead');
+    const lines = presidentStatusHud(
+      presidentState({
+        phase: 'finished',
+        turnSeatIndex: null,
+        currentRank: null,
+        currentCount: 0,
+        winnerSeatIndex: 0,
+        rankOrder: [
+          { seat: 0, title: 'President', score: 2 },
+          { seat: 1, title: 'Scum', score: 1 },
+        ],
+      }),
+      seats,
+    );
+    expect(lines.turn).toBe('Turn: -');
+    expect(lines.phase).toBe('Phase: Finished');
+    expect(lines.round).toBe('Round: President');
   });
 });

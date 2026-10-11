@@ -28,6 +28,27 @@ export {
   readDummyState,
 } from './dummy-counter';
 export type { DummyIntent, DummyState } from './dummy-counter';
+export {
+  PRESIDENT_GAME_TYPE,
+  PRESIDENT_RANKS,
+  PRESIDENT_SUITS,
+  presidentGameDefinition,
+  presidentRankOf,
+  presidentRules,
+  readPresidentEventNote,
+  readPresidentIntent,
+  readPresidentState,
+} from './president';
+export type {
+  PresidentEventNote,
+  PresidentIntent,
+  PresidentLastPlay,
+  PresidentPhase,
+  PresidentRank,
+  PresidentRankEntry,
+  PresidentState,
+  PresidentSuit,
+} from './president';
 export type { GameDefinition } from './game-definition';
 export type {
   GameRules,
