@@ -31,6 +31,10 @@ import {
   HEARTS_GAME_TYPE,
 } from '../../src/shared/games/hearts';
 import {
+  pokerGameDefinition,
+  POKER_GAME_TYPE,
+} from '../../src/shared/games/poker';
+import {
   dummyGameDefinition,
   DUMMY_GAME_TYPE,
 } from '../../src/shared/games/dummy-counter';
@@ -49,6 +53,7 @@ const DEFINITIONS: ReadonlyMap<string, GameDefinition> = new Map<
   [BLACKJACK_GAME_TYPE, blackjackGameDefinition],
   [SPADES_GAME_TYPE, spadesGameDefinition],
   [HEARTS_GAME_TYPE, heartsGameDefinition],
+  [POKER_GAME_TYPE, pokerGameDefinition],
   [DUMMY_GAME_TYPE, dummyGameDefinition],
 ]);
 

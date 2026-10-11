@@ -11,6 +11,9 @@ import {
   clampPlayerCount,
   CREATE_TABLE,
   gameOption,
+  POKER_GAME_TYPE,
+  POKER_VARIATION_LABELS,
+  POKER_VARIATIONS,
   memberByClient,
   listLayout,
   nextTableName,
@@ -102,6 +105,7 @@ export class LobbyScene {
   private busy = false;
   private creating = false;
   private gameIndex = 0;
+  private variationIndex = 0;
   private maxPlayers = gameOption(0).maxPlayers;
   private readonly rowActors: ex.Actor[] = [];
   private emptyText: ex.Text | undefined;
@@ -111,6 +115,9 @@ export class LobbyScene {
   private errorText: ex.Text | undefined;
   private gameText: ex.Text | undefined;
   private maxText: ex.Text | undefined;
+  private variationText: ex.Text | undefined;
+  private dealLabel: ex.Text | undefined;
+  private variationActors: ex.Actor[] = [];
   private popup: ex.Actor | undefined;
 
   constructor(
@@ -361,6 +368,26 @@ export class LobbyScene {
       },
       popup,
     );
+    this.dealLabel = this.addLabel(420, 252, '', 8, DIM, popup);
+    this.variationText = this.addLabel(420, 276, '', 8, GOLD, popup);
+    this.variationActors = [
+      this.button(
+        CREATE_TABLE.varPrev,
+        'Prev',
+        () => {
+          this.stepVariation(-1);
+        },
+        popup,
+      ),
+      this.button(
+        CREATE_TABLE.varNext,
+        'Next',
+        () => {
+          this.stepVariation(1);
+        },
+        popup,
+      ),
+    ];
     this.button(
       CREATE_TABLE.create,
       'Create',
@@ -389,6 +416,7 @@ export class LobbyScene {
       return;
     }
     this.creating = true;
+    this.variationIndex = 0;
     this.paintChoice();
     this.setPopupOpen(true);
   }
@@ -426,6 +454,18 @@ export class LobbyScene {
     this.paintChoice();
   }
 
+  private stepVariation(delta: number): void {
+    if (
+      !this.creating ||
+      gameOption(this.gameIndex).gameType !== POKER_GAME_TYPE
+    ) {
+      return;
+    }
+    const count = POKER_VARIATIONS.length;
+    this.variationIndex = (this.variationIndex + delta + count) % count;
+    this.paintChoice();
+  }
+
   private paintChoice(): void {
     const game = gameOption(this.gameIndex);
     if (this.gameText) {
@@ -433,6 +473,18 @@ export class LobbyScene {
     }
     if (this.maxText) {
       this.maxText.text = String(this.maxPlayers);
+    }
+    const poker = game.gameType === POKER_GAME_TYPE;
+    const variation =
+      POKER_VARIATIONS[this.variationIndex] ?? POKER_VARIATIONS[0];
+    if (this.dealLabel) {
+      this.dealLabel.text = poker ? 'Deal' : '';
+    }
+    if (this.variationText) {
+      this.variationText.text = poker ? POKER_VARIATION_LABELS[variation] : '';
+    }
+    for (const actor of this.variationActors) {
+      actor.graphics.isVisible = poker;
     }
   }
 
@@ -443,13 +495,22 @@ export class LobbyScene {
     const game = gameOption(this.gameIndex);
     const maxPlayers = clampPlayerCount(game, this.maxPlayers);
     const tableName = nextTableName(this.readTables(), this.lobbyId, game);
+    const variation =
+      game.gameType === POKER_GAME_TYPE
+        ? POKER_VARIATIONS[this.variationIndex]
+        : undefined;
     this.busy = true;
     this.setError('');
     try {
       await this.connection.reducers.createGameTable({
         lobbyId: this.lobbyId,
         gameType: game.gameType,
-        settings: tableSettingsJson(game.minPlayers, maxPlayers, tableName),
+        settings: tableSettingsJson(
+          game.minPlayers,
+          maxPlayers,
+          tableName,
+          variation,
+        ),
       });
     } catch (error: unknown) {
       this.setError(errorMessage(error));
@@ -730,7 +791,7 @@ export class LobbyScene {
     caption: string,
     onPress: () => void,
     parent?: ex.Actor,
-  ): void {
+  ): ex.Actor {
     const actor = new ex.Actor({
       pos: ex.vec(box.x, box.y),
       anchor: ex.vec(0, 0),
@@ -766,8 +827,9 @@ export class LobbyScene {
     if (parent) {
       actor.pos = ex.vec(box.x - parent.pos.x, box.y - parent.pos.y);
       parent.addChild(actor);
-      return;
+    } else {
+      this.scene.add(actor);
     }
-    this.scene.add(actor);
+    return actor;
   }
 }

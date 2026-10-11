@@ -11,6 +11,7 @@ export function openingTableState(
     GameTable,
     'lobbyId' | 'name' | 'minPlayers' | 'maxPlayers' | 'createdAt'
   > & { id?: string },
+  variation?: string,
 ): unknown {
   const rules = rulesByType[gameType];
   if (!rules) {
@@ -24,7 +25,7 @@ export function openingTableState(
     status: 'waiting_for_players',
     minPlayers: table.minPlayers,
     maxPlayers: table.maxPlayers,
-    stateJson: '{}',
+    stateJson: variation ? JSON.stringify({ variation }) : '{}',
     createdAt: table.createdAt,
   });
 }

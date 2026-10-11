@@ -33,6 +33,10 @@ import {
   HEARTS_GAME_TYPE,
   readHeartsEventNote,
 } from '../../src/shared/games/hearts';
+import {
+  POKER_GAME_TYPE,
+  readPokerEventNote,
+} from '../../src/shared/games/poker';
 
 const NAME_LIMIT = 10;
 const MESSAGE_LIMIT = 64;
@@ -129,6 +133,9 @@ export function eventMessage(
   }
   if (gameType === HEARTS_GAME_TYPE) {
     return heartsEventMessage(note, seatName);
+  }
+  if (gameType === POKER_GAME_TYPE) {
+    return pokerEventMessage(note, seatName);
   }
   if (gameType !== BLUFF_GAME_TYPE) {
     return null;
@@ -337,3 +344,39 @@ function heartsEventMessage(
   return clip(`${name} played ${parsed.card}. ${taker} takes the trick`);
 }
 
+function pokerEventMessage(
+  note: unknown,
+  seatName: (seatIndex: number) => string,
+): string | null {
+  const parsed = readPokerEventNote(note);
+  if (!parsed) {
+    return null;
+  }
+  if (parsed.kind === 'finished') {
+    if (parsed.winners.length === 0) {
+      return clip('Hand over');
+    }
+    const names = parsed.winners.map((seat) => shortName(seatName(seat)));
+    if (parsed.winners.length === 1) {
+      return clip(`${names[0]} wins`);
+    }
+    return clip(`${names.join(', ')} split`);
+  }
+  const name = shortName(seatName(parsed.seat));
+  if (parsed.kind === 'fold') {
+    return clip(`${name} folds`);
+  }
+  if (parsed.kind === 'check') {
+    return clip(`${name} checks`);
+  }
+  if (parsed.kind === 'call') {
+    return clip(`${name} calls ${parsed.amount}`);
+  }
+  if (parsed.kind === 'bet') {
+    return clip(`${name} bets ${parsed.amount}`);
+  }
+  if (parsed.kind === 'raise') {
+    return clip(`${name} raises to ${parsed.amount}`);
+  }
+  return clip(`${name} discards`);
+}

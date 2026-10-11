@@ -6,6 +6,13 @@ import { rummyGameDefinition } from '../../src/shared/games/rummy';
 import { blackjackGameDefinition } from '../../src/shared/games/blackjack';
 import { spadesGameDefinition } from '../../src/shared/games/spades';
 import { heartsGameDefinition } from '../../src/shared/games/hearts';
+import {
+  POKER_GAME_TYPE,
+  POKER_VARIATION_LABELS,
+  POKER_VARIATIONS,
+  pokerGameDefinition,
+  type PokerVariation,
+} from '../../src/shared/games/poker';
 import type { GameDefinition } from '../../src/shared/games/game-definition';
 
 export const NAME_MAX = 12;
@@ -67,7 +74,11 @@ export const GAME_CATALOG = [
   catalogEntry(blackjackGameDefinition),
   catalogEntry(spadesGameDefinition),
   catalogEntry(heartsGameDefinition),
+  catalogEntry(pokerGameDefinition),
 ] as const satisfies readonly GameOption[];
+
+export { POKER_GAME_TYPE, POKER_VARIATION_LABELS, POKER_VARIATIONS };
+export type { PokerVariation };
 
 export interface TableRow {
   id: string;
@@ -127,13 +138,15 @@ export const ROOM_BANNER = {
 } as const;
 
 export const CREATE_TABLE = {
-  panel: { x: 188, y: 140, w: 440, h: 210 },
+  panel: { x: 188, y: 140, w: 440, h: 250 },
   prev: { x: 204, y: 220, w: 72, h: 26 },
   next: { x: 284, y: 220, w: 72, h: 26 },
   minus: { x: 420, y: 220, w: 40, h: 26 },
   plus: { x: 468, y: 220, w: 40, h: 26 },
-  create: { x: 204, y: 292, w: 160, h: 28 },
-  cancel: { x: 376, y: 292, w: 160, h: 28 },
+  varPrev: { x: 204, y: 268, w: 72, h: 26 },
+  varNext: { x: 284, y: 268, w: 72, h: 26 },
+  create: { x: 204, y: 328, w: 160, h: 28 },
+  cancel: { x: 376, y: 328, w: 160, h: 28 },
 } as const;
 
 export function normalizePlayerName(raw: string): string {
@@ -269,11 +282,18 @@ export function tableSettingsJson(
   minPlayers: number,
   maxPlayers: number,
   name?: string,
+  variation?: string,
 ): string {
+  const settings: Record<string, string | number> = {};
   if (name && name.length > 0) {
-    return JSON.stringify({ name, minPlayers, maxPlayers });
+    settings.name = name;
   }
-  return JSON.stringify({ minPlayers, maxPlayers });
+  settings.minPlayers = minPlayers;
+  settings.maxPlayers = maxPlayers;
+  if (variation && variation.length > 0) {
+    settings.variation = variation;
+  }
+  return JSON.stringify(settings);
 }
 
 export function tableStatusLabel(tag: string): string {

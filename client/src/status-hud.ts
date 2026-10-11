@@ -17,6 +17,10 @@ import {
   type HeartsPhase,
   type HeartsState,
 } from '../../src/shared/games/hearts';
+import {
+  POKER_VARIATION_LABELS,
+  type PokerState,
+} from '../../src/shared/games/poker';
 
 export const STATUS_HUD = { x: 668, y: 16, w: 240, h: 52 } as const;
 
@@ -332,3 +336,41 @@ export function heartsStatusHud(
   };
 }
 
+const POKER_STREET_LABELS = {
+  preflop: 'Preflop',
+  flop: 'Flop',
+  turn: 'Turn',
+  river: 'River',
+} as const;
+
+/**
+ * Status lines from the subscribed Poker `stateJson`.
+ * The same three HUD rows: who acts, the street, and the variation.
+ */
+export function pokerStatusHud(
+  state: PokerState,
+  seats: readonly { seatIndex: number; name: string }[],
+): StatusHudLines {
+  let turn = '-';
+  if (state.phase === 'play' && state.turnSeatIndex !== null) {
+    const seatIndex = state.turnSeatIndex;
+    const seat = seats.find((row) => row.seatIndex === seatIndex);
+    const name = seat?.name ?? '';
+    turn = name.length > 0 ? shortName(name) : `Seat ${seatIndex}`;
+  }
+  let phase = 'Waiting';
+  if (state.phase === 'finished') {
+    phase = 'Finished';
+  } else if (state.phase === 'play' && state.step === 'discard') {
+    phase = 'Discard';
+  } else if (state.phase === 'play') {
+    phase = POKER_STREET_LABELS[state.street];
+  }
+  const round =
+    state.phase === 'lobby' ? '-' : POKER_VARIATION_LABELS[state.variation];
+  return {
+    turn: `Turn: ${turn}`,
+    phase: `Phase: ${phase}`,
+    round: `Round: ${round}`,
+  };
+}
