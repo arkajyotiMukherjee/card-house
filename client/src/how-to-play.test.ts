@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { bluffGameDefinition } from '../../src/shared/games/bluff';
+import { crazyEightsGameDefinition } from '../../src/shared/games/crazy-eights';
+import { goFishGameDefinition } from '../../src/shared/games/go-fish';
+import { presidentGameDefinition } from '../../src/shared/games/president';
+import { rummyGameDefinition } from '../../src/shared/games/rummy';
+import { blackjackGameDefinition } from '../../src/shared/games/blackjack';
+import { spadesGameDefinition } from '../../src/shared/games/spades';
 import { heartsGameDefinition } from '../../src/shared/games/hearts';
 import { HOW_TO_PLAY_TEXT } from './game-scene';
 import {
@@ -14,8 +20,47 @@ describe('definitionFor', () => {
     expect(definitionFor('bluff')).toBe(bluffGameDefinition);
   });
 
+  it('returns the President definition for gameType president', () => {
+    expect(definitionFor('president')).toBe(presidentGameDefinition);
+  });
+
+  it('returns the Go Fish definition for gameType go_fish', () => {
+    expect(definitionFor('go_fish')).toBe(goFishGameDefinition);
+  });
+
+  it('returns the Crazy Eights definition for gameType crazy_eights', () => {
+    expect(definitionFor('crazy_eights')).toBe(crazyEightsGameDefinition);
+  });
+
+  it('returns the Rummy definition for gameType rummy', () => {
+    expect(definitionFor('rummy')).toBe(rummyGameDefinition);
+    const layout = layoutHowToPlay(
+      rummyGameDefinition,
+      HOW_TO_PLAY_TEXT.columns,
+    );
+    expect(layout.title).toBe('How to Play Rummy');
+    for (const line of layout.lines) {
+      expect(line.length).toBeLessThanOrEqual(HOW_TO_PLAY_TEXT.columns);
+    }
+    expect(layout.lines.length).toBeLessThanOrEqual(HOW_TO_PLAY_TEXT.rows);
+  });
+
+  it('returns the Blackjack definition for gameType blackjack', () => {
+    expect(definitionFor('blackjack')).toBe(blackjackGameDefinition);
+  });
+
+  it('returns the Spades definition for gameType spades', () => {
+    expect(definitionFor('spades')).toBe(spadesGameDefinition);
+    expect(layoutHowToPlay(spadesGameDefinition, 84).title).toBe(
+      'How to Play Spades',
+    );
+  });
+
   it('returns the Hearts definition for gameType hearts', () => {
     expect(definitionFor('hearts')).toBe(heartsGameDefinition);
+    expect(layoutHowToPlay(heartsGameDefinition, 84).title).toBe(
+      'How to Play Hearts',
+    );
   });
 
   it('has no definition for an unknown gameType', () => {

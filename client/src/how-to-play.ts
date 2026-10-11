@@ -3,6 +3,30 @@ import {
   BLUFF_GAME_TYPE,
 } from '../../src/shared/games/bluff';
 import {
+  crazyEightsGameDefinition,
+  CRAZY_EIGHTS_GAME_TYPE,
+} from '../../src/shared/games/crazy-eights';
+import {
+  goFishGameDefinition,
+  GO_FISH_GAME_TYPE,
+} from '../../src/shared/games/go-fish';
+import {
+  presidentGameDefinition,
+  PRESIDENT_GAME_TYPE,
+} from '../../src/shared/games/president';
+import {
+  rummyGameDefinition,
+  RUMMY_GAME_TYPE,
+} from '../../src/shared/games/rummy';
+import {
+  blackjackGameDefinition,
+  BLACKJACK_GAME_TYPE,
+} from '../../src/shared/games/blackjack';
+import {
+  spadesGameDefinition,
+  SPADES_GAME_TYPE,
+} from '../../src/shared/games/spades';
+import {
   heartsGameDefinition,
   HEARTS_GAME_TYPE,
 } from '../../src/shared/games/hearts';
@@ -18,6 +42,12 @@ const DEFINITIONS: ReadonlyMap<string, GameDefinition> = new Map<
   GameDefinition
 >([
   [BLUFF_GAME_TYPE, bluffGameDefinition],
+  [PRESIDENT_GAME_TYPE, presidentGameDefinition],
+  [GO_FISH_GAME_TYPE, goFishGameDefinition],
+  [CRAZY_EIGHTS_GAME_TYPE, crazyEightsGameDefinition],
+  [RUMMY_GAME_TYPE, rummyGameDefinition],
+  [BLACKJACK_GAME_TYPE, blackjackGameDefinition],
+  [SPADES_GAME_TYPE, spadesGameDefinition],
   [HEARTS_GAME_TYPE, heartsGameDefinition],
   [DUMMY_GAME_TYPE, dummyGameDefinition],
 ]);

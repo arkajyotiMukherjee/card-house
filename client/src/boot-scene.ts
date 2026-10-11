@@ -55,7 +55,7 @@ export const cardAtlas = new CardAtlas(heartsImage, cardBackImage, {
   clubs: clubsImage,
   spades: spadesImage,
 });
-const chipAtlas = new ChipAtlas(chipsImage);
+export const chipAtlas = new ChipAtlas(chipsImage);
 
 export const greenTable = tables.sprite('green');
 greenTable.scale = ex.vec(TABLE_SCALE, TABLE_SCALE);
