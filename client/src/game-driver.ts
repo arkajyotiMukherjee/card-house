@@ -15,6 +15,8 @@ export interface RenderContext {
   meSeatIndex: number | null;
   cards: CardAtlas;
   sendIntent: (intent: unknown) => void;
+  /** True while an overlay covers the table. Drivers ignore pointer input then. */
+  inputBlocked: () => boolean;
 }
 
 export interface InputEvent {

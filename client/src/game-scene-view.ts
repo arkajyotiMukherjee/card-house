@@ -392,6 +392,7 @@ export class GameScene extends ex.Scene {
       sendIntent: (intent) => {
         this.sendPayload(JSON.stringify(intent));
       },
+      inputBlocked: () => this.howToPlay.isOpen,
     };
   }
 

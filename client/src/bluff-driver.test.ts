@@ -17,7 +17,11 @@ function state(): BluffState {
   };
 }
 
-function context(sent: unknown[], seatIndex: number | null): RenderContext {
+function context(
+  sent: unknown[],
+  seatIndex: number | null,
+  blocked = false,
+): RenderContext {
   return {
     scene: {} as Scene,
     seats: [
@@ -28,6 +32,7 @@ function context(sent: unknown[], seatIndex: number | null): RenderContext {
     sendIntent: (intent) => {
       sent.push(intent);
     },
+    inputBlocked: () => blocked,
   };
 }
 
@@ -69,5 +74,23 @@ describe('BluffDriver input', () => {
     driver.handleInput({ type: 'pointerup', target: 'play' }, table, ctx);
     driver.handleInput({ type: 'pointerup', target: 'challenge' }, table, ctx);
     expect(sent).toEqual([]);
+  });
+
+  it('ignores card, Play, and Challenge input while an overlay is open', () => {
+    const driver = new BluffDriver();
+    const sent: unknown[] = [];
+    const table = state();
+    const open = context(sent, 0, true);
+    driver.handleInput({ type: 'pointerup', target: 'AS' }, table, open);
+    driver.handleInput({ type: 'pointerup', target: 'play' }, table, open);
+    driver.handleInput({ type: 'pointerup', target: 'challenge' }, table, open);
+    expect(sent).toEqual([]);
+
+    const closed = context(sent, 0, false);
+    driver.handleInput({ type: 'pointerup', target: 'play' }, table, closed);
+    expect(sent).toEqual([]);
+    driver.handleInput({ type: 'pointerup', target: 'AS' }, table, closed);
+    driver.handleInput({ type: 'pointerup', target: 'play' }, table, closed);
+    expect(sent).toEqual([{ type: 'play', cards: ['AS'] }]);
   });
 });
