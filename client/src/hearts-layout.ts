@@ -3,6 +3,7 @@ import {
   canPlayCard,
   isPointCard,
   passDirection,
+  QUEEN_OF_SPADES,
   type HeartsState,
 } from '../../src/shared/games/hearts';
 import {
@@ -15,6 +16,7 @@ import {
   handPositions,
   opponentBackPositions,
 } from './bluff-layout';
+import { LOGICAL_WIDTH } from './sheets';
 
 export {
   CARD_DRAW,
@@ -30,19 +32,37 @@ export const PASS_BUTTON = { x: 748, y: 448, w: 96, h: 28 } as const;
 export const PLAY_BUTTON = { x: 852, y: 448, w: 96, h: 28 } as const;
 
 const PENALTY_STEP = 18;
+const PENALTY_LANE = 66;
+const PENALTY_SIDE_GAP = 84;
+const PENALTY_EDGE = 32;
+const TRICK_REACH = 0.78;
+const BACKS_FULL_HAND = 13;
 
-/** Hearts and the queen of spades, in the order they were taken. */
+/**
+ * Hearts in the order they were taken, then the queen of spades last.
+ * Last is the top of the fan, so the queen is never half hidden.
+ */
 export function pointCards(cards: readonly string[]): string[] {
   const points: string[] = [];
+  let queen = false;
   for (const card of cards) {
-    if (isPointCard(card)) {
+    if (card === QUEEN_OF_SPADES) {
+      queen = true;
+    } else if (isPointCard(card)) {
       points.push(card);
     }
+  }
+  if (queen) {
+    points.push(QUEEN_OF_SPADES);
   }
   return points;
 }
 
-/** A played card, in from the seat toward the middle of the table. */
+/**
+ * A played card, in from the seat toward the middle of the table.
+ * It sits past the fanned card backs of that seat, so a played card
+ * never lands on the hand it came from.
+ */
 export function trickPosition(
   seatX: number,
   seatY: number,
@@ -50,14 +70,25 @@ export function trickPosition(
   const dx = TABLE_CENTER.x - seatX;
   const dy = TABLE_CENTER.y - seatY;
   const len = Math.hypot(dx, dy) || 1;
-  const dist = Math.round(len * 0.62);
+  const lastBack = opponentBackPositions(seatX, seatY, BACKS_FULL_HAND).at(-1);
+  const backsReach = lastBack
+    ? Math.hypot(lastBack.x - seatX, lastBack.y - seatY)
+    : 0;
+  const along = Math.max(Math.abs(dx), Math.abs(dy)) / len;
+  const clear = backsReach + CARD_DRAW / along;
+  const dist = Math.round(Math.min(clear, len * TRICK_REACH));
   return {
     x: Math.round(seatX + (dx / len) * dist),
     y: Math.round(seatY + (dy / len) * dist),
   };
 }
 
-/** Taken hearts and the queen, beside a seat and above your own hand. */
+/**
+ * Taken hearts and the queen. Your own sit above your hand. An opponent's
+ * sit in a row on the side of the name plate away from the center, where
+ * neither their card backs nor the trick are. A seat too close to the top
+ * edge for that row gets it beside the plate instead.
+ */
 export function penaltyPositions(
   count: number,
   seatX: number,
@@ -65,14 +96,34 @@ export function penaltyPositions(
   self: boolean,
 ): { x: number; y: number }[] {
   const positions: { x: number; y: number }[] = [];
-  const y = self ? HAND_Y - 78 : seatY + 22;
-  const origin = self
-    ? HAND_LEFT + CARD_DRAW / 2
-    : seatX - ((Math.max(count, 1) - 1) * PENALTY_STEP) / 2;
+  if (self) {
+    const y = HAND_Y - 78;
+    for (let index = 0; index < count; index += 1) {
+      positions.push({
+        x: HAND_LEFT + CARD_DRAW / 2 + index * PENALTY_STEP,
+        y,
+      });
+    }
+    return positions;
+  }
+  const centerIsBelow = TABLE_CENTER.y > seatY;
+  const laneY = seatY + (centerIsBelow ? -PENALTY_LANE : PENALTY_LANE);
+  if (laneY >= PENALTY_EDGE) {
+    const half = ((Math.max(count, 1) - 1) * PENALTY_STEP) / 2;
+    const limit = LOGICAL_WIDTH - PENALTY_EDGE - half;
+    const origin = Math.min(Math.max(seatX, PENALTY_EDGE + half), limit) - half;
+    for (let index = 0; index < count; index += 1) {
+      positions.push({
+        x: Math.round(origin + index * PENALTY_STEP),
+        y: laneY,
+      });
+    }
+    return positions;
+  }
   for (let index = 0; index < count; index += 1) {
     positions.push({
-      x: Math.round(origin + index * PENALTY_STEP),
-      y,
+      x: Math.round(seatX - PENALTY_SIDE_GAP - index * PENALTY_STEP),
+      y: seatY + 10,
     });
   }
   return positions;

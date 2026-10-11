@@ -353,13 +353,19 @@ export class HeartsDriver implements GameDriver<HeartsState> {
         this.textActor(ctx, 748, 428, mine ? 'Your turn' : 'Wait', GOLD),
       );
       if (state.heartsBroken) {
-        this.labels.push(this.textActor(ctx, 430, 196, 'Hearts', GOLD));
+        this.labels.push(this.textActor(ctx, 216, 196, 'Hearts broken', GOLD));
       }
     }
     for (const seat of ctx.seats) {
-      const score = state.scores[String(seat.seatIndex)] ?? 0;
+      const text = `${state.scores[String(seat.seatIndex)] ?? 0} pts`;
       this.labels.push(
-        this.textActor(ctx, seat.x - 16, seat.y - 16, `s${score}`, DIM),
+        this.textActor(
+          ctx,
+          Math.round(seat.x - (text.length * 8) / 2),
+          seat.y - 16,
+          text,
+          DIM,
+        ),
       );
     }
   }
