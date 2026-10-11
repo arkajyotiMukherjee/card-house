@@ -111,7 +111,7 @@ export class BootScene extends ex.Scene {
       z: 0,
     });
     table.graphics.use(greenTable);
-    engine.add(table);
+    this.add(table);
 
     const cardY = LOGICAL_HEIGHT / 2 + 8;
     for (const heart of HEARTS) {
@@ -123,10 +123,10 @@ export class BootScene extends ex.Scene {
         z: 1,
       });
       actor.graphics.use(scaled(cardAtlas.sprite(heart.card), CARD_SCALE));
-      engine.add(actor);
+      this.add(actor);
     }
 
-    this.addChipStack(engine, 680, 188);
+    this.addChipStack(680, 188);
 
     const label = new ex.Actor({
       pos: ex.vec(16, 512),
@@ -134,14 +134,14 @@ export class BootScene extends ex.Scene {
       z: 10,
     });
     label.graphics.use(this.status);
-    engine.add(label);
+    this.add(label);
   }
 
   setStatus(text: string): void {
     this.status.text = text;
   }
 
-  private addChipStack(engine: ex.Engine, x: number, top: number): void {
+  private addChipStack(x: number, top: number): void {
     const step = CHIP_STACK_STEP * CHIP_SCALE;
     const body = CHIP_BODY_OFFSET * CHIP_SCALE;
     for (let index = 0; index < CHIP_STACK_COUNT; index += 1) {
@@ -153,7 +153,7 @@ export class BootScene extends ex.Scene {
         z: depth,
       });
       stack.graphics.use(scaled(chipAtlas.stackSprite('red'), CHIP_SCALE));
-      engine.add(stack);
+      this.add(stack);
 
       const face = new ex.Actor({
         pos: ex.vec(x, faceTop),
@@ -161,7 +161,7 @@ export class BootScene extends ex.Scene {
         z: depth + 1,
       });
       face.graphics.use(scaled(chipAtlas.sprite('red'), CHIP_SCALE));
-      engine.add(face);
+      this.add(face);
     }
   }
 }
