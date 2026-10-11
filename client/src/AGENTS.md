@@ -6,9 +6,11 @@ Style, resolution, and pixel filtering: [../../repo-conventions.md](../../repo-c
 
 ## Files
 
-- `main.ts` — reads or creates `clientId`, then the engine at 960×540, fixed display, integer scale, loader, and `connectCardroom`. After the lobby subscription applies, it mounts the lobby panel, `LobbyScene`, and `GameScene` with that `clientId`. Joining a table opens `GameScene`. Leave returns to the lobby.
+- `main.ts` — reads or creates `clientId`, then the engine at 960×540, fixed display, integer scale, loader, and `connectCardroom`. The app starts on `MenuScene`. After the lobby subscription applies, it mounts the lobby panel, `LobbyScene`, and `GameScene` with that `clientId`, and hands the panel to the menu. Entering a room from the menu opens the lobby scene (`boot`). Joining a table opens `GameScene`. Leave returns to the lobby.
 - `client-id.ts` — `getOrCreateClientId` reads `clientId` from `localStorage` or stores a new UUID. The key name is `clientId`.
 - `boot-scene.ts` — boot scene. Draws the green table, two hearts, the card back, one chip, and a status line.
+- `menu-layout.ts` — menu geometry and pure logic: the three button boxes, prompt boxes, how-to-play layout, markdown heading split and word wrap, and the looping pose of each background card or chip.
+- `menu-scene.ts` — `MenuScene`, the first scene. Title logo, drifting cards and chips, and Create Room, Join Room, and How to Play (All Games). Create and Join open a canvas prompt (name, plus room code for Join). Submit calls the lobby panel, shows its error in the prompt, and on success opens the lobby scene. How to Play lists `GAME_CATALOG` and shows the selected game's `howToPlay` text. Escape closes a prompt or the overlay.
 - `sheets.ts` — pixel sizes and grid math (`CARD_SIZE` 64, chip 32×44, table 129×80, logical 960×540).
 - `card-atlas.ts` — `{ rank, suit }` to a sprite. Hearts, diamonds, clubs, and spades share one grid. A suit with no sheet throws.
 - `game-driver.ts` — `GameDriver<State>`, the render context, and pointer input.
@@ -21,7 +23,7 @@ Style, resolution, and pixel filtering: [../../repo-conventions.md](../../repo-c
 - `game-scene-view.ts` — `GameScene`. Green table, seat labels, Leave Table, and the dummy counter. Bluff tables use `BluffDriver` on the subscribed `stateJson` and show the top-right status HUD. Dummy tables hide it. `sendIntent` calls `handleGameIntent`. The count text is the subscribed dummy `stateJson`.
 - `status-hud.ts` — `STATUS_HUD` box and `bluffStatusHud`, the three HUD lines from the subscribed Bluff `stateJson`: `turnSeatIndex` as a seated name, `phase`, and a round that is the place of `requiredRank` in Ace to King. Bluff stores no hand or round counter.
 - `lobby.ts` — name and room-code field editing, which `LobbyMember.name` rows belong to the joined lobby, the table-list rows for that lobby, and `GAME_CATALOG`. That catalog offers Bluff from `bluffGameDefinition` (`gameType`, display name, min and max players, how-to-play). Stub and dummy stay on the rules registry and are not Create Table choices.
-- `lobby-panel.ts` — canvas name field, optional room code, and the joined room. It tells `LobbyScene` which lobby was joined.
+- `lobby-panel.ts` — canvas name field, optional room code, and the joined room. It tells `LobbyScene` which lobby was joined. `mountLobbyPanel` returns `enter(kind, name, code)` so the menu can create or join and read the error. Its keyboard handler only runs while the lobby scene is active.
 - `lobby-scene.ts` — `LobbyScene` on the boot scene. Lists game name, table name, `currentSeats/maxPlayers`, and status. Create Table picks a game and max players. A table click calls `joinTable` and opens `GameScene`.
 - `vite-env.d.ts` — those two compile-time globals.
 - `test-setup.ts` — Node stubs so Excalibur can load under Vitest.
