@@ -70,7 +70,7 @@ void engine.start(loader).then(() => {
       lobbyScene.mount();
       const panel = mountLobbyPanel(engine, scene, connection, clientId, {
         onJoined: (lobby) => {
-          lobbyScene.openLobby(lobby.id);
+          lobbyScene.openLobby(lobby.id, lobby.code);
         },
       });
       menu.connect(
