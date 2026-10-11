@@ -81,5 +81,25 @@ describe('eventMessage', () => {
     expect(eventMessage('dummy', null, names)).toBeNull();
     expect(eventMessage('bluff', null, names)).toBeNull();
     expect(eventMessage('bluff', { kind: 'nope' }, names)).toBeNull();
+    expect(eventMessage('spades', { kind: 'nope' }, names)).toBeNull();
+  });
+
+  it('announces a Spades bid, trick, and winning score', () => {
+    expect(
+      eventMessage('spades', { kind: 'bid', seat: 0, tricks: 0 }, names),
+    ).toBe('Ada bid nil');
+    expect(
+      eventMessage('spades', { kind: 'bid', seat: 1, tricks: 3 }, names),
+    ).toBe('Bea bid 3');
+    expect(eventMessage('spades', { kind: 'trick', winner: 1 }, names)).toBe(
+      'Bea won the trick',
+    );
+    expect(
+      eventMessage(
+        'spades',
+        { kind: 'hand', ns: 600, ew: -20, winner: 'ns' },
+        names,
+      ),
+    ).toBe('NS wins 600 to -20');
   });
 });

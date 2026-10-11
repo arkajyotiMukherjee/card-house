@@ -2,6 +2,10 @@ import {
   BLUFF_GAME_TYPE,
   readBluffEventNote,
 } from '../../src/shared/games/bluff';
+import {
+  readSpadesEventNote,
+  SPADES_GAME_TYPE,
+} from '../../src/shared/games/spades';
 
 const NAME_LIMIT = 10;
 const MESSAGE_LIMIT = 64;
@@ -52,6 +56,9 @@ export function eventMessage(
   note: unknown,
   seatName: (seatIndex: number) => string,
 ): string | null {
+  if (gameType === SPADES_GAME_TYPE) {
+    return spadesEventMessage(note, seatName);
+  }
   if (gameType !== BLUFF_GAME_TYPE) {
     return null;
   }
@@ -75,4 +82,34 @@ export function eventMessage(
   return clip(
     `${challenger} called bluff but ${accused} was honest. ${challenger} takes the pile`,
   );
+}
+
+function spadesEventMessage(
+  note: unknown,
+  seatName: (seatIndex: number) => string,
+): string | null {
+  const parsed = readSpadesEventNote(note);
+  if (!parsed) {
+    return null;
+  }
+  if (parsed.kind === 'bid') {
+    const name = shortName(seatName(parsed.seat));
+    if (parsed.tricks === 0) {
+      return clip(`${name} bid nil`);
+    }
+    return clip(`${name} bid ${parsed.tricks}`);
+  }
+  if (parsed.kind === 'play') {
+    return clip(`${shortName(seatName(parsed.seat))} played ${parsed.card}`);
+  }
+  if (parsed.kind === 'trick') {
+    return clip(`${shortName(seatName(parsed.winner))} won the trick`);
+  }
+  if (parsed.winner === 'ns') {
+    return clip(`NS wins ${parsed.ns} to ${parsed.ew}`);
+  }
+  if (parsed.winner === 'ew') {
+    return clip(`EW wins ${parsed.ew} to ${parsed.ns}`);
+  }
+  return clip(`Scores NS ${parsed.ns} EW ${parsed.ew}`);
 }

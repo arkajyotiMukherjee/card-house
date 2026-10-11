@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { bluffGameDefinition } from '../../src/shared/games/bluff';
+import { spadesGameDefinition } from '../../src/shared/games/spades';
 import { HOW_TO_PLAY_TEXT } from './game-scene';
 import {
   clampScroll,
@@ -11,6 +12,13 @@ import {
 describe('definitionFor', () => {
   it('returns the Bluff definition for gameType bluff', () => {
     expect(definitionFor('bluff')).toBe(bluffGameDefinition);
+  });
+
+  it('returns the Spades definition for gameType spades', () => {
+    expect(definitionFor('spades')).toBe(spadesGameDefinition);
+    expect(layoutHowToPlay(spadesGameDefinition, 84).title).toBe(
+      'How to Play Spades',
+    );
   });
 
   it('has no definition for an unknown gameType', () => {

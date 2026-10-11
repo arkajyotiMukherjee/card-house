@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { bluffGameDefinition } from '../../src/shared/games/bluff';
+import { spadesGameDefinition } from '../../src/shared/games/spades';
 import {
   applyCodeKey,
   applyFieldKey,
@@ -147,7 +148,7 @@ describe('lobby tables', () => {
     });
   });
 
-  it('offers Bluff once from the shared definition', () => {
+  it('offers Bluff and Spades from the shared definitions', () => {
     expect(GAME_CATALOG).toEqual([
       {
         gameType: bluffGameDefinition.gameType,
@@ -155,6 +156,13 @@ describe('lobby tables', () => {
         minPlayers: bluffGameDefinition.minPlayers,
         maxPlayers: bluffGameDefinition.maxPlayers,
         howToPlay: bluffGameDefinition.howToPlay,
+      },
+      {
+        gameType: spadesGameDefinition.gameType,
+        name: spadesGameDefinition.displayName,
+        minPlayers: spadesGameDefinition.minPlayers,
+        maxPlayers: spadesGameDefinition.maxPlayers,
+        howToPlay: spadesGameDefinition.howToPlay,
       },
     ]);
     const gameTypes = GAME_CATALOG.map((game) => game.gameType);
@@ -171,11 +179,23 @@ describe('lobby tables', () => {
       maxPlayers: 6,
     });
     expect(bluff.howToPlay).toBe(bluffGameDefinition.howToPlay);
-    expect(gameOption(1)).toBe(bluff);
-    expect(gameOption(-1)).toBe(bluff);
+    expect(gameOption(2)).toBe(bluff);
+    expect(gameOption(-2)).toBe(bluff);
     expect(clampPlayerCount(bluff, 9)).toBe(6);
     expect(clampPlayerCount(bluff, 2)).toBe(2);
     expect(nextTableName(tables, 'lobby_1', bluff)).toBe('Bluff #2');
+    const spades = gameOption(1);
+    expect(spades).toMatchObject({
+      gameType: 'spades',
+      name: 'Spades',
+      minPlayers: 4,
+      maxPlayers: 4,
+    });
+    expect(spades.howToPlay).toBe(spadesGameDefinition.howToPlay);
+    expect(gameOption(-1)).toBe(spades);
+    expect(clampPlayerCount(spades, 2)).toBe(4);
+    expect(clampPlayerCount(spades, 6)).toBe(4);
+    expect(nextTableName(tables, 'lobby_1', spades)).toBe('Spades #1');
   });
 
   it('finds this browser in the joined lobby', () => {

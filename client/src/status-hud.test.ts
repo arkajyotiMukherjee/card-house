@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BluffState } from '../../src/shared/games/bluff';
-import { bluffStatusHud } from './status-hud';
+import type { SpadesState } from '../../src/shared/games/spades';
+import { bluffStatusHud, spadesStatusHud } from './status-hud';
 
 const seats = [
   { seatIndex: 0, name: 'Ada' },
@@ -71,5 +72,45 @@ describe('bluffStatusHud', () => {
     );
     expect(lines.turn).toBe('Turn: -');
     expect(lines.phase).toBe('Phase: Finished');
+  });
+});
+
+function spadesState(overrides: Partial<SpadesState> = {}): SpadesState {
+  return {
+    phase: 'play',
+    stage: 'bid',
+    hands: { '0': ['AS'], '1': ['2H'] },
+    bids: { '0': null, '1': null },
+    tricks: { '0': 0, '1': 0 },
+    trick: [],
+    lastTrick: null,
+    spadesBroken: false,
+    turnSeatIndex: 0,
+    dealerSeatIndex: 3,
+    scores: { ns: 0, ew: 0 },
+    bags: { ns: 0, ew: 0 },
+    handNumber: 2,
+    winnerTeam: null,
+    tableId: 'table-spades',
+    ...overrides,
+  };
+}
+
+describe('spadesStatusHud', () => {
+  it('names the bidder, the bid phase, and the hand', () => {
+    expect(spadesStatusHud(spadesState(), seats)).toEqual({
+      turn: 'Turn: Ada',
+      phase: 'Phase: Bid',
+      round: 'Hand: 2',
+    });
+  });
+
+  it('switches to play while tricks are in progress', () => {
+    const lines = spadesStatusHud(
+      spadesState({ stage: 'trick', turnSeatIndex: 1 }),
+      seats,
+    );
+    expect(lines.turn).toBe('Turn: Bea');
+    expect(lines.phase).toBe('Phase: Play');
   });
 });

@@ -86,7 +86,7 @@ Vite `8` (`client/vite.config.ts`): `host` `0.0.0.0`, port `5173`, `strictPort: 
 
 ## SpacetimeDB
 
-`spacetimedb` `2.10.2` is the source of truth for lobby membership and table rows. The client renders subscribed `stateJson` and sends intents. It does not decide whether a move is legal. The module today implements `create_lobby`, `join_lobby`, `create_game_table`, `join_table`, `leave_table`, and `handle_game_intent`. GameType `dummy` is a shared counter. GameType `bluff` is Bluff: one deck, hands, a discard pile, and a required rank. `join_table` deals a table whose `stateJson` is still `phase: "lobby"` once the seated count reaches `minPlayers`. A stored `phase` of `play` sets the table status to `in_progress`, and `finished` sets it to `finished`. Dummy and stub rows have no phase, so their status stays.
+`spacetimedb` `2.10.2` is the source of truth for lobby membership and table rows. The client renders subscribed `stateJson` and sends intents. It does not decide whether a move is legal. The module today implements `create_lobby`, `join_lobby`, `create_game_table`, `join_table`, `leave_table`, and `handle_game_intent`. GameType `dummy` is a shared counter. GameType `bluff` is Bluff: one deck, hands, a discard pile, and a required rank. GameType `spades` is Spades: four players, partnership bids, and trump tricks. `join_table` deals a table whose `stateJson` is still `phase: "lobby"` once the seated count reaches `minPlayers`. A stored `phase` of `play` sets the table status to `in_progress`, and `finished` sets it to `finished`. Dummy and stub rows have no phase, so their status stays.
 
 Schema and reducers are `server/src/index.ts`. `CaseConversionPolicy.None` keeps names as written: PascalCase tables (`Lobby`, `LobbyMember`, `GameTable`, `GameSeat`, `GameEvent`), camelCase columns, snake_case reducers. Tables are `public: true`.
 
@@ -112,7 +112,7 @@ Copy a new sheet into `client/public/assets/` when the client needs it. Keep the
 
 Vitest `3` (`client/vitest.config.ts`): environment `node`, include `src/**/*.test.ts`, setup file `src/test-setup.ts`. That setup file stubs `window` because Excalibur's ESM build reads it while the module loads. `table-atlas.test.ts` opts into `@vitest-environment happy-dom`.
 
-Tests sit next to the unit (`sheets.test.ts`, `card-atlas.test.ts`, `chip-atlas.test.ts`, `table-atlas.test.ts`). They read the PNGs in `client/public/assets/` with `pngjs` and compare pixel buffers. `pnpm test` runs that client suite, then the server rules tests. `pnpm --filter server test` registers the shared stub `gameType` on `rulesByType`, checks that an unknown `gameType` does not return those rules, checks the dummy counter, and checks Bluff dealing and intents.
+Tests sit next to the unit (`sheets.test.ts`, `card-atlas.test.ts`, `chip-atlas.test.ts`, `table-atlas.test.ts`). They read the PNGs in `client/public/assets/` with `pngjs` and compare pixel buffers. `pnpm test` runs that client suite, then the server rules tests. `pnpm --filter server test` registers the shared stub `gameType` on `rulesByType`, checks that an unknown `gameType` does not return those rules, checks the dummy counter, and checks Bluff and Spades dealing and intents.
 
 ## Docs
 

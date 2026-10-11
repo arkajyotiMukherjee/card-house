@@ -9,6 +9,21 @@ export {
   readBluffIntent,
   readBluffState,
 } from './bluff';
+export {
+  SPADES_GAME_TYPE,
+  spadesGameDefinition,
+  spadesRules,
+  readSpadesEventNote,
+  readSpadesIntent,
+  readSpadesState,
+} from './spades';
+export type {
+  SpadesEventNote,
+  SpadesIntent,
+  SpadesPhase,
+  SpadesState,
+  SpadesTeam,
+} from './spades';
 export type {
   BluffCardId,
   BluffEventNote,
