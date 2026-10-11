@@ -9,11 +9,24 @@ import type {
   GameSeat as RulesSeat,
   GameTable as RulesTable,
 } from '../../src/shared/games';
+import { bluffGameDefinition, bluffRules } from '../../src/shared/games/bluff';
+import {
+  crazyEightsGameDefinition,
+  crazyEightsRules,
+} from '../../src/shared/games/crazy-eights';
+import {
+  goFishGameDefinition,
+  goFishRules,
+} from '../../src/shared/games/go-fish';
+import {
+  presidentGameDefinition,
+  presidentRules,
+} from '../../src/shared/games/president';
+import { rummyGameDefinition, rummyRules } from '../../src/shared/games/rummy';
 import {
   blackjackGameDefinition,
   blackjackRules,
 } from '../../src/shared/games/blackjack';
-import { bluffGameDefinition, bluffRules } from '../../src/shared/games/bluff';
 import {
   dummyCounterRules,
   dummyGameDefinition,
@@ -28,6 +41,10 @@ import { stubIntentRules } from './stub-rules';
 registerGameRules(stubGameDefinition, stubIntentRules);
 registerGameRules(dummyGameDefinition, dummyCounterRules);
 registerGameRules(bluffGameDefinition, bluffRules);
+registerGameRules(presidentGameDefinition, presidentRules);
+registerGameRules(goFishGameDefinition, goFishRules);
+registerGameRules(crazyEightsGameDefinition, crazyEightsRules);
+registerGameRules(rummyGameDefinition, rummyRules);
 registerGameRules(blackjackGameDefinition, blackjackRules);
 
 const LobbyStatus = t.enum('LobbyStatus', ['open', 'closed']);

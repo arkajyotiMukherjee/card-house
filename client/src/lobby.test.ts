@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { blackjackGameDefinition } from '../../src/shared/games/blackjack';
 import { bluffGameDefinition } from '../../src/shared/games/bluff';
+import { crazyEightsGameDefinition } from '../../src/shared/games/crazy-eights';
+import { goFishGameDefinition } from '../../src/shared/games/go-fish';
+import { presidentGameDefinition } from '../../src/shared/games/president';
+import { rummyGameDefinition } from '../../src/shared/games/rummy';
+import { blackjackGameDefinition } from '../../src/shared/games/blackjack';
 import {
   applyCodeKey,
   applyFieldKey,
@@ -148,7 +152,7 @@ describe('lobby tables', () => {
     });
   });
 
-  it('offers Bluff and Blackjack from the shared definitions', () => {
+  it('offers Bluff, President, Go Fish, Crazy Eights, Rummy, and Blackjack from the shared definitions', () => {
     expect(GAME_CATALOG).toEqual([
       {
         gameType: bluffGameDefinition.gameType,
@@ -156,6 +160,34 @@ describe('lobby tables', () => {
         minPlayers: bluffGameDefinition.minPlayers,
         maxPlayers: bluffGameDefinition.maxPlayers,
         howToPlay: bluffGameDefinition.howToPlay,
+      },
+      {
+        gameType: presidentGameDefinition.gameType,
+        name: presidentGameDefinition.displayName,
+        minPlayers: presidentGameDefinition.minPlayers,
+        maxPlayers: presidentGameDefinition.maxPlayers,
+        howToPlay: presidentGameDefinition.howToPlay,
+      },
+      {
+        gameType: goFishGameDefinition.gameType,
+        name: goFishGameDefinition.displayName,
+        minPlayers: goFishGameDefinition.minPlayers,
+        maxPlayers: goFishGameDefinition.maxPlayers,
+        howToPlay: goFishGameDefinition.howToPlay,
+      },
+      {
+        gameType: crazyEightsGameDefinition.gameType,
+        name: crazyEightsGameDefinition.displayName,
+        minPlayers: crazyEightsGameDefinition.minPlayers,
+        maxPlayers: crazyEightsGameDefinition.maxPlayers,
+        howToPlay: crazyEightsGameDefinition.howToPlay,
+      },
+      {
+        gameType: rummyGameDefinition.gameType,
+        name: rummyGameDefinition.displayName,
+        minPlayers: rummyGameDefinition.minPlayers,
+        maxPlayers: rummyGameDefinition.maxPlayers,
+        howToPlay: rummyGameDefinition.howToPlay,
       },
       {
         gameType: blackjackGameDefinition.gameType,
@@ -168,7 +200,6 @@ describe('lobby tables', () => {
     const gameTypes = GAME_CATALOG.map((game) => game.gameType);
     expect(gameTypes).not.toContain('dummy');
     expect(gameTypes).not.toContain('stub');
-    expect(gameTypes).not.toContain('president');
     expect(gameTypes).not.toContain('poker_holdem');
     expect(gameTypes).not.toContain('poker_five_card_draw');
     const bluff = gameOption(0);
@@ -179,7 +210,39 @@ describe('lobby tables', () => {
       maxPlayers: 6,
     });
     expect(bluff.howToPlay).toBe(bluffGameDefinition.howToPlay);
-    const blackjack = gameOption(1);
+    const president = gameOption(1);
+    expect(president).toMatchObject({
+      gameType: 'president',
+      name: 'President',
+      minPlayers: 3,
+      maxPlayers: 6,
+    });
+    expect(president.howToPlay).toBe(presidentGameDefinition.howToPlay);
+    const goFish = gameOption(2);
+    expect(goFish).toMatchObject({
+      gameType: 'go_fish',
+      name: 'Go Fish',
+      minPlayers: 2,
+      maxPlayers: 6,
+    });
+    expect(goFish.howToPlay).toBe(goFishGameDefinition.howToPlay);
+    const crazy = gameOption(3);
+    expect(crazy).toMatchObject({
+      gameType: 'crazy_eights',
+      name: 'Crazy Eights',
+      minPlayers: 2,
+      maxPlayers: 7,
+    });
+    expect(crazy.howToPlay).toBe(crazyEightsGameDefinition.howToPlay);
+    const rummy = gameOption(4);
+    expect(rummy).toMatchObject({
+      gameType: 'rummy',
+      name: 'Rummy',
+      minPlayers: 2,
+      maxPlayers: 6,
+    });
+    expect(rummy.howToPlay).toBe(rummyGameDefinition.howToPlay);
+    const blackjack = gameOption(5);
     expect(blackjack).toMatchObject({
       gameType: 'blackjack',
       name: 'Blackjack',
@@ -187,14 +250,24 @@ describe('lobby tables', () => {
       maxPlayers: blackjackGameDefinition.maxPlayers,
     });
     expect(blackjack.howToPlay).toBe(blackjackGameDefinition.howToPlay);
-    expect(gameOption(2)).toBe(bluff);
+    expect(gameOption(6)).toBe(bluff);
     expect(gameOption(-1)).toBe(blackjack);
     expect(clampPlayerCount(bluff, 9)).toBe(6);
     expect(clampPlayerCount(bluff, 2)).toBe(2);
+    expect(clampPlayerCount(president, 9)).toBe(6);
+    expect(clampPlayerCount(president, 1)).toBe(3);
+    expect(clampPlayerCount(goFish, 9)).toBe(6);
+    expect(clampPlayerCount(crazy, 9)).toBe(7);
+    expect(clampPlayerCount(crazy, 1)).toBe(2);
+    expect(nextTableName(tables, 'lobby_1', bluff)).toBe('Bluff #2');
+    expect(nextTableName(tables, 'lobby_1', president)).toBe('President #1');
+    expect(nextTableName(tables, 'lobby_1', goFish)).toBe('Go Fish #1');
+    expect(nextTableName(tables, 'lobby_1', crazy)).toBe('Crazy Eights #1');
+    expect(nextTableName(tables, 'lobby_1', rummy)).toBe('Rummy #1');
     expect(clampPlayerCount(blackjack, 9)).toBe(
       blackjackGameDefinition.maxPlayers,
     );
-    expect(nextTableName(tables, 'lobby_1', bluff)).toBe('Bluff #2');
+    expect(nextTableName(tables, 'lobby_1', blackjack)).toBe('Blackjack #1');
   });
 
   it('finds this browser in the joined lobby', () => {
