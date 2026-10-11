@@ -10,6 +10,7 @@ import {
 import {
   BET_10_BUTTON,
   BET_25_BUTTON,
+  BANNER_Y,
   BET_50_BUTTON,
   CARD_DRAW,
   DEALER_X,
@@ -19,23 +20,29 @@ import {
   SPLIT_BUTTON,
   STAND_BUTTON,
   betAnchor,
+  dealerLabelPosition,
   dealerPositions,
   faceForBlackjackCard,
   finishedLine,
   playerCardSlots,
+  totalLabelPosition,
 } from './blackjack-layout';
-import { chipsImage, pixelFont } from './boot-scene';
+import { chipsImage } from './boot-scene';
+import {
+  DIM,
+  GOLD,
+  STROKE,
+  STROKE_HOT,
+  canvasText,
+  panelRect,
+} from './canvas-ui';
 import type { CardAtlas } from './card-atlas';
 import { ChipAtlas, type ChipDenomination } from './chip-atlas';
 import type { GameDriver, InputEvent, RenderContext } from './game-driver';
 import { LOGICAL_WIDTH } from './sheets';
 
-const GOLD = ex.Color.fromHex('#f4e4b3');
-const DIM = ex.Color.fromHex('#d7c08a');
 const BUTTON = ex.Color.fromHex('#1b5c38');
 const BUTTON_DOWN = ex.Color.fromHex('#0e3d24');
-const STROKE = ex.Color.fromHex('#e6c27a');
-const STROKE_HOT = ex.Color.fromHex('#fff6d0');
 const FLASH_FILL = ex.Color.fromRGB(232, 60, 48, 0.8);
 const FLASH_STROKE = ex.Color.fromHex('#ff3b2f');
 
@@ -44,6 +51,10 @@ const FLASH_ON_MS = 130;
 const FLASH_OFF_MS = 80;
 const FLASH_BLINKS = 3;
 const CHIP_SCALE = 2;
+const CHIP_STACK_STEP = 4;
+const CHIP_STACK_MAX = 4;
+const DIMMED = 0.45;
+const CHIP_DENOMINATIONS = [100, 25, 10, 5, 1] as const;
 
 const chips = new ChipAtlas(chipsImage);
 
@@ -116,40 +127,8 @@ interface ButtonRecord {
   box: { x: number; y: number; w: number; h: number };
   group: 'bet' | 'act';
   target: string;
-}
-
-function canvasText(text: string, size: number, color: ex.Color): ex.Text {
-  const graphic = new ex.Text({
-    text,
-    color,
-    font: pixelFont.toFont({
-      family: '"Press Start 2P"',
-      size,
-      color,
-      quality: 1,
-      filtering: ex.ImageFiltering.Pixel,
-    }),
-  });
-  graphic.origin = ex.vec(0, 0);
-  return graphic;
-}
-
-function panelRect(
-  width: number,
-  height: number,
-  fill: ex.Color,
-  stroke: ex.Color,
-): ex.Rectangle {
-  const rect = new ex.Rectangle({
-    width,
-    height,
-    color: fill,
-    strokeColor: stroke,
-    lineWidth: 2,
-    smoothing: false,
-  });
-  rect.origin = ex.vec(0, 0);
-  return rect;
+  face: ex.Rectangle;
+  caption: ex.Actor;
 }
 
 function cardSprite(
@@ -167,20 +146,16 @@ function cardSprite(
   return atlas.sprite(face);
 }
 
-function chipDenomination(amount: number): ChipDenomination {
-  if (amount >= 100) {
-    return 100;
+function chipStack(amount: number): ChipDenomination[] {
+  const stack: ChipDenomination[] = [];
+  let left = amount;
+  for (const value of CHIP_DENOMINATIONS) {
+    while (left >= value && stack.length < CHIP_STACK_MAX) {
+      stack.push(value);
+      left -= value;
+    }
   }
-  if (amount >= 25) {
-    return 25;
-  }
-  if (amount >= 10) {
-    return 10;
-  }
-  if (amount >= 5) {
-    return 5;
-  }
-  return 1;
+  return stack;
 }
 
 function resultLabel(results: readonly BlackjackResult[]): string {
@@ -208,8 +183,7 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
   readonly gameType = BLACKJACK_GAME_TYPE;
 
   private cards = new Map<string, CardRecord>();
-  private chipActors = new Map<string, ex.Actor>();
-  private chipLabels = new Map<string, ex.Text>();
+  private chipActors = new Map<string, ex.Actor[]>();
   private labels: ex.Actor[] = [];
   private buttons: ButtonRecord[] = [];
   private flashes: ex.Actor[] = [];
@@ -224,7 +198,7 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
       this.addButtons(ctx);
       this.buttonsReady = true;
     }
-    this.placeButtons(state);
+    this.placeButtons(state, ctx);
     this.syncLabels(state, ctx);
     if (state.phase === 'lobby') {
       this.clearTableCards();
@@ -354,37 +328,23 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
     const dealerText = state.holeHidden
       ? 'Dealer'
       : `Dealer ${blackjackTotal(state.dealer)}`;
-    this.labels.push(this.textActor(ctx, 430, 132, dealerText, GOLD));
+    const dealerAt = dealerLabelPosition(state.dealer.length);
+    this.labels.push(
+      this.textActor(ctx, dealerAt.x, dealerAt.y, dealerText, GOLD),
+    );
     for (const seat of ctx.seats) {
       const row = state.seats[String(seat.seatIndex)];
-      if (!row) {
+      if (!row || row.hands.length === 0) {
         continue;
       }
+      const totals = row.hands
+        .map((hand) => String(blackjackTotal(hand.cards)))
+        .join('/');
       const outcome = resultLabel(row.results);
-      if (outcome.length > 0) {
-        this.labels.push(
-          this.textActor(
-            ctx,
-            seat.self ? 24 : seat.x - 16,
-            seat.self ? 480 : seat.y + 24,
-            outcome,
-            GOLD,
-          ),
-        );
-        continue;
-      }
-      const hand = row.hands[row.handIndex] ?? row.hands[0];
-      if (!hand) {
-        continue;
-      }
+      const text = outcome.length > 0 ? `${totals} ${outcome}` : totals;
+      const at = totalLabelPosition(seat.x, seat.y, seat.name, text);
       this.labels.push(
-        this.textActor(
-          ctx,
-          seat.self ? 24 : seat.x - 16,
-          seat.self ? 480 : seat.y + 24,
-          String(blackjackTotal(hand.cards)),
-          DIM,
-        ),
+        this.textActor(ctx, at.x, at.y, text, outcome ? GOLD : DIM),
       );
     }
   }
@@ -530,45 +490,47 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
       if (amount <= 0) {
         continue;
       }
-      const anchor = betAnchor(seat.x, seat.y, seat.self);
-      desired.set(String(seat.seatIndex), {
+      const anchor = betAnchor(seat.x, seat.y, seat.name);
+      desired.set(`${seat.seatIndex}:${amount}:${anchor.x}:${anchor.y}`, {
         x: anchor.x,
         y: anchor.y,
         amount,
       });
     }
-    for (const [key, actor] of this.chipActors) {
+    for (const [key, actors] of this.chipActors) {
       if (!desired.has(key)) {
-        actor.kill();
+        for (const actor of actors) {
+          actor.kill();
+        }
         this.chipActors.delete(key);
-        this.chipLabels.delete(key);
       }
     }
     for (const [key, place] of desired) {
-      let actor = this.chipActors.get(key);
-      let label = this.chipLabels.get(key);
-      if (!actor || !label) {
-        actor = new ex.Actor({
-          pos: ex.vec(place.x, place.y),
-          anchor: ex.vec(0.5, 0.5),
-          z: 15,
-          scale: ex.vec(CHIP_SCALE, CHIP_SCALE),
-        });
-        label = canvasText(String(place.amount), 8, GOLD);
-        const caption = new ex.Actor({
-          pos: ex.vec(14, -4),
-          anchor: ex.vec(0, 0),
-          scale: ex.vec(1 / CHIP_SCALE, 1 / CHIP_SCALE),
-        });
-        caption.graphics.use(label);
-        actor.addChild(caption);
-        ctx.scene.add(actor);
-        this.chipActors.set(key, actor);
-        this.chipLabels.set(key, label);
+      if (this.chipActors.has(key)) {
+        continue;
       }
-      actor.pos = ex.vec(place.x, place.y);
-      actor.graphics.use(chips.sprite(chipDenomination(place.amount)));
-      label.text = String(place.amount);
+      const actors: ex.Actor[] = [];
+      chipStack(place.amount).forEach((value, index) => {
+        const chip = new ex.Actor({
+          pos: ex.vec(place.x, place.y - index * CHIP_STACK_STEP),
+          anchor: ex.vec(0.5, 0.5),
+          z: 15 + index,
+        });
+        const sprite = chips.sprite(value);
+        sprite.scale = ex.vec(CHIP_SCALE, CHIP_SCALE);
+        chip.graphics.use(sprite);
+        ctx.scene.add(chip);
+        actors.push(chip);
+      });
+      const caption = this.textActor(
+        ctx,
+        place.x + 16 * CHIP_SCALE * 0.5 + 6,
+        place.y - 4,
+        String(place.amount),
+        GOLD,
+      );
+      actors.push(caption);
+      this.chipActors.set(key, actors);
     }
   }
 
@@ -577,14 +539,18 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
       record.actor.kill();
     }
     this.cards.clear();
-    for (const actor of this.chipActors.values()) {
-      actor.kill();
+    for (const actors of this.chipActors.values()) {
+      for (const actor of actors) {
+        actor.kill();
+      }
     }
     this.chipActors.clear();
-    this.chipLabels.clear();
   }
 
-  private placeButtons(state: BlackjackState): void {
+  private placeButtons(state: BlackjackState, ctx: RenderContext): void {
+    const mine =
+      ctx.meSeatIndex !== null && state.turnSeatIndex === ctx.meSeatIndex;
+    const opacity = mine ? 1 : DIMMED;
     const betting = state.phase === 'play' && state.step === 'bet';
     const acting = state.phase === 'play' && state.step === 'act';
     for (const button of this.buttons) {
@@ -594,6 +560,8 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
       button.actor.pos = show
         ? ex.vec(button.box.x, button.box.y)
         : ex.vec(button.box.x, -200);
+      button.face.opacity = opacity;
+      button.caption.graphics.opacity = opacity;
     }
   }
 
@@ -656,13 +624,13 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
       this.handleInput({ type: 'pointerup', target }, state, current);
     });
     ctx.scene.add(actor);
-    this.buttons.push({ actor, box, group, target });
+    this.buttons.push({ actor, box, group, target, face, caption });
   }
 
   private banner(ctx: RenderContext, text: string): ex.Actor {
     const width = text.length * 8 + 16;
     const actor = new ex.Actor({
-      pos: ex.vec(Math.floor((LOGICAL_WIDTH - width) / 2), 112),
+      pos: ex.vec(Math.floor((LOGICAL_WIDTH - width) / 2), BANNER_Y),
       anchor: ex.vec(0, 0),
       width,
       height: 24,
