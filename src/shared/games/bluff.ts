@@ -388,7 +388,7 @@ function applyPlay(
     throw new Error('Invalid intent');
   }
   if (cards.length < 1 || cards.length > 4) {
-    throw new Error('Invalid intent');
+    throw new Error('Pick 1 to 4 cards');
   }
   const key = handKey(seatIndex);
   const hand = state.hands[key];
@@ -437,7 +437,7 @@ function givePile(
  */
 function applyChallenge(state: BluffState, challenger: number): BluffState {
   if (state.lastPlay === null) {
-    throw new Error('Invalid intent');
+    throw new Error('Nothing to challenge');
   }
   const lastPlay = state.lastPlay;
   const previousHand = state.hands[handKey(lastPlay.seat)];

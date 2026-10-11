@@ -27,10 +27,55 @@ const BUTTON = ex.Color.fromHex('#1b5c38');
 const BUTTON_DOWN = ex.Color.fromHex('#0e3d24');
 const STROKE = ex.Color.fromHex('#e6c27a');
 const STROKE_HOT = ex.Color.fromHex('#fff6d0');
-const FLASH_FILL = ex.Color.fromRGB(232, 93, 76, 0.55);
+const FLASH_FILL = ex.Color.fromRGB(232, 60, 48, 0.8);
 const FLASH_STROKE = ex.Color.fromHex('#ff3b2f');
 
 const TRAVEL_MS = 420;
+const FLASH_ON_MS = 130;
+const FLASH_OFF_MS = 80;
+const FLASH_BLINKS = 3;
+
+/** A red box that blinks a few times over a control, then removes itself. */
+class FlashActor extends ex.Actor {
+  private elapsed = 0;
+
+  constructor(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    private readonly onDone: () => void,
+  ) {
+    super({
+      pos: ex.vec(x, y),
+      anchor: ex.vec(0, 0),
+      width,
+      height,
+      z: 40,
+    });
+    const rect = new ex.Rectangle({
+      width,
+      height,
+      color: FLASH_FILL,
+      strokeColor: FLASH_STROKE,
+      lineWidth: 4,
+      smoothing: false,
+    });
+    rect.origin = ex.vec(0, 0);
+    this.graphics.use(rect);
+  }
+
+  onPreUpdate(_engine: ex.Engine, elapsedMs: number): void {
+    this.elapsed += elapsedMs;
+    const cycle = FLASH_ON_MS + FLASH_OFF_MS;
+    if (this.elapsed >= cycle * FLASH_BLINKS) {
+      this.onDone();
+      this.kill();
+      return;
+    }
+    this.graphics.isVisible = this.elapsed % cycle < FLASH_ON_MS;
+  }
+}
 
 interface CardRecord {
   actor: ex.Actor;
@@ -218,25 +263,7 @@ export class BluffDriver implements GameDriver<BluffState> {
     width: number,
     height: number,
   ): void {
-    const actor = new ex.Actor({
-      pos: ex.vec(x, y),
-      anchor: ex.vec(0, 0),
-      width,
-      height,
-      z: 40,
-    });
-    const rect = new ex.Rectangle({
-      width,
-      height,
-      color: FLASH_FILL,
-      strokeColor: FLASH_STROKE,
-      lineWidth: 4,
-      smoothing: false,
-    });
-    rect.origin = ex.vec(0, 0);
-    actor.graphics.use(rect);
-    actor.actions.blink(110, 70, 3).callMethod(() => {
-      actor.kill();
+    const actor = new FlashActor(x, y, width, height, () => {
       this.flashes = this.flashes.filter((item) => item !== actor);
     });
     ctx.scene.add(actor);
