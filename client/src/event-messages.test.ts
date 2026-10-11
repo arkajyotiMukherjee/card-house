@@ -77,6 +77,53 @@ describe('eventMessage', () => {
     ).toBe('Ada played 1 card as A');
   });
 
+  it('announces a President play, pass, and finish', () => {
+    expect(
+      eventMessage(
+        'president',
+        { kind: 'play', seat: 0, count: 2, rank: 'K' },
+        names,
+      ),
+    ).toBe('Ada played 2 cards of K');
+    expect(eventMessage('president', { kind: 'pass', seat: 1 }, names)).toBe(
+      'Bea passed',
+    );
+    expect(
+      eventMessage(
+        'president',
+        { kind: 'finish', president: 0, scum: 1 },
+        names,
+      ),
+    ).toBe('Ada is President. Bea is Scum');
+  });
+
+  it('announces a Crazy Eights play, draw, and win', () => {
+    expect(
+      eventMessage(
+        'crazy_eights',
+        { kind: 'play', seat: 0, card: '8H', suit: 'D' },
+        names,
+      ),
+    ).toBe('Ada played an 8, suit Diamonds');
+    expect(
+      eventMessage(
+        'crazy_eights',
+        { kind: 'play', seat: 1, card: '5S', suit: 'S' },
+        names,
+      ),
+    ).toBe('Bea played 5S');
+    expect(eventMessage('crazy_eights', { kind: 'draw', seat: 0 }, names)).toBe(
+      'Ada draws',
+    );
+    expect(
+      eventMessage(
+        'crazy_eights',
+        { kind: 'finish', seat: 0, score: 63 },
+        names,
+      ),
+    ).toBe('Ada wins, score 63');
+  });
+
   it('announces a rummy draw, meld, and going out', () => {
     expect(
       eventMessage('rummy', { kind: 'draw', seat: 0, source: 'stock' }, names),
@@ -107,5 +154,23 @@ describe('eventMessage', () => {
     expect(eventMessage('dummy', null, names)).toBeNull();
     expect(eventMessage('bluff', null, names)).toBeNull();
     expect(eventMessage('bluff', { kind: 'nope' }, names)).toBeNull();
+    expect(eventMessage('go_fish', null, names)).toBeNull();
+  });
+
+  it('announces a Go Fish ask', () => {
+    expect(
+      eventMessage(
+        'go_fish',
+        { kind: 'ask', from: 0, to: 1, rank: 'K', given: 2, drawn: false },
+        names,
+      ),
+    ).toBe('Ada took 2 K from Bea');
+    expect(
+      eventMessage(
+        'go_fish',
+        { kind: 'ask', from: 1, to: 0, rank: 'A', given: 0, drawn: true },
+        names,
+      ),
+    ).toBe('Bea asked Ada for A. Go fish');
   });
 });
