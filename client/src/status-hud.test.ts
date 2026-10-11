@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import type { BlackjackState } from '../../src/shared/games/blackjack';
 import type { BluffState } from '../../src/shared/games/bluff';
-import { bluffStatusHud } from './status-hud';
+import { blackjackStatusHud, bluffStatusHud } from './status-hud';
 
 const seats = [
   { seatIndex: 0, name: 'Ada' },
@@ -71,5 +72,49 @@ describe('bluffStatusHud', () => {
     );
     expect(lines.turn).toBe('Turn: -');
     expect(lines.phase).toBe('Phase: Finished');
+  });
+});
+
+function blackjackState(
+  overrides: Partial<BlackjackState> = {},
+): BlackjackState {
+  return {
+    phase: 'play',
+    step: 'act',
+    deck: [],
+    dealer: ['AS', 'KH'],
+    holeHidden: true,
+    seats: {},
+    turnSeatIndex: 0,
+    winnerSeatIndexes: [],
+    ...overrides,
+  };
+}
+
+describe('blackjackStatusHud', () => {
+  it('names the betting seat and the play seat', () => {
+    expect(blackjackStatusHud(blackjackState({ step: 'bet' }), seats)).toEqual({
+      turn: 'Turn: Ada',
+      phase: 'Phase: Betting',
+      round: 'Round: Bets',
+    });
+    expect(blackjackStatusHud(blackjackState(), seats)).toEqual({
+      turn: 'Turn: Ada',
+      phase: 'Phase: Play',
+      round: 'Round: Hand',
+    });
+  });
+
+  it('clears the turn when the round is finished', () => {
+    expect(
+      blackjackStatusHud(
+        blackjackState({ phase: 'finished', turnSeatIndex: null }),
+        seats,
+      ),
+    ).toEqual({
+      turn: 'Turn: -',
+      phase: 'Phase: Finished',
+      round: 'Round: Done',
+    });
   });
 });

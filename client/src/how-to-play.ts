@@ -1,4 +1,8 @@
 import {
+  blackjackGameDefinition,
+  BLACKJACK_GAME_TYPE,
+} from '../../src/shared/games/blackjack';
+import {
   bluffGameDefinition,
   BLUFF_GAME_TYPE,
 } from '../../src/shared/games/bluff';
@@ -14,6 +18,7 @@ const DEFINITIONS: ReadonlyMap<string, GameDefinition> = new Map<
   GameDefinition
 >([
   [BLUFF_GAME_TYPE, bluffGameDefinition],
+  [BLACKJACK_GAME_TYPE, blackjackGameDefinition],
   [DUMMY_GAME_TYPE, dummyGameDefinition],
 ]);
 

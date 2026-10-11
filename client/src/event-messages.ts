@@ -1,4 +1,8 @@
 import {
+  BLACKJACK_GAME_TYPE,
+  readBlackjackEventNote,
+} from '../../src/shared/games/blackjack';
+import {
   BLUFF_GAME_TYPE,
   readBluffEventNote,
 } from '../../src/shared/games/bluff';
@@ -43,6 +47,34 @@ function clip(message: string): string {
     : message.slice(0, MESSAGE_LIMIT);
 }
 
+function blackjackMessage(
+  note: unknown,
+  seatName: (seatIndex: number) => string,
+): string | null {
+  const parsed = readBlackjackEventNote(note);
+  if (!parsed) {
+    return null;
+  }
+  const name = shortName(seatName(parsed.seat));
+  if (parsed.kind === 'bet') {
+    return clip(`${name} bets ${parsed.amount}`);
+  }
+  if (parsed.kind === 'split') {
+    return clip(`${name} splits`);
+  }
+  if (parsed.kind === 'hit') {
+    return clip(parsed.bust ? `${name} busts` : `${name} hits ${parsed.total}`);
+  }
+  if (parsed.kind === 'stand') {
+    return clip(`${name} stands on ${parsed.total}`);
+  }
+  return clip(
+    parsed.bust
+      ? `${name} doubles and busts`
+      : `${name} doubles to ${parsed.total}`,
+  );
+}
+
 /**
  * One short line for the message strip, or `null` when the event has nothing
  * to announce. Dummy and stub events carry no note, so they stay silent.
@@ -52,6 +84,9 @@ export function eventMessage(
   note: unknown,
   seatName: (seatIndex: number) => string,
 ): string | null {
+  if (gameType === BLACKJACK_GAME_TYPE) {
+    return blackjackMessage(note, seatName);
+  }
   if (gameType !== BLUFF_GAME_TYPE) {
     return null;
   }

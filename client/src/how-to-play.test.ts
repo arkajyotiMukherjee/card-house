@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { blackjackGameDefinition } from '../../src/shared/games/blackjack';
 import { bluffGameDefinition } from '../../src/shared/games/bluff';
 import { HOW_TO_PLAY_TEXT } from './game-scene';
 import {
@@ -11,6 +12,10 @@ import {
 describe('definitionFor', () => {
   it('returns the Bluff definition for gameType bluff', () => {
     expect(definitionFor('bluff')).toBe(bluffGameDefinition);
+  });
+
+  it('returns the Blackjack definition for gameType blackjack', () => {
+    expect(definitionFor('blackjack')).toBe(blackjackGameDefinition);
   });
 
   it('has no definition for an unknown gameType', () => {

@@ -20,6 +20,34 @@ export type {
   BluffSuit,
 } from './bluff';
 export {
+  BLACKJACK_BET_AMOUNTS,
+  BLACKJACK_GAME_TYPE,
+  BLACKJACK_RANKS,
+  BLACKJACK_STARTING_CHIPS,
+  BLACKJACK_SUITS,
+  blackjackGameDefinition,
+  blackjackRules,
+  blackjackStake,
+  blackjackTotal,
+  rankOfBlackjackCard,
+  readBlackjackEventNote,
+  readBlackjackIntent,
+  readBlackjackState,
+} from './blackjack';
+export type {
+  BlackjackCardId,
+  BlackjackEventNote,
+  BlackjackHand,
+  BlackjackIntent,
+  BlackjackPhase,
+  BlackjackRank,
+  BlackjackResult,
+  BlackjackSeatState,
+  BlackjackState,
+  BlackjackStep,
+  BlackjackSuit,
+} from './blackjack';
+export {
   DUMMY_GAME_TYPE,
   DUMMY_INCREMENT,
   dummyCounterRules,

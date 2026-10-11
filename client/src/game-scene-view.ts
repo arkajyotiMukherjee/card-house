@@ -1,9 +1,14 @@
 import * as ex from 'excalibur';
+import {
+  readBlackjackState,
+  type BlackjackState,
+} from '../../src/shared/games/blackjack';
 import { readBluffState, type BluffState } from '../../src/shared/games/bluff';
 import {
   DUMMY_INCREMENT,
   type DummyIntent,
 } from '../../src/shared/games/dummy-counter';
+import { BlackjackDriver } from './blackjack-driver';
 import { BluffDriver } from './bluff-driver';
 import { cardAtlas, greenTable } from './boot-scene';
 import {
@@ -36,7 +41,7 @@ import {
 import type { RenderContext } from './game-driver';
 import { HowToPlayOverlay } from './how-to-play-overlay';
 import type { DbConnection, SubscriptionHandle } from './module_bindings';
-import { bluffStatusHud, STATUS_HUD } from './status-hud';
+import { blackjackStatusHud, bluffStatusHud, STATUS_HUD } from './status-hud';
 import {
   LOGICAL_HEIGHT,
   LOGICAL_WIDTH,
@@ -62,6 +67,7 @@ export class GameScene extends ex.Scene {
   private subscribedTableId = '';
   private dummy = false;
   private readonly bluffDriver = new BluffDriver();
+  private readonly blackjackDriver = new BlackjackDriver();
   private lastRow: { id: string; gameType: string; stateJson: string } | null =
     null;
   private placed: PlacedSeat[] = [];
@@ -97,6 +103,7 @@ export class GameScene extends ex.Scene {
       this.howToPlay.close();
       this.howToPlay.setGameType('');
       this.bluffDriver.destroy(this.driverContext());
+      this.blackjackDriver.destroy(this.driverContext());
       this.placeHud(false);
     }
   }
@@ -346,6 +353,11 @@ export class GameScene extends ex.Scene {
           this.showStrip(message, true);
           return;
         }
+        if (this.lastRow?.gameType === this.blackjackDriver.gameType) {
+          this.blackjackDriver.intentRejected(intent, this.driverContext());
+          this.showStrip(message, true);
+          return;
+        }
         this.showError(message);
       });
   }
@@ -469,12 +481,18 @@ export class GameScene extends ex.Scene {
     if (!this.ready || !row || row.id !== this.tableId) {
       return;
     }
+    if (row.gameType === this.blackjackDriver.gameType) {
+      this.paintBlackjack(row.stateJson);
+      return;
+    }
     if (row.gameType !== this.bluffDriver.gameType) {
       this.bluffDriver.destroy(this.driverContext());
+      this.blackjackDriver.destroy(this.driverContext());
       this.placeHud(false);
       this.paintCounter(row.gameType, row.stateJson);
       return;
     }
+    this.blackjackDriver.destroy(this.driverContext());
     this.dummy = false;
     this.placeCounter(false);
     let state: BluffState;
@@ -491,6 +509,30 @@ export class GameScene extends ex.Scene {
       state.phase === 'lobby' ? 'Waiting for players' : '';
     this.bluffDriver.render(state, this.driverContext());
     this.paintHud(state);
+  }
+
+  private paintBlackjack(stateJson: string): void {
+    this.bluffDriver.destroy(this.driverContext());
+    this.dummy = false;
+    this.placeCounter(false);
+    let state: BlackjackState;
+    try {
+      state = readBlackjackState(JSON.parse(stateJson));
+    } catch (error: unknown) {
+      this.showError(
+        error instanceof Error ? error.message : 'Invalid table state',
+      );
+      return;
+    }
+    this.errorText.text = '';
+    this.waitingText.text =
+      state.phase === 'lobby' ? 'Waiting for players' : '';
+    this.blackjackDriver.render(state, this.driverContext());
+    const lines = blackjackStatusHud(state, this.placed);
+    this.hudTurn.text = lines.turn;
+    this.hudPhase.text = lines.phase;
+    this.hudRound.text = lines.round;
+    this.placeHud(true);
   }
 
   private paintHud(state: BluffState): void {

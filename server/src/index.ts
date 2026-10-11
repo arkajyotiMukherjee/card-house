@@ -9,6 +9,10 @@ import type {
   GameSeat as RulesSeat,
   GameTable as RulesTable,
 } from '../../src/shared/games';
+import {
+  blackjackGameDefinition,
+  blackjackRules,
+} from '../../src/shared/games/blackjack';
 import { bluffGameDefinition, bluffRules } from '../../src/shared/games/bluff';
 import {
   dummyCounterRules,
@@ -24,6 +28,7 @@ import { stubIntentRules } from './stub-rules';
 registerGameRules(stubGameDefinition, stubIntentRules);
 registerGameRules(dummyGameDefinition, dummyCounterRules);
 registerGameRules(bluffGameDefinition, bluffRules);
+registerGameRules(blackjackGameDefinition, blackjackRules);
 
 const LobbyStatus = t.enum('LobbyStatus', ['open', 'closed']);
 const TableStatus = t.enum('TableStatus', [

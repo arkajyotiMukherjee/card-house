@@ -1,3 +1,4 @@
+import { blackjackGameDefinition } from '../../src/shared/games/blackjack';
 import { bluffGameDefinition } from '../../src/shared/games/bluff';
 import type { GameDefinition } from '../../src/shared/games/game-definition';
 
@@ -53,6 +54,7 @@ function catalogEntry(definition: GameDefinition): GameOption {
 /** Games Create Table can offer. Sourced from each shared `GameDefinition`. */
 export const GAME_CATALOG = [
   catalogEntry(bluffGameDefinition),
+  catalogEntry(blackjackGameDefinition),
 ] as const satisfies readonly GameOption[];
 
 export interface TableRow {

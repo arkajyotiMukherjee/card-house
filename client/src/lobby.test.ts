@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { blackjackGameDefinition } from '../../src/shared/games/blackjack';
 import { bluffGameDefinition } from '../../src/shared/games/bluff';
 import {
   applyCodeKey,
@@ -147,7 +148,7 @@ describe('lobby tables', () => {
     });
   });
 
-  it('offers Bluff once from the shared definition', () => {
+  it('offers Bluff and Blackjack from the shared definitions', () => {
     expect(GAME_CATALOG).toEqual([
       {
         gameType: bluffGameDefinition.gameType,
@@ -155,6 +156,13 @@ describe('lobby tables', () => {
         minPlayers: bluffGameDefinition.minPlayers,
         maxPlayers: bluffGameDefinition.maxPlayers,
         howToPlay: bluffGameDefinition.howToPlay,
+      },
+      {
+        gameType: blackjackGameDefinition.gameType,
+        name: blackjackGameDefinition.displayName,
+        minPlayers: blackjackGameDefinition.minPlayers,
+        maxPlayers: blackjackGameDefinition.maxPlayers,
+        howToPlay: blackjackGameDefinition.howToPlay,
       },
     ]);
     const gameTypes = GAME_CATALOG.map((game) => game.gameType);
@@ -171,10 +179,21 @@ describe('lobby tables', () => {
       maxPlayers: 6,
     });
     expect(bluff.howToPlay).toBe(bluffGameDefinition.howToPlay);
-    expect(gameOption(1)).toBe(bluff);
-    expect(gameOption(-1)).toBe(bluff);
+    const blackjack = gameOption(1);
+    expect(blackjack).toMatchObject({
+      gameType: 'blackjack',
+      name: 'Blackjack',
+      minPlayers: blackjackGameDefinition.minPlayers,
+      maxPlayers: blackjackGameDefinition.maxPlayers,
+    });
+    expect(blackjack.howToPlay).toBe(blackjackGameDefinition.howToPlay);
+    expect(gameOption(2)).toBe(bluff);
+    expect(gameOption(-1)).toBe(blackjack);
     expect(clampPlayerCount(bluff, 9)).toBe(6);
     expect(clampPlayerCount(bluff, 2)).toBe(2);
+    expect(clampPlayerCount(blackjack, 9)).toBe(
+      blackjackGameDefinition.maxPlayers,
+    );
     expect(nextTableName(tables, 'lobby_1', bluff)).toBe('Bluff #2');
   });
 
