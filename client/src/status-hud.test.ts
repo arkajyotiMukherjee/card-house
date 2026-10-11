@@ -3,11 +3,13 @@ import type { BluffState } from '../../src/shared/games/bluff';
 import type { CrazyEightsState } from '../../src/shared/games/crazy-eights';
 import type { GoFishState } from '../../src/shared/games/go-fish';
 import type { PresidentState } from '../../src/shared/games/president';
+import type { RummyState } from '../../src/shared/games/rummy';
 import {
   bluffStatusHud,
   crazyEightsStatusHud,
   goFishStatusHud,
   presidentStatusHud,
+  rummyStatusHud,
 } from './status-hud';
 
 const seats = [
@@ -229,6 +231,49 @@ describe('crazyEightsStatusHud', () => {
       turn: 'Turn: -',
       phase: 'Phase: Finished',
       round: 'Score: 50',
+    });
+  });
+});
+
+function rummyState(overrides: Partial<RummyState>): RummyState {
+  return {
+    phase: 'play',
+    hands: { '0': ['AS'], '1': ['KH'] },
+    stock: ['2C', '3D'],
+    discardPile: ['4S'],
+    melds: [],
+    turnSeatIndex: 0,
+    drawn: false,
+    scores: {},
+    winnerSeatIndex: null,
+    ...overrides,
+  };
+}
+
+describe('rummyStatusHud', () => {
+  it('names the player on turn and the stock', () => {
+    expect(rummyStatusHud(rummyState({}), seats)).toEqual({
+      turn: 'Turn: Ada',
+      phase: 'Phase: Play',
+      round: 'Round: Stock 2',
+    });
+  });
+
+  it('shows the winner score when the hand is over', () => {
+    expect(
+      rummyStatusHud(
+        rummyState({
+          phase: 'finished',
+          turnSeatIndex: null,
+          winnerSeatIndex: 1,
+          scores: { '0': 1, '1': 0 },
+        }),
+        seats,
+      ),
+    ).toEqual({
+      turn: 'Turn: -',
+      phase: 'Phase: Finished',
+      round: 'Round: Score 0',
     });
   });
 });

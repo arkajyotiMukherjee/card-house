@@ -3,6 +3,7 @@ import { bluffGameDefinition } from '../../src/shared/games/bluff';
 import { crazyEightsGameDefinition } from '../../src/shared/games/crazy-eights';
 import { goFishGameDefinition } from '../../src/shared/games/go-fish';
 import { presidentGameDefinition } from '../../src/shared/games/president';
+import { rummyGameDefinition } from '../../src/shared/games/rummy';
 import {
   applyCodeKey,
   applyFieldKey,
@@ -150,7 +151,7 @@ describe('lobby tables', () => {
     });
   });
 
-  it('offers Bluff, President, Go Fish, and Crazy Eights from the shared definitions', () => {
+  it('offers Bluff, President, Go Fish, Crazy Eights, and Rummy from the shared definitions', () => {
     expect(GAME_CATALOG).toEqual([
       {
         gameType: bluffGameDefinition.gameType,
@@ -179,6 +180,13 @@ describe('lobby tables', () => {
         minPlayers: crazyEightsGameDefinition.minPlayers,
         maxPlayers: crazyEightsGameDefinition.maxPlayers,
         howToPlay: crazyEightsGameDefinition.howToPlay,
+      },
+      {
+        gameType: rummyGameDefinition.gameType,
+        name: rummyGameDefinition.displayName,
+        minPlayers: rummyGameDefinition.minPlayers,
+        maxPlayers: rummyGameDefinition.maxPlayers,
+        howToPlay: rummyGameDefinition.howToPlay,
       },
     ]);
     const gameTypes = GAME_CATALOG.map((game) => game.gameType);
@@ -218,8 +226,16 @@ describe('lobby tables', () => {
       maxPlayers: 7,
     });
     expect(crazy.howToPlay).toBe(crazyEightsGameDefinition.howToPlay);
-    expect(gameOption(4)).toBe(bluff);
-    expect(gameOption(-1)).toBe(crazy);
+    const rummy = gameOption(4);
+    expect(rummy).toMatchObject({
+      gameType: 'rummy',
+      name: 'Rummy',
+      minPlayers: 2,
+      maxPlayers: 6,
+    });
+    expect(rummy.howToPlay).toBe(rummyGameDefinition.howToPlay);
+    expect(gameOption(5)).toBe(bluff);
+    expect(gameOption(-1)).toBe(rummy);
     expect(clampPlayerCount(bluff, 9)).toBe(6);
     expect(clampPlayerCount(bluff, 2)).toBe(2);
     expect(clampPlayerCount(president, 9)).toBe(6);
@@ -231,6 +247,7 @@ describe('lobby tables', () => {
     expect(nextTableName(tables, 'lobby_1', president)).toBe('President #1');
     expect(nextTableName(tables, 'lobby_1', goFish)).toBe('Go Fish #1');
     expect(nextTableName(tables, 'lobby_1', crazy)).toBe('Crazy Eights #1');
+    expect(nextTableName(tables, 'lobby_1', rummy)).toBe('Rummy #1');
   });
 
   it('finds this browser in the joined lobby', () => {

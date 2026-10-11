@@ -124,6 +124,32 @@ describe('eventMessage', () => {
     ).toBe('Ada wins, score 63');
   });
 
+  it('announces a rummy draw, meld, and going out', () => {
+    expect(
+      eventMessage('rummy', { kind: 'draw', seat: 0, source: 'stock' }, names),
+    ).toBe('Ada drew from the stock');
+    expect(
+      eventMessage(
+        'rummy',
+        { kind: 'meld', seat: 1, count: 3, out: false },
+        names,
+      ),
+    ).toBe('Bea melded 3 cards');
+    expect(
+      eventMessage(
+        'rummy',
+        {
+          kind: 'discard',
+          seat: 0,
+          out: true,
+          ended: false,
+          winnerSeatIndex: 0,
+        },
+        names,
+      ),
+    ).toBe('Ada discarded and went out');
+  });
+
   it('keeps dummy and unknown events silent', () => {
     expect(eventMessage('dummy', null, names)).toBeNull();
     expect(eventMessage('bluff', null, names)).toBeNull();

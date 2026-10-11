@@ -15,6 +15,10 @@ import {
   PRESIDENT_GAME_TYPE,
 } from '../../src/shared/games/president';
 import {
+  rummyGameDefinition,
+  RUMMY_GAME_TYPE,
+} from '../../src/shared/games/rummy';
+import {
   dummyGameDefinition,
   DUMMY_GAME_TYPE,
 } from '../../src/shared/games/dummy-counter';
@@ -29,6 +33,7 @@ const DEFINITIONS: ReadonlyMap<string, GameDefinition> = new Map<
   [PRESIDENT_GAME_TYPE, presidentGameDefinition],
   [GO_FISH_GAME_TYPE, goFishGameDefinition],
   [CRAZY_EIGHTS_GAME_TYPE, crazyEightsGameDefinition],
+  [RUMMY_GAME_TYPE, rummyGameDefinition],
   [DUMMY_GAME_TYPE, dummyGameDefinition],
 ]);
 

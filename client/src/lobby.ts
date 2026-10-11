@@ -2,6 +2,7 @@ import { bluffGameDefinition } from '../../src/shared/games/bluff';
 import { crazyEightsGameDefinition } from '../../src/shared/games/crazy-eights';
 import { goFishGameDefinition } from '../../src/shared/games/go-fish';
 import { presidentGameDefinition } from '../../src/shared/games/president';
+import { rummyGameDefinition } from '../../src/shared/games/rummy';
 import type { GameDefinition } from '../../src/shared/games/game-definition';
 
 export const NAME_MAX = 12;
@@ -59,6 +60,7 @@ export const GAME_CATALOG = [
   catalogEntry(presidentGameDefinition),
   catalogEntry(goFishGameDefinition),
   catalogEntry(crazyEightsGameDefinition),
+  catalogEntry(rummyGameDefinition),
 ] as const satisfies readonly GameOption[];
 
 export interface TableRow {

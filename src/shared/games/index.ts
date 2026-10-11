@@ -97,6 +97,28 @@ export type {
   PresidentState,
   PresidentSuit,
 } from './president';
+export {
+  RUMMY_GAME_TYPE,
+  RUMMY_RANKS,
+  RUMMY_SUITS,
+  cardPoints as rummyCardPoints,
+  deadwoodPoints,
+  readRummyEventNote,
+  readRummyIntent,
+  readRummyState,
+  rummyGameDefinition,
+  rummyRules,
+} from './rummy';
+export type {
+  RummyCardId,
+  RummyEventNote,
+  RummyIntent,
+  RummyMeld,
+  RummyPhase,
+  RummyRank,
+  RummyState,
+  RummySuit,
+} from './rummy';
 export type { GameDefinition } from './game-definition';
 export type {
   GameRules,
