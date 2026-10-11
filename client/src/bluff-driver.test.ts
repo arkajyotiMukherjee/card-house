@@ -99,9 +99,12 @@ describe('BluffDriver input', () => {
 
     const closed = context(sent, 0, false);
     driver.handleInput({ type: 'pointerup', target: 'play' }, table, closed);
-    expect(sent).toEqual([]);
+    expect(sent).toEqual([{ type: 'play', cards: [] }]);
     driver.handleInput({ type: 'pointerup', target: 'AS' }, table, closed);
     driver.handleInput({ type: 'pointerup', target: 'play' }, table, closed);
-    expect(sent).toEqual([{ type: 'play', cards: ['AS'] }]);
+    expect(sent).toEqual([
+      { type: 'play', cards: [] },
+      { type: 'play', cards: ['AS'] },
+    ]);
   });
 });
