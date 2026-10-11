@@ -3,6 +3,10 @@ import {
   readBluffEventNote,
 } from '../../src/shared/games/bluff';
 import {
+  GO_FISH_GAME_TYPE,
+  readGoFishEventNote,
+} from '../../src/shared/games/go-fish';
+import {
   PRESIDENT_GAME_TYPE,
   readPresidentEventNote,
 } from '../../src/shared/games/president';
@@ -59,6 +63,9 @@ export function eventMessage(
   if (gameType === PRESIDENT_GAME_TYPE) {
     return presidentEventMessage(note, seatName);
   }
+  if (gameType === GO_FISH_GAME_TYPE) {
+    return goFishMessage(note, seatName);
+  }
   if (gameType !== BLUFF_GAME_TYPE) {
     return null;
   }
@@ -107,4 +114,23 @@ function presidentEventMessage(
   return clip(
     `${shortName(seatName(parsed.seat))} played ${parsed.count} ${cards} of ${parsed.rank}`,
   );
+}
+
+function goFishMessage(
+  note: unknown,
+  seatName: (seatIndex: number) => string,
+): string | null {
+  const parsed = readGoFishEventNote(note);
+  if (!parsed) {
+    return null;
+  }
+  const from = shortName(seatName(parsed.from));
+  const to = shortName(seatName(parsed.to));
+  if (parsed.given > 0) {
+    return clip(`${from} took ${parsed.given} ${parsed.rank} from ${to}`);
+  }
+  if (parsed.drawn) {
+    return clip(`${from} asked ${to} for ${parsed.rank}. Go fish`);
+  }
+  return clip(`${from} asked ${to} for ${parsed.rank}`);
 }

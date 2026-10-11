@@ -1,4 +1,5 @@
 import { bluffGameDefinition } from '../../src/shared/games/bluff';
+import { goFishGameDefinition } from '../../src/shared/games/go-fish';
 import { presidentGameDefinition } from '../../src/shared/games/president';
 import type { GameDefinition } from '../../src/shared/games/game-definition';
 
@@ -55,6 +56,7 @@ function catalogEntry(definition: GameDefinition): GameOption {
 export const GAME_CATALOG = [
   catalogEntry(bluffGameDefinition),
   catalogEntry(presidentGameDefinition),
+  catalogEntry(goFishGameDefinition),
 ] as const satisfies readonly GameOption[];
 
 export interface TableRow {

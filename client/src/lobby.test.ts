@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { bluffGameDefinition } from '../../src/shared/games/bluff';
+import { goFishGameDefinition } from '../../src/shared/games/go-fish';
 import { presidentGameDefinition } from '../../src/shared/games/president';
 import {
   applyCodeKey,
@@ -148,7 +149,7 @@ describe('lobby tables', () => {
     });
   });
 
-  it('offers Bluff and President from the shared definitions', () => {
+  it('offers Bluff, President, and Go Fish from the shared definitions', () => {
     expect(GAME_CATALOG).toEqual([
       {
         gameType: bluffGameDefinition.gameType,
@@ -163,6 +164,13 @@ describe('lobby tables', () => {
         minPlayers: presidentGameDefinition.minPlayers,
         maxPlayers: presidentGameDefinition.maxPlayers,
         howToPlay: presidentGameDefinition.howToPlay,
+      },
+      {
+        gameType: goFishGameDefinition.gameType,
+        name: goFishGameDefinition.displayName,
+        minPlayers: goFishGameDefinition.minPlayers,
+        maxPlayers: goFishGameDefinition.maxPlayers,
+        howToPlay: goFishGameDefinition.howToPlay,
       },
     ]);
     const gameTypes = GAME_CATALOG.map((game) => game.gameType);
@@ -186,14 +194,24 @@ describe('lobby tables', () => {
       maxPlayers: 6,
     });
     expect(president.howToPlay).toBe(presidentGameDefinition.howToPlay);
-    expect(gameOption(2)).toBe(bluff);
-    expect(gameOption(-1)).toBe(president);
+    const goFish = gameOption(2);
+    expect(goFish).toMatchObject({
+      gameType: 'go_fish',
+      name: 'Go Fish',
+      minPlayers: 2,
+      maxPlayers: 6,
+    });
+    expect(goFish.howToPlay).toBe(goFishGameDefinition.howToPlay);
+    expect(gameOption(3)).toBe(bluff);
+    expect(gameOption(-1)).toBe(goFish);
     expect(clampPlayerCount(bluff, 9)).toBe(6);
     expect(clampPlayerCount(bluff, 2)).toBe(2);
     expect(clampPlayerCount(president, 9)).toBe(6);
     expect(clampPlayerCount(president, 1)).toBe(3);
+    expect(clampPlayerCount(goFish, 9)).toBe(6);
     expect(nextTableName(tables, 'lobby_1', bluff)).toBe('Bluff #2');
     expect(nextTableName(tables, 'lobby_1', president)).toBe('President #1');
+    expect(nextTableName(tables, 'lobby_1', goFish)).toBe('Go Fish #1');
   });
 
   it('finds this browser in the joined lobby', () => {
