@@ -55,6 +55,48 @@ export {
   readDummyState,
 } from './dummy-counter';
 export type { DummyIntent, DummyState } from './dummy-counter';
+export {
+  GO_FISH_GAME_TYPE,
+  GO_FISH_RANKS,
+  GO_FISH_SUITS,
+  goFishGameDefinition,
+  goFishRules,
+  readGoFishEventNote,
+  readGoFishIntent,
+  readGoFishState,
+} from './go-fish';
+export type {
+  GoFishBook,
+  GoFishCardId,
+  GoFishEventNote,
+  GoFishIntent,
+  GoFishLastAsk,
+  GoFishPhase,
+  GoFishRank,
+  GoFishState,
+  GoFishSuit,
+} from './go-fish';
+export {
+  PRESIDENT_GAME_TYPE,
+  PRESIDENT_RANKS,
+  PRESIDENT_SUITS,
+  presidentGameDefinition,
+  presidentRankOf,
+  presidentRules,
+  readPresidentEventNote,
+  readPresidentIntent,
+  readPresidentState,
+} from './president';
+export type {
+  PresidentEventNote,
+  PresidentIntent,
+  PresidentLastPlay,
+  PresidentPhase,
+  PresidentRank,
+  PresidentRankEntry,
+  PresidentState,
+  PresidentSuit,
+} from './president';
 export type { GameDefinition } from './game-definition';
 export type {
   GameRules,
