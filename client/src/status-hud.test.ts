@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { BluffState } from '../../src/shared/games/bluff';
+import type { CrazyEightsState } from '../../src/shared/games/crazy-eights';
 import type { GoFishState } from '../../src/shared/games/go-fish';
 import type { PresidentState } from '../../src/shared/games/president';
 import {
   bluffStatusHud,
+  crazyEightsStatusHud,
   goFishStatusHud,
   presidentStatusHud,
 } from './status-hud';
@@ -114,6 +116,21 @@ function goFish(overrides: Partial<GoFishState>): GoFishState {
   };
 }
 
+function crazyState(overrides: Partial<CrazyEightsState>): CrazyEightsState {
+  return {
+    phase: 'play',
+    hands: { '0': ['8H'], '1': ['2S'] },
+    stock: ['9D'],
+    discardPile: ['5S'],
+    currentSuit: 'S',
+    turnSeatIndex: 0,
+    winnerSeatIndex: null,
+    scores: {},
+    passes: 0,
+    ...overrides,
+  };
+}
+
 describe('presidentStatusHud', () => {
   it('names the player on turn and the rank to beat', () => {
     expect(presidentStatusHud(presidentState({}), seats)).toEqual({
@@ -176,5 +193,42 @@ describe('goFishStatusHud', () => {
         seats,
       ).round,
     ).toBe('Books: tie');
+  });
+});
+
+describe('crazyEightsStatusHud', () => {
+  it('names the player on turn and the suit in play', () => {
+    expect(crazyEightsStatusHud(crazyState({}), seats)).toEqual({
+      turn: 'Turn: Ada',
+      phase: 'Phase: Play',
+      round: 'Suit: Spades',
+    });
+  });
+
+  it('asks for a suit while a starter eight is unanswered', () => {
+    expect(
+      crazyEightsStatusHud(
+        crazyState({ currentSuit: null, discardPile: ['8C'] }),
+        seats,
+      ).round,
+    ).toBe('Suit: pick');
+  });
+
+  it('shows the winner score when the hand is over', () => {
+    expect(
+      crazyEightsStatusHud(
+        crazyState({
+          phase: 'finished',
+          turnSeatIndex: null,
+          winnerSeatIndex: 1,
+          scores: { '0': 0, '1': 50 },
+        }),
+        seats,
+      ),
+    ).toEqual({
+      turn: 'Turn: -',
+      phase: 'Phase: Finished',
+      round: 'Score: 50',
+    });
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { bluffGameDefinition } from '../../src/shared/games/bluff';
+import { crazyEightsGameDefinition } from '../../src/shared/games/crazy-eights';
 import { goFishGameDefinition } from '../../src/shared/games/go-fish';
 import { presidentGameDefinition } from '../../src/shared/games/president';
 import { HOW_TO_PLAY_TEXT } from './game-scene';
@@ -21,6 +22,10 @@ describe('definitionFor', () => {
 
   it('returns the Go Fish definition for gameType go_fish', () => {
     expect(definitionFor('go_fish')).toBe(goFishGameDefinition);
+  });
+
+  it('returns the Crazy Eights definition for gameType crazy_eights', () => {
+    expect(definitionFor('crazy_eights')).toBe(crazyEightsGameDefinition);
   });
 
   it('has no definition for an unknown gameType', () => {

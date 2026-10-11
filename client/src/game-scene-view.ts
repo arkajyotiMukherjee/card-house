@@ -1,6 +1,10 @@
 import * as ex from 'excalibur';
 import { readBluffState, type BluffState } from '../../src/shared/games/bluff';
 import {
+  readCrazyEightsState,
+  type CrazyEightsState,
+} from '../../src/shared/games/crazy-eights';
+import {
   readGoFishState,
   type GoFishState,
 } from '../../src/shared/games/go-fish';
@@ -13,6 +17,7 @@ import {
   type DummyIntent,
 } from '../../src/shared/games/dummy-counter';
 import { BluffDriver } from './bluff-driver';
+import { CrazyEightsDriver } from './crazy-eights-driver';
 import { GoFishDriver } from './go-fish-driver';
 import { PresidentDriver } from './president-driver';
 import { cardAtlas, greenTable } from './boot-scene';
@@ -48,6 +53,7 @@ import { HowToPlayOverlay } from './how-to-play-overlay';
 import type { DbConnection, SubscriptionHandle } from './module_bindings';
 import {
   bluffStatusHud,
+  crazyEightsStatusHud,
   goFishStatusHud,
   presidentStatusHud,
   STATUS_HUD,
@@ -80,6 +86,7 @@ export class GameScene extends ex.Scene {
   private readonly bluffDriver = new BluffDriver();
   private readonly presidentDriver = new PresidentDriver();
   private readonly goFishDriver = new GoFishDriver();
+  private readonly crazyEightsDriver = new CrazyEightsDriver();
   private lastRow: { id: string; gameType: string; stateJson: string } | null =
     null;
   private placed: PlacedSeat[] = [];
@@ -117,6 +124,7 @@ export class GameScene extends ex.Scene {
       this.bluffDriver.destroy(this.driverContext());
       this.presidentDriver.destroy(this.driverContext());
       this.goFishDriver.destroy(this.driverContext());
+      this.crazyEightsDriver.destroy(this.driverContext());
       this.placeHud(false);
     }
   }
@@ -493,24 +501,35 @@ export class GameScene extends ex.Scene {
     if (row.gameType === this.bluffDriver.gameType) {
       this.presidentDriver.destroy(this.driverContext());
       this.goFishDriver.destroy(this.driverContext());
+      this.crazyEightsDriver.destroy(this.driverContext());
       this.paintBluff(row.stateJson);
       return;
     }
     if (row.gameType === this.presidentDriver.gameType) {
       this.bluffDriver.destroy(this.driverContext());
       this.goFishDriver.destroy(this.driverContext());
+      this.crazyEightsDriver.destroy(this.driverContext());
       this.paintPresident(row.stateJson);
       return;
     }
     if (row.gameType === this.goFishDriver.gameType) {
       this.bluffDriver.destroy(this.driverContext());
       this.presidentDriver.destroy(this.driverContext());
+      this.crazyEightsDriver.destroy(this.driverContext());
       this.paintGoFish(row.stateJson);
+      return;
+    }
+    if (row.gameType === this.crazyEightsDriver.gameType) {
+      this.bluffDriver.destroy(this.driverContext());
+      this.presidentDriver.destroy(this.driverContext());
+      this.goFishDriver.destroy(this.driverContext());
+      this.paintCrazyEights(row.stateJson);
       return;
     }
     this.bluffDriver.destroy(this.driverContext());
     this.presidentDriver.destroy(this.driverContext());
     this.goFishDriver.destroy(this.driverContext());
+    this.crazyEightsDriver.destroy(this.driverContext());
     this.placeHud(false);
     this.paintCounter(row.gameType, row.stateJson);
   }
@@ -521,6 +540,7 @@ export class GameScene extends ex.Scene {
     | GameDriver<BluffState>
     | GameDriver<PresidentState>
     | GameDriver<GoFishState>
+    | GameDriver<CrazyEightsState>
     | null {
     if (gameType === this.bluffDriver.gameType) {
       return this.bluffDriver;
@@ -530,6 +550,9 @@ export class GameScene extends ex.Scene {
     }
     if (gameType === this.goFishDriver.gameType) {
       return this.goFishDriver;
+    }
+    if (gameType === this.crazyEightsDriver.gameType) {
+      return this.crazyEightsDriver;
     }
     return null;
   }
@@ -589,6 +612,25 @@ export class GameScene extends ex.Scene {
       state.phase === 'lobby' ? 'Waiting for players' : '';
     this.goFishDriver.render(state, this.driverContext());
     this.paintHud(goFishStatusHud(state, this.placed));
+  }
+
+  private paintCrazyEights(stateJson: string): void {
+    this.dummy = false;
+    this.placeCounter(false);
+    let state: CrazyEightsState;
+    try {
+      state = readCrazyEightsState(JSON.parse(stateJson));
+    } catch (error: unknown) {
+      this.showError(
+        error instanceof Error ? error.message : 'Invalid table state',
+      );
+      return;
+    }
+    this.errorText.text = '';
+    this.waitingText.text =
+      state.phase === 'lobby' ? 'Waiting for players' : '';
+    this.crazyEightsDriver.render(state, this.driverContext());
+    this.paintHud(crazyEightsStatusHud(state, this.placed));
   }
 
   private paintHud(lines: StatusHudLines): void {

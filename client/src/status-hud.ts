@@ -3,6 +3,10 @@ import {
   type BluffPhase,
   type BluffState,
 } from '../../src/shared/games/bluff';
+import {
+  CRAZY_EIGHTS_SUIT_NAMES,
+  type CrazyEightsState,
+} from '../../src/shared/games/crazy-eights';
 import type { GoFishPhase, GoFishState } from '../../src/shared/games/go-fish';
 import type { PresidentState } from '../../src/shared/games/president';
 
@@ -123,5 +127,44 @@ export function goFishStatusHud(
     turn: `Turn: ${turn}`,
     phase: `Phase: ${GO_FISH_PHASE_LABELS[state.phase]}`,
     round: `Books: ${books}`,
+  };
+}
+
+/**
+ * The same three HUD lines for Crazy Eights.
+ * The third line is the suit in play, or the winner's score when the hand ends.
+ */
+export function crazyEightsStatusHud(
+  state: CrazyEightsState,
+  seats: readonly { seatIndex: number; name: string }[],
+): StatusHudLines {
+  let turn = '-';
+  if (state.phase === 'play' && state.turnSeatIndex !== null) {
+    const seatIndex = state.turnSeatIndex;
+    const seat = seats.find((row) => row.seatIndex === seatIndex);
+    const name = seat?.name ?? '';
+    turn = name.length > 0 ? shortName(name) : `Seat ${seatIndex}`;
+  }
+  const phase =
+    state.phase === 'lobby'
+      ? 'Waiting'
+      : state.phase === 'play'
+        ? 'Play'
+        : 'Finished';
+  let round = 'Suit: -';
+  if (state.phase === 'play') {
+    round =
+      state.currentSuit === null
+        ? 'Suit: pick'
+        : `Suit: ${CRAZY_EIGHTS_SUIT_NAMES[state.currentSuit]}`;
+  }
+  if (state.phase === 'finished' && state.winnerSeatIndex !== null) {
+    const score = state.scores[String(state.winnerSeatIndex)] ?? 0;
+    round = `Score: ${score}`;
+  }
+  return {
+    turn: `Turn: ${turn}`,
+    phase: `Phase: ${phase}`,
+    round,
   };
 }
