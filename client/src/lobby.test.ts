@@ -7,6 +7,7 @@ import {
   findCreatedLobby,
   GAME_CATALOG,
   gameOption,
+  listLayout,
   lobbyByCode,
   lobbyTableQueries,
   memberByClient,
@@ -14,6 +15,9 @@ import {
   nextTableName,
   normalizePlayerName,
   normalizeRoomCode,
+  seatedTableIds,
+  TABLE_LIST,
+  tableGroups,
   tableLines,
   tableSettingsJson,
 } from './lobby';
@@ -199,5 +203,68 @@ describe('lobby tables', () => {
     expect(tableSettingsJson(2, 6, 'Bluff #1')).toBe(
       '{"name":"Bluff #1","minPlayers":2,"maxPlayers":6}',
     );
+  });
+});
+
+describe('grouped table list', () => {
+  const rows = [
+    { id: 'd1', gameType: 'dummy', name: 'Dummy #1', maxPlayers: 4 },
+    { id: 'b2', gameType: 'bluff', name: 'Bluff #2', maxPlayers: 6 },
+    { id: 'b1', gameType: 'bluff', name: 'Bluff #1', maxPlayers: 6 },
+  ].map((row) => ({
+    ...row,
+    lobbyId: 'lobby_1',
+    statusTag: 'waiting_for_players',
+  }));
+  const seats = [
+    { tableId: 'b2', lobbyMemberId: 'me' },
+    { tableId: 'd1', lobbyMemberId: 'other' },
+  ];
+
+  it('marks only the tables this member sits at', () => {
+    const seated = seatedTableIds(seats, 'me');
+    expect([...seated]).toEqual(['b2']);
+    expect(seatedTableIds(seats, '').size).toBe(0);
+    const lines = tableLines(rows, seats, 'lobby_1', seated);
+    expect(lines.filter((line) => line.seated).map((line) => line.id)).toEqual([
+      'b2',
+    ]);
+  });
+
+  it('groups by game type with catalog games first', () => {
+    const lines = tableLines(rows, seats, 'lobby_1');
+    const groups = tableGroups(lines);
+    expect(groups.map((group) => group.gameType)).toEqual(['bluff', 'dummy']);
+    expect(groups[0]?.lines.map((line) => line.tableName)).toEqual([
+      'Bluff #1',
+      'Bluff #2',
+    ]);
+  });
+
+  it('stacks headers and rows, and counts rows that do not fit', () => {
+    const groups = tableGroups(tableLines(rows, seats, 'lobby_1'));
+    const layout = listLayout(groups);
+    expect(layout.hidden).toBe(0);
+    expect(layout.slots.map((slot) => slot.kind)).toEqual([
+      'header',
+      'row',
+      'row',
+      'header',
+      'row',
+    ]);
+    const ys = layout.slots.map((slot) => slot.y);
+    expect(ys[0]).toBe(TABLE_LIST.list.y);
+    expect([...ys].sort((a, b) => a - b)).toEqual(ys);
+    expect(ys.every((y) => y < TABLE_LIST.list.bottom)).toBe(true);
+
+    const many = Array.from({ length: 40 }, (_, index) => ({
+      ...rows[1]!,
+      id: `m${index}`,
+      name: `Bluff #${index}`,
+    }));
+    const crowded = listLayout(tableGroups(tableLines(many, [], 'lobby_1')));
+    const shown = crowded.slots.filter((slot) => slot.kind === 'row').length;
+    expect(shown + crowded.hidden).toBe(40);
+    expect(crowded.hidden).toBeGreaterThan(0);
   });
 });

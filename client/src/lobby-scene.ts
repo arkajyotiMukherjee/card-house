@@ -1,18 +1,28 @@
 import * as ex from 'excalibur';
-import { pixelFont } from './boot-scene';
+import { cardAtlas, pixelFont } from './boot-scene';
 import { subscribeLobbyTables } from './connect';
+import {
+  IDLE_CARDS,
+  IDLE_OPACITY,
+  idleCardPose,
+  type IdleCard,
+} from './lobby-ambience';
 import {
   clampPlayerCount,
   CREATE_TABLE,
   gameOption,
   memberByClient,
+  listLayout,
   nextTableName,
+  ROOM_BANNER,
+  seatedTableIds,
+  tableGroups,
   tableLines,
   tableSettingsJson,
   TABLE_LIST,
+  type ListSlot,
   type MemberRecord,
   type SeatRef,
-  type TableLine,
   type TableRow,
 } from './lobby';
 import type { DbConnection } from './module_bindings';
@@ -28,6 +38,9 @@ const DANGER = ex.Color.fromHex('#e85d4c');
 const PANEL = ex.Color.fromHex('#0a2e1c');
 const WAITING = ex.Color.fromHex('#3dd68c');
 const PLAYING = ex.Color.fromHex('#e6c27a');
+const FIELD_SEATED = ex.Color.fromHex('#1a4a2c');
+const INK = ex.Color.fromHex('#0a2e1c');
+const BANNER_FILL = ex.Color.fromHex('#0a2e1c');
 
 function canvasText(text: string, size: number, color: ex.Color): ex.Text {
   const graphic = new ex.Text({
@@ -63,6 +76,16 @@ function panelRect(
   return rect;
 }
 
+function solidRect(
+  width: number,
+  height: number,
+  color: ex.Color,
+): ex.Rectangle {
+  const rect = new ex.Rectangle({ width, height, color, smoothing: false });
+  rect.origin = ex.vec(0, 0);
+  return rect;
+}
+
 function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message.length > 0) {
     return error.message;
@@ -72,6 +95,7 @@ function errorMessage(error: unknown): string {
 
 export class LobbyScene {
   private lobbyId = '';
+  private lobbyCode = '';
   private subscribedLobbyId = '';
   private panelReady = false;
   private watching = false;
@@ -81,6 +105,9 @@ export class LobbyScene {
   private maxPlayers = gameOption(0).maxPlayers;
   private readonly rowActors: ex.Actor[] = [];
   private emptyText: ex.Text | undefined;
+  private moreText: ex.Text | undefined;
+  private codeText: ex.Text | undefined;
+  private codeActor: ex.Actor | undefined;
   private errorText: ex.Text | undefined;
   private gameText: ex.Text | undefined;
   private maxText: ex.Text | undefined;
@@ -121,9 +148,11 @@ export class LobbyScene {
     });
   }
 
-  openLobby(lobbyId: string): void {
+  openLobby(lobbyId: string, code = ''): void {
     this.lobbyId = lobbyId;
+    this.lobbyCode = code;
     this.ensurePanel();
+    this.paintCode();
     if (this.subscribedLobbyId === lobbyId) {
       this.render();
       return;
@@ -160,7 +189,20 @@ export class LobbyScene {
     this.scene.add(backdrop);
 
     this.addLabel(808, 52, 'Tables', 8, DIM);
-    this.emptyText = this.addLabel(808, 108, 'No tables', 8, DIM);
+    this.emptyText = this.addLabel(
+      TABLE_LIST.list.x,
+      TABLE_LIST.list.y,
+      'No tables',
+      8,
+      DIM,
+    );
+    this.moreText = this.addLabel(
+      TABLE_LIST.more.x,
+      TABLE_LIST.more.y,
+      '',
+      8,
+      DIM,
+    );
     this.errorText = this.addLabel(
       TABLE_LIST.error.x,
       TABLE_LIST.error.y,
@@ -172,6 +214,97 @@ export class LobbyScene {
       this.openCreate();
     });
     this.buildPopup();
+    this.buildBanner();
+    this.buildIdleCards();
+  }
+
+  private buildBanner(): void {
+    const box = ROOM_BANNER.panel;
+    const backdrop = new ex.Actor({
+      pos: ex.vec(box.x, box.y),
+      anchor: ex.vec(0, 0),
+      width: box.w,
+      height: box.h,
+      z: 15,
+    });
+    backdrop.graphics.use(panelRect(box.w, box.h, BANNER_FILL, STROKE_HOT));
+    this.scene.add(backdrop);
+
+    this.centeredActor(
+      canvasText('ROOM CODE', ROOM_BANNER.title.size, DIM),
+      ROOM_BANNER.title.y,
+      'ROOM CODE',
+      ROOM_BANNER.title.size,
+    );
+    this.codeText = canvasText('', ROOM_BANNER.code.size, GOLD);
+    this.codeActor = this.centeredActor(
+      this.codeText,
+      ROOM_BANNER.code.y,
+      '',
+      ROOM_BANNER.code.size,
+    );
+  }
+
+  private centeredActor(
+    graphic: ex.Text,
+    y: number,
+    text: string,
+    size: number,
+  ): ex.Actor {
+    const actor = new ex.Actor({
+      pos: ex.vec(this.centeredX(text, size), y),
+      anchor: ex.vec(0, 0),
+      z: 21,
+    });
+    actor.graphics.use(graphic);
+    this.scene.add(actor);
+    return actor;
+  }
+
+  private centeredX(text: string, size: number): number {
+    const box = ROOM_BANNER.panel;
+    return box.x + Math.floor((box.w - text.length * size) / 2);
+  }
+
+  private paintCode(): void {
+    if (!this.codeText || !this.codeActor) {
+      return;
+    }
+    const code = this.lobbyCode.length > 0 ? this.lobbyCode : '----';
+    this.codeText.text = code;
+    this.codeActor.pos = ex.vec(
+      this.centeredX(code, ROOM_BANNER.code.size),
+      ROOM_BANNER.code.y,
+    );
+  }
+
+  private buildIdleCards(): void {
+    for (const idle of IDLE_CARDS) {
+      this.scene.add(this.idleCardActor(idle));
+    }
+  }
+
+  private idleCardActor(idle: IdleCard): ex.Actor {
+    const sprite =
+      idle.card === 'back' ? cardAtlas.back() : cardAtlas.sprite(idle.card);
+    sprite.scale = ex.vec(2, 2);
+    const actor = new ex.Actor({
+      pos: ex.vec(idle.x, idle.y),
+      anchor: ex.vec(0.5, 0.5),
+      z: 2,
+    });
+    actor.graphics.use(sprite);
+    actor.graphics.opacity = IDLE_OPACITY;
+    actor.pointer.useColliderShape = false;
+    actor.pointer.useGraphicsBounds = false;
+    let elapsed = 0;
+    actor.on('postupdate', (event) => {
+      elapsed += event.elapsed;
+      const pose = idleCardPose(idle, elapsed);
+      actor.pos = ex.vec(pose.x, pose.y);
+      actor.rotation = pose.rotation;
+    });
+    return actor;
   }
 
   private buildPopup(): void {
@@ -379,34 +512,76 @@ export class LobbyScene {
     if (!this.panelReady || this.lobbyId.length === 0) {
       return;
     }
-    const lines = tableLines(this.readTables(), this.readSeats(), this.lobbyId);
+    const seats = this.readSeats();
+    const member = memberByClient(
+      this.readMembers(),
+      this.lobbyId,
+      this.clientId,
+    );
+    const lines = tableLines(
+      this.readTables(),
+      seats,
+      this.lobbyId,
+      seatedTableIds(seats, member?.id ?? ''),
+    );
+    const layout = listLayout(tableGroups(lines));
     if (this.emptyText) {
       this.emptyText.text = lines.length === 0 ? 'No tables' : '';
+    }
+    if (this.moreText) {
+      this.moreText.text = layout.hidden > 0 ? `+${layout.hidden} more` : '';
     }
     for (const actor of this.rowActors) {
       actor.kill();
     }
     this.rowActors.length = 0;
-    for (let index = 0; index < lines.length; index += 1) {
-      const line = lines[index];
-      if (!line) {
-        continue;
-      }
-      this.rowActors.push(this.rowActor(index, line));
+    for (const slot of layout.slots) {
+      this.rowActors.push(
+        slot.kind === 'header' ? this.headerActor(slot) : this.rowActor(slot),
+      );
     }
   }
 
-  private rowActor(index: number, line: TableLine): ex.Actor {
-    const row = TABLE_LIST.row;
-    const y = row.y + index * (row.h + row.gap);
+  private headerActor(slot: Extract<ListSlot, { kind: 'header' }>): ex.Actor {
+    const { list, header, row } = TABLE_LIST;
     const actor = new ex.Actor({
-      pos: ex.vec(row.x, y),
+      pos: ex.vec(list.x, slot.y),
+      anchor: ex.vec(0, 0),
+      width: row.w,
+      height: header.h,
+      z: 20,
+    });
+    const name = slot.group.gameName.slice(0, 11).toUpperCase();
+    const count = String(slot.group.lines.length);
+    this.childLabel(actor, 0, 2, name, GOLD);
+    this.childLabel(actor, row.w - count.length * 8, 2, count, DIM);
+    const rule = new ex.Actor({
+      pos: ex.vec(0, header.h - 1),
+      anchor: ex.vec(0, 0),
+    });
+    rule.graphics.use(solidRect(row.w, 2, STROKE));
+    actor.addChild(rule);
+    this.scene.add(actor);
+    return actor;
+  }
+
+  private rowActor(slot: Extract<ListSlot, { kind: 'row' }>): ex.Actor {
+    const { line } = slot;
+    const row = TABLE_LIST.row;
+    const actor = new ex.Actor({
+      pos: ex.vec(TABLE_LIST.list.x, slot.y),
       anchor: ex.vec(0, 0),
       width: row.w,
       height: row.h,
       z: 20,
     });
-    const face = panelRect(row.w, row.h, FIELD, STROKE);
+    const face = panelRect(
+      row.w,
+      row.h,
+      line.seated ? FIELD_SEATED : FIELD,
+      line.seated ? STROKE_HOT : STROKE,
+    );
+    const restStroke = line.seated ? STROKE_HOT : STROKE;
     actor.graphics.use(face);
     const full = line.currentSeats >= line.maxPlayers;
     const dot = new ex.Rectangle({
@@ -421,31 +596,48 @@ export class LobbyScene {
       smoothing: false,
     });
     const dotActor = new ex.Actor({
-      pos: ex.vec(6, 8),
+      pos: ex.vec(6, 6),
       anchor: ex.vec(0, 0),
     });
     dotActor.graphics.use(dot);
     actor.addChild(dotActor);
-    this.childLabel(actor, 16, 6, line.gameName, GOLD);
-    this.childLabel(actor, 16, 18, line.tableName, DIM);
+    this.childLabel(actor, 16, 4, line.tableName, GOLD);
     this.childLabel(
       actor,
       16,
-      30,
+      17,
       `${line.seatsLabel} ${line.statusLabel}`,
-      GOLD,
+      DIM,
     );
+    if (line.seated) {
+      this.seatBadge(actor, row.w - 33, 3);
+    }
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;
     });
     actor.on('pointerleave', () => {
-      face.strokeColor = STROKE;
+      face.strokeColor = restStroke;
     });
     actor.on('pointerup', () => {
       void this.joinTable(line.id);
     });
     this.scene.add(actor);
     return actor;
+  }
+
+  private seatBadge(parent: ex.Actor, x: number, y: number): void {
+    const badge = new ex.Actor({
+      pos: ex.vec(x, y),
+      anchor: ex.vec(0, 0),
+    });
+    badge.graphics.use(solidRect(28, 12, STROKE_HOT));
+    parent.addChild(badge);
+    const caption = new ex.Actor({
+      pos: ex.vec(2, 2),
+      anchor: ex.vec(0, 0),
+    });
+    caption.graphics.use(canvasText('YOU', 8, INK));
+    badge.addChild(caption);
   }
 
   private readTables(): TableRow[] {
@@ -466,7 +658,10 @@ export class LobbyScene {
   private readSeats(): SeatRef[] {
     const rows: SeatRef[] = [];
     for (const seat of this.connection.db.gameSeat.iter()) {
-      rows.push({ tableId: seat.tableId });
+      rows.push({
+        tableId: seat.tableId,
+        lobbyMemberId: seat.lobbyMemberId,
+      });
     }
     return rows;
   }
