@@ -3,6 +3,11 @@ import {
   type BluffPhase,
   type BluffState,
 } from '../../src/shared/games/bluff';
+import {
+  passDirection,
+  type HeartsPhase,
+  type HeartsState,
+} from '../../src/shared/games/hearts';
 
 export const STATUS_HUD = { x: 668, y: 16, w: 240, h: 52 } as const;
 
@@ -51,6 +56,50 @@ export function bluffStatusHud(
   return {
     turn: `Turn: ${turn}`,
     phase: `Phase: ${PHASE_LABELS[state.phase]}`,
+    round: `Round: ${round}`,
+  };
+}
+
+const HEARTS_PHASE_LABELS = {
+  lobby: 'Waiting',
+  pass: 'Passing',
+  play: 'Play',
+  finished: 'Finished',
+} as const satisfies Record<HeartsPhase, string>;
+
+const PASS_ROUND = {
+  left: 'Left',
+  right: 'Right',
+  across: 'Across',
+  hold: 'Hold',
+} as const;
+
+/**
+ * Status lines from the subscribed Hearts `stateJson`.
+ * The same three HUD rows: who acts, the phase, and the hand or pass direction.
+ */
+export function heartsStatusHud(
+  state: HeartsState,
+  seats: readonly { seatIndex: number; name: string }[],
+): StatusHudLines {
+  let turn = '-';
+  if (state.phase === 'pass') {
+    turn = 'Passing';
+  } else if (state.phase === 'play' && state.turnSeatIndex !== null) {
+    const seatIndex = state.turnSeatIndex;
+    const seat = seats.find((row) => row.seatIndex === seatIndex);
+    const name = seat?.name ?? '';
+    turn = name.length > 0 ? shortName(name) : `Seat ${seatIndex}`;
+  }
+  const round =
+    state.phase === 'lobby'
+      ? '-'
+      : state.phase === 'pass'
+        ? PASS_ROUND[passDirection(state.handIndex)]
+        : `Hand ${state.handIndex + 1}`;
+  return {
+    turn: `Turn: ${turn}`,
+    phase: `Phase: ${HEARTS_PHASE_LABELS[state.phase]}`,
     round: `Round: ${round}`,
   };
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { bluffGameDefinition } from '../../src/shared/games/bluff';
+import { heartsGameDefinition } from '../../src/shared/games/hearts';
 import { HOW_TO_PLAY_TEXT } from './game-scene';
 import {
   clampScroll,
@@ -11,6 +12,10 @@ import {
 describe('definitionFor', () => {
   it('returns the Bluff definition for gameType bluff', () => {
     expect(definitionFor('bluff')).toBe(bluffGameDefinition);
+  });
+
+  it('returns the Hearts definition for gameType hearts', () => {
+    expect(definitionFor('hearts')).toBe(heartsGameDefinition);
   });
 
   it('has no definition for an unknown gameType', () => {

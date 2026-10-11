@@ -3,6 +3,10 @@ import {
   BLUFF_GAME_TYPE,
 } from '../../src/shared/games/bluff';
 import {
+  heartsGameDefinition,
+  HEARTS_GAME_TYPE,
+} from '../../src/shared/games/hearts';
+import {
   dummyGameDefinition,
   DUMMY_GAME_TYPE,
 } from '../../src/shared/games/dummy-counter';
@@ -14,6 +18,7 @@ const DEFINITIONS: ReadonlyMap<string, GameDefinition> = new Map<
   GameDefinition
 >([
   [BLUFF_GAME_TYPE, bluffGameDefinition],
+  [HEARTS_GAME_TYPE, heartsGameDefinition],
   [DUMMY_GAME_TYPE, dummyGameDefinition],
 ]);
 

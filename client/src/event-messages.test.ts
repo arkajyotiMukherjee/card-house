@@ -77,6 +77,33 @@ describe('eventMessage', () => {
     ).toBe('Ada played 1 card as A');
   });
 
+  it('announces a hearts pass, the queen, and the winner', () => {
+    expect(
+      eventMessage(
+        'hearts',
+        { kind: 'pass', seat: 0, direction: 'left' },
+        names,
+      ),
+    ).toBe('Ada passed 3 left');
+    expect(
+      eventMessage(
+        'hearts',
+        {
+          kind: 'play',
+          seat: 1,
+          card: 'QS',
+          trickWinner: 1,
+          points: 13,
+          queen: true,
+        },
+        names,
+      ),
+    ).toBe('Bea played QS. Bea takes the queen');
+    expect(eventMessage('hearts', { kind: 'finished', winner: 0 }, names)).toBe(
+      'Ada wins',
+    );
+  });
+
   it('keeps dummy and unknown events silent', () => {
     expect(eventMessage('dummy', null, names)).toBeNull();
     expect(eventMessage('bluff', null, names)).toBeNull();

@@ -1,4 +1,5 @@
 import { bluffGameDefinition } from '../../src/shared/games/bluff';
+import { heartsGameDefinition } from '../../src/shared/games/hearts';
 import type { GameDefinition } from '../../src/shared/games/game-definition';
 
 export const NAME_MAX = 12;
@@ -53,6 +54,7 @@ function catalogEntry(definition: GameDefinition): GameOption {
 /** Games Create Table can offer. Sourced from each shared `GameDefinition`. */
 export const GAME_CATALOG = [
   catalogEntry(bluffGameDefinition),
+  catalogEntry(heartsGameDefinition),
 ] as const satisfies readonly GameOption[];
 
 export interface TableRow {

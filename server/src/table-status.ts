@@ -14,7 +14,7 @@ export function statusTagForState(
   if (!('phase' in state) || typeof state.phase !== 'string') {
     return current;
   }
-  if (state.phase === 'play') {
+  if (state.phase === 'play' || state.phase === 'pass') {
     return 'in_progress';
   }
   if (state.phase === 'finished') {

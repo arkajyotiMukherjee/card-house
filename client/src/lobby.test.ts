@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { bluffGameDefinition } from '../../src/shared/games/bluff';
+import { heartsGameDefinition } from '../../src/shared/games/hearts';
 import {
   applyCodeKey,
   applyFieldKey,
@@ -147,7 +148,7 @@ describe('lobby tables', () => {
     });
   });
 
-  it('offers Bluff once from the shared definition', () => {
+  it('offers Bluff and Hearts from the shared definitions', () => {
     expect(GAME_CATALOG).toEqual([
       {
         gameType: bluffGameDefinition.gameType,
@@ -155,6 +156,13 @@ describe('lobby tables', () => {
         minPlayers: bluffGameDefinition.minPlayers,
         maxPlayers: bluffGameDefinition.maxPlayers,
         howToPlay: bluffGameDefinition.howToPlay,
+      },
+      {
+        gameType: heartsGameDefinition.gameType,
+        name: heartsGameDefinition.displayName,
+        minPlayers: heartsGameDefinition.minPlayers,
+        maxPlayers: heartsGameDefinition.maxPlayers,
+        howToPlay: heartsGameDefinition.howToPlay,
       },
     ]);
     const gameTypes = GAME_CATALOG.map((game) => game.gameType);
@@ -171,11 +179,22 @@ describe('lobby tables', () => {
       maxPlayers: 6,
     });
     expect(bluff.howToPlay).toBe(bluffGameDefinition.howToPlay);
-    expect(gameOption(1)).toBe(bluff);
-    expect(gameOption(-1)).toBe(bluff);
+    const hearts = gameOption(1);
+    expect(hearts).toMatchObject({
+      gameType: 'hearts',
+      name: 'Hearts',
+      minPlayers: 4,
+      maxPlayers: 4,
+    });
+    expect(hearts.howToPlay).toBe(heartsGameDefinition.howToPlay);
+    expect(gameOption(2)).toBe(bluff);
+    expect(gameOption(-1)).toBe(hearts);
     expect(clampPlayerCount(bluff, 9)).toBe(6);
     expect(clampPlayerCount(bluff, 2)).toBe(2);
+    expect(clampPlayerCount(hearts, 2)).toBe(4);
+    expect(clampPlayerCount(hearts, 9)).toBe(4);
     expect(nextTableName(tables, 'lobby_1', bluff)).toBe('Bluff #2');
+    expect(nextTableName(tables, 'lobby_1', hearts)).toBe('Hearts #1');
   });
 
   it('finds this browser in the joined lobby', () => {

@@ -28,6 +28,31 @@ export {
   readDummyState,
 } from './dummy-counter';
 export type { DummyIntent, DummyState } from './dummy-counter';
+export {
+  HEARTS_GAME_TYPE,
+  HEARTS_RANKS,
+  HEARTS_SCORE_LIMIT,
+  HEARTS_SUITS,
+  QUEEN_OF_SPADES,
+  TWO_OF_CLUBS,
+  heartsGameDefinition,
+  heartsRules,
+  passDirection,
+  playError,
+  readHeartsEventNote,
+  readHeartsIntent,
+  readHeartsState,
+} from './hearts';
+export type {
+  HeartsEventNote,
+  HeartsIntent,
+  HeartsPhase,
+  HeartsRank,
+  HeartsState,
+  HeartsSuit,
+  HeartsTrickCard,
+  PassDirection,
+} from './hearts';
 export type { GameDefinition } from './game-definition';
 export type {
   GameRules,
