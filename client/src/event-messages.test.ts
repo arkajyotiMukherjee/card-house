@@ -81,5 +81,23 @@ describe('eventMessage', () => {
     expect(eventMessage('dummy', null, names)).toBeNull();
     expect(eventMessage('bluff', null, names)).toBeNull();
     expect(eventMessage('bluff', { kind: 'nope' }, names)).toBeNull();
+    expect(eventMessage('go_fish', null, names)).toBeNull();
+  });
+
+  it('announces a Go Fish ask', () => {
+    expect(
+      eventMessage(
+        'go_fish',
+        { kind: 'ask', from: 0, to: 1, rank: 'K', given: 2, drawn: false },
+        names,
+      ),
+    ).toBe('Ada took 2 K from Bea');
+    expect(
+      eventMessage(
+        'go_fish',
+        { kind: 'ask', from: 1, to: 0, rank: 'A', given: 0, drawn: true },
+        names,
+      ),
+    ).toBe('Bea asked Ada for A. Go fish');
   });
 });

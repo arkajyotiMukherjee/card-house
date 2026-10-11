@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { bluffGameDefinition } from '../../src/shared/games/bluff';
+import { goFishGameDefinition } from '../../src/shared/games/go-fish';
 import { HOW_TO_PLAY_TEXT } from './game-scene';
 import {
   clampScroll,
@@ -11,6 +12,10 @@ import {
 describe('definitionFor', () => {
   it('returns the Bluff definition for gameType bluff', () => {
     expect(definitionFor('bluff')).toBe(bluffGameDefinition);
+  });
+
+  it('returns the Go Fish definition for gameType go_fish', () => {
+    expect(definitionFor('go_fish')).toBe(goFishGameDefinition);
   });
 
   it('has no definition for an unknown gameType', () => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BluffState } from '../../src/shared/games/bluff';
-import { bluffStatusHud } from './status-hud';
+import type { GoFishState } from '../../src/shared/games/go-fish';
+import { bluffStatusHud, goFishStatusHud } from './status-hud';
 
 const seats = [
   { seatIndex: 0, name: 'Ada' },
@@ -71,5 +72,44 @@ describe('bluffStatusHud', () => {
     );
     expect(lines.turn).toBe('Turn: -');
     expect(lines.phase).toBe('Phase: Finished');
+  });
+});
+
+function goFish(overrides: Partial<GoFishState>): GoFishState {
+  return {
+    phase: 'play',
+    hands: { '0': ['AS'], '1': ['2S'] },
+    stock: ['3D'],
+    books: {
+      '0': [{ rank: 'K', cards: ['KS', 'KH', 'KD', 'KC'] }],
+      '1': [],
+    },
+    turnSeatIndex: 0,
+    winnerSeatIndex: null,
+    lastAsk: null,
+    ...overrides,
+  };
+}
+
+describe('goFishStatusHud', () => {
+  it('names the player on turn and their book count', () => {
+    expect(goFishStatusHud(goFish({}), seats)).toEqual({
+      turn: 'Turn: Ada',
+      phase: 'Phase: Play',
+      round: 'Books: 1',
+    });
+  });
+
+  it('shows a tie when the rules finish even', () => {
+    expect(
+      goFishStatusHud(
+        goFish({
+          phase: 'finished',
+          turnSeatIndex: null,
+          winnerSeatIndex: null,
+        }),
+        seats,
+      ).round,
+    ).toBe('Books: tie');
   });
 });
