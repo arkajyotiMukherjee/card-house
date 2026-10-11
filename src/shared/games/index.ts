@@ -49,6 +49,27 @@ export type {
   GoFishState,
   GoFishSuit,
 } from './go-fish';
+export {
+  PRESIDENT_GAME_TYPE,
+  PRESIDENT_RANKS,
+  PRESIDENT_SUITS,
+  presidentGameDefinition,
+  presidentRankOf,
+  presidentRules,
+  readPresidentEventNote,
+  readPresidentIntent,
+  readPresidentState,
+} from './president';
+export type {
+  PresidentEventNote,
+  PresidentIntent,
+  PresidentLastPlay,
+  PresidentPhase,
+  PresidentRank,
+  PresidentRankEntry,
+  PresidentState,
+  PresidentSuit,
+} from './president';
 export type { GameDefinition } from './game-definition';
 export type {
   GameRules,

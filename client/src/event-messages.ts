@@ -6,6 +6,10 @@ import {
   GO_FISH_GAME_TYPE,
   readGoFishEventNote,
 } from '../../src/shared/games/go-fish';
+import {
+  PRESIDENT_GAME_TYPE,
+  readPresidentEventNote,
+} from '../../src/shared/games/president';
 
 const NAME_LIMIT = 10;
 const MESSAGE_LIMIT = 64;
@@ -56,6 +60,9 @@ export function eventMessage(
   note: unknown,
   seatName: (seatIndex: number) => string,
 ): string | null {
+  if (gameType === PRESIDENT_GAME_TYPE) {
+    return presidentEventMessage(note, seatName);
+  }
   if (gameType === GO_FISH_GAME_TYPE) {
     return goFishMessage(note, seatName);
   }
@@ -81,6 +88,31 @@ export function eventMessage(
   }
   return clip(
     `${challenger} called bluff but ${accused} was honest. ${challenger} takes the pile`,
+  );
+}
+
+function presidentEventMessage(
+  note: unknown,
+  seatName: (seatIndex: number) => string,
+): string | null {
+  const parsed = readPresidentEventNote(note);
+  if (!parsed) {
+    return null;
+  }
+  if (parsed.kind === 'pass') {
+    return clip(`${shortName(seatName(parsed.seat))} passed`);
+  }
+  if (parsed.kind === 'finish') {
+    const president = shortName(seatName(parsed.president));
+    if (parsed.president === parsed.scum) {
+      return clip(`${president} is President`);
+    }
+    const scum = shortName(seatName(parsed.scum));
+    return clip(`${president} is President. ${scum} is Scum`);
+  }
+  const cards = parsed.count === 1 ? 'card' : 'cards';
+  return clip(
+    `${shortName(seatName(parsed.seat))} played ${parsed.count} ${cards} of ${parsed.rank}`,
   );
 }
 

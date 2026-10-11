@@ -4,6 +4,7 @@ import {
   type BluffState,
 } from '../../src/shared/games/bluff';
 import type { GoFishPhase, GoFishState } from '../../src/shared/games/go-fish';
+import type { PresidentState } from '../../src/shared/games/president';
 
 export const STATUS_HUD = { x: 668, y: 16, w: 240, h: 52 } as const;
 
@@ -49,6 +50,38 @@ export function bluffStatusHud(
     state.phase === 'lobby'
       ? '-'
       : `${rankIndex + 1}/${BLUFF_RANKS.length} (${state.requiredRank})`;
+  return {
+    turn: `Turn: ${turn}`,
+    phase: `Phase: ${PHASE_LABELS[state.phase]}`,
+    round: `Round: ${round}`,
+  };
+}
+
+/**
+ * Status lines from the subscribed President `stateJson`.
+ * The round is the trick to beat, or President's title once the hand ends.
+ */
+export function presidentStatusHud(
+  state: PresidentState,
+  seats: readonly { seatIndex: number; name: string }[],
+): StatusHudLines {
+  let turn = '-';
+  if (state.phase === 'play' && state.turnSeatIndex !== null) {
+    const seatIndex = state.turnSeatIndex;
+    const seat = seats.find((row) => row.seatIndex === seatIndex);
+    const name = seat?.name ?? '';
+    turn = name.length > 0 ? shortName(name) : `Seat ${seatIndex}`;
+  }
+  let round = '-';
+  if (state.phase === 'finished') {
+    round = state.rankOrder[0]?.title ?? 'Done';
+  } else if (state.phase === 'play') {
+    if (state.currentCount > 0 && state.currentRank !== null) {
+      round = `${state.currentCount}x${state.currentRank}`;
+    } else {
+      round = 'Lead';
+    }
+  }
   return {
     turn: `Turn: ${turn}`,
     phase: `Phase: ${PHASE_LABELS[state.phase]}`,

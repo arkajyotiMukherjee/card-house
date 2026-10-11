@@ -15,6 +15,10 @@ import {
   goFishRules,
 } from '../../src/shared/games/go-fish';
 import {
+  presidentGameDefinition,
+  presidentRules,
+} from '../../src/shared/games/president';
+import {
   dummyCounterRules,
   dummyGameDefinition,
 } from '../../src/shared/games/dummy-counter';
@@ -28,6 +32,7 @@ import { stubIntentRules } from './stub-rules';
 registerGameRules(stubGameDefinition, stubIntentRules);
 registerGameRules(dummyGameDefinition, dummyCounterRules);
 registerGameRules(bluffGameDefinition, bluffRules);
+registerGameRules(presidentGameDefinition, presidentRules);
 registerGameRules(goFishGameDefinition, goFishRules);
 
 const LobbyStatus = t.enum('LobbyStatus', ['open', 'closed']);
