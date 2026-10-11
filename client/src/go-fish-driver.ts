@@ -15,12 +15,15 @@ import { canvasText, panelRect } from './canvas-ui';
 import type { CardAtlas } from './card-atlas';
 import type { GameDriver, InputEvent, RenderContext } from './game-driver';
 import {
+  STOCK_LABEL_DY,
   askButtonBox,
   askSeat,
   bookSlots,
   finishedLine,
   legalCard,
+  opponentBackAnchor,
   opponentBookOrigin,
+  plateWidth,
   selfBookOrigin,
   stockPosition,
 } from './go-fish-layout';
@@ -40,6 +43,10 @@ const FLASH_ON_MS = 130;
 const FLASH_OFF_MS = 80;
 const FLASH_BLINKS = 3;
 const BOOK_SCALE = 0.5;
+const BOOK_ART_HALF = 12;
+const BOOK_LABEL_DY = 34;
+const BOOK_CAPTION_DY = 16;
+const LAST_ASK_Y = 236;
 const STOCK_SHOWN = 3;
 
 /** A red box that blinks a few times over a control, then removes itself. */
@@ -95,7 +102,9 @@ interface CardRecord {
 
 interface BookRecord {
   actor: ex.Actor;
+  caption: ex.Actor;
   cardId: string;
+  rank: string;
 }
 
 function cardSprite(
@@ -276,13 +285,14 @@ export class GoFishDriver implements GameDriver<GoFishState> {
       this.textActor(ctx, 748, 428, mine ? 'Your turn' : 'Wait', GOLD),
     );
     const stock = stockPosition();
+    const stockLine = `Stock ${state.stock.length}`;
     this.labels.push(
       this.textActor(
         ctx,
-        stock.x - 56,
-        stock.y - 8,
-        `x${state.stock.length}`,
-        DIM,
+        stock.x - stockLine.length * 4,
+        stock.y + STOCK_LABEL_DY,
+        stockLine,
+        GOLD,
       ),
     );
     if (state.lastAsk) {
@@ -293,22 +303,32 @@ export class GoFishDriver implements GameDriver<GoFishState> {
           : ask.drawn
             ? 'Go fish'
             : `No ${ask.rank}`;
-      this.labels.push(this.textActor(ctx, 430, 214, line, DIM));
+      this.labels.push(
+        this.textActor(ctx, 480 - line.length * 4, LAST_ASK_Y, line, DIM),
+      );
     }
     for (const seat of ctx.seats) {
+      const booked = state.books[String(seat.seatIndex)]?.length ?? 0;
       if (seat.self) {
+        if (booked > 0) {
+          const origin = selfBookOrigin();
+          this.labels.push(
+            this.textActor(
+              ctx,
+              origin.x - BOOK_ART_HALF,
+              origin.y - BOOK_LABEL_DY,
+              `Books ${booked}`,
+              GOLD,
+            ),
+          );
+        }
         continue;
       }
       const count = state.hands[String(seat.seatIndex)]?.length ?? 0;
-      const booked = state.books[String(seat.seatIndex)]?.length ?? 0;
+      const line = booked > 0 ? `x${count} Books ${booked}` : `x${count}`;
       this.labels.push(
-        this.textActor(ctx, seat.x - 16, seat.y - 16, `x${count}`, DIM),
+        this.textActor(ctx, seat.x - line.length * 4, seat.y - 16, line, DIM),
       );
-      if (booked > 0) {
-        this.labels.push(
-          this.textActor(ctx, seat.x - 16, seat.y + 8, `b${booked}`, GOLD),
-        );
-      }
     }
   }
 
@@ -486,7 +506,8 @@ export class GoFishDriver implements GameDriver<GoFishState> {
         continue;
       }
       const count = state.hands[String(seat.seatIndex)]?.length ?? 0;
-      const slots = opponentBackPositions(seat.x, seat.y, count);
+      const anchor = opponentBackAnchor(seat.x, seat.y);
+      const slots = opponentBackPositions(anchor.x, anchor.y, count);
       for (let index = 0; index < slots.length; index += 1) {
         const slot = slots[index];
         if (!slot) {
@@ -570,12 +591,20 @@ export class GoFishDriver implements GameDriver<GoFishState> {
   }
 
   private syncBooks(state: GoFishState, ctx: RenderContext): void {
-    const desired = new Map<string, { x: number; y: number; cardId: string }>();
+    const desired = new Map<
+      string,
+      { x: number; y: number; cardId: string; rank: string }
+    >();
     for (const seat of ctx.seats) {
       const list = state.books[String(seat.seatIndex)] ?? [];
       const origin = seat.self
         ? selfBookOrigin()
-        : opponentBookOrigin(seat.x, seat.y);
+        : opponentBookOrigin(
+            seat.x,
+            seat.y,
+            list.length,
+            plateWidth(seat.name),
+          );
       const slots = bookSlots(origin.x, origin.y, list.length);
       for (let index = 0; index < list.length; index += 1) {
         const book = list[index];
@@ -588,20 +617,20 @@ export class GoFishDriver implements GameDriver<GoFishState> {
           x: slot.x,
           y: slot.y,
           cardId,
+          rank: book.rank,
         });
       }
     }
     for (const [key, record] of this.books) {
       if (!desired.has(key)) {
         record.actor.kill();
+        record.caption.kill();
         this.books.delete(key);
       }
     }
     for (const [key, place] of desired) {
       let record = this.books.get(key);
       if (!record) {
-        const sprite = cardSprite(ctx.cards, place.cardId, true);
-        sprite.scale = ex.vec(BOOK_SCALE, BOOK_SCALE);
         const actor = new ex.Actor({
           pos: ex.vec(place.x, place.y),
           anchor: ex.vec(0.5, 0.5),
@@ -609,18 +638,30 @@ export class GoFishDriver implements GameDriver<GoFishState> {
           height: CARD_DRAW * BOOK_SCALE,
           z: 6,
         });
-        actor.graphics.use(sprite);
+        const caption = new ex.Actor({
+          pos: ex.vec(place.x, place.y),
+          anchor: ex.vec(0, 0),
+          z: 7,
+        });
         ctx.scene.add(actor);
-        record = { actor, cardId: place.cardId };
+        ctx.scene.add(caption);
+        record = { actor, caption, cardId: '', rank: '' };
         this.books.set(key, record);
-        continue;
       }
       record.actor.pos = ex.vec(place.x, place.y);
+      record.caption.pos = ex.vec(
+        place.x - place.rank.length * 4,
+        place.y + BOOK_CAPTION_DY,
+      );
       if (record.cardId !== place.cardId) {
         record.cardId = place.cardId;
         const sprite = cardSprite(ctx.cards, place.cardId, true);
         sprite.scale = ex.vec(BOOK_SCALE, BOOK_SCALE);
         record.actor.graphics.use(sprite);
+      }
+      if (record.rank !== place.rank) {
+        record.rank = place.rank;
+        record.caption.graphics.use(canvasText(place.rank, 8, GOLD));
       }
     }
   }
@@ -658,6 +699,7 @@ export class GoFishDriver implements GameDriver<GoFishState> {
     this.backTargets.clear();
     for (const record of this.books.values()) {
       record.actor.kill();
+      record.caption.kill();
     }
     this.books.clear();
     for (const actor of this.stockActors) {

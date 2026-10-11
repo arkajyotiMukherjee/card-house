@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import type { GoFishState } from '../../src/shared/games/go-fish';
-import { HAND_Y, PILE_X, PILE_Y } from './bluff-layout';
 import {
+  CARD_DRAW,
+  HAND_Y,
+  PILE_X,
+  PILE_Y,
+  opponentBackPositions,
+} from './bluff-layout';
+import {
+  BACK_PUSH,
+  BOOK_ART_W,
+  BOOK_STEP,
   BOOK_Y,
   STOCK_X,
   askButtonBox,
@@ -9,7 +18,9 @@ import {
   bookSlots,
   finishedLine,
   legalCard,
+  opponentBackAnchor,
   opponentBookOrigin,
+  plateWidth,
   selfBookOrigin,
   stockPosition,
 } from './go-fish-layout';
@@ -40,13 +51,40 @@ describe('go fish layout', () => {
   });
 
   it('keeps other books and ask buttons off the bottom hand', () => {
-    const origin = opponentBookOrigin(780, 310);
+    const origin = opponentBookOrigin(780, 310, 2);
     const books = bookSlots(origin.x, origin.y, 2);
     expect(books.every((slot) => slot.y < HAND_Y - 40)).toBe(true);
     const ask = askButtonBox(780, 310);
     expect(ask.y + ask.h).toBeLessThan(HAND_Y - 40);
     expect(askSeat('ask:1')).toBe(1);
     expect(askSeat('AS')).toBeNull();
+  });
+
+  it('puts other books beside the plate, away from the table center', () => {
+    const width = plateWidth('Bea');
+    const right = opponentBookOrigin(780, 310, 3, width);
+    expect(right.x - BOOK_ART_W / 2).toBeGreaterThanOrEqual(780 + width / 2);
+    const left = opponentBookOrigin(180, 310, 3, width);
+    const span = BOOK_ART_W + BOOK_STEP * 2;
+    expect(left.x - BOOK_ART_W / 2 + span).toBeLessThanOrEqual(180 - width / 2);
+    const top = opponentBookOrigin(480, 72, 2, width);
+    expect(top.x - BOOK_ART_W / 2).toBeGreaterThanOrEqual(480 + width / 2);
+  });
+
+  it('keeps a long row of books on the screen', () => {
+    const origin = opponentBookOrigin(780, 310, 13, plateWidth('Bea'));
+    const last = bookSlots(origin.x, origin.y, 13).at(-1);
+    expect((last?.x ?? 0) + BOOK_ART_W / 2).toBeLessThanOrEqual(960);
+  });
+
+  it('fans other card backs past the ask button', () => {
+    const ask = askButtonBox(480, 72);
+    const anchor = opponentBackAnchor(480, 72);
+    expect(anchor.y - 72).toBe(BACK_PUSH);
+    const first = opponentBackPositions(anchor.x, anchor.y, 1)[0];
+    expect((first?.y ?? 0) - CARD_DRAW / 2).toBeGreaterThanOrEqual(
+      ask.y + ask.h,
+    );
   });
 
   it('lifts a card only on your turn when it is in your hand', () => {
