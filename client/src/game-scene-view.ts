@@ -20,6 +20,7 @@ import {
 } from './game-scene';
 import type { RenderContext } from './game-driver';
 import type { DbConnection, SubscriptionHandle } from './module_bindings';
+import { bluffStatusHud, STATUS_HUD } from './status-hud';
 import {
   LOGICAL_HEIGHT,
   LOGICAL_WIDTH,
@@ -91,6 +92,10 @@ export class GameScene extends ex.Scene {
   private countText!: ex.Text;
   private countValue!: ex.Actor;
   private counterPlate!: ex.Actor;
+  private hudPlate!: ex.Actor;
+  private hudTurn!: ex.Text;
+  private hudPhase!: ex.Text;
+  private hudRound!: ex.Text;
 
   constructor(
     private readonly connection: DbConnection,
@@ -108,6 +113,7 @@ export class GameScene extends ex.Scene {
     if (this.ready) {
       this.errorText.text = '';
       this.bluffDriver.destroy(this.driverContext());
+      this.placeHud(false);
     }
   }
 
@@ -146,6 +152,7 @@ export class GameScene extends ex.Scene {
 
     this.addLeaveButton();
     this.addCounterButton();
+    this.addStatusHud();
     this.watchRows();
     this.ready = true;
   }
@@ -367,6 +374,7 @@ export class GameScene extends ex.Scene {
     }
     if (row.gameType !== this.bluffDriver.gameType) {
       this.bluffDriver.destroy(this.driverContext());
+      this.placeHud(false);
       this.paintCounter(row.gameType, row.stateJson);
       return;
     }
@@ -385,6 +393,47 @@ export class GameScene extends ex.Scene {
     this.waitingText.text =
       state.phase === 'lobby' ? 'Waiting for players' : '';
     this.bluffDriver.render(state, this.driverContext());
+    this.paintHud(state);
+  }
+
+  private paintHud(state: BluffState): void {
+    const lines = bluffStatusHud(state, this.placed);
+    this.hudTurn.text = lines.turn;
+    this.hudPhase.text = lines.phase;
+    this.hudRound.text = lines.round;
+    this.placeHud(true);
+  }
+
+  private placeHud(visible: boolean): void {
+    this.hudPlate.pos = visible
+      ? ex.vec(STATUS_HUD.x, STATUS_HUD.y)
+      : ex.vec(STATUS_HUD.x, -200);
+  }
+
+  private addStatusHud(): void {
+    const box = STATUS_HUD;
+    const plate = new ex.Actor({
+      pos: ex.vec(box.x, -200),
+      anchor: ex.vec(0, 0),
+      width: box.w,
+      height: box.h,
+      z: 8,
+    });
+    plate.graphics.use(panelRect(box.w, box.h, PLATE, STROKE));
+    this.hudTurn = canvasText('', 8, SELF);
+    this.hudPhase = canvasText('', 8, GOLD);
+    this.hudRound = canvasText('', 8, DIM);
+    const rows = [this.hudTurn, this.hudPhase, this.hudRound];
+    for (let index = 0; index < rows.length; index += 1) {
+      const row = new ex.Actor({
+        pos: ex.vec(10, 8 + index * 12),
+        anchor: ex.vec(0, 0),
+      });
+      row.graphics.use(rows[index]);
+      plate.addChild(row);
+    }
+    this.add(plate);
+    this.hudPlate = plate;
   }
 
   private driverContext(): RenderContext {
