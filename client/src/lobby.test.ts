@@ -7,6 +7,7 @@ import { rummyGameDefinition } from '../../src/shared/games/rummy';
 import { blackjackGameDefinition } from '../../src/shared/games/blackjack';
 import { spadesGameDefinition } from '../../src/shared/games/spades';
 import { heartsGameDefinition } from '../../src/shared/games/hearts';
+import { pokerGameDefinition } from '../../src/shared/games/poker';
 import {
   applyCodeKey,
   applyFieldKey,
@@ -154,7 +155,7 @@ describe('lobby tables', () => {
     });
   });
 
-  it('offers Bluff, President, Go Fish, Crazy Eights, Rummy, Blackjack, Spades, and Hearts from the shared definitions', () => {
+  it('offers Bluff, President, Go Fish, Crazy Eights, Rummy, Blackjack, Spades, Hearts, and Poker from the shared definitions', () => {
     expect(GAME_CATALOG).toEqual([
       {
         gameType: bluffGameDefinition.gameType,
@@ -211,6 +212,13 @@ describe('lobby tables', () => {
         minPlayers: heartsGameDefinition.minPlayers,
         maxPlayers: heartsGameDefinition.maxPlayers,
         howToPlay: heartsGameDefinition.howToPlay,
+      },
+      {
+        gameType: pokerGameDefinition.gameType,
+        name: pokerGameDefinition.displayName,
+        minPlayers: pokerGameDefinition.minPlayers,
+        maxPlayers: pokerGameDefinition.maxPlayers,
+        howToPlay: pokerGameDefinition.howToPlay,
       },
     ]);
     const gameTypes = GAME_CATALOG.map((game) => game.gameType);
@@ -282,8 +290,19 @@ describe('lobby tables', () => {
       maxPlayers: 4,
     });
     expect(hearts.howToPlay).toBe(heartsGameDefinition.howToPlay);
-    expect(gameOption(8)).toBe(bluff);
-    expect(gameOption(-1)).toBe(hearts);
+    const poker = gameOption(8);
+    expect(poker).toMatchObject({
+      gameType: 'poker',
+      name: 'Poker',
+      minPlayers: pokerGameDefinition.minPlayers,
+      maxPlayers: pokerGameDefinition.maxPlayers,
+    });
+    expect(poker.howToPlay).toBe(pokerGameDefinition.howToPlay);
+    expect(poker.howToPlay).toContain("Texas Hold'em");
+    expect(poker.howToPlay).toContain('Omaha');
+    expect(poker.howToPlay).toContain('Oklahoma');
+    expect(gameOption(9)).toBe(bluff);
+    expect(gameOption(-1)).toBe(poker);
     expect(clampPlayerCount(bluff, 9)).toBe(6);
     expect(clampPlayerCount(bluff, 2)).toBe(2);
     expect(clampPlayerCount(president, 9)).toBe(6);
@@ -306,6 +325,12 @@ describe('lobby tables', () => {
     expect(clampPlayerCount(hearts, 2)).toBe(4);
     expect(clampPlayerCount(hearts, 9)).toBe(4);
     expect(nextTableName(tables, 'lobby_1', hearts)).toBe('Hearts #1');
+    expect(clampPlayerCount(poker, 1)).toBe(pokerGameDefinition.minPlayers);
+    expect(clampPlayerCount(poker, 12)).toBe(pokerGameDefinition.maxPlayers);
+    expect(nextTableName(tables, 'lobby_1', poker)).toBe('Poker #1');
+    expect(tableSettingsJson(2, 6, 'Poker #1', 'omaha')).toBe(
+      '{"name":"Poker #1","minPlayers":2,"maxPlayers":6,"variation":"omaha"}',
+    );
   });
 
   it('finds this browser in the joined lobby', () => {

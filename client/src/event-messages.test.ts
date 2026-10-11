@@ -222,6 +222,22 @@ describe('eventMessage', () => {
     );
   });
 
+  it('announces a poker fold, raise, and winner', () => {
+    expect(eventMessage('poker', { kind: 'fold', seat: 0 }, names)).toBe(
+      'Ada folds',
+    );
+    expect(
+      eventMessage('poker', { kind: 'raise', seat: 1, amount: 60 }, names),
+    ).toBe('Bea raises to 60');
+    expect(
+      eventMessage(
+        'poker',
+        { kind: 'finished', end: 'showdown', winners: [0] },
+        names,
+      ),
+    ).toBe('Ada wins');
+  });
+
   it('keeps dummy and unknown events silent', () => {
     expect(eventMessage('dummy', null, names)).toBeNull();
     expect(eventMessage('bluff', null, names)).toBeNull();

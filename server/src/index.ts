@@ -36,6 +36,12 @@ import {
   heartsRules,
 } from '../../src/shared/games/hearts';
 import {
+  POKER_GAME_TYPE,
+  POKER_VARIATIONS,
+  pokerGameDefinition,
+  pokerRules,
+} from '../../src/shared/games/poker';
+import {
   dummyCounterRules,
   dummyGameDefinition,
 } from '../../src/shared/games/dummy-counter';
@@ -56,6 +62,7 @@ registerGameRules(rummyGameDefinition, rummyRules);
 registerGameRules(blackjackGameDefinition, blackjackRules);
 registerGameRules(spadesGameDefinition, spadesRules);
 registerGameRules(heartsGameDefinition, heartsRules);
+registerGameRules(pokerGameDefinition, pokerRules);
 
 const LobbyStatus = t.enum('LobbyStatus', ['open', 'closed']);
 const TableStatus = t.enum('TableStatus', [
@@ -68,7 +75,12 @@ const SeatState = t.enum('SeatState', ['active', 'folded', 'disconnected']);
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const DEFAULT_MIN_PLAYERS = 2;
 const DEFAULT_MAX_PLAYERS = 8;
-const TABLE_SETTING_KEYS = ['name', 'minPlayers', 'maxPlayers'] as const;
+const TABLE_SETTING_KEYS = [
+  'name',
+  'minPlayers',
+  'maxPlayers',
+  'variation',
+] as const;
 
 const Lobby = table(
   { name: 'Lobby', public: true },
@@ -283,6 +295,7 @@ function tableSettings(raw: string | undefined): {
   name?: string;
   minPlayers?: number;
   maxPlayers?: number;
+  variation?: string;
 } {
   if (raw === undefined || raw.trim().length === 0) {
     return {};
@@ -311,6 +324,7 @@ function tableSettings(raw: string | undefined): {
     name?: string;
     minPlayers?: number;
     maxPlayers?: number;
+    variation?: string;
   } = {};
   if ('name' in record) {
     if (typeof record.name !== 'string' || record.name.trim().length === 0) {
@@ -324,7 +338,32 @@ function tableSettings(raw: string | undefined): {
   if ('maxPlayers' in record) {
     settings.maxPlayers = playerLimit(record.maxPlayers, 'maxPlayers');
   }
+  if ('variation' in record) {
+    if (
+      typeof record.variation !== 'string' ||
+      record.variation.trim().length === 0
+    ) {
+      throw new SenderError('variation must be a poker variation');
+    }
+    settings.variation = record.variation.trim();
+  }
   return settings;
+}
+
+function pokerVariation(
+  gameType: string,
+  variation: string | undefined,
+): string | undefined {
+  if (variation === undefined) {
+    return undefined;
+  }
+  if (gameType !== POKER_GAME_TYPE) {
+    throw new SenderError('variation is only for poker');
+  }
+  if (!(POKER_VARIATIONS as readonly string[]).includes(variation)) {
+    throw new SenderError('Unknown poker variation');
+  }
+  return variation;
 }
 
 export const create_game_table = spacetimedb.reducer(
@@ -375,14 +414,18 @@ export const create_game_table = spacetimedb.reducer(
     const id = `table_${lobby.id}_${micros.toString()}_${existing}`;
     const name = settings.name ?? `${gameType} #${sameType + 1}`;
     const stateJson = storedState(
-      openingTableState(gameType, {
-        id,
-        lobbyId: lobby.id,
-        name,
-        minPlayers,
-        maxPlayers,
-        createdAt: Number(ctx.timestamp.toMillis()),
-      }),
+      openingTableState(
+        gameType,
+        {
+          id,
+          lobbyId: lobby.id,
+          name,
+          minPlayers,
+          maxPlayers,
+          createdAt: Number(ctx.timestamp.toMillis()),
+        },
+        pokerVariation(gameType, settings.variation),
+      ),
     );
     ctx.db.GameTable.insert({
       id,

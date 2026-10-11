@@ -7,12 +7,14 @@ import type { RummyState } from '../../src/shared/games/rummy';
 import type { BlackjackState } from '../../src/shared/games/blackjack';
 import type { SpadesState } from '../../src/shared/games/spades';
 import type { HeartsState } from '../../src/shared/games/hearts';
+import type { PokerState } from '../../src/shared/games/poker';
 import {
   blackjackStatusHud,
   bluffStatusHud,
   crazyEightsStatusHud,
   goFishStatusHud,
   heartsStatusHud,
+  pokerStatusHud,
   presidentStatusHud,
   rummyStatusHud,
   spadesStatusHud,
@@ -405,5 +407,44 @@ describe('heartsStatusHud', () => {
       phase: 'Phase: Passing',
       round: 'Round: Left',
     });
+  });
+});
+
+function pokerState(overrides: Partial<PokerState> = {}): PokerState {
+  return {
+    phase: 'play',
+    variation: 'omaha',
+    street: 'flop',
+    step: 'bet',
+    deck: [],
+    board: [],
+    seats: {},
+    order: [0, 1],
+    dealerSeatIndex: 0,
+    turnSeatIndex: 1,
+    currentBet: 0,
+    minRaise: 20,
+    pot: 40,
+    pots: [],
+    winnerSeatIndexes: [],
+    hands: {},
+    end: null,
+    smallBlind: 10,
+    bigBlind: 20,
+    limit: 'pot-limit',
+    ...overrides,
+  };
+}
+
+describe('pokerStatusHud', () => {
+  it('names the street, the player, and the variation', () => {
+    expect(pokerStatusHud(pokerState(), seats)).toEqual({
+      turn: 'Turn: Bea',
+      phase: 'Phase: Flop',
+      round: 'Round: Omaha',
+    });
+    expect(pokerStatusHud(pokerState({ step: 'discard' }), seats).phase).toBe(
+      'Phase: Discard',
+    );
   });
 });

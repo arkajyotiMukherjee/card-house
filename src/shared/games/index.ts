@@ -187,6 +187,35 @@ export type {
   HeartsTrickCard,
   PassDirection,
 } from './hearts';
+export {
+  POKER_BIG_BLIND,
+  POKER_GAME_TYPE,
+  POKER_SMALL_BLIND,
+  POKER_STARTING_CHIPS,
+  POKER_VARIATION_LABELS,
+  POKER_VARIATIONS,
+  bestPokerHand,
+  pokerGameDefinition,
+  pokerRules,
+  readPokerEventNote,
+  readPokerIntent,
+  readPokerState,
+  variationFromStateJson,
+} from './poker';
+export type {
+  PokerEnd,
+  PokerEventNote,
+  PokerHandRank,
+  PokerIntent,
+  PokerLimit,
+  PokerPhase,
+  PokerPot,
+  PokerSeatState,
+  PokerState,
+  PokerStreet,
+  PokerSuit,
+  PokerVariation,
+} from './poker';
 export type { GameDefinition } from './game-definition';
 export type {
   GameRules,

@@ -7,6 +7,7 @@ import { rummyGameDefinition } from '../../src/shared/games/rummy';
 import { blackjackGameDefinition } from '../../src/shared/games/blackjack';
 import { spadesGameDefinition } from '../../src/shared/games/spades';
 import { heartsGameDefinition } from '../../src/shared/games/hearts';
+import { pokerGameDefinition } from '../../src/shared/games/poker';
 import { HOW_TO_PLAY_TEXT } from './game-scene';
 import {
   clampScroll,
@@ -61,6 +62,15 @@ describe('definitionFor', () => {
     expect(layoutHowToPlay(heartsGameDefinition, 84).title).toBe(
       'How to Play Hearts',
     );
+  });
+
+  it('returns the Poker definition for gameType poker', () => {
+    expect(definitionFor('poker')).toBe(pokerGameDefinition);
+    expect(layoutHowToPlay(pokerGameDefinition, 84).title).toBe(
+      'How to Play Poker',
+    );
+    expect(pokerGameDefinition.howToPlay).toContain('Omaha');
+    expect(pokerGameDefinition.howToPlay).toContain('Oklahoma');
   });
 
   it('has no definition for an unknown gameType', () => {
