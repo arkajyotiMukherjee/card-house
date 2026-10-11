@@ -5,7 +5,21 @@ import {
   type DummyIntent,
 } from '../../src/shared/games/dummy-counter';
 import { BluffDriver } from './bluff-driver';
-import { cardAtlas, greenTable, pixelFont } from './boot-scene';
+import { cardAtlas, greenTable } from './boot-scene';
+import {
+  BUTTON,
+  BUTTON_DOWN,
+  canvasText,
+  DANGER,
+  DIM,
+  FELT,
+  GOLD,
+  panelRect,
+  PLATE,
+  SELF,
+  STROKE,
+  STROKE_HOT,
+} from './canvas-ui';
 import {
   COUNTER_BUTTON,
   dummyIntentPayload,
@@ -19,6 +33,7 @@ import {
   type SeatRef,
 } from './game-scene';
 import type { RenderContext } from './game-driver';
+import { HowToPlayOverlay } from './how-to-play-overlay';
 import type { DbConnection, SubscriptionHandle } from './module_bindings';
 import { bluffStatusHud, STATUS_HUD } from './status-hud';
 import {
@@ -28,51 +43,6 @@ import {
   TABLE_SCALE,
   TABLE_WIDTH,
 } from './sheets';
-
-const FELT = ex.Color.fromHex('#145c38');
-const GOLD = ex.Color.fromHex('#f4e4b3');
-const SELF = ex.Color.fromHex('#fff6d0');
-const DIM = ex.Color.fromHex('#d7c08a');
-const PLATE = ex.Color.fromHex('#0b2418');
-const BUTTON = ex.Color.fromHex('#6e2a24');
-const BUTTON_DOWN = ex.Color.fromHex('#3f1614');
-const STROKE = ex.Color.fromHex('#e6c27a');
-const STROKE_HOT = ex.Color.fromHex('#fff6d0');
-const DANGER = ex.Color.fromHex('#e85d4c');
-
-function canvasText(text: string, size: number, color: ex.Color): ex.Text {
-  const graphic = new ex.Text({
-    text,
-    color,
-    font: pixelFont.toFont({
-      family: '"Press Start 2P"',
-      size,
-      color,
-      quality: 1,
-      filtering: ex.ImageFiltering.Pixel,
-    }),
-  });
-  graphic.origin = ex.vec(0, 0);
-  return graphic;
-}
-
-function panelRect(
-  width: number,
-  height: number,
-  fill: ex.Color,
-  stroke: ex.Color,
-): ex.Rectangle {
-  const rect = new ex.Rectangle({
-    width,
-    height,
-    color: fill,
-    strokeColor: stroke,
-    lineWidth: 2,
-    smoothing: false,
-  });
-  rect.origin = ex.vec(0, 0);
-  return rect;
-}
 
 export class GameScene extends ex.Scene {
   private tableId = '';
@@ -92,6 +62,7 @@ export class GameScene extends ex.Scene {
   private countText!: ex.Text;
   private countValue!: ex.Actor;
   private counterPlate!: ex.Actor;
+  private howToPlay!: HowToPlayOverlay;
   private hudPlate!: ex.Actor;
   private hudTurn!: ex.Text;
   private hudPhase!: ex.Text;
@@ -112,6 +83,8 @@ export class GameScene extends ex.Scene {
     this.lastRow = null;
     if (this.ready) {
       this.errorText.text = '';
+      this.howToPlay.close();
+      this.howToPlay.setGameType('');
       this.bluffDriver.destroy(this.driverContext());
       this.placeHud(false);
     }
@@ -152,18 +125,34 @@ export class GameScene extends ex.Scene {
 
     this.addLeaveButton();
     this.addCounterButton();
+    this.howToPlay = new HowToPlayOverlay(this);
     this.addStatusHud();
     this.watchRows();
     this.ready = true;
   }
 
   onActivate(): void {
+    this.input.keyboard.on('press', this.onKeyPress);
+    this.input.pointers.on('wheel', this.onWheel);
     this.bindTable();
   }
 
   onDeactivate(): void {
+    this.input.keyboard.off('press', this.onKeyPress);
+    this.input.pointers.off('wheel', this.onWheel);
+    this.howToPlay.close();
     this.endSubscription();
   }
+
+  private readonly onKeyPress = (event: ex.KeyEvent): void => {
+    if (event.key === ex.Keys.Escape) {
+      this.howToPlay.close();
+    }
+  };
+
+  private readonly onWheel = (event: ex.WheelEvent): void => {
+    this.howToPlay.scrollBy(event.deltaY);
+  };
 
   private watchRows(): void {
     this.connection.db.gameSeat.onInsert(() => {
@@ -321,7 +310,7 @@ export class GameScene extends ex.Scene {
   }
 
   private sendPayload(intentPayload: string): void {
-    if (this.tableId.length === 0) {
+    if (this.howToPlay.isOpen || this.tableId.length === 0) {
       return;
     }
     const tableId = this.tableId;
@@ -352,6 +341,7 @@ export class GameScene extends ex.Scene {
       gameType: row.gameType,
       stateJson: row.stateJson,
     };
+    this.howToPlay.setGameType(row.gameType);
     this.paintGame();
   }
 
@@ -451,6 +441,7 @@ export class GameScene extends ex.Scene {
       sendIntent: (intent) => {
         this.sendPayload(JSON.stringify(intent));
       },
+      inputBlocked: () => this.howToPlay.isOpen,
     };
   }
 
@@ -530,7 +521,7 @@ export class GameScene extends ex.Scene {
   }
 
   private leave(): void {
-    if (this.leaving || this.tableId.length === 0) {
+    if (this.leaving || this.howToPlay.isOpen || this.tableId.length === 0) {
       return;
     }
     this.leaving = true;

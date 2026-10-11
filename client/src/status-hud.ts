@@ -4,7 +4,7 @@ import {
   type BluffState,
 } from '../../src/shared/games/bluff';
 
-export const STATUS_HUD = { x: 704, y: 16, w: 240, h: 52 } as const;
+export const STATUS_HUD = { x: 668, y: 16, w: 240, h: 52 } as const;
 
 const NAME_MAX = 14;
 

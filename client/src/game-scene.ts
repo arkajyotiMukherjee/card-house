@@ -7,6 +7,24 @@ import {
 
 export const LEAVE_TABLE_BUTTON = { x: 16, y: 16, w: 168, h: 28 } as const;
 
+/** The `?` control, top right. Opens the per-game How to Play overlay. */
+export const HOW_TO_PLAY_BUTTON = { x: 916, y: 16, w: 28, h: 28 } as const;
+
+/** How to Play window, centered on the 960×540 canvas. */
+export const HOW_TO_PLAY_PANEL = { x: 120, y: 50, w: 720, h: 440 } as const;
+
+/**
+ * Text grid inside the window. Press Start 2P at 8px is 8px per column,
+ * so `columns` is the width left after padding divided by 8.
+ */
+export const HOW_TO_PLAY_TEXT = {
+  padding: 24,
+  top: 64,
+  lineHeight: 16,
+  rows: 19,
+  columns: 84,
+} as const;
+
 /** Click target on a dummy table. The number painted here is the subscribed count. */
 export const COUNTER_BUTTON = { x: 392, y: 220, w: 176, h: 72 } as const;
 

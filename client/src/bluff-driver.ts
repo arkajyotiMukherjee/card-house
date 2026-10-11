@@ -130,6 +130,9 @@ export class BluffDriver implements GameDriver<BluffState> {
     if (state.phase !== 'play') {
       return;
     }
+    if (ctx.inputBlocked() && event.type !== 'pointerleave') {
+      return;
+    }
     if (event.target === 'play' && event.type === 'pointerup') {
       this.sendPlay(state, ctx);
       return;
