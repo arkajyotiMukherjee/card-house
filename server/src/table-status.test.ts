@@ -16,6 +16,10 @@ assert(
   'a dealt Bluff table is in progress',
 );
 assert(
+  statusTagForState({ phase: 'pass' }, 'waiting_for_players') === 'in_progress',
+  'a Hearts pass is in progress',
+);
+assert(
   statusTagForState(
     { phase: 'finished', winnerSeatIndex: 0 },
     'in_progress',

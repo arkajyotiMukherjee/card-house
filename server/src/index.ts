@@ -32,6 +32,10 @@ import {
   spadesRules,
 } from '../../src/shared/games/spades';
 import {
+  heartsGameDefinition,
+  heartsRules,
+} from '../../src/shared/games/hearts';
+import {
   dummyCounterRules,
   dummyGameDefinition,
 } from '../../src/shared/games/dummy-counter';
@@ -51,6 +55,7 @@ registerGameRules(crazyEightsGameDefinition, crazyEightsRules);
 registerGameRules(rummyGameDefinition, rummyRules);
 registerGameRules(blackjackGameDefinition, blackjackRules);
 registerGameRules(spadesGameDefinition, spadesRules);
+registerGameRules(heartsGameDefinition, heartsRules);
 
 const LobbyStatus = t.enum('LobbyStatus', ['open', 'closed']);
 const TableStatus = t.enum('TableStatus', [

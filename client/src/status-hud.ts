@@ -12,6 +12,11 @@ import type { PresidentState } from '../../src/shared/games/president';
 import type { RummyPhase, RummyState } from '../../src/shared/games/rummy';
 import type { BlackjackState } from '../../src/shared/games/blackjack';
 import type { SpadesState } from '../../src/shared/games/spades';
+import {
+  passDirection,
+  type HeartsPhase,
+  type HeartsState,
+} from '../../src/shared/games/hearts';
 
 export const STATUS_HUD = { x: 668, y: 16, w: 240, h: 52 } as const;
 
@@ -280,6 +285,50 @@ export function spadesStatusHud(
     turn: `Turn: ${turn}`,
     phase: `Phase: ${phase}`,
     round: `Hand: ${round}`,
+  };
+}
+
+const HEARTS_PHASE_LABELS = {
+  lobby: 'Waiting',
+  pass: 'Passing',
+  play: 'Play',
+  finished: 'Finished',
+} as const satisfies Record<HeartsPhase, string>;
+
+const PASS_ROUND = {
+  left: 'Left',
+  right: 'Right',
+  across: 'Across',
+  hold: 'Hold',
+} as const;
+
+/**
+ * Status lines from the subscribed Hearts `stateJson`.
+ * The same three HUD rows: who acts, the phase, and the hand or pass direction.
+ */
+export function heartsStatusHud(
+  state: HeartsState,
+  seats: readonly { seatIndex: number; name: string }[],
+): StatusHudLines {
+  let turn = '-';
+  if (state.phase === 'pass') {
+    turn = 'Passing';
+  } else if (state.phase === 'play' && state.turnSeatIndex !== null) {
+    const seatIndex = state.turnSeatIndex;
+    const seat = seats.find((row) => row.seatIndex === seatIndex);
+    const name = seat?.name ?? '';
+    turn = name.length > 0 ? shortName(name) : `Seat ${seatIndex}`;
+  }
+  const round =
+    state.phase === 'lobby'
+      ? '-'
+      : state.phase === 'pass'
+        ? PASS_ROUND[passDirection(state.handIndex)]
+        : `Hand ${state.handIndex + 1}`;
+  return {
+    turn: `Turn: ${turn}`,
+    phase: `Phase: ${HEARTS_PHASE_LABELS[state.phase]}`,
+    round: `Round: ${round}`,
   };
 }
 

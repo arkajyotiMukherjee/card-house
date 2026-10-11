@@ -22,6 +22,10 @@ import {
   type SpadesState,
 } from '../../src/shared/games/spades';
 import {
+  readHeartsState,
+  type HeartsState,
+} from '../../src/shared/games/hearts';
+import {
   DUMMY_INCREMENT,
   type DummyIntent,
 } from '../../src/shared/games/dummy-counter';
@@ -32,6 +36,7 @@ import { PresidentDriver } from './president-driver';
 import { RummyDriver } from './rummy-driver';
 import { BlackjackDriver } from './blackjack-driver';
 import { SpadesDriver } from './spades-driver';
+import { HeartsDriver } from './hearts-driver';
 import { cardAtlas, greenTable } from './boot-scene';
 import {
   BUTTON,
@@ -71,6 +76,7 @@ import {
   rummyStatusHud,
   blackjackStatusHud,
   spadesStatusHud,
+  heartsStatusHud,
   STATUS_HUD,
   type StatusHudLines,
 } from './status-hud';
@@ -105,6 +111,7 @@ export class GameScene extends ex.Scene {
   private readonly rummyDriver = new RummyDriver();
   private readonly blackjackDriver = new BlackjackDriver();
   private readonly spadesDriver = new SpadesDriver();
+  private readonly heartsDriver = new HeartsDriver();
   private lastRow: { id: string; gameType: string; stateJson: string } | null =
     null;
   private placed: PlacedSeat[] = [];
@@ -146,6 +153,7 @@ export class GameScene extends ex.Scene {
       this.rummyDriver.destroy(this.driverContext());
       this.blackjackDriver.destroy(this.driverContext());
       this.spadesDriver.destroy(this.driverContext());
+      this.heartsDriver.destroy(this.driverContext());
       this.placeHud(false);
     }
   }
@@ -526,6 +534,7 @@ export class GameScene extends ex.Scene {
       this.rummyDriver.destroy(this.driverContext());
       this.blackjackDriver.destroy(this.driverContext());
       this.spadesDriver.destroy(this.driverContext());
+      this.heartsDriver.destroy(this.driverContext());
       this.paintBluff(row.stateJson);
       return;
     }
@@ -536,6 +545,7 @@ export class GameScene extends ex.Scene {
       this.rummyDriver.destroy(this.driverContext());
       this.blackjackDriver.destroy(this.driverContext());
       this.spadesDriver.destroy(this.driverContext());
+      this.heartsDriver.destroy(this.driverContext());
       this.paintPresident(row.stateJson);
       return;
     }
@@ -546,6 +556,7 @@ export class GameScene extends ex.Scene {
       this.rummyDriver.destroy(this.driverContext());
       this.blackjackDriver.destroy(this.driverContext());
       this.spadesDriver.destroy(this.driverContext());
+      this.heartsDriver.destroy(this.driverContext());
       this.paintGoFish(row.stateJson);
       return;
     }
@@ -556,6 +567,7 @@ export class GameScene extends ex.Scene {
       this.rummyDriver.destroy(this.driverContext());
       this.blackjackDriver.destroy(this.driverContext());
       this.spadesDriver.destroy(this.driverContext());
+      this.heartsDriver.destroy(this.driverContext());
       this.paintCrazyEights(row.stateJson);
       return;
     }
@@ -566,6 +578,7 @@ export class GameScene extends ex.Scene {
       this.crazyEightsDriver.destroy(this.driverContext());
       this.blackjackDriver.destroy(this.driverContext());
       this.spadesDriver.destroy(this.driverContext());
+      this.heartsDriver.destroy(this.driverContext());
       this.paintRummy(row.stateJson);
       return;
     }
@@ -576,6 +589,7 @@ export class GameScene extends ex.Scene {
       this.crazyEightsDriver.destroy(this.driverContext());
       this.rummyDriver.destroy(this.driverContext());
       this.spadesDriver.destroy(this.driverContext());
+      this.heartsDriver.destroy(this.driverContext());
       this.paintBlackjack(row.stateJson);
       return;
     }
@@ -586,7 +600,19 @@ export class GameScene extends ex.Scene {
       this.crazyEightsDriver.destroy(this.driverContext());
       this.rummyDriver.destroy(this.driverContext());
       this.blackjackDriver.destroy(this.driverContext());
+      this.heartsDriver.destroy(this.driverContext());
       this.paintSpades(row.stateJson);
+      return;
+    }
+    if (row.gameType === this.heartsDriver.gameType) {
+      this.bluffDriver.destroy(this.driverContext());
+      this.presidentDriver.destroy(this.driverContext());
+      this.goFishDriver.destroy(this.driverContext());
+      this.crazyEightsDriver.destroy(this.driverContext());
+      this.rummyDriver.destroy(this.driverContext());
+      this.blackjackDriver.destroy(this.driverContext());
+      this.spadesDriver.destroy(this.driverContext());
+      this.paintHearts(row.stateJson);
       return;
     }
     this.bluffDriver.destroy(this.driverContext());
@@ -596,6 +622,7 @@ export class GameScene extends ex.Scene {
     this.rummyDriver.destroy(this.driverContext());
     this.blackjackDriver.destroy(this.driverContext());
     this.spadesDriver.destroy(this.driverContext());
+    this.heartsDriver.destroy(this.driverContext());
     this.placeHud(false);
     this.paintCounter(row.gameType, row.stateJson);
   }
@@ -610,6 +637,7 @@ export class GameScene extends ex.Scene {
     | GameDriver<RummyState>
     | GameDriver<BlackjackState>
     | GameDriver<SpadesState>
+    | GameDriver<HeartsState>
     | null {
     if (gameType === this.bluffDriver.gameType) {
       return this.bluffDriver;
@@ -631,6 +659,9 @@ export class GameScene extends ex.Scene {
     }
     if (gameType === this.spadesDriver.gameType) {
       return this.spadesDriver;
+    }
+    if (gameType === this.heartsDriver.gameType) {
+      return this.heartsDriver;
     }
     return null;
   }
@@ -766,6 +797,25 @@ export class GameScene extends ex.Scene {
       state.phase === 'lobby' ? 'Waiting for players' : '';
     this.spadesDriver.render(state, this.driverContext());
     this.paintHud(spadesStatusHud(state, this.placed));
+  }
+
+  private paintHearts(stateJson: string): void {
+    this.dummy = false;
+    this.placeCounter(false);
+    let state: HeartsState;
+    try {
+      state = readHeartsState(JSON.parse(stateJson));
+    } catch (error: unknown) {
+      this.showError(
+        error instanceof Error ? error.message : 'Invalid table state',
+      );
+      return;
+    }
+    this.errorText.text = '';
+    this.waitingText.text =
+      state.phase === 'lobby' ? 'Waiting for players' : '';
+    this.heartsDriver.render(state, this.driverContext());
+    this.paintHud(heartsStatusHud(state, this.placed));
   }
 
   private paintHud(lines: StatusHudLines): void {

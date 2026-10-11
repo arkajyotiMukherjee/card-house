@@ -29,6 +29,10 @@ import {
   readSpadesEventNote,
   SPADES_GAME_TYPE,
 } from '../../src/shared/games/spades';
+import {
+  HEARTS_GAME_TYPE,
+  readHeartsEventNote,
+} from '../../src/shared/games/hearts';
 
 const NAME_LIMIT = 10;
 const MESSAGE_LIMIT = 64;
@@ -122,6 +126,9 @@ export function eventMessage(
   }
   if (gameType === SPADES_GAME_TYPE) {
     return spadesEventMessage(note, seatName);
+  }
+  if (gameType === HEARTS_GAME_TYPE) {
+    return heartsEventMessage(note, seatName);
   }
   if (gameType !== BLUFF_GAME_TYPE) {
     return null;
@@ -287,5 +294,46 @@ function spadesEventMessage(
     return clip(`EW wins ${parsed.ew} to ${parsed.ns}`);
   }
   return clip(`Scores NS ${parsed.ns} EW ${parsed.ew}`);
+}
+
+function heartsEventMessage(
+  note: unknown,
+  seatName: (seatIndex: number) => string,
+): string | null {
+  const parsed = readHeartsEventNote(note);
+  if (!parsed) {
+    return null;
+  }
+  if (parsed.kind === 'pass') {
+    return clip(
+      `${shortName(seatName(parsed.seat))} passed 3 ${parsed.direction}`,
+    );
+  }
+  if (parsed.kind === 'moon') {
+    const shooter = shortName(seatName(parsed.seat));
+    if (parsed.winner === null) {
+      return clip(`${shooter} shot the moon`);
+    }
+    return clip(
+      `${shooter} shot the moon. ${shortName(seatName(parsed.winner))} wins`,
+    );
+  }
+  if (parsed.kind === 'finished') {
+    return clip(`${shortName(seatName(parsed.winner))} wins`);
+  }
+  const name = shortName(seatName(parsed.seat));
+  if (parsed.trickWinner === null) {
+    return clip(`${name} played ${parsed.card}`);
+  }
+  const taker = shortName(seatName(parsed.trickWinner));
+  if (parsed.queen) {
+    return clip(`${name} played ${parsed.card}. ${taker} takes the queen`);
+  }
+  if (parsed.points > 0) {
+    return clip(
+      `${name} played ${parsed.card}. ${taker} takes ${parsed.points}`,
+    );
+  }
+  return clip(`${name} played ${parsed.card}. ${taker} takes the trick`);
 }
 

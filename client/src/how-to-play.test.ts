@@ -6,6 +6,7 @@ import { presidentGameDefinition } from '../../src/shared/games/president';
 import { rummyGameDefinition } from '../../src/shared/games/rummy';
 import { blackjackGameDefinition } from '../../src/shared/games/blackjack';
 import { spadesGameDefinition } from '../../src/shared/games/spades';
+import { heartsGameDefinition } from '../../src/shared/games/hearts';
 import { HOW_TO_PLAY_TEXT } from './game-scene';
 import {
   clampScroll,
@@ -52,6 +53,13 @@ describe('definitionFor', () => {
     expect(definitionFor('spades')).toBe(spadesGameDefinition);
     expect(layoutHowToPlay(spadesGameDefinition, 84).title).toBe(
       'How to Play Spades',
+    );
+  });
+
+  it('returns the Hearts definition for gameType hearts', () => {
+    expect(definitionFor('hearts')).toBe(heartsGameDefinition);
+    expect(layoutHowToPlay(heartsGameDefinition, 84).title).toBe(
+      'How to Play Hearts',
     );
   });
 
