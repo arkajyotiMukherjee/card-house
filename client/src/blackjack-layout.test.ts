@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { BlackjackState } from '../../src/shared/games/blackjack';
+import type {
+  BlackjackSeatState,
+  BlackjackState,
+} from '../../src/shared/games/blackjack';
 import { HAND_Y } from './bluff-layout';
 import {
   DEALER_X,
@@ -16,16 +19,32 @@ import {
   totalLabelPosition,
 } from './blackjack-layout';
 
-function finished(winnerSeatIndexes: number[]): BlackjackState {
+function finished(
+  winnerSeatIndexes: number[],
+  seats: Record<string, BlackjackSeatState> = {},
+): BlackjackState {
   return {
     phase: 'finished',
     step: 'act',
     deck: [],
-    dealer: ['AS', 'KH'],
+    dealer: ['7S', '7H'],
     holeHidden: false,
-    seats: {},
+    seats,
     turnSeatIndex: null,
     winnerSeatIndexes,
+  };
+}
+
+function scoredSeat(
+  cards: string[],
+  result: 'win' | 'lose' | 'push' | 'blackjack',
+): BlackjackSeatState {
+  return {
+    chips: 175,
+    bet: 25,
+    hands: [{ cards, bet: 25, done: true }],
+    handIndex: 0,
+    results: [result],
   };
 }
 
@@ -76,8 +95,27 @@ describe('blackjack layout', () => {
     expect(finishedLine(finished([0]), [{ seatIndex: 0, name: 'Ada' }])).toBe(
       'Winner seat 0 Ada',
     );
-    expect(finishedLine(finished([]), [])).toBe('Push');
+    expect(
+      finishedLine(finished([], { '0': scoredSeat(['10H', '7D'], 'push') }), [
+        { seatIndex: 0, name: 'Ada' },
+      ]),
+    ).toBe('Push');
     expect(faceForBlackjackCard('10H')).toEqual({ rank: '10', suit: 'hearts' });
     expect(faceForBlackjackCard('AS')).toEqual({ rank: 'A', suit: 'spades' });
+  });
+
+  it('does not call a dealer win a push', () => {
+    const line = finishedLine(
+      finished([], {
+        '0': scoredSeat(['8C', 'KH', '7C'], 'lose'),
+        '1': scoredSeat(['JH', 'JC', '7D'], 'lose'),
+      }),
+      [
+        { seatIndex: 0, name: 'Ada' },
+        { seatIndex: 1, name: 'Bea' },
+      ],
+    );
+    expect(line).not.toBe('Push');
+    expect(line).toBe('Dealer');
   });
 });

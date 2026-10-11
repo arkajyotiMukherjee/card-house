@@ -141,9 +141,20 @@ export function faceForBlackjackCard(cardId: string): CardFace | null {
   return { rank, suit };
 }
 
+function roundResults(state: BlackjackState): string[] {
+  const results: string[] = [];
+  for (const seat of Object.values(state.seats)) {
+    for (const result of seat.results) {
+      results.push(result);
+    }
+  }
+  return results;
+}
+
 /**
  * End-of-round line from the subscribed state.
- * A seat in `winnerSeatIndexes` beat the dealer. An empty list is a push.
+ * A seat in `winnerSeatIndexes` beat the dealer.
+ * Push is a tie. Every hand lost is the dealer's round.
  */
 export function finishedLine(
   state: BlackjackState,
@@ -153,7 +164,14 @@ export function finishedLine(
     return null;
   }
   if (state.winnerSeatIndexes.length === 0) {
-    return 'Push';
+    const results = roundResults(state);
+    if (results.some((result) => result === 'push')) {
+      return 'Push';
+    }
+    if (results.length > 0 && results.every((result) => result === 'lose')) {
+      return 'Dealer';
+    }
+    return null;
   }
   const parts: string[] = [];
   for (const seatIndex of state.winnerSeatIndexes) {
