@@ -2,7 +2,19 @@ import type { SpadesState, SpadesTeam } from '../../src/shared/games/spades';
 import { TABLE_CENTER } from './bluff-layout';
 import { LOGICAL_WIDTH } from './sheets';
 
-export const PARTNERSHIP_BOARD = { x: 52, y: 146, line: 14 } as const;
+/**
+ * Left of the felt. Each team gets a header row, a bid row and a score row,
+ * with a chip beside the header and bid rows. `rows` are y offsets from `y`.
+ */
+export const PARTNERSHIP_BOARD = {
+  x: 52,
+  y: 146,
+  chipX: 14,
+  rows: [0, 20, 34, 48, 76, 90, 104],
+  chipRows: [18, 74],
+} as const;
+
+export const BID_PROMPT = { x: 228, y: 396 } as const;
 
 const BID_W = 32;
 const BID_H = 28;
@@ -13,10 +25,22 @@ const WON_PULL = 0.62;
 
 export interface PartnershipBoard {
   trump: string;
+  nsHead: string;
   nsBid: string;
   nsScore: string;
+  ewHead: string;
   ewBid: string;
   ewScore: string;
+}
+
+/** The label drawn on the bid button for `tricks`. A bid of 0 is nil. */
+export function bidButtonLabel(tricks: number): string {
+  return tricks === 0 ? 'Nil' : String(tricks);
+}
+
+/** Which partnership a seat plays for. Seats 0 and 2 are NS, 1 and 3 are EW. */
+export function seatTeam(seatIndex: number): SpadesTeam {
+  return seatIndex % 2 === 0 ? 'ns' : 'ew';
 }
 
 export function bidButtonBox(tricks: number): {
@@ -103,23 +127,32 @@ function trickText(state: SpadesState, seats: readonly number[]): number {
 }
 
 function teamLines(
-  label: string,
   team: SpadesTeam,
   state: SpadesState,
-): { bid: string; score: string } {
+  meSeat: number | null,
+): { head: string; bid: string; score: string } {
   const seats = teamSeats(state, team);
   const score = team === 'ns' ? state.scores.ns : state.scores.ew;
   const bags = team === 'ns' ? state.bags.ns : state.bags.ew;
+  const mine = meSeat !== null && seatTeam(meSeat) === team;
+  const label = team === 'ns' ? 'NS' : 'EW';
   return {
-    bid: `${label} bid ${bidText(state, seats)} tricks ${trickText(state, seats)}`,
+    head: mine ? `${label} (you)` : label,
+    bid: `bid ${bidText(state, seats)} won ${trickText(state, seats)}`,
     score: `${score} bags ${bags}`,
   };
 }
 
-/** Partnership bids, tricks taken, and the running score. */
-export function partnershipBoard(state: SpadesState): PartnershipBoard {
-  const ns = teamLines('NS', 'ns', state);
-  const ew = teamLines('EW', 'ew', state);
+/**
+ * Partnership bids, tricks taken, and the running score.
+ * `meSeat` marks the viewer's own partnership.
+ */
+export function partnershipBoard(
+  state: SpadesState,
+  meSeat: number | null = null,
+): PartnershipBoard {
+  const ns = teamLines('ns', state, meSeat);
+  const ew = teamLines('ew', state, meSeat);
   const trump =
     state.phase === 'lobby'
       ? ''
@@ -128,25 +161,27 @@ export function partnershipBoard(state: SpadesState): PartnershipBoard {
         : 'Spades held';
   return {
     trump,
+    nsHead: ns.head,
     nsBid: ns.bid,
     nsScore: ns.score,
+    ewHead: ew.head,
     ewBid: ew.bid,
     ewScore: ew.score,
   };
 }
 
+/** One seat's own bid and tricks taken, drawn beside its name plate. */
 export function seatBidText(state: SpadesState, seatIndex: number): string {
   const key = String(seatIndex);
   const bid = state.bids[key];
   const tricks = state.tricks[key] ?? 0;
   if (typeof bid !== 'number') {
-    if (state.phase === 'play' && state.stage === 'bid' && key in state.hands) {
-      return 'Bid';
-    }
-    return '';
+    const bidding =
+      state.phase === 'play' && state.stage === 'bid' && key in state.hands;
+    return bidding && state.turnSeatIndex === seatIndex ? 'Bidding' : '';
   }
   const name = bid === 0 ? 'Nil' : `Bid ${bid}`;
-  return `${name} ${tricks}`;
+  return `${name} took ${tricks}`;
 }
 
 export function legalCard(

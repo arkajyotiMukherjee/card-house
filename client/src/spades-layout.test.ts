@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest';
 import type { SpadesState } from '../../src/shared/games/spades';
 import { TABLE_CENTER } from './bluff-layout';
 import {
+  PARTNERSHIP_BOARD,
   bidButtonBox,
+  bidButtonLabel,
   finishedLine,
   legalCard,
   partnershipBoard,
   seatBidText,
+  seatTeam,
   trickPosition,
   wonTrickPosition,
 } from './spades-layout';
@@ -55,19 +58,44 @@ describe('spades layout', () => {
   it('draws partnership bids, tricks, and scores', () => {
     expect(partnershipBoard(state())).toEqual({
       trump: 'Spades held',
-      nsBid: 'NS bid 5 tricks 3',
+      nsHead: 'NS',
+      nsBid: 'bid 5 won 3',
       nsScore: '120 bags 2',
-      ewBid: 'EW bid 4 tricks 1',
+      ewHead: 'EW',
+      ewBid: 'bid 4 won 1',
       ewScore: '-40 bags 0',
     });
     expect(partnershipBoard(state({ spadesBroken: true })).trump).toBe(
       'Spades broken',
     );
-    expect(seatBidText(state(), 1)).toBe('Nil 0');
-    expect(seatBidText(state(), 0)).toBe('Bid 3 1');
-    expect(seatBidText(state({ stage: 'bid', bids: { '0': null } }), 0)).toBe(
-      'Bid',
-    );
+    expect(seatBidText(state(), 1)).toBe('Nil took 0');
+    expect(seatBidText(state(), 0)).toBe('Bid 3 took 1');
+  });
+
+  it('marks the viewer partnership and shows who is bidding', () => {
+    expect(partnershipBoard(state(), 0).nsHead).toBe('NS (you)');
+    expect(partnershipBoard(state(), 0).ewHead).toBe('EW');
+    expect(partnershipBoard(state(), 3).ewHead).toBe('EW (you)');
+    expect(partnershipBoard(state(), null).nsHead).toBe('NS');
+    expect(seatTeam(0)).toBe('ns');
+    expect(seatTeam(2)).toBe('ns');
+    expect(seatTeam(1)).toBe('ew');
+    const bidding = state({
+      stage: 'bid',
+      bids: { '0': null, '1': null },
+      turnSeatIndex: 0,
+    });
+    expect(seatBidText(bidding, 0)).toBe('Bidding');
+    expect(seatBidText(bidding, 1)).toBe('');
+    expect(bidButtonLabel(0)).toBe('Nil');
+    expect(bidButtonLabel(7)).toBe('7');
+  });
+
+  it('keeps the board rows and chips on the left of the felt', () => {
+    const { rows, chipRows, x, chipX } = PARTNERSHIP_BOARD;
+    expect(chipX + 32).toBeLessThan(x);
+    expect([...rows]).toEqual([...rows].sort((a, b) => a - b));
+    expect(chipRows[1] - chipRows[0]).toBeGreaterThanOrEqual(32);
   });
 
   it('lifts a card only on your turn during the trick', () => {
