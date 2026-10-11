@@ -177,10 +177,11 @@ function quoteSqlString(value: string): string {
  */
 export function tableSubscriptionQueries(
   tableId: string,
-): readonly [string, string] {
+): readonly [string, string, string] {
   const id = quoteSqlString(tableId);
   return [
     `SELECT * FROM GameTable WHERE id = ${id}`,
     `SELECT * FROM GameSeat WHERE tableId = ${id}`,
+    `SELECT * FROM GameEvent WHERE tableId = ${id}`,
   ];
 }

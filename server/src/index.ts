@@ -611,8 +611,16 @@ function appliedIntentType(intent: unknown): string {
   return 'intent';
 }
 
-function appliedIntentPayload(order: number, intent: unknown): string {
-  const encoded = JSON.stringify({ order, intent });
+function appliedIntentPayload(
+  order: number,
+  intent: unknown,
+  note: unknown,
+): string {
+  const encoded = JSON.stringify(
+    note === undefined || note === null
+      ? { order, intent }
+      : { order, intent, note },
+  );
   if (typeof encoded !== 'string') {
     throw new SenderError('Could not store game event');
   }
@@ -717,6 +725,16 @@ export const handle_game_intent = spacetimedb.reducer(
       throw new SenderError(message);
     }
 
+    let note: unknown;
+    try {
+      note = rules.eventNote?.(prev, intent, next, {
+        seat: rulesSeat(seat),
+        now: Number(ctx.timestamp.toMillis()),
+      });
+    } catch {
+      note = undefined;
+    }
+
     const stateJson = storedState(next);
     ctx.db.GameTable.id.update({
       ...gameTable,
@@ -735,7 +753,7 @@ export const handle_game_intent = spacetimedb.reducer(
       tableId: gameTable.id,
       lobbyMemberId: member.id,
       type: appliedIntentType(intent),
-      payloadJson: appliedIntentPayload(order, intent),
+      payloadJson: appliedIntentPayload(order, intent, note),
       createdAt: ctx.timestamp,
     });
   },

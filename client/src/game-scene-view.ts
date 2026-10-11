@@ -20,6 +20,7 @@ import {
   STROKE,
   STROKE_HOT,
 } from './canvas-ui';
+import { eventMessage, readStoredEvent } from './event-messages';
 import {
   COUNTER_BUTTON,
   dummyIntentPayload,
@@ -44,6 +45,11 @@ import {
   TABLE_WIDTH,
 } from './sheets';
 
+const WARN_PLATE = ex.Color.fromHex('#4a1713');
+const STRIP_Y = 44;
+const STRIP_HOLD_MS = 3200;
+const STRIP_FADE_MS = 500;
+
 export class GameScene extends ex.Scene {
   private tableId = '';
   private lobbyMemberId = '';
@@ -59,6 +65,9 @@ export class GameScene extends ex.Scene {
   private lastRow: { id: string; gameType: string; stateJson: string } | null =
     null;
   private placed: PlacedSeat[] = [];
+  private strip: ex.Actor | null = null;
+  private eventsLive = false;
+  private readonly shownEvents = new Set<string>();
   private countText!: ex.Text;
   private countValue!: ex.Actor;
   private counterPlate!: ex.Actor;
@@ -81,6 +90,8 @@ export class GameScene extends ex.Scene {
     this.lobbyMemberId = lobbyMemberId;
     this.leaving = false;
     this.lastRow = null;
+    this.clearStrip();
+    this.shownEvents.clear();
     if (this.ready) {
       this.errorText.text = '';
       this.howToPlay.close();
@@ -167,6 +178,9 @@ export class GameScene extends ex.Scene {
     this.connection.db.lobbyMember.onUpdate(() => {
       this.paintSeats();
     });
+    this.connection.db.gameEvent.onInsert((_ctx, row) => {
+      this.announce(row);
+    });
     this.connection.db.gameTable.onInsert((_ctx, row) => {
       this.applySubscribedState(row);
     });
@@ -187,11 +201,13 @@ export class GameScene extends ex.Scene {
     }
     this.endSubscription();
     this.subscribedTableId = tableId;
+    this.eventsLive = false;
     const queries = tableSubscriptionQueries(tableId);
     this.subscription = this.connection
       .subscriptionBuilder()
       .onApplied(() => {
         if (this.subscribedTableId === tableId) {
+          this.eventsLive = true;
           this.paintSeats();
           this.readSubscribedState();
         }
@@ -211,6 +227,7 @@ export class GameScene extends ex.Scene {
     const handle = this.subscription;
     this.subscription = undefined;
     this.subscribedTableId = '';
+    this.eventsLive = false;
     if (!handle || handle.isEnded()) {
       return;
     }
@@ -306,10 +323,10 @@ export class GameScene extends ex.Scene {
     if (!this.dummy || this.tableId.length === 0) {
       return;
     }
-    this.sendPayload(dummyIntentPayload(intent));
+    this.sendPayload(dummyIntentPayload(intent), intent);
   }
 
-  private sendPayload(intentPayload: string): void {
+  private sendPayload(intentPayload: string, intent: unknown): void {
     if (this.howToPlay.isOpen || this.tableId.length === 0) {
       return;
     }
@@ -322,10 +339,100 @@ export class GameScene extends ex.Scene {
         intentPayload,
       })
       .catch((error: unknown) => {
-        this.showError(
-          error instanceof Error ? error.message : 'Intent rejected',
-        );
+        const message =
+          error instanceof Error ? error.message : 'Intent rejected';
+        if (this.lastRow?.gameType === this.bluffDriver.gameType) {
+          this.bluffDriver.intentRejected(intent, this.driverContext());
+          this.showStrip(message, true);
+          return;
+        }
+        this.showError(message);
       });
+  }
+
+  private announce(row: {
+    id: string;
+    tableId: string;
+    payloadJson: string;
+  }): void {
+    if (!this.ready || !this.eventsLive || row.tableId !== this.tableId) {
+      return;
+    }
+    if (this.shownEvents.has(row.id)) {
+      return;
+    }
+    this.shownEvents.add(row.id);
+    const stored = readStoredEvent(row.payloadJson);
+    if (!stored) {
+      return;
+    }
+    const names = new Map<number, string>();
+    for (const seat of this.placed) {
+      names.set(seat.seatIndex, seat.name);
+    }
+    const message = eventMessage(
+      this.gameTypeOfTable(),
+      stored.note,
+      (seatIndex) => names.get(seatIndex) ?? `Seat ${seatIndex + 1}`,
+    );
+    if (message) {
+      this.showStrip(message, false);
+    }
+  }
+
+  private gameTypeOfTable(): string {
+    if (this.lastRow && this.lastRow.id === this.tableId) {
+      return this.lastRow.gameType;
+    }
+    for (const table of this.connection.db.gameTable.iter()) {
+      if (table.id === this.tableId) {
+        return table.gameType;
+      }
+    }
+    return '';
+  }
+
+  /** One short line near the top center. It fades out on its own. */
+  private showStrip(message: string, warning: boolean): void {
+    this.clearStrip();
+    const width = message.length * 8 + 24;
+    const strip = new ex.Actor({
+      pos: ex.vec(Math.floor((LOGICAL_WIDTH - width) / 2), STRIP_Y),
+      anchor: ex.vec(0, 0),
+      width,
+      height: 22,
+      z: 26,
+    });
+    strip.graphics.use(
+      panelRect(
+        width,
+        22,
+        warning ? WARN_PLATE : PLATE,
+        warning ? DANGER : STROKE_HOT,
+      ),
+    );
+    const caption = new ex.Actor({
+      pos: ex.vec(12, 7),
+      anchor: ex.vec(0, 0),
+    });
+    caption.graphics.use(canvasText(message, 8, warning ? DANGER : GOLD));
+    strip.addChild(caption);
+    strip.actions
+      .delay(STRIP_HOLD_MS)
+      .fade(0, STRIP_FADE_MS)
+      .callMethod(() => {
+        strip.kill();
+        if (this.strip === strip) {
+          this.strip = null;
+        }
+      });
+    this.add(strip);
+    this.strip = strip;
+  }
+
+  private clearStrip(): void {
+    this.strip?.kill();
+    this.strip = null;
   }
 
   private applySubscribedState(row: {
@@ -439,7 +546,7 @@ export class GameScene extends ex.Scene {
       meSeatIndex,
       cards: cardAtlas,
       sendIntent: (intent) => {
-        this.sendPayload(JSON.stringify(intent));
+        this.sendPayload(JSON.stringify(intent), intent);
       },
       inputBlocked: () => this.howToPlay.isOpen,
     };

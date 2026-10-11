@@ -60,7 +60,18 @@ describe('BluffDriver input', () => {
     driver.handleInput({ type: 'pointerenter', target: 'AS' }, table, ctx);
     driver.handleInput({ type: 'pointerup', target: 'AS' }, table, ctx);
     driver.handleInput({ type: 'pointerup', target: 'play' }, table, ctx);
-    expect(sent).toEqual([]);
+    expect(sent).toEqual([{ type: 'play', cards: [] }]);
+  });
+
+  it('forwards a play with no card for the module to reject', () => {
+    const driver = new BluffDriver();
+    const sent: unknown[] = [];
+    driver.handleInput(
+      { type: 'pointerup', target: 'play' },
+      state(),
+      context(sent, 0),
+    );
+    expect(sent).toEqual([{ type: 'play', cards: [] }]);
   });
 
   it('does not send a move after the rules finish', () => {
@@ -88,9 +99,12 @@ describe('BluffDriver input', () => {
 
     const closed = context(sent, 0, false);
     driver.handleInput({ type: 'pointerup', target: 'play' }, table, closed);
-    expect(sent).toEqual([]);
+    expect(sent).toEqual([{ type: 'play', cards: [] }]);
     driver.handleInput({ type: 'pointerup', target: 'AS' }, table, closed);
     driver.handleInput({ type: 'pointerup', target: 'play' }, table, closed);
-    expect(sent).toEqual([{ type: 'play', cards: ['AS'] }]);
+    expect(sent).toEqual([
+      { type: 'play', cards: [] },
+      { type: 'play', cards: ['AS'] },
+    ]);
   });
 });

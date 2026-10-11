@@ -5,11 +5,13 @@ export {
   bluffGameDefinition,
   bluffRules,
   rankOfCard,
+  readBluffEventNote,
   readBluffIntent,
   readBluffState,
 } from './bluff';
 export type {
   BluffCardId,
+  BluffEventNote,
   BluffIntent,
   BluffLastPlay,
   BluffPhase,

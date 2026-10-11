@@ -45,6 +45,16 @@ export interface IntentContext {
 export interface GameRules<State, Intent> {
   initialState(players: GameSeat[], table: GameTable): State;
   applyIntent(prev: State, intent: Intent, ctx: IntentContext): State;
+  /**
+   * A JSON-safe note about an accepted intent, stored on its `GameEvent`.
+   * Clients turn it into the message strip text. `null` announces nothing.
+   */
+  eventNote?(
+    prev: State,
+    intent: Intent,
+    next: State,
+    ctx: IntentContext,
+  ): unknown;
   onPlayerJoin?(prev: State, seat: GameSeat): State;
   onPlayerLeave?(prev: State, seat: GameSeat): State;
   isJoinAllowedDuringPhase?(state: State): boolean;
