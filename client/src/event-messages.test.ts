@@ -77,6 +77,26 @@ describe('eventMessage', () => {
     ).toBe('Ada played 1 card as A');
   });
 
+  it('announces a President play, pass, and finish', () => {
+    expect(
+      eventMessage(
+        'president',
+        { kind: 'play', seat: 0, count: 2, rank: 'K' },
+        names,
+      ),
+    ).toBe('Ada played 2 cards of K');
+    expect(eventMessage('president', { kind: 'pass', seat: 1 }, names)).toBe(
+      'Bea passed',
+    );
+    expect(
+      eventMessage(
+        'president',
+        { kind: 'finish', president: 0, scum: 1 },
+        names,
+      ),
+    ).toBe('Ada is President. Bea is Scum');
+  });
+
   it('keeps dummy and unknown events silent', () => {
     expect(eventMessage('dummy', null, names)).toBeNull();
     expect(eventMessage('bluff', null, names)).toBeNull();

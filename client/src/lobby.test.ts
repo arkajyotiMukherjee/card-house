@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { bluffGameDefinition } from '../../src/shared/games/bluff';
+import { presidentGameDefinition } from '../../src/shared/games/president';
 import {
   applyCodeKey,
   applyFieldKey,
@@ -147,7 +148,7 @@ describe('lobby tables', () => {
     });
   });
 
-  it('offers Bluff once from the shared definition', () => {
+  it('offers Bluff and President from the shared definitions', () => {
     expect(GAME_CATALOG).toEqual([
       {
         gameType: bluffGameDefinition.gameType,
@@ -156,11 +157,17 @@ describe('lobby tables', () => {
         maxPlayers: bluffGameDefinition.maxPlayers,
         howToPlay: bluffGameDefinition.howToPlay,
       },
+      {
+        gameType: presidentGameDefinition.gameType,
+        name: presidentGameDefinition.displayName,
+        minPlayers: presidentGameDefinition.minPlayers,
+        maxPlayers: presidentGameDefinition.maxPlayers,
+        howToPlay: presidentGameDefinition.howToPlay,
+      },
     ]);
     const gameTypes = GAME_CATALOG.map((game) => game.gameType);
     expect(gameTypes).not.toContain('dummy');
     expect(gameTypes).not.toContain('stub');
-    expect(gameTypes).not.toContain('president');
     expect(gameTypes).not.toContain('poker_holdem');
     expect(gameTypes).not.toContain('poker_five_card_draw');
     const bluff = gameOption(0);
@@ -171,11 +178,22 @@ describe('lobby tables', () => {
       maxPlayers: 6,
     });
     expect(bluff.howToPlay).toBe(bluffGameDefinition.howToPlay);
-    expect(gameOption(1)).toBe(bluff);
-    expect(gameOption(-1)).toBe(bluff);
+    const president = gameOption(1);
+    expect(president).toMatchObject({
+      gameType: 'president',
+      name: 'President',
+      minPlayers: 3,
+      maxPlayers: 6,
+    });
+    expect(president.howToPlay).toBe(presidentGameDefinition.howToPlay);
+    expect(gameOption(2)).toBe(bluff);
+    expect(gameOption(-1)).toBe(president);
     expect(clampPlayerCount(bluff, 9)).toBe(6);
     expect(clampPlayerCount(bluff, 2)).toBe(2);
+    expect(clampPlayerCount(president, 9)).toBe(6);
+    expect(clampPlayerCount(president, 1)).toBe(3);
     expect(nextTableName(tables, 'lobby_1', bluff)).toBe('Bluff #2');
+    expect(nextTableName(tables, 'lobby_1', president)).toBe('President #1');
   });
 
   it('finds this browser in the joined lobby', () => {
