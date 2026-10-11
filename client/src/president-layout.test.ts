@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import type { PresidentState } from '../../src/shared/games/president';
+import {
+  PRESIDENT_RANKS,
+  type PresidentState,
+} from '../../src/shared/games/president';
 import { PILE_X, PILE_Y, pilePositions } from './bluff-layout';
 import {
+  RANK_X,
   finishedLine,
   legalCard,
   rankOrderLines,
   requirementLine,
+  strengthSlots,
 } from './president-layout';
 
 const seats = [
@@ -75,11 +80,47 @@ describe('president layout', () => {
       ],
     });
     expect(rankOrderLines(finished, seats)).toEqual([
+      'Final',
       'President Ada 3',
       'Neutral Bea 2',
       'Scum Cal 1',
     ]);
     expect(finishedLine(finished, seats)).toBe('President Ada');
     expect(finishedLine(playState(), seats)).toBeNull();
+  });
+
+  it('keeps long finish lines left of the upper-left seat plate', () => {
+    const longSeats = [
+      { seatIndex: 0, name: 'ABCDEFGHIJKL' },
+      { seatIndex: 1, name: 'x' },
+    ];
+    const finished = playState({
+      phase: 'finished',
+      rankOrder: [
+        { seat: 0, title: 'Vice Scum', score: 4 },
+        { seat: 1, title: 'President', score: 6 },
+      ],
+    });
+    for (const line of rankOrderLines(finished, longSeats)) {
+      expect(RANK_X + line.length * 8).toBeLessThanOrEqual(192);
+    }
+  });
+
+  it('lays the rank strip low to high, centered under the pile', () => {
+    const slots = strengthSlots(PILE_X, 'K');
+    expect(slots.map((slot) => slot.rank)).toEqual([...PRESIDENT_RANKS]);
+    expect(slots[0]?.rank).toBe('3');
+    expect(slots.at(-1)?.rank).toBe('2');
+    expect(slots.filter((slot) => slot.current).map((s) => s.rank)).toEqual([
+      'K',
+    ]);
+    const xs = slots.map((slot) => slot.x);
+    expect([...xs].sort((a, b) => a - b)).toEqual(xs);
+    const first = xs[0] ?? 0;
+    const last = (xs.at(-1) ?? 0) + 8;
+    expect(Math.abs((first + last) / 2 - PILE_X)).toBeLessThanOrEqual(1);
+    expect(strengthSlots(PILE_X, null).some((slot) => slot.current)).toBe(
+      false,
+    );
   });
 });

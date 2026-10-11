@@ -23,10 +23,13 @@ import {
   RANK_STEP,
   RANK_X,
   RANK_Y,
+  STRENGTH_CAPTION_Y,
+  STRENGTH_Y,
   finishedLine,
   legalCard,
   rankOrderLines,
   requirementLine,
+  strengthSlots,
 } from './president-layout';
 import { LOGICAL_WIDTH } from './sheets';
 
@@ -146,7 +149,8 @@ function cardSprite(
 
 /**
  * President table: your hand along the bottom, other hands as backs,
- * the play pile in the center, and the rank order down the left.
+ * the play pile in the center with a low-to-high rank strip under it, and
+ * the finish order down the left.
  */
 export class PresidentDriver implements GameDriver<PresidentState> {
   readonly name = 'President';
@@ -326,6 +330,7 @@ export class PresidentDriver implements GameDriver<PresidentState> {
       return;
     }
     this.addRankOrder(state, ctx);
+    this.addStrengthStrip(state, ctx);
     if (state.phase === 'finished') {
       const line = finishedLine(state, ctx.seats) ?? 'Finished';
       this.labels.push(this.banner(ctx, line));
@@ -373,6 +378,31 @@ export class PresidentDriver implements GameDriver<PresidentState> {
         this.textActor(ctx, RANK_X, RANK_Y + index * RANK_STEP, text, GOLD),
       );
     }
+  }
+
+  private addStrengthStrip(state: PresidentState, ctx: RenderContext): void {
+    const current = state.phase === 'play' ? state.currentRank : null;
+    for (const slot of strengthSlots(PILE_X, current)) {
+      this.labels.push(
+        this.textActor(
+          ctx,
+          slot.x,
+          STRENGTH_Y,
+          slot.rank,
+          slot.current ? STROKE_HOT : DIM,
+        ),
+      );
+    }
+    const caption = 'Low to high';
+    this.labels.push(
+      this.textActor(
+        ctx,
+        PILE_X - (caption.length * 8) / 2,
+        STRENGTH_CAPTION_Y,
+        caption,
+        DIM,
+      ),
+    );
   }
 
   private syncCards(state: PresidentState, ctx: RenderContext): void {

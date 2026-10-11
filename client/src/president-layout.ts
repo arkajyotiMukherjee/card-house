@@ -1,13 +1,59 @@
-import type { PresidentState } from '../../src/shared/games/president';
+import {
+  PRESIDENT_RANKS,
+  type PresidentRank,
+  type PresidentState,
+} from '../../src/shared/games/president';
 
 /** Bottom-right actions, same boxes as the shared table controls. */
 export const PLAY_BUTTON = { x: 748, y: 448, w: 96, h: 28 } as const;
 export const PASS_BUTTON = { x: 852, y: 448, w: 96, h: 28 } as const;
 
-/** Rank order sits under Leave Table, clear of the hand and the status HUD. */
+/** Finish order sits under Leave Table, clear of the hand and the status HUD. */
 export const RANK_X = 16;
 export const RANK_Y = 56;
 export const RANK_STEP = 14;
+
+/** Press Start 2P at 8px is 8px per column. */
+const GLYPH = 8;
+
+/**
+ * Longest finish-order line. 22 columns end at x 192, left of the seat plate
+ * at the upper-left anchor.
+ */
+const RANK_LINE_MAX = 22;
+const NAME_MAX = 10;
+
+/** Card strength strip under the play pile, low to high. */
+export const STRENGTH_Y = 312;
+export const STRENGTH_CAPTION_Y = 326;
+
+export interface StrengthSlot {
+  rank: PresidentRank;
+  x: number;
+  /** True for the rank the next play must beat. */
+  current: boolean;
+}
+
+/**
+ * Where each rank of the strength strip is drawn, centered on `centerX`.
+ * Ranks are one space apart, and `10` is two glyphs wide.
+ */
+export function strengthSlots(
+  centerX: number,
+  currentRank: PresidentRank | null,
+): StrengthSlot[] {
+  let columns = PRESIDENT_RANKS.length - 1;
+  for (const rank of PRESIDENT_RANKS) {
+    columns += rank.length;
+  }
+  const slots: StrengthSlot[] = [];
+  let x = Math.round(centerX - (columns * GLYPH) / 2);
+  for (const rank of PRESIDENT_RANKS) {
+    slots.push({ rank, x, current: rank === currentRank });
+    x += (rank.length + 1) * GLYPH;
+  }
+  return slots;
+}
 
 export function legalCard(
   state: PresidentState,
@@ -47,7 +93,7 @@ function seatName(
   const seat = seats.find((row) => row.seatIndex === seatIndex);
   const name = seat?.name ?? '';
   if (name.length > 0) {
-    return name;
+    return name.slice(0, NAME_MAX);
   }
   return `Seat ${seatIndex}`;
 }
@@ -58,9 +104,16 @@ export function rankOrderLines(
   seats: readonly { seatIndex: number; name: string }[],
 ): string[] {
   if (state.phase === 'finished') {
-    return state.rankOrder.map((entry) => {
-      return `${entry.title} ${seatName(seats, entry.seat)} ${entry.score}`;
-    });
+    const lines = ['Final'];
+    for (const entry of state.rankOrder) {
+      lines.push(
+        `${entry.title} ${seatName(seats, entry.seat)} ${entry.score}`.slice(
+          0,
+          RANK_LINE_MAX,
+        ),
+      );
+    }
+    return lines;
   }
   if (state.finishOrder.length === 0) {
     return [];
