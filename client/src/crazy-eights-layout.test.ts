@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CrazyEightsState } from '../../src/shared/games/crazy-eights';
-import { HAND_Y, PILE_X, PILE_Y } from './bluff-layout';
+import { CARD_DRAW, HAND_Y, PILE_X, PILE_Y } from './bluff-layout';
 import {
   DRAW_BUTTON,
   PLAY_BUTTON,
@@ -10,7 +10,8 @@ import {
   passInsteadOfDraw,
   pilePositions,
   stockPositions,
-  suitLine,
+  suitBadge,
+  discardPositions,
   topIsWildEight,
 } from './crazy-eights-layout';
 
@@ -48,10 +49,26 @@ describe('crazy eights layout', () => {
   });
 
   it('names the suit in play and a wild eight on the pile', () => {
-    expect(suitLine(state())).toBe('Suit: Spades');
-    expect(suitLine(state({ currentSuit: null }))).toBe('Suit: pick');
+    expect(suitBadge(state())).toEqual({ text: 'Suit: Spades', suit: 'S' });
+    expect(suitBadge(state({ discardPile: ['8H'], currentSuit: 'D' }))).toEqual(
+      {
+        text: 'Wild 8: Diamonds',
+        suit: 'D',
+      },
+    );
+    expect(
+      suitBadge(state({ discardPile: ['8H'], currentSuit: null })),
+    ).toEqual({ text: 'Wild 8: any suit', suit: null });
     expect(topIsWildEight(state())).toBe(false);
     expect(topIsWildEight(state({ discardPile: ['8H'] }))).toBe(true);
+  });
+
+  it('fans at most three discards so the stock stays clear', () => {
+    expect(discardPositions(1)).toHaveLength(1);
+    expect(discardPositions(30)).toHaveLength(3);
+    const left = Math.min(...discardPositions(30).map((slot) => slot.x));
+    const stockRight = stockPositions(3).at(-1)!.x + CARD_DRAW / 2;
+    expect(left - CARD_DRAW / 2).toBeGreaterThan(stockRight);
   });
 
   it('switches Draw to Pass only when the stock cannot be rebuilt', () => {

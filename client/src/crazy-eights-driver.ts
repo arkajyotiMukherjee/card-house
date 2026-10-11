@@ -12,6 +12,7 @@ import {
   PILE_X,
   PILE_Y,
   PLAY_BUTTON,
+  SUIT_BUTTONS_HIDDEN_Y,
   SUIT_BUTTON_H,
   SUIT_BUTTON_W,
   SUIT_BUTTON_Y,
@@ -23,12 +24,11 @@ import {
   legalCard,
   opponentBackPositions,
   passInsteadOfDraw,
-  pilePositions,
+  discardPositions,
   stockPositions,
-  suitLine,
-  topIsWildEight,
+  suitBadge,
 } from './crazy-eights-layout';
-import { pixelFont } from './boot-scene';
+import { canvasText, panelRect } from './canvas-ui';
 import type { CardAtlas } from './card-atlas';
 import type { GameDriver, InputEvent, RenderContext } from './game-driver';
 import { LOGICAL_WIDTH } from './sheets';
@@ -38,6 +38,7 @@ const DIM = ex.Color.fromHex('#d7c08a');
 const BUTTON = ex.Color.fromHex('#1b5c38');
 const BUTTON_DOWN = ex.Color.fromHex('#0e3d24');
 const STROKE = ex.Color.fromHex('#e6c27a');
+const RED = ex.Color.fromHex('#ff8a7a');
 const STROKE_HOT = ex.Color.fromHex('#fff6d0');
 const FLASH_FILL = ex.Color.fromRGB(232, 60, 48, 0.8);
 const FLASH_STROKE = ex.Color.fromHex('#ff3b2f');
@@ -98,40 +99,6 @@ interface CardRecord {
   placed: boolean;
 }
 
-function canvasText(text: string, size: number, color: ex.Color): ex.Text {
-  const graphic = new ex.Text({
-    text,
-    color,
-    font: pixelFont.toFont({
-      family: '"Press Start 2P"',
-      size,
-      color,
-      quality: 1,
-      filtering: ex.ImageFiltering.Pixel,
-    }),
-  });
-  graphic.origin = ex.vec(0, 0);
-  return graphic;
-}
-
-function panelRect(
-  width: number,
-  height: number,
-  fill: ex.Color,
-  stroke: ex.Color,
-): ex.Rectangle {
-  const rect = new ex.Rectangle({
-    width,
-    height,
-    color: fill,
-    strokeColor: stroke,
-    lineWidth: 2,
-    smoothing: false,
-  });
-  rect.origin = ex.vec(0, 0);
-  return rect;
-}
-
 function cardSprite(
   atlas: CardAtlas,
   cardId: string,
@@ -165,6 +132,7 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
   private buttons: ex.Actor[] = [];
   private flashes: ex.Actor[] = [];
   private suitFaces = new Map<CrazyEightsSuit, ex.Rectangle>();
+  private suitActors = new Map<CrazyEightsSuit, ex.Actor>();
   private selected = new Set<string>();
   private hover: string | null = null;
   private namedSuit: CrazyEightsSuit | null = null;
@@ -204,6 +172,7 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
     this.syncCards(state, ctx);
     this.syncBacks(state, ctx);
     this.syncStock(state, ctx);
+    this.paintSuitButtons();
   }
 
   handleInput(
@@ -334,6 +303,7 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
     }
     this.buttons = [];
     this.suitFaces.clear();
+    this.suitActors.clear();
     this.buttonsReady = false;
     this.drawText = null;
     this.selected.clear();
@@ -401,6 +371,10 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
     const eight = this.onlySelected();
     const naming = eight !== null && rankOfCard(eight) === '8';
     for (const spec of SUIT_BUTTONS) {
+      const actor = this.suitActors.get(spec.suit);
+      if (actor) {
+        actor.pos.y = naming ? SUIT_BUTTON_Y : SUIT_BUTTONS_HIDDEN_Y;
+      }
       const face = this.suitFaces.get(spec.suit);
       if (!face) {
         continue;
@@ -426,12 +400,9 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
     }
     const mine =
       ctx.meSeatIndex !== null && state.turnSeatIndex === ctx.meSeatIndex;
-    this.labels.push(this.textActor(ctx, 390, 196, suitLine(state), GOLD));
-    if (topIsWildEight(state)) {
-      this.labels.push(this.textActor(ctx, 390, 214, 'Wild 8', DIM));
-    }
+    this.labels.push(this.suitBadgeActor(ctx, state));
     this.labels.push(
-      this.textActor(ctx, 390, 232, mine ? 'Your turn' : 'Wait', GOLD),
+      this.textActor(ctx, 748, 428, mine ? 'Your turn' : 'Wait', GOLD),
     );
     if (state.stock.length > 0) {
       this.labels.push(
@@ -479,7 +450,7 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
         z: 12 + index,
       });
     }
-    const pileSlots = pilePositions(state.discardPile.length);
+    const pileSlots = discardPositions(state.discardPile.length);
     const pileStart = state.discardPile.length - pileSlots.length;
     for (let index = 0; index < pileSlots.length; index += 1) {
       const cardId = state.discardPile[pileStart + index];
@@ -751,6 +722,31 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
     return actor;
   }
 
+  private suitBadgeActor(
+    ctx: RenderContext,
+    state: CrazyEightsState,
+  ): ex.Actor {
+    const badge = suitBadge(state);
+    const width = badge.text.length * 8 + 16;
+    const red = badge.suit === 'H' || badge.suit === 'D';
+    const actor = new ex.Actor({
+      pos: ex.vec(Math.floor(PILE_X - width / 2), BADGE_Y),
+      anchor: ex.vec(0, 0),
+      width,
+      height: 24,
+      z: 14,
+    });
+    actor.graphics.use(panelRect(width, 24, BUTTON, STROKE));
+    const caption = new ex.Actor({
+      pos: ex.vec(8, 8),
+      anchor: ex.vec(0, 0),
+    });
+    caption.graphics.use(canvasText(badge.text, 8, red ? RED : GOLD));
+    actor.addChild(caption);
+    ctx.scene.add(actor);
+    return actor;
+  }
+
   private textActor(
     ctx: RenderContext,
     x: number,
@@ -801,6 +797,7 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
       const suit = target.slice(5);
       if (isCrazyEightsSuit(suit)) {
         this.suitFaces.set(suit, face);
+        this.suitActors.set(suit, actor);
       }
     }
     const caption = new ex.Actor({
@@ -842,5 +839,6 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
   }
 }
 
+const BADGE_Y = 196;
 const STOCK_LABEL_X = 360;
 const STOCK_LABEL_Y = 220;

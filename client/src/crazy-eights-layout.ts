@@ -56,6 +56,9 @@ export const STOCK_Y = PILE_Y;
 
 const STOCK_SHOWN = 3;
 
+/** Off-canvas row for the suit buttons while no eight is selected. */
+export const SUIT_BUTTONS_HIDDEN_Y = -200;
+
 export function stockPositions(count: number): { x: number; y: number }[] {
   const shown = Math.min(count, STOCK_SHOWN);
   const positions: { x: number; y: number }[] = [];
@@ -94,11 +97,29 @@ export function passInsteadOfDraw(
   return seatMustPass(state, seatIndex);
 }
 
-export function suitLine(state: CrazyEightsState): string {
+/** Discards fanned face up. The stock sits to the left, so keep the fan short. */
+export const DISCARD_SHOWN = 3;
+
+export function discardPositions(count: number): { x: number; y: number }[] {
+  return pilePositions(Math.min(count, DISCARD_SHOWN));
+}
+
+/**
+ * The badge over the discard. A wild eight says so and names the suit chosen
+ * for it. `suit` is null while a starter eight has no suit, so any card plays.
+ */
+export function suitBadge(state: CrazyEightsState): {
+  text: string;
+  suit: CrazyEightsSuit | null;
+} {
   if (state.currentSuit === null) {
-    return 'Suit: pick';
+    return { text: 'Wild 8: any suit', suit: null };
   }
-  return `Suit: ${CRAZY_EIGHTS_SUIT_NAMES[state.currentSuit]}`;
+  const name = CRAZY_EIGHTS_SUIT_NAMES[state.currentSuit];
+  return {
+    text: topIsWildEight(state) ? `Wild 8: ${name}` : `Suit: ${name}`,
+    suit: state.currentSuit,
+  };
 }
 
 /** The top discard is an eight, so the named suit can differ from the card. */
