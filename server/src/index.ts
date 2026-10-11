@@ -24,6 +24,10 @@ import {
 } from '../../src/shared/games/president';
 import { rummyGameDefinition, rummyRules } from '../../src/shared/games/rummy';
 import {
+  blackjackGameDefinition,
+  blackjackRules,
+} from '../../src/shared/games/blackjack';
+import {
   dummyCounterRules,
   dummyGameDefinition,
 } from '../../src/shared/games/dummy-counter';
@@ -41,6 +45,7 @@ registerGameRules(presidentGameDefinition, presidentRules);
 registerGameRules(goFishGameDefinition, goFishRules);
 registerGameRules(crazyEightsGameDefinition, crazyEightsRules);
 registerGameRules(rummyGameDefinition, rummyRules);
+registerGameRules(blackjackGameDefinition, blackjackRules);
 
 const LobbyStatus = t.enum('LobbyStatus', ['open', 'closed']);
 const TableStatus = t.enum('TableStatus', [

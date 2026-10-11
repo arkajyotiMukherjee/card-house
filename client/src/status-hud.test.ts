@@ -4,7 +4,9 @@ import type { CrazyEightsState } from '../../src/shared/games/crazy-eights';
 import type { GoFishState } from '../../src/shared/games/go-fish';
 import type { PresidentState } from '../../src/shared/games/president';
 import type { RummyState } from '../../src/shared/games/rummy';
+import type { BlackjackState } from '../../src/shared/games/blackjack';
 import {
+  blackjackStatusHud,
   bluffStatusHud,
   crazyEightsStatusHud,
   goFishStatusHud,
@@ -274,6 +276,50 @@ describe('rummyStatusHud', () => {
       turn: 'Turn: -',
       phase: 'Phase: Finished',
       round: 'Round: Score 0',
+    });
+  });
+});
+
+function blackjackState(
+  overrides: Partial<BlackjackState> = {},
+): BlackjackState {
+  return {
+    phase: 'play',
+    step: 'act',
+    deck: [],
+    dealer: ['AS', 'KH'],
+    holeHidden: true,
+    seats: {},
+    turnSeatIndex: 0,
+    winnerSeatIndexes: [],
+    ...overrides,
+  };
+}
+
+describe('blackjackStatusHud', () => {
+  it('names the betting seat and the play seat', () => {
+    expect(blackjackStatusHud(blackjackState({ step: 'bet' }), seats)).toEqual({
+      turn: 'Turn: Ada',
+      phase: 'Phase: Betting',
+      round: 'Round: Bets',
+    });
+    expect(blackjackStatusHud(blackjackState(), seats)).toEqual({
+      turn: 'Turn: Ada',
+      phase: 'Phase: Play',
+      round: 'Round: Hand',
+    });
+  });
+
+  it('clears the turn when the round is finished', () => {
+    expect(
+      blackjackStatusHud(
+        blackjackState({ phase: 'finished', turnSeatIndex: null }),
+        seats,
+      ),
+    ).toEqual({
+      turn: 'Turn: -',
+      phase: 'Phase: Finished',
+      round: 'Round: Done',
     });
   });
 });

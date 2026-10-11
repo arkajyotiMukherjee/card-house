@@ -4,6 +4,7 @@ import { crazyEightsGameDefinition } from '../../src/shared/games/crazy-eights';
 import { goFishGameDefinition } from '../../src/shared/games/go-fish';
 import { presidentGameDefinition } from '../../src/shared/games/president';
 import { rummyGameDefinition } from '../../src/shared/games/rummy';
+import { blackjackGameDefinition } from '../../src/shared/games/blackjack';
 import { HOW_TO_PLAY_TEXT } from './game-scene';
 import {
   clampScroll,
@@ -40,6 +41,10 @@ describe('definitionFor', () => {
       expect(line.length).toBeLessThanOrEqual(HOW_TO_PLAY_TEXT.columns);
     }
     expect(layout.lines.length).toBeLessThanOrEqual(HOW_TO_PLAY_TEXT.rows);
+  });
+
+  it('returns the Blackjack definition for gameType blackjack', () => {
+    expect(definitionFor('blackjack')).toBe(blackjackGameDefinition);
   });
 
   it('has no definition for an unknown gameType', () => {

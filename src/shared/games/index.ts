@@ -119,6 +119,34 @@ export type {
   RummyState,
   RummySuit,
 } from './rummy';
+export {
+  BLACKJACK_BET_AMOUNTS,
+  BLACKJACK_GAME_TYPE,
+  BLACKJACK_RANKS,
+  BLACKJACK_STARTING_CHIPS,
+  BLACKJACK_SUITS,
+  blackjackGameDefinition,
+  blackjackRules,
+  blackjackStake,
+  blackjackTotal,
+  rankOfBlackjackCard,
+  readBlackjackEventNote,
+  readBlackjackIntent,
+  readBlackjackState,
+} from './blackjack';
+export type {
+  BlackjackCardId,
+  BlackjackEventNote,
+  BlackjackHand,
+  BlackjackIntent,
+  BlackjackPhase,
+  BlackjackRank,
+  BlackjackResult,
+  BlackjackSeatState,
+  BlackjackState,
+  BlackjackStep,
+  BlackjackSuit,
+} from './blackjack';
 export type { GameDefinition } from './game-definition';
 export type {
   GameRules,

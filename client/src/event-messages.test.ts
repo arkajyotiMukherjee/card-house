@@ -150,6 +150,32 @@ describe('eventMessage', () => {
     ).toBe('Ada discarded and went out');
   });
 
+  it('announces a blackjack bet, hit, and bust', () => {
+    expect(
+      eventMessage('blackjack', { kind: 'bet', seat: 0, amount: 25 }, names),
+    ).toBe('Ada bets 25');
+    expect(
+      eventMessage(
+        'blackjack',
+        { kind: 'hit', seat: 1, total: 16, bust: false },
+        names,
+      ),
+    ).toBe('Bea hits 16');
+    expect(
+      eventMessage(
+        'blackjack',
+        { kind: 'hit', seat: 0, total: 24, bust: true },
+        names,
+      ),
+    ).toBe('Ada busts');
+    expect(
+      eventMessage('blackjack', { kind: 'stand', seat: 0, total: 18 }, names),
+    ).toBe('Ada stands on 18');
+    expect(eventMessage('blackjack', { kind: 'split', seat: 1 }, names)).toBe(
+      'Bea splits',
+    );
+  });
+
   it('keeps dummy and unknown events silent', () => {
     expect(eventMessage('dummy', null, names)).toBeNull();
     expect(eventMessage('bluff', null, names)).toBeNull();

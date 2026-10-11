@@ -21,6 +21,10 @@ import {
   readRummyEventNote,
   type RummyEventNote,
 } from '../../src/shared/games/rummy';
+import {
+  BLACKJACK_GAME_TYPE,
+  readBlackjackEventNote,
+} from '../../src/shared/games/blackjack';
 
 const NAME_LIMIT = 10;
 const MESSAGE_LIMIT = 64;
@@ -108,6 +112,9 @@ export function eventMessage(
   }
   if (gameType === RUMMY_GAME_TYPE) {
     return rummyMessage(readRummyEventNote(note), seatName);
+  }
+  if (gameType === BLACKJACK_GAME_TYPE) {
+    return blackjackMessage(note, seatName);
   }
   if (gameType !== BLUFF_GAME_TYPE) {
     return null;
@@ -215,5 +222,33 @@ function rummyMessage(
     return clip(`Stock is empty. ${who} has the low score`);
   }
   return clip(`${name} discarded`);
+}
+
+function blackjackMessage(
+  note: unknown,
+  seatName: (seatIndex: number) => string,
+): string | null {
+  const parsed = readBlackjackEventNote(note);
+  if (!parsed) {
+    return null;
+  }
+  const name = shortName(seatName(parsed.seat));
+  if (parsed.kind === 'bet') {
+    return clip(`${name} bets ${parsed.amount}`);
+  }
+  if (parsed.kind === 'split') {
+    return clip(`${name} splits`);
+  }
+  if (parsed.kind === 'hit') {
+    return clip(parsed.bust ? `${name} busts` : `${name} hits ${parsed.total}`);
+  }
+  if (parsed.kind === 'stand') {
+    return clip(`${name} stands on ${parsed.total}`);
+  }
+  return clip(
+    parsed.bust
+      ? `${name} doubles and busts`
+      : `${name} doubles to ${parsed.total}`,
+  );
 }
 
