@@ -1,4 +1,9 @@
 import { bluffGameDefinition } from '../../src/shared/games/bluff';
+import { crazyEightsGameDefinition } from '../../src/shared/games/crazy-eights';
+import { goFishGameDefinition } from '../../src/shared/games/go-fish';
+import { presidentGameDefinition } from '../../src/shared/games/president';
+import { rummyGameDefinition } from '../../src/shared/games/rummy';
+import { blackjackGameDefinition } from '../../src/shared/games/blackjack';
 import { spadesGameDefinition } from '../../src/shared/games/spades';
 import type { GameDefinition } from '../../src/shared/games/game-definition';
 
@@ -54,6 +59,11 @@ function catalogEntry(definition: GameDefinition): GameOption {
 /** Games Create Table can offer. Sourced from each shared `GameDefinition`. */
 export const GAME_CATALOG = [
   catalogEntry(bluffGameDefinition),
+  catalogEntry(presidentGameDefinition),
+  catalogEntry(goFishGameDefinition),
+  catalogEntry(crazyEightsGameDefinition),
+  catalogEntry(rummyGameDefinition),
+  catalogEntry(blackjackGameDefinition),
   catalogEntry(spadesGameDefinition),
 ] as const satisfies readonly GameOption[];
 
