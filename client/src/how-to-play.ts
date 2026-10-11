@@ -23,6 +23,10 @@ import {
   BLACKJACK_GAME_TYPE,
 } from '../../src/shared/games/blackjack';
 import {
+  spadesGameDefinition,
+  SPADES_GAME_TYPE,
+} from '../../src/shared/games/spades';
+import {
   dummyGameDefinition,
   DUMMY_GAME_TYPE,
 } from '../../src/shared/games/dummy-counter';
@@ -39,6 +43,7 @@ const DEFINITIONS: ReadonlyMap<string, GameDefinition> = new Map<
   [CRAZY_EIGHTS_GAME_TYPE, crazyEightsGameDefinition],
   [RUMMY_GAME_TYPE, rummyGameDefinition],
   [BLACKJACK_GAME_TYPE, blackjackGameDefinition],
+  [SPADES_GAME_TYPE, spadesGameDefinition],
   [DUMMY_GAME_TYPE, dummyGameDefinition],
 ]);
 

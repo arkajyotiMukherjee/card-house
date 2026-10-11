@@ -5,6 +5,7 @@ import { goFishGameDefinition } from '../../src/shared/games/go-fish';
 import { presidentGameDefinition } from '../../src/shared/games/president';
 import { rummyGameDefinition } from '../../src/shared/games/rummy';
 import { blackjackGameDefinition } from '../../src/shared/games/blackjack';
+import { spadesGameDefinition } from '../../src/shared/games/spades';
 import { HOW_TO_PLAY_TEXT } from './game-scene';
 import {
   clampScroll,
@@ -45,6 +46,13 @@ describe('definitionFor', () => {
 
   it('returns the Blackjack definition for gameType blackjack', () => {
     expect(definitionFor('blackjack')).toBe(blackjackGameDefinition);
+  });
+
+  it('returns the Spades definition for gameType spades', () => {
+    expect(definitionFor('spades')).toBe(spadesGameDefinition);
+    expect(layoutHowToPlay(spadesGameDefinition, 84).title).toBe(
+      'How to Play Spades',
+    );
   });
 
   it('has no definition for an unknown gameType', () => {

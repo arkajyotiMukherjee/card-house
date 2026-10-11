@@ -5,6 +5,7 @@ import { goFishGameDefinition } from '../../src/shared/games/go-fish';
 import { presidentGameDefinition } from '../../src/shared/games/president';
 import { rummyGameDefinition } from '../../src/shared/games/rummy';
 import { blackjackGameDefinition } from '../../src/shared/games/blackjack';
+import { spadesGameDefinition } from '../../src/shared/games/spades';
 import {
   applyCodeKey,
   applyFieldKey,
@@ -152,7 +153,7 @@ describe('lobby tables', () => {
     });
   });
 
-  it('offers Bluff, President, Go Fish, Crazy Eights, Rummy, and Blackjack from the shared definitions', () => {
+  it('offers Bluff, President, Go Fish, Crazy Eights, Rummy, Blackjack, and Spades from the shared definitions', () => {
     expect(GAME_CATALOG).toEqual([
       {
         gameType: bluffGameDefinition.gameType,
@@ -195,6 +196,13 @@ describe('lobby tables', () => {
         minPlayers: blackjackGameDefinition.minPlayers,
         maxPlayers: blackjackGameDefinition.maxPlayers,
         howToPlay: blackjackGameDefinition.howToPlay,
+      },
+      {
+        gameType: spadesGameDefinition.gameType,
+        name: spadesGameDefinition.displayName,
+        minPlayers: spadesGameDefinition.minPlayers,
+        maxPlayers: spadesGameDefinition.maxPlayers,
+        howToPlay: spadesGameDefinition.howToPlay,
       },
     ]);
     const gameTypes = GAME_CATALOG.map((game) => game.gameType);
@@ -250,8 +258,16 @@ describe('lobby tables', () => {
       maxPlayers: blackjackGameDefinition.maxPlayers,
     });
     expect(blackjack.howToPlay).toBe(blackjackGameDefinition.howToPlay);
-    expect(gameOption(6)).toBe(bluff);
-    expect(gameOption(-1)).toBe(blackjack);
+    const spades = gameOption(6);
+    expect(spades).toMatchObject({
+      gameType: 'spades',
+      name: 'Spades',
+      minPlayers: 4,
+      maxPlayers: 4,
+    });
+    expect(spades.howToPlay).toBe(spadesGameDefinition.howToPlay);
+    expect(gameOption(7)).toBe(bluff);
+    expect(gameOption(-1)).toBe(spades);
     expect(clampPlayerCount(bluff, 9)).toBe(6);
     expect(clampPlayerCount(bluff, 2)).toBe(2);
     expect(clampPlayerCount(president, 9)).toBe(6);
@@ -268,6 +284,9 @@ describe('lobby tables', () => {
       blackjackGameDefinition.maxPlayers,
     );
     expect(nextTableName(tables, 'lobby_1', blackjack)).toBe('Blackjack #1');
+    expect(clampPlayerCount(spades, 2)).toBe(4);
+    expect(clampPlayerCount(spades, 6)).toBe(4);
+    expect(nextTableName(tables, 'lobby_1', spades)).toBe('Spades #1');
   });
 
   it('finds this browser in the joined lobby', () => {

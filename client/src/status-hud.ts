@@ -11,6 +11,7 @@ import type { GoFishPhase, GoFishState } from '../../src/shared/games/go-fish';
 import type { PresidentState } from '../../src/shared/games/president';
 import type { RummyPhase, RummyState } from '../../src/shared/games/rummy';
 import type { BlackjackState } from '../../src/shared/games/blackjack';
+import type { SpadesState } from '../../src/shared/games/spades';
 
 export const STATUS_HUD = { x: 668, y: 16, w: 240, h: 52 } as const;
 
@@ -244,6 +245,41 @@ export function blackjackStatusHud(
     turn: `Turn: ${turn}`,
     phase: `Phase: ${phase}`,
     round: `Round: ${round}`,
+  };
+}
+
+/**
+ * The same three HUD lines for Spades.
+ * Turn is the seated name, phase is Bid, Play, or Finished, and the hand
+ * number is the Spades hand. Partnership bids stay on the table.
+ */
+export function spadesStatusHud(
+  state: SpadesState,
+  seats: readonly { seatIndex: number; name: string }[],
+): StatusHudLines {
+  let turn = '-';
+  if (state.phase === 'play' && state.turnSeatIndex !== null) {
+    const seatIndex = state.turnSeatIndex;
+    const seat = seats.find((row) => row.seatIndex === seatIndex);
+    const name = seat?.name ?? '';
+    turn = name.length > 0 ? shortName(name) : `Seat ${seatIndex}`;
+  }
+  let phase = 'Waiting';
+  if (state.phase === 'finished') {
+    phase = 'Finished';
+  } else if (state.phase === 'play' && state.stage === 'bid') {
+    phase = 'Bid';
+  } else if (state.phase === 'play') {
+    phase = 'Play';
+  }
+  const round =
+    state.phase === 'lobby' || state.handNumber < 1
+      ? '-'
+      : String(state.handNumber);
+  return {
+    turn: `Turn: ${turn}`,
+    phase: `Phase: ${phase}`,
+    round: `Hand: ${round}`,
   };
 }
 

@@ -18,6 +18,10 @@ import {
   type BlackjackState,
 } from '../../src/shared/games/blackjack';
 import {
+  readSpadesState,
+  type SpadesState,
+} from '../../src/shared/games/spades';
+import {
   DUMMY_INCREMENT,
   type DummyIntent,
 } from '../../src/shared/games/dummy-counter';
@@ -27,6 +31,7 @@ import { GoFishDriver } from './go-fish-driver';
 import { PresidentDriver } from './president-driver';
 import { RummyDriver } from './rummy-driver';
 import { BlackjackDriver } from './blackjack-driver';
+import { SpadesDriver } from './spades-driver';
 import { cardAtlas, greenTable } from './boot-scene';
 import {
   BUTTON,
@@ -65,6 +70,7 @@ import {
   presidentStatusHud,
   rummyStatusHud,
   blackjackStatusHud,
+  spadesStatusHud,
   STATUS_HUD,
   type StatusHudLines,
 } from './status-hud';
@@ -98,6 +104,7 @@ export class GameScene extends ex.Scene {
   private readonly crazyEightsDriver = new CrazyEightsDriver();
   private readonly rummyDriver = new RummyDriver();
   private readonly blackjackDriver = new BlackjackDriver();
+  private readonly spadesDriver = new SpadesDriver();
   private lastRow: { id: string; gameType: string; stateJson: string } | null =
     null;
   private placed: PlacedSeat[] = [];
@@ -138,6 +145,7 @@ export class GameScene extends ex.Scene {
       this.crazyEightsDriver.destroy(this.driverContext());
       this.rummyDriver.destroy(this.driverContext());
       this.blackjackDriver.destroy(this.driverContext());
+      this.spadesDriver.destroy(this.driverContext());
       this.placeHud(false);
     }
   }
@@ -517,6 +525,7 @@ export class GameScene extends ex.Scene {
       this.crazyEightsDriver.destroy(this.driverContext());
       this.rummyDriver.destroy(this.driverContext());
       this.blackjackDriver.destroy(this.driverContext());
+      this.spadesDriver.destroy(this.driverContext());
       this.paintBluff(row.stateJson);
       return;
     }
@@ -526,6 +535,7 @@ export class GameScene extends ex.Scene {
       this.crazyEightsDriver.destroy(this.driverContext());
       this.rummyDriver.destroy(this.driverContext());
       this.blackjackDriver.destroy(this.driverContext());
+      this.spadesDriver.destroy(this.driverContext());
       this.paintPresident(row.stateJson);
       return;
     }
@@ -535,6 +545,7 @@ export class GameScene extends ex.Scene {
       this.crazyEightsDriver.destroy(this.driverContext());
       this.rummyDriver.destroy(this.driverContext());
       this.blackjackDriver.destroy(this.driverContext());
+      this.spadesDriver.destroy(this.driverContext());
       this.paintGoFish(row.stateJson);
       return;
     }
@@ -544,6 +555,7 @@ export class GameScene extends ex.Scene {
       this.goFishDriver.destroy(this.driverContext());
       this.rummyDriver.destroy(this.driverContext());
       this.blackjackDriver.destroy(this.driverContext());
+      this.spadesDriver.destroy(this.driverContext());
       this.paintCrazyEights(row.stateJson);
       return;
     }
@@ -553,6 +565,7 @@ export class GameScene extends ex.Scene {
       this.goFishDriver.destroy(this.driverContext());
       this.crazyEightsDriver.destroy(this.driverContext());
       this.blackjackDriver.destroy(this.driverContext());
+      this.spadesDriver.destroy(this.driverContext());
       this.paintRummy(row.stateJson);
       return;
     }
@@ -562,7 +575,18 @@ export class GameScene extends ex.Scene {
       this.goFishDriver.destroy(this.driverContext());
       this.crazyEightsDriver.destroy(this.driverContext());
       this.rummyDriver.destroy(this.driverContext());
+      this.spadesDriver.destroy(this.driverContext());
       this.paintBlackjack(row.stateJson);
+      return;
+    }
+    if (row.gameType === this.spadesDriver.gameType) {
+      this.bluffDriver.destroy(this.driverContext());
+      this.presidentDriver.destroy(this.driverContext());
+      this.goFishDriver.destroy(this.driverContext());
+      this.crazyEightsDriver.destroy(this.driverContext());
+      this.rummyDriver.destroy(this.driverContext());
+      this.blackjackDriver.destroy(this.driverContext());
+      this.paintSpades(row.stateJson);
       return;
     }
     this.bluffDriver.destroy(this.driverContext());
@@ -571,6 +595,7 @@ export class GameScene extends ex.Scene {
     this.crazyEightsDriver.destroy(this.driverContext());
     this.rummyDriver.destroy(this.driverContext());
     this.blackjackDriver.destroy(this.driverContext());
+    this.spadesDriver.destroy(this.driverContext());
     this.placeHud(false);
     this.paintCounter(row.gameType, row.stateJson);
   }
@@ -584,6 +609,7 @@ export class GameScene extends ex.Scene {
     | GameDriver<CrazyEightsState>
     | GameDriver<RummyState>
     | GameDriver<BlackjackState>
+    | GameDriver<SpadesState>
     | null {
     if (gameType === this.bluffDriver.gameType) {
       return this.bluffDriver;
@@ -602,6 +628,9 @@ export class GameScene extends ex.Scene {
     }
     if (gameType === this.blackjackDriver.gameType) {
       return this.blackjackDriver;
+    }
+    if (gameType === this.spadesDriver.gameType) {
+      return this.spadesDriver;
     }
     return null;
   }
@@ -718,6 +747,25 @@ export class GameScene extends ex.Scene {
       state.phase === 'lobby' ? 'Waiting for players' : '';
     this.blackjackDriver.render(state, this.driverContext());
     this.paintHud(blackjackStatusHud(state, this.placed));
+  }
+
+  private paintSpades(stateJson: string): void {
+    this.dummy = false;
+    this.placeCounter(false);
+    let state: SpadesState;
+    try {
+      state = readSpadesState(JSON.parse(stateJson));
+    } catch (error: unknown) {
+      this.showError(
+        error instanceof Error ? error.message : 'Invalid table state',
+      );
+      return;
+    }
+    this.errorText.text = '';
+    this.waitingText.text =
+      state.phase === 'lobby' ? 'Waiting for players' : '';
+    this.spadesDriver.render(state, this.driverContext());
+    this.paintHud(spadesStatusHud(state, this.placed));
   }
 
   private paintHud(lines: StatusHudLines): void {

@@ -5,6 +5,7 @@ import type { GoFishState } from '../../src/shared/games/go-fish';
 import type { PresidentState } from '../../src/shared/games/president';
 import type { RummyState } from '../../src/shared/games/rummy';
 import type { BlackjackState } from '../../src/shared/games/blackjack';
+import type { SpadesState } from '../../src/shared/games/spades';
 import {
   blackjackStatusHud,
   bluffStatusHud,
@@ -12,6 +13,7 @@ import {
   goFishStatusHud,
   presidentStatusHud,
   rummyStatusHud,
+  spadesStatusHud,
 } from './status-hud';
 
 const seats = [
@@ -321,5 +323,45 @@ describe('blackjackStatusHud', () => {
       phase: 'Phase: Finished',
       round: 'Round: Done',
     });
+  });
+});
+
+function spadesState(overrides: Partial<SpadesState> = {}): SpadesState {
+  return {
+    phase: 'play',
+    stage: 'bid',
+    hands: { '0': ['AS'], '1': ['2H'] },
+    bids: { '0': null, '1': null },
+    tricks: { '0': 0, '1': 0 },
+    trick: [],
+    lastTrick: null,
+    spadesBroken: false,
+    turnSeatIndex: 0,
+    dealerSeatIndex: 3,
+    scores: { ns: 0, ew: 0 },
+    bags: { ns: 0, ew: 0 },
+    handNumber: 2,
+    winnerTeam: null,
+    tableId: 'table-spades',
+    ...overrides,
+  };
+}
+
+describe('spadesStatusHud', () => {
+  it('names the bidder, the bid phase, and the hand', () => {
+    expect(spadesStatusHud(spadesState(), seats)).toEqual({
+      turn: 'Turn: Ada',
+      phase: 'Phase: Bid',
+      round: 'Hand: 2',
+    });
+  });
+
+  it('switches to play while tricks are in progress', () => {
+    const lines = spadesStatusHud(
+      spadesState({ stage: 'trick', turnSeatIndex: 1 }),
+      seats,
+    );
+    expect(lines.turn).toBe('Turn: Bea');
+    expect(lines.phase).toBe('Phase: Play');
   });
 });

@@ -28,6 +28,10 @@ import {
   blackjackRules,
 } from '../../src/shared/games/blackjack';
 import {
+  spadesGameDefinition,
+  spadesRules,
+} from '../../src/shared/games/spades';
+import {
   dummyCounterRules,
   dummyGameDefinition,
 } from '../../src/shared/games/dummy-counter';
@@ -46,6 +50,7 @@ registerGameRules(goFishGameDefinition, goFishRules);
 registerGameRules(crazyEightsGameDefinition, crazyEightsRules);
 registerGameRules(rummyGameDefinition, rummyRules);
 registerGameRules(blackjackGameDefinition, blackjackRules);
+registerGameRules(spadesGameDefinition, spadesRules);
 
 const LobbyStatus = t.enum('LobbyStatus', ['open', 'closed']);
 const TableStatus = t.enum('TableStatus', [
