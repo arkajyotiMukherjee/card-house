@@ -26,8 +26,9 @@ import {
   discardPositions,
   finishedLine,
   legalCard,
-  meldOrigin,
-  meldPositions,
+  HINT_X,
+  HINT_Y,
+  meldLayout,
   stockPosition,
 } from './rummy-layout';
 import { LOGICAL_WIDTH } from './sheets';
@@ -366,7 +367,7 @@ export class RummyDriver implements GameDriver<RummyState> {
         ctx.meSeatIndex !== null && state.turnSeatIndex === ctx.meSeatIndex;
       const hint = state.drawn ? 'Meld or discard' : 'Draw one card';
       this.labels.push(
-        this.textActor(ctx, 16, 368, mine ? hint : 'Wait', GOLD),
+        this.textActor(ctx, HINT_X, HINT_Y, mine ? hint : 'Wait', GOLD),
       );
     }
     if (state.discardPile.length > 0) {
@@ -383,7 +384,13 @@ export class RummyDriver implements GameDriver<RummyState> {
         : (state.hands[String(ctx.meSeatIndex)] ?? []);
     if (state.phase === 'play' && ctx.meSeatIndex !== null) {
       this.labels.push(
-        this.textActor(ctx, 16, 472, `Pts ${deadwoodPoints(hand)}`, DIM),
+        this.textActor(
+          ctx,
+          HINT_X,
+          HINT_Y + 14,
+          `Pts ${deadwoodPoints(hand)}`,
+          DIM,
+        ),
       );
     }
     for (const seat of ctx.seats) {
@@ -448,33 +455,47 @@ export class RummyDriver implements GameDriver<RummyState> {
         z: 10 + index,
       });
     }
-    const perSeat = new Map<number, number>();
+    const meldsBySeat = new Map<number, number[]>();
     for (let meldIndex = 0; meldIndex < state.melds.length; meldIndex += 1) {
       const meld = state.melds[meldIndex];
-      if (!meld) {
-        continue;
+      if (meld) {
+        meldsBySeat.set(meld.seat, [
+          ...(meldsBySeat.get(meld.seat) ?? []),
+          meldIndex,
+        ]);
       }
-      const local = perSeat.get(meld.seat) ?? 0;
-      perSeat.set(meld.seat, local + 1);
-      const seat = ctx.seats.find((row) => row.seatIndex === meld.seat);
-      const self = seat?.self ?? meld.seat === ctx.meSeatIndex;
-      const origin = meldOrigin(seat?.x ?? 480, seat?.y ?? 456, self, local);
-      const slots = meldPositions(origin.x, origin.y, meld.cards.length);
-      const start = meld.cards.length - slots.length;
-      for (let index = 0; index < slots.length; index += 1) {
-        const cardId = meld.cards[start + index];
-        const slot = slots[index];
-        if (!cardId || !slot) {
+    }
+    for (const [seatIndex, meldIndexes] of meldsBySeat) {
+      const seat = ctx.seats.find((row) => row.seatIndex === seatIndex);
+      const self = seat?.self ?? seatIndex === ctx.meSeatIndex;
+      const sizes = meldIndexes.map(
+        (meldIndex) => state.melds[meldIndex]?.cards.length ?? 0,
+      );
+      const layout = meldLayout(seat?.x ?? 480, seat?.y ?? 456, self, sizes);
+      for (let local = 0; local < meldIndexes.length; local += 1) {
+        const meldIndex = meldIndexes[local];
+        const meld =
+          meldIndex === undefined ? undefined : state.melds[meldIndex];
+        const slots = layout[local] ?? [];
+        if (meldIndex === undefined || !meld) {
           continue;
         }
-        this.roles.set(cardId, { kind: 'meld', meldIndex });
-        desired.set(cardId, {
-          x: slot.x,
-          y: slot.y,
-          faceUp: true,
-          delay: 0,
-          z: 6 + index,
-        });
+        const start = meld.cards.length - slots.length;
+        for (let index = 0; index < slots.length; index += 1) {
+          const cardId = meld.cards[start + index];
+          const slot = slots[index];
+          if (!cardId || !slot) {
+            continue;
+          }
+          this.roles.set(cardId, { kind: 'meld', meldIndex });
+          desired.set(cardId, {
+            x: slot.x,
+            y: slot.y,
+            faceUp: true,
+            delay: 0,
+            z: slot.z,
+          });
+        }
       }
     }
     for (const cardId of [...this.selected]) {

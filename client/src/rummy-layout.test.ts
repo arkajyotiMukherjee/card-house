@@ -1,15 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import type { RummyState } from '../../src/shared/games/rummy';
-import { HAND_Y } from './bluff-layout';
+import { CARD_DRAW, HAND_Y, opponentBackPositions } from './bluff-layout';
+import { SEAT_ANCHORS } from './game-scene';
 import {
+  DISCARD_BUTTON,
   DISCARD_X,
   DISCARD_Y,
+  DRAW_DISCARD_BUTTON,
+  DRAW_STOCK_BUTTON,
+  HINT_X,
+  HINT_Y,
+  MELD_BUTTON,
   STOCK_X,
   discardPositions,
   finishedLine,
   legalCard,
-  meldOrigin,
-  meldPositions,
+  meldLayout,
   stockPosition,
 } from './rummy-layout';
 
@@ -37,15 +43,123 @@ describe('rummy layout', () => {
     expect(stockPosition().x).toBeGreaterThan(DISCARD_X);
   });
 
-  it('puts your melds above the hand and other melds off the bottom row', () => {
-    const mine = meldOrigin(480, 456, true, 0);
-    expect(mine.y).toBeLessThan(HAND_Y);
-    const slots = meldPositions(mine.x, mine.y, 4);
-    expect(slots).toHaveLength(4);
-    expect(slots[0]?.x).toBeLessThan(slots[1]?.x ?? 0);
-    const theirs = meldOrigin(780, 310, false, 0);
-    expect(theirs.y).toBeLessThan(HAND_Y - 40);
-    expect(meldPositions(theirs.x, theirs.y, 3).length).toBe(3);
+  describe.each([
+    { label: 'first meld', melds: [4], strict: true },
+    { label: 'two melds', melds: [4, 3], strict: false },
+  ])('$label', ({ melds, strict }) => {
+    it('stays on the canvas and clear of the rest of the table', () => {
+      interface Box {
+        name: string;
+        x: number;
+        y: number;
+        w: number;
+        h: number;
+      }
+      const card = (name: string, x: number, y: number): Box => ({
+        name,
+        x: x - CARD_DRAW / 2,
+        y: y - CARD_DRAW / 2,
+        w: CARD_DRAW,
+        h: CARD_DRAW,
+      });
+      const overlaps = (a: Box, b: Box): boolean =>
+        a.x < b.x + b.w &&
+        b.x < a.x + a.w &&
+        a.y < b.y + b.h &&
+        b.y < a.y + a.h;
+      const seats = SEAT_ANCHORS.slice(0, 6);
+      const fixed: Box[] = [
+        { name: 'hud', x: 668, y: 16, w: 240, h: 52 },
+        { name: 'hint', x: HINT_X, y: HINT_Y, w: 120, h: 22 },
+        { name: 'handStrip', x: 16, y: HAND_Y - CARD_DRAW / 2, w: 720, h: 64 },
+        card('stock', stockPosition().x, stockPosition().y),
+      ];
+      for (const [name, button] of [
+        ['draw', DRAW_STOCK_BUTTON],
+        ['take', DRAW_DISCARD_BUTTON],
+        ['meld', MELD_BUTTON],
+        ['discard', DISCARD_BUTTON],
+      ] as const) {
+        fixed.push({ name, ...button });
+      }
+      discardPositions(5).forEach((slot, index) => {
+        fixed.push(card(`discard${index}`, slot.x, slot.y));
+      });
+      seats.forEach((seat, index) => {
+        fixed.push({
+          name: `plate${index}`,
+          x: seat.x - 30,
+          y: seat.y,
+          w: 60,
+          h: 20,
+        });
+        if (index > 0) {
+          opponentBackPositions(seat.x, seat.y, 4).forEach((slot, back) => {
+            fixed.push(card(`back${index}.${back}`, slot.x, slot.y));
+          });
+        }
+      });
+      const problems: string[] = [];
+      const placed: Box[][] = [];
+      seats.forEach((seat, index) => {
+        const layout = meldLayout(seat.x, seat.y, index === 0, melds);
+        const boxes: Box[] = [];
+        layout.forEach((slots, meld) => {
+          slots.forEach((slot, cardIndex) => {
+            boxes.push(
+              card(`seat${index}.m${meld}.c${cardIndex}`, slot.x, slot.y),
+            );
+          });
+        });
+        placed.push(boxes);
+        for (const box of boxes) {
+          if (
+            box.x < 0 ||
+            box.y < 0 ||
+            box.x + box.w > 960 ||
+            box.y + box.h > 540
+          ) {
+            problems.push(`${box.name} leaves the canvas`);
+          }
+          for (const other of fixed) {
+            const ownPlate = other.name === `plate${index}`;
+            const soft = !strict && other.name.startsWith('back');
+            if (!ownPlate && !soft && overlaps(box, other)) {
+              problems.push(`${box.name} covers ${other.name}`);
+            }
+            if (ownPlate && overlaps(box, other)) {
+              problems.push(`${box.name} covers its own seat plate`);
+            }
+          }
+        }
+      });
+      placed.forEach((boxes, a) => {
+        placed.slice(a + 1).forEach((others) => {
+          for (const box of boxes) {
+            for (const other of others) {
+              if (overlaps(box, other)) {
+                problems.push(`${box.name} covers ${other.name}`);
+              }
+            }
+          }
+        });
+      });
+      expect(problems).toEqual([]);
+    });
+  });
+
+  it('stacks overlapping meld rows so the nearest row is drawn on top', () => {
+    const mine = meldLayout(480, 456, true, [3, 3, 3, 3, 3]);
+    expect(mine[0]?.[0]?.y).toBeLessThan(HAND_Y - CARD_DRAW);
+    const rows = mine.map((slots) => slots[0]);
+    const bottom = rows.reduce((a, b) => ((a?.y ?? 0) > (b?.y ?? 0) ? a : b));
+    for (const slot of rows) {
+      expect(bottom?.z ?? 0).toBeGreaterThanOrEqual(slot?.z ?? 0);
+    }
+    const first = meldLayout(780, 310, false, [4])[0];
+    expect(first).toHaveLength(4);
+    expect(first?.[0]?.x).toBeLessThan(first?.[1]?.x ?? 0);
+    expect(first?.[0]?.z).toBeLessThan(first?.[1]?.z ?? 0);
   });
 
   it('lifts a card only when it is in your hand on your turn', () => {
