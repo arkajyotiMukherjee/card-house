@@ -29,6 +29,15 @@ const DANGER = ex.Color.fromHex('#e85d4c');
 type FieldId = 'name' | 'code';
 type SubmitKind = 'create' | 'join';
 
+export interface LobbyPanel {
+  /** Fills the form, submits it, and resolves to an error message if it fails. */
+  enter: (
+    kind: SubmitKind,
+    playerName: string,
+    roomCode: string,
+  ) => Promise<string | undefined>;
+}
+
 function canvasText(text: string, size: number, color: ex.Color): ex.Text {
   const graphic = new ex.Text({
     text,
@@ -83,11 +92,12 @@ function labelActor(
 }
 
 export function mountLobbyPanel(
+  engine: ex.Engine,
   scene: ex.Scene,
   connection: DbConnection,
   clientId: string,
   handlers: { onJoined?: (lobby: LobbyRow) => void } = {},
-): void {
+): LobbyPanel {
   const backdrop = new ex.Actor({
     pos: ex.vec(8, 44),
     anchor: ex.vec(0, 0),
@@ -210,14 +220,14 @@ export function mountLobbyPanel(
     errorText.text = message;
   };
 
-  const submit = (kind: SubmitKind): void => {
+  const submit = (kind: SubmitKind): Promise<string | undefined> => {
     if (busy || joinedCode.length > 0) {
-      return;
+      return Promise.resolve(undefined);
     }
     const playerName = normalizePlayerName(name);
     if (playerName.length === 0) {
       fail('Name is required');
-      return;
+      return Promise.resolve('Name is required');
     }
     errorText.text = '';
     busy = true;
@@ -225,7 +235,7 @@ export function mountLobbyPanel(
       kind === 'create'
         ? createThenJoin(connection, clientId, playerName)
         : joinExisting(connection, clientId, playerName, code);
-    void task
+    return task
       .then((room) => {
         joinedCode = room;
         syncJoinedLobby();
@@ -235,9 +245,13 @@ export function mountLobbyPanel(
         ) {
           fail('Waiting for room');
         }
+        return undefined;
       })
       .catch((error: unknown) => {
-        fail(error instanceof Error ? error.message : 'Could not join');
+        const message =
+          error instanceof Error ? error.message : 'Could not join';
+        fail(message);
+        return message;
       })
       .finally(() => {
         busy = false;
@@ -259,13 +273,16 @@ export function mountLobbyPanel(
     paintFields();
   });
   createButton.on('pointerup', () => {
-    submit('create');
+    void submit('create');
   });
   joinButton.on('pointerup', () => {
-    submit('join');
+    void submit('join');
   });
 
-  scene.engine.input.keyboard.on('press', (evt) => {
+  engine.input.keyboard.on('press', (evt) => {
+    if (engine.currentScene !== scene) {
+      return;
+    }
     if (busy || joinedCode.length > 0) {
       return;
     }
@@ -277,7 +294,7 @@ export function mountLobbyPanel(
       return;
     }
     if (evt.key === ex.Keys.Enter) {
-      submit(code.trim().length > 0 ? 'join' : 'create');
+      void submit(code.trim().length > 0 ? 'join' : 'create');
       return;
     }
     if (evt.key === ex.Keys.Tab) {
@@ -306,6 +323,15 @@ export function mountLobbyPanel(
   });
 
   paintFields();
+
+  return {
+    enter: (kind, playerName, roomCode) => {
+      name = playerName.slice(0, NAME_MAX);
+      code = roomCode;
+      paintFields();
+      return submit(kind);
+    },
+  };
 
   function writeField(key: string): void {
     if (focused === 'name') {

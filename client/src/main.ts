@@ -5,6 +5,7 @@ import { connectCardroom } from './connect';
 import { GameScene } from './game-scene-view';
 import { LobbyScene } from './lobby-scene';
 import { mountLobbyPanel } from './lobby-panel';
+import { MenuScene } from './menu-scene';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH, integerScale } from './sheets';
 
 const clientId = getOrCreateClientId();
@@ -37,17 +38,20 @@ function applyIntegerScale(): void {
 
 const scene = new BootScene();
 engine.add('boot', scene);
+const menu = new MenuScene();
+engine.add('menu', menu);
 
 window.addEventListener('resize', applyIntegerScale);
 applyIntegerScale();
 
 const loader = new ex.Loader(demoImages);
 void engine.start(loader).then(() => {
-  engine.goToScene('boot');
+  engine.goToScene('menu');
   applyIntegerScale();
   connectCardroom({
     onStatus: (line) => {
       scene.setStatus(line);
+      menu.setStatus(line);
     },
     onSubscribed: (connection) => {
       const game = new GameScene(connection, clientId, () => {
@@ -64,11 +68,17 @@ void engine.start(loader).then(() => {
         },
       );
       lobbyScene.mount();
-      mountLobbyPanel(scene, connection, clientId, {
+      const panel = mountLobbyPanel(engine, scene, connection, clientId, {
         onJoined: (lobby) => {
           lobbyScene.openLobby(lobby.id);
         },
       });
+      menu.connect(
+        (entry) => panel.enter(entry.kind, entry.name, entry.code),
+        () => {
+          engine.goToScene('boot');
+        },
+      );
     },
   });
 });
