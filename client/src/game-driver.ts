@@ -27,5 +27,7 @@ export interface GameDriver<State> {
   gameType: string;
   render(state: State, ctx: RenderContext): void;
   handleInput(event: InputEvent, state: State, ctx: RenderContext): void;
+  /** The module rejected `intent`. Mark the controls that sent it. */
+  intentRejected?(intent: unknown, ctx: RenderContext): void;
   destroy(ctx: RenderContext): void;
 }

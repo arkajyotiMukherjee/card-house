@@ -166,6 +166,63 @@ assert(finished.winnerSeatIndex === 0, 'the seat that emptied its hand wins');
 assert(finished.hands['0'].length === 0, 'the winner holds no cards');
 assert(finished.hands['1'][0] === 'KH', 'the other seat keeps its card');
 
+const liar: BluffState = {
+  phase: 'play',
+  hands: { '0': ['2S'], '1': ['KH', 'QH'] },
+  discardPile: ['3C'],
+  requiredRank: '2',
+  turnSeatIndex: 1,
+  lastPlay: { seat: 0, cards: ['3C'], claimRank: 'A' },
+  winnerSeatIndex: null,
+};
+const bluffNote = bluffRules.eventNote(
+  liar,
+  { type: 'challenge' },
+  bluffRules.applyIntent(liar, { type: 'challenge' }, context(1)),
+  context(1),
+);
+assert(
+  JSON.stringify(bluffNote) ===
+    JSON.stringify({
+      kind: 'challenge',
+      challenger: 1,
+      accused: 0,
+      bluff: true,
+      pickedUp: 0,
+    }),
+  'a challenge of a false claim notes a caught bluff',
+);
+const honest: BluffState = {
+  ...liar,
+  discardPile: ['AC'],
+  lastPlay: { seat: 0, cards: ['AC'], claimRank: 'A' },
+};
+const honestNote = bluffRules.eventNote(
+  honest,
+  { type: 'challenge' },
+  bluffRules.applyIntent(honest, { type: 'challenge' }, context(1)),
+  context(1),
+);
+assert(
+  honestNote !== null && honestNote.kind === 'challenge' && !honestNote.bluff,
+  'a challenge of an honest claim notes no bluff',
+);
+assert(
+  honestNote.pickedUp === 1,
+  'the challenger picks up after an honest claim',
+);
+const playNote = bluffRules.eventNote(
+  ending,
+  { type: 'play', cards: ['AS'] },
+  finished,
+  context(0),
+);
+assert(
+  JSON.stringify(playNote) ===
+    JSON.stringify({ kind: 'play', seat: 0, count: 1, claimRank: 'A' }),
+  'a play notes the seat, card count, and claimed rank',
+);
+
 console.log(
   JSON.stringify({
     gameType: bluffGameDefinition.gameType,

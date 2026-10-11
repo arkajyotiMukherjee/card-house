@@ -59,6 +59,18 @@ export interface BluffState {
 export type BluffIntent =
   { type: 'play'; cards: string[] } | { type: 'challenge' };
 
+/** What a table event says. Seat numbers stay indexes; clients add names. */
+export type BluffEventNote =
+  | { kind: 'play'; seat: number; count: number; claimRank: BluffRank }
+  | {
+      kind: 'challenge';
+      challenger: number;
+      accused: number;
+      /** True when the accused played cards that were not the claimed rank. */
+      bluff: boolean;
+      pickedUp: number;
+    };
+
 export const bluffGameDefinition = {
   gameType: BLUFF_GAME_TYPE,
   displayName: 'Bluff',
@@ -184,6 +196,42 @@ export function readBluffIntent(value: unknown): BluffIntent {
     cards.push(card);
   }
   return { type: 'play', cards };
+}
+
+export function readBluffEventNote(value: unknown): BluffEventNote | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return null;
+  }
+  const note = value as Record<string, unknown>;
+  if (
+    note.kind === 'play' &&
+    isSeatIndex(note.seat) &&
+    isSeatIndex(note.count) &&
+    isRank(note.claimRank)
+  ) {
+    return {
+      kind: 'play',
+      seat: note.seat,
+      count: note.count,
+      claimRank: note.claimRank,
+    };
+  }
+  if (
+    note.kind === 'challenge' &&
+    isSeatIndex(note.challenger) &&
+    isSeatIndex(note.accused) &&
+    typeof note.bluff === 'boolean' &&
+    isSeatIndex(note.pickedUp)
+  ) {
+    return {
+      kind: 'challenge',
+      challenger: note.challenger,
+      accused: note.accused,
+      bluff: note.bluff,
+      pickedUp: note.pickedUp,
+    };
+  }
+  return null;
 }
 
 function notStartedState(): BluffState {
@@ -478,6 +526,38 @@ export const bluffRules = {
       return applyPlay(state, action.cards, ctx.seat.seatIndex);
     }
     return applyChallenge(state, ctx.seat.seatIndex);
+  },
+  eventNote(
+    prev: BluffState,
+    intent: BluffIntent,
+    next: BluffState,
+    ctx: IntentContext,
+  ): BluffEventNote | null {
+    void next;
+    const before = readBluffState(prev);
+    const action = readBluffIntent(intent);
+    if (action.type === 'play') {
+      return {
+        kind: 'play',
+        seat: ctx.seat.seatIndex,
+        count: action.cards.length,
+        claimRank: before.requiredRank,
+      };
+    }
+    const lastPlay = before.lastPlay;
+    if (lastPlay === null) {
+      return null;
+    }
+    const bluff = !lastPlay.cards.every(
+      (card) => rankOfCard(card) === lastPlay.claimRank,
+    );
+    return {
+      kind: 'challenge',
+      challenger: ctx.seat.seatIndex,
+      accused: lastPlay.seat,
+      bluff,
+      pickedUp: bluff ? lastPlay.seat : ctx.seat.seatIndex,
+    };
   },
   onPlayerJoin(prev: BluffState, seat: GameSeat): BluffState {
     void seat;

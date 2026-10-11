@@ -27,6 +27,8 @@ const BUTTON = ex.Color.fromHex('#1b5c38');
 const BUTTON_DOWN = ex.Color.fromHex('#0e3d24');
 const STROKE = ex.Color.fromHex('#e6c27a');
 const STROKE_HOT = ex.Color.fromHex('#fff6d0');
+const FLASH_FILL = ex.Color.fromRGB(232, 93, 76, 0.55);
+const FLASH_STROKE = ex.Color.fromHex('#ff3b2f');
 
 const TRAVEL_MS = 420;
 
@@ -101,6 +103,7 @@ export class BluffDriver implements GameDriver<BluffState> {
   private backTargets = new Map<string, string>();
   private labels: ex.Actor[] = [];
   private buttons: ex.Actor[] = [];
+  private flashes: ex.Actor[] = [];
   private selected = new Set<string>();
   private hover: string | null = null;
   private buttonsReady = false;
@@ -163,8 +166,89 @@ export class BluffDriver implements GameDriver<BluffState> {
     }
   }
 
+  /**
+   * The module said no. Flash the Play button and the lifted cards, or the
+   * Challenge button, so the click does not look ignored.
+   */
+  intentRejected(intent: unknown, ctx: RenderContext): void {
+    const type =
+      typeof intent === 'object' && intent !== null && 'type' in intent
+        ? intent.type
+        : null;
+    if (type === 'challenge') {
+      this.flashBox(
+        ctx,
+        CHALLENGE_BUTTON.x,
+        CHALLENGE_BUTTON.y,
+        CHALLENGE_BUTTON.w,
+        CHALLENGE_BUTTON.h,
+      );
+      return;
+    }
+    if (type !== 'play') {
+      return;
+    }
+    this.flashBox(
+      ctx,
+      PLAY_BUTTON.x,
+      PLAY_BUTTON.y,
+      PLAY_BUTTON.w,
+      PLAY_BUTTON.h,
+    );
+    for (const cardId of this.selected) {
+      const record = this.cards.get(cardId);
+      if (!record) {
+        continue;
+      }
+      const half = CARD_DRAW / 2;
+      this.flashBox(
+        ctx,
+        record.actor.pos.x - half,
+        record.actor.pos.y - half,
+        CARD_DRAW,
+        CARD_DRAW,
+      );
+    }
+  }
+
+  private flashBox(
+    ctx: RenderContext,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+  ): void {
+    const actor = new ex.Actor({
+      pos: ex.vec(x, y),
+      anchor: ex.vec(0, 0),
+      width,
+      height,
+      z: 40,
+    });
+    const rect = new ex.Rectangle({
+      width,
+      height,
+      color: FLASH_FILL,
+      strokeColor: FLASH_STROKE,
+      lineWidth: 4,
+      smoothing: false,
+    });
+    rect.origin = ex.vec(0, 0);
+    actor.graphics.use(rect);
+    actor.actions.blink(110, 70, 3).callMethod(() => {
+      actor.kill();
+      this.flashes = this.flashes.filter((item) => item !== actor);
+    });
+    ctx.scene.add(actor);
+    this.flashes.push(actor);
+  }
+
   destroy(ctx: RenderContext): void {
     void ctx;
+    for (const actor of this.flashes) {
+      actor.kill();
+    }
+    this.flashes = [];
     this.clearTableCards();
     for (const actor of this.labels) {
       actor.kill();
@@ -187,9 +271,6 @@ export class BluffDriver implements GameDriver<BluffState> {
     }
     const hand = state.hands[String(ctx.meSeatIndex)] ?? [];
     const cards = selectedPlayCards(hand, this.selected);
-    if (cards.length === 0) {
-      return;
-    }
     ctx.sendIntent({ type: 'play', cards });
   }
 
