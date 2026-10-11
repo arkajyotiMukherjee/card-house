@@ -3,10 +3,14 @@ import type { PokerState } from '../../src/shared/games/poker';
 import { HAND_Y } from './bluff-layout';
 import {
   BOARD_Y,
+  bannerX,
   boardPositions,
+  droppedPositions,
   faceForPokerCard,
   finishedLine,
   holePositions,
+  seatLabelOrigin,
+  seatNote,
 } from './poker-layout';
 
 function finished(winners: number[]): PokerState {
@@ -64,5 +68,58 @@ describe('poker layout', () => {
       'Winners seat 0 Ada, seat 1 Bea',
     );
     expect(finishedLine({ ...finished([]), phase: 'play' }, seats)).toBeNull();
+  });
+
+  it('keeps the chip label right of the seat plate and the banner clear of side seats', () => {
+    const label = seatLabelOrigin(480, 456, 'Ada');
+    expect(label).toEqual({ x: 510, y: 462 });
+    expect(label.x).toBeGreaterThan(
+      (holePositions(true, 480, 456, 4).at(-1)?.x ?? 0) + 32,
+    );
+    expect(bannerX('Winner seat 0 Ada')).toBeGreaterThanOrEqual(280);
+    expect(bannerX('x'.repeat(200))).toBe(280);
+  });
+
+  it('puts dropped cards beside the hand, below the action buttons', () => {
+    const slots = droppedPositions(3);
+    expect(slots).toHaveLength(2);
+    expect(slots.every((slot) => slot.y > 476)).toBe(true);
+    expect(slots[0]?.x).toBeGreaterThan(736);
+  });
+
+  it('notes folds, bets, all-ins, and showdown hands', () => {
+    const base = finished([0]);
+    const row = {
+      chips: 100,
+      hole: ['AS', 'KD'],
+      streetBet: 0,
+      committed: 20,
+      folded: false,
+      allIn: false,
+      acted: true,
+      mustDiscard: false,
+    };
+    const play: PokerState = {
+      ...base,
+      phase: 'play',
+      end: null,
+      seats: {
+        '0': { ...row, streetBet: 40 },
+        '1': { ...row, folded: true },
+        '2': { ...row, allIn: true },
+        '3': row,
+      },
+    };
+    expect(seatNote(play, 0)).toBe('Bet 40');
+    expect(seatNote(play, 1)).toBe('Fold');
+    expect(seatNote(play, 2)).toBe('All-in');
+    expect(seatNote(play, 3)).toBeNull();
+    const showdown: PokerState = {
+      ...base,
+      seats: play.seats,
+      hands: { '0': { cards: [], name: 'Flush', score: [5] } },
+    };
+    expect(seatNote(showdown, 0)).toBe('Flush');
+    expect(seatNote(showdown, 1)).toBe('Fold');
   });
 });

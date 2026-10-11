@@ -20,6 +20,7 @@ import {
   canvasText,
   panelRect,
 } from './canvas-ui';
+import { cardLift } from './bluff-layout';
 import type { CardAtlas } from './card-atlas';
 import { ChipAtlas, type ChipDenomination } from './chip-atlas';
 import type { GameDriver, InputEvent, RenderContext } from './game-driver';
@@ -28,14 +29,22 @@ import {
   CALL_BUTTON,
   CARD_DRAW,
   CHECK_BUTTON,
+  DISCARD_PROMPT,
+  DROPPED_LABEL,
+  DROPPED_SCALE,
   FOLD_BUTTON,
   POT_X,
   POT_Y,
   RAISE_BUTTON,
+  BANNER_Y,
+  bannerX,
   boardPositions,
+  droppedPositions,
   faceForPokerCard,
   finishedLine,
   holePositions,
+  seatLabelOrigin,
+  seatNote,
 } from './poker-layout';
 
 const BUTTON = ex.Color.fromHex('#1b5c38');
@@ -50,6 +59,8 @@ const CHIP_SCALE = 2;
 const CHIP_STACK_STEP = 4;
 const CHIP_STACK_MAX = 4;
 const DIMMED = 0.45;
+const FOLDED_CARD = 0.4;
+const DROPPED_CARD = 0.55;
 const CHIP_DENOMINATIONS = [100, 25, 10, 5, 1] as const;
 
 const chips = new ChipAtlas(chipsImage);
@@ -107,6 +118,7 @@ class FlashActor extends ex.Actor {
 interface CardRecord {
   actor: ex.Actor;
   faceUp: boolean;
+  home: { x: number; y: number };
 }
 
 interface ButtonRecord {
@@ -184,6 +196,13 @@ export class PokerDriver implements GameDriver<PokerState> {
   private labels: ex.Actor[] = [];
   private buttons: ButtonRecord[] = [];
   private flashes: ex.Actor[] = [];
+  private dropped: string[] = [];
+  private droppedActors = new Map<string, ex.Actor>();
+  private droppedLabel: ex.Actor | null = null;
+  private lastHole: string[] = [];
+  private droppable = new Set<string>();
+  private hovered: string | null = null;
+  private dropMarks: ex.Actor[] = [];
   private buttonsReady = false;
   private state: PokerState | null = null;
   private ctx: RenderContext | null = null;
@@ -199,10 +218,12 @@ export class PokerDriver implements GameDriver<PokerState> {
     this.syncLabels(state, ctx);
     if (state.phase === 'lobby') {
       this.clearCards();
+      this.clearDropped();
       this.clearChips();
       return;
     }
     this.syncCards(state, ctx);
+    this.syncDropped(ctx);
     this.syncPot(state, ctx);
   }
 
@@ -279,6 +300,7 @@ export class PokerDriver implements GameDriver<PokerState> {
     }
     this.flashes = [];
     this.clearCards();
+    this.clearDropped();
     this.clearChips();
     for (const actor of this.labels) {
       actor.kill();
@@ -373,13 +395,24 @@ export class PokerDriver implements GameDriver<PokerState> {
     this.labels.push(this.textActor(ctx, 16, 56, variation, GOLD));
     if (state.phase === 'finished') {
       const line = finishedLine(state, ctx.seats) ?? 'Finished';
-      this.labels.push(this.textActor(ctx, 300, 248, line, GOLD));
+      this.labels.push(
+        this.textActor(ctx, bannerX(line), BANNER_Y, line, GOLD),
+      );
     } else {
       const mine =
         ctx.meSeatIndex !== null && state.turnSeatIndex === ctx.meSeatIndex;
       let hint = mine ? 'Your turn' : 'Wait';
       if (mine && state.step === 'discard') {
-        hint = 'Discard';
+        hint = 'Drop one';
+        this.labels.push(
+          this.textActor(
+            ctx,
+            DISCARD_PROMPT.x,
+            DISCARD_PROMPT.y,
+            'Click a card to drop it',
+            FLASH_STROKE,
+          ),
+        );
       } else if (
         mine &&
         ctx.meSeatIndex !== null &&
@@ -398,17 +431,23 @@ export class PokerDriver implements GameDriver<PokerState> {
         continue;
       }
       const marker = state.dealerSeatIndex === seat.seatIndex ? ' D' : '';
-      const text = `${row.chips}${marker}`;
+      const origin = seatLabelOrigin(seat.x, seat.y, seat.name);
       this.labels.push(
-        this.textActor(ctx, seat.x - 16, seat.y + 18, text, DIM),
+        this.textActor(ctx, origin.x, origin.y, `${row.chips}${marker}`, DIM),
       );
+      const note = seatNote(state, seat.seatIndex);
+      if (note) {
+        this.labels.push(
+          this.textActor(ctx, origin.x, origin.y + 12, note, GOLD),
+        );
+      }
     }
   }
 
   private syncCards(state: PokerState, ctx: RenderContext): void {
     const desired = new Map<
       string,
-      { x: number; y: number; faceUp: boolean; z: number }
+      { x: number; y: number; faceUp: boolean; z: number; opacity: number }
     >();
     const board = boardPositions(state.board.length);
     for (let index = 0; index < state.board.length; index += 1) {
@@ -417,9 +456,25 @@ export class PokerDriver implements GameDriver<PokerState> {
       if (!cardId || !slot) {
         continue;
       }
-      desired.set(cardId, { x: slot.x, y: slot.y, faceUp: true, z: 8 + index });
+      desired.set(cardId, {
+        x: slot.x,
+        y: slot.y,
+        faceUp: true,
+        z: 8 + index,
+        opacity: 1,
+      });
     }
     const reveal = state.phase === 'finished' && state.end === 'showdown';
+    const mine =
+      ctx.meSeatIndex !== null && state.turnSeatIndex === ctx.meSeatIndex;
+    const canDrop =
+      mine &&
+      state.phase === 'play' &&
+      state.step === 'discard' &&
+      ctx.meSeatIndex !== null &&
+      pokerCanDiscard(state, ctx.meSeatIndex);
+    this.droppable = new Set();
+    this.trackDrops(state, ctx);
     for (const seat of ctx.seats) {
       const row = state.seats[String(seat.seatIndex)];
       if (!row) {
@@ -432,28 +487,108 @@ export class PokerDriver implements GameDriver<PokerState> {
         if (!cardId || !slot) {
           continue;
         }
+        const droppable = canDrop && seat.self;
+        if (droppable) {
+          this.droppable.add(cardId);
+        }
         desired.set(cardId, {
           x: slot.x,
           y: slot.y,
           faceUp: seat.self || reveal,
           z: (seat.self ? 14 : 6) + index,
+          opacity: row.folded ? FOLDED_CARD : 1,
         });
       }
     }
     for (const [cardId, record] of this.cards) {
-      if (!desired.has(cardId)) {
+      if (desired.has(cardId)) {
+        continue;
+      }
+      this.cards.delete(cardId);
+      if (this.dropped.includes(cardId)) {
+        this.droppedActors.set(cardId, record.actor);
+      } else {
         record.actor.kill();
-        this.cards.delete(cardId);
       }
     }
     for (const [cardId, place] of desired) {
       this.placeCard(cardId, place, ctx);
     }
+    if (this.hovered !== null && !this.droppable.has(this.hovered)) {
+      this.hovered = null;
+    }
+    this.refreshDropMarks(ctx);
+  }
+
+  /** The module removes a dropped card from state, so remember your own drops. */
+  private trackDrops(state: PokerState, ctx: RenderContext): void {
+    if (state.board.length === 0) {
+      this.dropped = [];
+      this.lastHole = [];
+      return;
+    }
+    const row =
+      ctx.meSeatIndex === null
+        ? undefined
+        : state.seats[String(ctx.meSeatIndex)];
+    if (!row || state.variation !== 'oklahoma') {
+      return;
+    }
+    if (this.lastHole.length > row.hole.length) {
+      for (const cardId of this.lastHole) {
+        if (!row.hole.includes(cardId) && !this.dropped.includes(cardId)) {
+          this.dropped.push(cardId);
+        }
+      }
+    }
+    this.lastHole = [...row.hole];
+  }
+
+  private syncDropped(ctx: RenderContext): void {
+    for (const [cardId, actor] of this.droppedActors) {
+      if (!this.dropped.includes(cardId)) {
+        actor.kill();
+        this.droppedActors.delete(cardId);
+      }
+    }
+    const slots = droppedPositions(this.dropped.length);
+    for (let index = 0; index < this.dropped.length; index += 1) {
+      const cardId = this.dropped[index];
+      const slot = slots[index];
+      const actor = cardId ? this.droppedActors.get(cardId) : undefined;
+      if (!cardId || !slot || !actor) {
+        continue;
+      }
+      actor.pos = ex.vec(slot.x, slot.y);
+      actor.scale = ex.vec(DROPPED_SCALE, DROPPED_SCALE);
+      actor.graphics.opacity = DROPPED_CARD;
+      actor.z = 14 + index;
+    }
+    const show = this.droppedActors.size > 0;
+    if (show && !this.droppedLabel) {
+      const label = new ex.Actor({
+        pos: ex.vec(DROPPED_LABEL.x, DROPPED_LABEL.y),
+        anchor: ex.vec(0, 0),
+        z: 16,
+      });
+      label.graphics.use(canvasText('Dropped', 8, DIM));
+      ctx.scene.add(label);
+      this.droppedLabel = label;
+    } else if (!show && this.droppedLabel) {
+      this.droppedLabel.kill();
+      this.droppedLabel = null;
+    }
   }
 
   private placeCard(
     cardId: string,
-    place: { x: number; y: number; faceUp: boolean; z: number },
+    place: {
+      x: number;
+      y: number;
+      faceUp: boolean;
+      z: number;
+      opacity: number;
+    },
     ctx: RenderContext,
   ): void {
     let record = this.cards.get(cardId);
@@ -466,6 +601,20 @@ export class PokerDriver implements GameDriver<PokerState> {
         z: place.z,
       });
       actor.graphics.use(cardSprite(ctx.cards, cardId, place.faceUp));
+      actor.on('pointerenter', () => {
+        if (!this.droppable.has(cardId)) {
+          return;
+        }
+        this.hovered = cardId;
+        this.relift();
+      });
+      actor.on('pointerleave', () => {
+        if (this.hovered !== cardId) {
+          return;
+        }
+        this.hovered = null;
+        this.relift();
+      });
       actor.on('pointerup', () => {
         const current = this.state;
         const context = this.ctx;
@@ -479,15 +628,78 @@ export class PokerDriver implements GameDriver<PokerState> {
         );
       });
       ctx.scene.add(actor);
-      record = { actor, faceUp: place.faceUp };
+      record = { actor, faceUp: place.faceUp, home: place };
       this.cards.set(cardId, record);
     }
+    record.home = { x: place.x, y: place.y };
     record.actor.z = place.z;
-    record.actor.pos = ex.vec(place.x, place.y);
+    record.actor.graphics.opacity = place.opacity;
+    record.actor.scale = ex.vec(1, 1);
+    record.actor.pos = ex.vec(place.x, this.liftedY(cardId, place.y));
     if (record.faceUp !== place.faceUp) {
       record.faceUp = place.faceUp;
       record.actor.graphics.use(cardSprite(ctx.cards, cardId, place.faceUp));
     }
+  }
+
+  private liftedY(cardId: string, y: number): number {
+    return (
+      y -
+      cardLift({
+        legal: this.droppable.has(cardId),
+        hovered: this.hovered === cardId,
+        selected: false,
+      })
+    );
+  }
+
+  private relift(): void {
+    for (const [cardId, record] of this.cards) {
+      record.actor.pos = ex.vec(
+        record.home.x,
+        this.liftedY(cardId, record.home.y),
+      );
+    }
+    if (this.ctx) {
+      this.refreshDropMarks(this.ctx);
+    }
+  }
+
+  /** A red outline and "Drop" tag on the hole card the click would discard. */
+  private refreshDropMarks(ctx: RenderContext): void {
+    for (const actor of this.dropMarks) {
+      actor.kill();
+    }
+    this.dropMarks = [];
+    const record = this.hovered ? this.cards.get(this.hovered) : undefined;
+    if (!record) {
+      return;
+    }
+    const x = record.home.x;
+    const y = this.liftedY(this.hovered ?? '', record.home.y);
+    const outline = new ex.Actor({
+      pos: ex.vec(x, y),
+      anchor: ex.vec(0.5, 0.5),
+      z: 30,
+    });
+    const frame = new ex.Rectangle({
+      width: CARD_DRAW,
+      height: CARD_DRAW,
+      color: ex.Color.Transparent,
+      strokeColor: FLASH_STROKE,
+      lineWidth: 3,
+      smoothing: false,
+    });
+    outline.graphics.use(frame);
+    const tag = new ex.Actor({
+      pos: ex.vec(x - 16, y - CARD_DRAW / 2 - 14),
+      anchor: ex.vec(0, 0),
+      z: 30,
+    });
+    tag.graphics.use(canvasText('Drop', 8, FLASH_STROKE));
+    ctx.scene.add(outline);
+    ctx.scene.add(tag);
+    this.dropMarks.push(outline, tag);
   }
 
   private syncPot(state: PokerState, ctx: RenderContext): void {
@@ -533,6 +745,23 @@ export class PokerDriver implements GameDriver<PokerState> {
       record.actor.kill();
     }
     this.cards.clear();
+    this.hovered = null;
+    this.droppable = new Set();
+    for (const actor of this.dropMarks) {
+      actor.kill();
+    }
+    this.dropMarks = [];
+  }
+
+  private clearDropped(): void {
+    for (const actor of this.droppedActors.values()) {
+      actor.kill();
+    }
+    this.droppedActors.clear();
+    this.dropped = [];
+    this.lastHole = [];
+    this.droppedLabel?.kill();
+    this.droppedLabel = null;
   }
 
   private clearChips(): void {
