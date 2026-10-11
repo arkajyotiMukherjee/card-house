@@ -77,6 +77,33 @@ describe('eventMessage', () => {
     ).toBe('Ada played 1 card as A');
   });
 
+  it('announces a Crazy Eights play, draw, and win', () => {
+    expect(
+      eventMessage(
+        'crazy_eights',
+        { kind: 'play', seat: 0, card: '8H', suit: 'D' },
+        names,
+      ),
+    ).toBe('Ada played an 8, suit Diamonds');
+    expect(
+      eventMessage(
+        'crazy_eights',
+        { kind: 'play', seat: 1, card: '5S', suit: 'S' },
+        names,
+      ),
+    ).toBe('Bea played 5S');
+    expect(eventMessage('crazy_eights', { kind: 'draw', seat: 0 }, names)).toBe(
+      'Ada draws',
+    );
+    expect(
+      eventMessage(
+        'crazy_eights',
+        { kind: 'finish', seat: 0, score: 63 },
+        names,
+      ),
+    ).toBe('Ada wins, score 63');
+  });
+
   it('keeps dummy and unknown events silent', () => {
     expect(eventMessage('dummy', null, names)).toBeNull();
     expect(eventMessage('bluff', null, names)).toBeNull();

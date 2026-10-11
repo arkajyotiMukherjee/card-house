@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { bluffGameDefinition } from '../../src/shared/games/bluff';
+import { crazyEightsGameDefinition } from '../../src/shared/games/crazy-eights';
 import {
   applyCodeKey,
   applyFieldKey,
@@ -147,7 +148,7 @@ describe('lobby tables', () => {
     });
   });
 
-  it('offers Bluff once from the shared definition', () => {
+  it('offers Bluff and Crazy Eights from the shared definitions', () => {
     expect(GAME_CATALOG).toEqual([
       {
         gameType: bluffGameDefinition.gameType,
@@ -155,6 +156,13 @@ describe('lobby tables', () => {
         minPlayers: bluffGameDefinition.minPlayers,
         maxPlayers: bluffGameDefinition.maxPlayers,
         howToPlay: bluffGameDefinition.howToPlay,
+      },
+      {
+        gameType: crazyEightsGameDefinition.gameType,
+        name: crazyEightsGameDefinition.displayName,
+        minPlayers: crazyEightsGameDefinition.minPlayers,
+        maxPlayers: crazyEightsGameDefinition.maxPlayers,
+        howToPlay: crazyEightsGameDefinition.howToPlay,
       },
     ]);
     const gameTypes = GAME_CATALOG.map((game) => game.gameType);
@@ -171,11 +179,22 @@ describe('lobby tables', () => {
       maxPlayers: 6,
     });
     expect(bluff.howToPlay).toBe(bluffGameDefinition.howToPlay);
-    expect(gameOption(1)).toBe(bluff);
-    expect(gameOption(-1)).toBe(bluff);
+    const crazy = gameOption(1);
+    expect(crazy).toMatchObject({
+      gameType: 'crazy_eights',
+      name: 'Crazy Eights',
+      minPlayers: 2,
+      maxPlayers: 7,
+    });
+    expect(crazy.howToPlay).toBe(crazyEightsGameDefinition.howToPlay);
+    expect(gameOption(2)).toBe(bluff);
+    expect(gameOption(-1)).toBe(crazy);
     expect(clampPlayerCount(bluff, 9)).toBe(6);
     expect(clampPlayerCount(bluff, 2)).toBe(2);
+    expect(clampPlayerCount(crazy, 9)).toBe(7);
+    expect(clampPlayerCount(crazy, 1)).toBe(2);
     expect(nextTableName(tables, 'lobby_1', bluff)).toBe('Bluff #2');
+    expect(nextTableName(tables, 'lobby_1', crazy)).toBe('Crazy Eights #1');
   });
 
   it('finds this browser in the joined lobby', () => {

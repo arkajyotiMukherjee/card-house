@@ -2,6 +2,12 @@ import {
   BLUFF_GAME_TYPE,
   readBluffEventNote,
 } from '../../src/shared/games/bluff';
+import {
+  CRAZY_EIGHTS_GAME_TYPE,
+  CRAZY_EIGHTS_SUIT_NAMES,
+  rankOfCard,
+  readCrazyEightsEventNote,
+} from '../../src/shared/games/crazy-eights';
 
 const NAME_LIMIT = 10;
 const MESSAGE_LIMIT = 64;
@@ -43,6 +49,32 @@ function clip(message: string): string {
     : message.slice(0, MESSAGE_LIMIT);
 }
 
+function crazyEightsMessage(
+  note: unknown,
+  seatName: (seatIndex: number) => string,
+): string | null {
+  const parsed = readCrazyEightsEventNote(note);
+  if (!parsed) {
+    return null;
+  }
+  const name = shortName(seatName(parsed.seat));
+  if (parsed.kind === 'play') {
+    if (rankOfCard(parsed.card) === '8') {
+      return clip(
+        `${name} played an 8, suit ${CRAZY_EIGHTS_SUIT_NAMES[parsed.suit]}`,
+      );
+    }
+    return clip(`${name} played ${parsed.card}`);
+  }
+  if (parsed.kind === 'draw') {
+    return clip(`${name} draws`);
+  }
+  if (parsed.kind === 'pass') {
+    return clip(`${name} passes`);
+  }
+  return clip(`${name} wins, score ${parsed.score}`);
+}
+
 /**
  * One short line for the message strip, or `null` when the event has nothing
  * to announce. Dummy and stub events carry no note, so they stay silent.
@@ -52,6 +84,9 @@ export function eventMessage(
   note: unknown,
   seatName: (seatIndex: number) => string,
 ): string | null {
+  if (gameType === CRAZY_EIGHTS_GAME_TYPE) {
+    return crazyEightsMessage(note, seatName);
+  }
   if (gameType !== BLUFF_GAME_TYPE) {
     return null;
   }

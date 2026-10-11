@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { bluffGameDefinition } from '../../src/shared/games/bluff';
+import { crazyEightsGameDefinition } from '../../src/shared/games/crazy-eights';
 import { HOW_TO_PLAY_TEXT } from './game-scene';
 import {
   clampScroll,
@@ -11,6 +12,10 @@ import {
 describe('definitionFor', () => {
   it('returns the Bluff definition for gameType bluff', () => {
     expect(definitionFor('bluff')).toBe(bluffGameDefinition);
+  });
+
+  it('returns the Crazy Eights definition for gameType crazy_eights', () => {
+    expect(definitionFor('crazy_eights')).toBe(crazyEightsGameDefinition);
   });
 
   it('has no definition for an unknown gameType', () => {

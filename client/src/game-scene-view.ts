@@ -1,10 +1,15 @@
 import * as ex from 'excalibur';
 import { readBluffState, type BluffState } from '../../src/shared/games/bluff';
 import {
+  readCrazyEightsState,
+  type CrazyEightsState,
+} from '../../src/shared/games/crazy-eights';
+import {
   DUMMY_INCREMENT,
   type DummyIntent,
 } from '../../src/shared/games/dummy-counter';
 import { BluffDriver } from './bluff-driver';
+import { CrazyEightsDriver } from './crazy-eights-driver';
 import { cardAtlas, greenTable } from './boot-scene';
 import {
   BUTTON,
@@ -36,7 +41,12 @@ import {
 import type { RenderContext } from './game-driver';
 import { HowToPlayOverlay } from './how-to-play-overlay';
 import type { DbConnection, SubscriptionHandle } from './module_bindings';
-import { bluffStatusHud, STATUS_HUD } from './status-hud';
+import {
+  bluffStatusHud,
+  crazyEightsStatusHud,
+  STATUS_HUD,
+  type StatusHudLines,
+} from './status-hud';
 import {
   LOGICAL_HEIGHT,
   LOGICAL_WIDTH,
@@ -62,6 +72,7 @@ export class GameScene extends ex.Scene {
   private subscribedTableId = '';
   private dummy = false;
   private readonly bluffDriver = new BluffDriver();
+  private readonly crazyEightsDriver = new CrazyEightsDriver();
   private lastRow: { id: string; gameType: string; stateJson: string } | null =
     null;
   private placed: PlacedSeat[] = [];
@@ -97,6 +108,7 @@ export class GameScene extends ex.Scene {
       this.howToPlay.close();
       this.howToPlay.setGameType('');
       this.bluffDriver.destroy(this.driverContext());
+      this.crazyEightsDriver.destroy(this.driverContext());
       this.placeHud(false);
     }
   }
@@ -346,6 +358,11 @@ export class GameScene extends ex.Scene {
           this.showStrip(message, true);
           return;
         }
+        if (this.lastRow?.gameType === this.crazyEightsDriver.gameType) {
+          this.crazyEightsDriver.intentRejected(intent, this.driverContext());
+          this.showStrip(message, true);
+          return;
+        }
         this.showError(message);
       });
   }
@@ -469,17 +486,28 @@ export class GameScene extends ex.Scene {
     if (!this.ready || !row || row.id !== this.tableId) {
       return;
     }
-    if (row.gameType !== this.bluffDriver.gameType) {
-      this.bluffDriver.destroy(this.driverContext());
-      this.placeHud(false);
-      this.paintCounter(row.gameType, row.stateJson);
+    if (row.gameType === this.bluffDriver.gameType) {
+      this.crazyEightsDriver.destroy(this.driverContext());
+      this.paintBluff(row.stateJson);
       return;
     }
+    if (row.gameType === this.crazyEightsDriver.gameType) {
+      this.bluffDriver.destroy(this.driverContext());
+      this.paintCrazyEights(row.stateJson);
+      return;
+    }
+    this.bluffDriver.destroy(this.driverContext());
+    this.crazyEightsDriver.destroy(this.driverContext());
+    this.placeHud(false);
+    this.paintCounter(row.gameType, row.stateJson);
+  }
+
+  private paintBluff(stateJson: string): void {
     this.dummy = false;
     this.placeCounter(false);
     let state: BluffState;
     try {
-      state = readBluffState(JSON.parse(row.stateJson));
+      state = readBluffState(JSON.parse(stateJson));
     } catch (error: unknown) {
       this.showError(
         error instanceof Error ? error.message : 'Invalid table state',
@@ -490,11 +518,29 @@ export class GameScene extends ex.Scene {
     this.waitingText.text =
       state.phase === 'lobby' ? 'Waiting for players' : '';
     this.bluffDriver.render(state, this.driverContext());
-    this.paintHud(state);
+    this.paintHud(bluffStatusHud(state, this.placed));
   }
 
-  private paintHud(state: BluffState): void {
-    const lines = bluffStatusHud(state, this.placed);
+  private paintCrazyEights(stateJson: string): void {
+    this.dummy = false;
+    this.placeCounter(false);
+    let state: CrazyEightsState;
+    try {
+      state = readCrazyEightsState(JSON.parse(stateJson));
+    } catch (error: unknown) {
+      this.showError(
+        error instanceof Error ? error.message : 'Invalid table state',
+      );
+      return;
+    }
+    this.errorText.text = '';
+    this.waitingText.text =
+      state.phase === 'lobby' ? 'Waiting for players' : '';
+    this.crazyEightsDriver.render(state, this.driverContext());
+    this.paintHud(crazyEightsStatusHud(state, this.placed));
+  }
+
+  private paintHud(lines: StatusHudLines): void {
     this.hudTurn.text = lines.turn;
     this.hudPhase.text = lines.phase;
     this.hudRound.text = lines.round;

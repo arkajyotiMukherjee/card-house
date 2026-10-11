@@ -11,6 +11,10 @@ import type {
 } from '../../src/shared/games';
 import { bluffGameDefinition, bluffRules } from '../../src/shared/games/bluff';
 import {
+  crazyEightsGameDefinition,
+  crazyEightsRules,
+} from '../../src/shared/games/crazy-eights';
+import {
   dummyCounterRules,
   dummyGameDefinition,
 } from '../../src/shared/games/dummy-counter';
@@ -24,6 +28,7 @@ import { stubIntentRules } from './stub-rules';
 registerGameRules(stubGameDefinition, stubIntentRules);
 registerGameRules(dummyGameDefinition, dummyCounterRules);
 registerGameRules(bluffGameDefinition, bluffRules);
+registerGameRules(crazyEightsGameDefinition, crazyEightsRules);
 
 const LobbyStatus = t.enum('LobbyStatus', ['open', 'closed']);
 const TableStatus = t.enum('TableStatus', [

@@ -20,6 +20,33 @@ export type {
   BluffSuit,
 } from './bluff';
 export {
+  CRAZY_EIGHTS_GAME_TYPE,
+  CRAZY_EIGHTS_RANKS,
+  CRAZY_EIGHTS_SUIT_NAMES,
+  CRAZY_EIGHTS_SUITS,
+  cardIsPlayable,
+  cardPoints,
+  crazyEightsGameDefinition,
+  crazyEightsRules,
+  handPoints,
+  isCrazyEightsSuit,
+  rankOfCard as rankOfCrazyEightsCard,
+  readCrazyEightsEventNote,
+  readCrazyEightsIntent,
+  readCrazyEightsState,
+  seatMustPass,
+  suitOfCard,
+} from './crazy-eights';
+export type {
+  CrazyEightsCardId,
+  CrazyEightsEventNote,
+  CrazyEightsIntent,
+  CrazyEightsPhase,
+  CrazyEightsRank,
+  CrazyEightsState,
+  CrazyEightsSuit,
+} from './crazy-eights';
+export {
   DUMMY_GAME_TYPE,
   DUMMY_INCREMENT,
   dummyCounterRules,

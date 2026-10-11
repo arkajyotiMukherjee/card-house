@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BluffState } from '../../src/shared/games/bluff';
-import { bluffStatusHud } from './status-hud';
+import type { CrazyEightsState } from '../../src/shared/games/crazy-eights';
+import { bluffStatusHud, crazyEightsStatusHud } from './status-hud';
 
 const seats = [
   { seatIndex: 0, name: 'Ada' },
@@ -71,5 +72,57 @@ describe('bluffStatusHud', () => {
     );
     expect(lines.turn).toBe('Turn: -');
     expect(lines.phase).toBe('Phase: Finished');
+  });
+});
+
+function crazyState(overrides: Partial<CrazyEightsState>): CrazyEightsState {
+  return {
+    phase: 'play',
+    hands: { '0': ['8H'], '1': ['2S'] },
+    stock: ['9D'],
+    discardPile: ['5S'],
+    currentSuit: 'S',
+    turnSeatIndex: 0,
+    winnerSeatIndex: null,
+    scores: {},
+    passes: 0,
+    ...overrides,
+  };
+}
+
+describe('crazyEightsStatusHud', () => {
+  it('names the player on turn and the suit in play', () => {
+    expect(crazyEightsStatusHud(crazyState({}), seats)).toEqual({
+      turn: 'Turn: Ada',
+      phase: 'Phase: Play',
+      round: 'Suit: Spades',
+    });
+  });
+
+  it('asks for a suit while a starter eight is unanswered', () => {
+    expect(
+      crazyEightsStatusHud(
+        crazyState({ currentSuit: null, discardPile: ['8C'] }),
+        seats,
+      ).round,
+    ).toBe('Suit: pick');
+  });
+
+  it('shows the winner score when the hand is over', () => {
+    expect(
+      crazyEightsStatusHud(
+        crazyState({
+          phase: 'finished',
+          turnSeatIndex: null,
+          winnerSeatIndex: 1,
+          scores: { '0': 0, '1': 50 },
+        }),
+        seats,
+      ),
+    ).toEqual({
+      turn: 'Turn: -',
+      phase: 'Phase: Finished',
+      round: 'Score: 50',
+    });
   });
 });
