@@ -46,6 +46,17 @@ import {
   dummyGameDefinition,
 } from '../../src/shared/games/dummy-counter';
 import { stubGameDefinition } from '../../src/shared/games/stub';
+import {
+  disconnectActivity,
+  forgetTable,
+  forgetTableForEveryone,
+  lobbyCreatedLine,
+  reconnectActivity,
+  rememberLobby,
+  rememberTable,
+  rulesErrorLine,
+  tableCreatedLine,
+} from './activity-log';
 import { discordProfile } from './discord-member';
 import { speakingRowId, voicePlace } from './speaking-state';
 import { stateIfLobbyReady } from './lobby-deal';
@@ -214,6 +225,25 @@ const VoicePresence = table(
   },
 );
 
+const OperatorSession = table(
+  { name: 'OperatorSession', public: false },
+  {
+    identity: t.string().primaryKey(),
+    lobbyId: t.string(),
+    tableId: t.string(),
+    connected: t.bool(),
+  },
+);
+
+const ConnectionRate = table(
+  { name: 'ConnectionRate', public: false },
+  {
+    id: t.string().primaryKey(),
+    windowStartMicros: t.u64(),
+    count: t.u32(),
+  },
+);
+
 const SpeakingState = table(
   {
     name: 'SpeakingState',
@@ -245,11 +275,35 @@ const spacetimedb = schema(
     GameEvent,
     VoicePresence,
     SpeakingState,
+    OperatorSession,
+    ConnectionRate,
   },
   { CASE_CONVERSION_POLICY: CaseConversionPolicy.None },
 );
 
 export default spacetimedb;
+
+export const client_connected = spacetimedb.clientConnected((ctx) => {
+  const line = reconnectActivity(
+    ctx.db,
+    ctx.sender.toHexString(),
+    ctx.timestamp.microsSinceUnixEpoch,
+  );
+  if (line !== undefined) {
+    console.log(line);
+  }
+});
+
+export const client_disconnected = spacetimedb.clientDisconnected((ctx) => {
+  const line = disconnectActivity(
+    ctx.db,
+    ctx.sender.toHexString(),
+    ctx.timestamp.microsSinceUnixEpoch,
+  );
+  if (line !== undefined) {
+    console.log(line);
+  }
+});
 
 function lobbyCode(micros: bigint, attempt: number): string {
   let n = micros + BigInt(attempt);
@@ -277,8 +331,9 @@ export const create_lobby = spacetimedb.reducer(
     if (code === '') {
       throw new SenderError('Could not allocate a lobby code');
     }
+    const id = `lobby_${sender}_${micros.toString()}`;
     ctx.db.Lobby.insert({
-      id: `lobby_${sender}_${micros.toString()}`,
+      id,
       code,
       status: { tag: 'open' },
       createdAt: ctx.timestamp,
@@ -286,6 +341,7 @@ export const create_lobby = spacetimedb.reducer(
       discordGuildId: '',
       discordLobbyVoiceChannelId: '',
     });
+    console.log(lobbyCreatedLine(id));
   },
 );
 
@@ -519,6 +575,7 @@ export const join_lobby = spacetimedb.reducer(
         connected: true,
         lastSeenAt: ctx.timestamp,
       });
+      rememberLobby(ctx.db, ctx.sender.toHexString(), lobby.id);
       return;
     }
 
@@ -534,6 +591,7 @@ export const join_lobby = spacetimedb.reducer(
       discordGlobalName: '',
       discordDiscriminator: undefined,
     });
+    rememberLobby(ctx.db, ctx.sender.toHexString(), lobby.id);
   },
 );
 
@@ -602,6 +660,7 @@ export const join_lobby_with_discord = spacetimedb.reducer(
         discordGlobalName: discord.discordGlobalName,
         discordDiscriminator: discord.discordDiscriminator,
       });
+      rememberLobby(ctx.db, ctx.sender.toHexString(), lobby.id);
       return;
     }
 
@@ -617,6 +676,7 @@ export const join_lobby_with_discord = spacetimedb.reducer(
       discordGlobalName: discord.discordGlobalName,
       discordDiscriminator: discord.discordDiscriminator,
     });
+    rememberLobby(ctx.db, ctx.sender.toHexString(), lobby.id);
   },
 );
 
@@ -841,6 +901,7 @@ export const create_game_table = spacetimedb.reducer(
       createdAt: ctx.timestamp,
       discordVoiceChannelId: '',
     });
+    console.log(tableCreatedLine(id, lobby.id));
   },
 );
 
@@ -1000,6 +1061,7 @@ export const remove_game_table = spacetimedb.reducer(
       ctx.db.GameEvent.id.delete(eventId);
     }
     clearPresence(ctx.db, gameTable.lobbyId, gameTable.id);
+    forgetTableForEveryone(ctx.db, gameTable.id);
     ctx.db.GameTable.id.delete(gameTable.id);
   },
 );
@@ -1097,6 +1159,7 @@ export const join_table = spacetimedb.reducer(
         ),
       });
     }
+    rememberTable(ctx.db, ctx.sender.toHexString(), lobby.id, gameTable.id);
   },
 );
 
@@ -1146,6 +1209,7 @@ export const leave_table = spacetimedb.reducer(
     for (const seatId of seatIds) {
       ctx.db.GameSeat.id.delete(seatId);
     }
+    forgetTable(ctx.db, ctx.sender.toHexString(), gameTable.id);
   },
 );
 
@@ -1356,10 +1420,11 @@ export const handle_game_intent = spacetimedb.reducer(
         now: Number(ctx.timestamp.toMillis()),
       });
     } catch (err) {
+      const message = err instanceof Error ? err.message : 'Intent rejected';
+      console.error(rulesErrorLine(gameTable.id, gameTable.lobbyId, message));
       if (err instanceof SenderError) {
         throw err;
       }
-      const message = err instanceof Error ? err.message : 'Intent rejected';
       throw new SenderError(message);
     }
 
