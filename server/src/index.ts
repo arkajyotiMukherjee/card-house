@@ -107,10 +107,10 @@ const Lobby = table(
     code: t.string().unique(),
     status: LobbyStatus,
     createdAt: t.timestamp(),
-    lastActivityAt: t.option(t.timestamp()).default(undefined),
     discordChannelId: t.string().default(''),
     discordGuildId: t.string().default(''),
     discordLobbyVoiceChannelId: t.string().default(''),
+    lastActivityAt: t.option(t.timestamp()).default(undefined),
   },
 );
 
