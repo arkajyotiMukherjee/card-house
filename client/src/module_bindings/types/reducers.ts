@@ -19,9 +19,10 @@ import LeaveTableReducer from "../leave_table_reducer";
 import RemoveGameTableReducer from "../remove_game_table_reducer";
 import SetLobbyDiscordChannelReducer from "../set_lobby_discord_channel_reducer";
 import SetLobbyDiscordVoiceReducer from "../set_lobby_discord_voice_reducer";
+import SetRoomCapsReducer from "../set_room_caps_reducer";
 import SetTableDiscordVoiceReducer from "../set_table_discord_voice_reducer";
-import UpdateVoicePresenceReducer from "../update_voice_presence_reducer";
 import UpdateSpeakingStateReducer from "../update_speaking_state_reducer";
+import UpdateVoicePresenceReducer from "../update_voice_presence_reducer";
 
 export type ClearLobbyDiscordVoiceParams = __Infer<typeof ClearLobbyDiscordVoiceReducer>;
 export type ClearTableDiscordVoiceParams = __Infer<typeof ClearTableDiscordVoiceReducer>;
@@ -36,7 +37,8 @@ export type LeaveTableParams = __Infer<typeof LeaveTableReducer>;
 export type RemoveGameTableParams = __Infer<typeof RemoveGameTableReducer>;
 export type SetLobbyDiscordChannelParams = __Infer<typeof SetLobbyDiscordChannelReducer>;
 export type SetLobbyDiscordVoiceParams = __Infer<typeof SetLobbyDiscordVoiceReducer>;
+export type SetRoomCapsParams = __Infer<typeof SetRoomCapsReducer>;
 export type SetTableDiscordVoiceParams = __Infer<typeof SetTableDiscordVoiceReducer>;
-export type UpdateVoicePresenceParams = __Infer<typeof UpdateVoicePresenceReducer>;
 export type UpdateSpeakingStateParams = __Infer<typeof UpdateSpeakingStateReducer>;
+export type UpdateVoicePresenceParams = __Infer<typeof UpdateVoicePresenceReducer>;
 

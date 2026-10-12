@@ -51,7 +51,22 @@ import { speakingRowId, voicePlace } from './speaking-state';
 import { stateIfLobbyReady } from './lobby-deal';
 import { openingTableState } from './opening-state';
 import { statusTagForState, type TableStatusTag } from './table-status';
-import { registerGameRules, rulesByType } from './rules-by-type';
+import {
+  definitionByType,
+  registerGameRules,
+  rulesByType,
+} from './rules-by-type';
+import {
+  DEFAULT_ROOM_CAPS,
+  ROOM_CAPS_ID,
+  joinSeatRejection,
+  lobbyCapRejection,
+  openSeatCount,
+  roomCapsRejection,
+  tableCapRejection,
+  tableSeatLimits,
+  type RoomCaps,
+} from './room-caps';
 import { stubIntentRules } from './stub-rules';
 import { voiceScopeForChannel } from './voice-presence';
 
@@ -76,8 +91,6 @@ const TableStatus = t.enum('TableStatus', [
 const SeatState = t.enum('SeatState', ['active', 'folded', 'disconnected']);
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const DEFAULT_MIN_PLAYERS = 2;
-const DEFAULT_MAX_PLAYERS = 8;
 const TABLE_SETTING_KEYS = [
   'name',
   'minPlayers',
@@ -214,6 +227,16 @@ const VoicePresence = table(
   },
 );
 
+const RoomCaps = table(
+  { name: 'RoomCaps', public: true },
+  {
+    id: t.string().primaryKey(),
+    maxLobbies: t.u32(),
+    maxTablesPerLobby: t.u32(),
+    maxSeatsPerTable: t.u32(),
+  },
+);
+
 const SpeakingState = table(
   {
     name: 'SpeakingState',
@@ -245,11 +268,18 @@ const spacetimedb = schema(
     GameEvent,
     VoicePresence,
     SpeakingState,
+    RoomCaps,
   },
   { CASE_CONVERSION_POLICY: CaseConversionPolicy.None },
 );
 
 export default spacetimedb;
+
+export const init = spacetimedb.init((ctx) => {
+  if (ctx.db.RoomCaps.id.find(ROOM_CAPS_ID) === null) {
+    ctx.db.RoomCaps.insert({ id: ROOM_CAPS_ID, ...DEFAULT_ROOM_CAPS });
+  }
+});
 
 function lobbyCode(micros: bigint, attempt: number): string {
   let n = micros + BigInt(attempt);
@@ -261,9 +291,52 @@ function lobbyCode(micros: bigint, attempt: number): string {
   return code;
 }
 
+interface RoomCapsRow extends RoomCaps {
+  id: string;
+}
+
+interface RoomCapsDb {
+  RoomCaps: {
+    id: {
+      find(id: string): RoomCapsRow | null;
+      update(row: RoomCapsRow): unknown;
+    };
+    insert(row: RoomCapsRow): unknown;
+  };
+}
+
+function currentRoomCaps(db: RoomCapsDb): RoomCaps {
+  const existing = db.RoomCaps.id.find(ROOM_CAPS_ID);
+  if (existing) {
+    return {
+      maxLobbies: existing.maxLobbies,
+      maxTablesPerLobby: existing.maxTablesPerLobby,
+      maxSeatsPerTable: existing.maxSeatsPerTable,
+    };
+  }
+  db.RoomCaps.insert({ id: ROOM_CAPS_ID, ...DEFAULT_ROOM_CAPS });
+  return { ...DEFAULT_ROOM_CAPS };
+}
+
+function reject(message: string | undefined): void {
+  if (message !== undefined) {
+    throw new SenderError(message);
+  }
+}
+
+function rowCount(rows: Iterable<unknown>): number {
+  let count = 0;
+  for (const _row of rows) {
+    count += 1;
+  }
+  return count;
+}
+
 export const create_lobby = spacetimedb.reducer(
   { name: 'create_lobby' },
   (ctx) => {
+    const caps = currentRoomCaps(ctx.db);
+    reject(lobbyCapRejection(rowCount(ctx.db.Lobby.iter()), caps));
     const sender = ctx.sender.toHexString();
     const micros = ctx.timestamp.microsSinceUnixEpoch;
     let code = '';
@@ -286,6 +359,24 @@ export const create_lobby = spacetimedb.reducer(
       discordGuildId: '',
       discordLobbyVoiceChannelId: '',
     });
+  },
+);
+
+export const set_room_caps = spacetimedb.reducer(
+  { name: 'set_room_caps' },
+  {
+    maxLobbies: t.u32(),
+    maxTablesPerLobby: t.u32(),
+    maxSeatsPerTable: t.u32(),
+  },
+  (ctx, caps) => {
+    reject(roomCapsRejection(caps));
+    const existing = ctx.db.RoomCaps.id.find(ROOM_CAPS_ID);
+    if (!existing) {
+      ctx.db.RoomCaps.insert({ id: ROOM_CAPS_ID, ...caps });
+      return;
+    }
+    ctx.db.RoomCaps.id.update({ ...existing, ...caps });
   },
 );
 
@@ -797,11 +888,7 @@ export const create_game_table = spacetimedb.reducer(
     }
 
     const settings = tableSettings(rawSettings);
-    const minPlayers = settings.minPlayers ?? DEFAULT_MIN_PLAYERS;
-    const maxPlayers = settings.maxPlayers ?? DEFAULT_MAX_PLAYERS;
-    if (maxPlayers < minPlayers) {
-      throw new SenderError('maxPlayers must be at least minPlayers');
-    }
+    const caps = currentRoomCaps(ctx.db);
 
     let existing = 0;
     let sameType = 0;
@@ -811,6 +898,23 @@ export const create_game_table = spacetimedb.reducer(
         sameType += 1;
       }
     }
+    reject(tableCapRejection(existing, caps));
+    const definition = definitionByType[gameType];
+    const seats = tableSeatLimits(
+      definition
+        ? {
+            minPlayers: definition.minPlayers,
+            maxPlayers: definition.maxPlayers,
+          }
+        : undefined,
+      { minPlayers: settings.minPlayers, maxPlayers: settings.maxPlayers },
+      caps,
+    );
+    if ('error' in seats) {
+      throw new SenderError(seats.error);
+    }
+    const minPlayers = seats.minPlayers;
+    const maxPlayers = seats.maxPlayers;
 
     const micros = ctx.timestamp.microsSinceUnixEpoch;
     const id = `table_${lobby.id}_${micros.toString()}_${existing}`;
@@ -1053,16 +1157,20 @@ export const join_table = spacetimedb.reducer(
       taken.push(seat.seatIndex);
       seated += 1;
     }
-    if (seated >= gameTable.maxPlayers) {
-      throw new SenderError('Table is full');
-    }
+    const caps = currentRoomCaps(ctx.db);
+    reject(joinSeatRejection(seated, gameTable.maxPlayers, caps));
+    const openSeats = openSeatCount(gameTable.maxPlayers, caps);
 
     let seatIndex = 0;
-    while (seatIndex < gameTable.maxPlayers && taken.includes(seatIndex)) {
+    while (seatIndex < openSeats && taken.includes(seatIndex)) {
       seatIndex += 1;
     }
-    if (seatIndex >= gameTable.maxPlayers) {
-      throw new SenderError('Table is full');
+    if (seatIndex >= openSeats) {
+      throw new SenderError(
+        openSeats >= gameTable.maxPlayers
+          ? 'Table is full'
+          : 'Seat cap reached',
+      );
     }
 
     ctx.db.GameSeat.insert({
