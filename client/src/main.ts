@@ -3,6 +3,11 @@ import { BootScene, demoImages } from './boot-scene';
 import { getOrCreateClientId } from './client-id';
 import { connectCardroom } from './connect';
 import { GameScene } from './game-scene-view';
+import {
+  cardroomBotUrl,
+  fetchDefaultPlayerName,
+  joinNameFromSearch,
+} from './discord-join';
 import { roomCodeFromPath } from './join-path';
 import { LobbyScene } from './lobby-scene';
 import { mountLobbyPanel } from './lobby-panel';
@@ -82,7 +87,17 @@ void engine.start(loader).then(() => {
         },
       );
       if (joinCode) {
-        menu.openJoin(joinCode);
+        const joinName = joinNameFromSearch(window.location.search);
+        if (joinName.state === 'ready') {
+          menu.openJoin(joinCode, joinName.name);
+        } else {
+          void fetchDefaultPlayerName(
+            cardroomBotUrl(),
+            joinName.discordUserId,
+          ).then((name) => {
+            menu.openJoin(joinCode, name);
+          });
+        }
       }
     },
   });

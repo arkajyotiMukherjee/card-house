@@ -133,12 +133,19 @@ export class MenuScene extends ex.Scene {
     this.onEntered = onEntered;
   }
 
-  /** Opens Join Room with the code from a `/cardroom create` join URL. */
-  openJoin(code: string): void {
+  /**
+   * Opens Join Room with the code from a `/cardroom create` join URL.
+   * A default Discord name joins without asking the player to type one.
+   */
+  openJoin(code: string, defaultName = ''): void {
     if (this.mode !== 'main') {
       return;
     }
-    this.openPrompt('join', code);
+    const name = defaultName.trim().slice(0, NAME_MAX);
+    this.openPrompt('join', code, name);
+    if (name.length > 0) {
+      void this.submitPrompt();
+    }
   }
 
   onInitialize(engine: ex.Engine): void {
@@ -319,9 +326,9 @@ export class MenuScene extends ex.Scene {
     this.overlay.push(shade);
   }
 
-  private openPrompt(kind: PromptKind, code = ''): void {
+  private openPrompt(kind: PromptKind, code = '', name = ''): void {
     this.mode = kind;
-    this.name = '';
+    this.name = name.slice(0, NAME_MAX);
     this.code = code;
     this.focused = 'name';
     this.shade();

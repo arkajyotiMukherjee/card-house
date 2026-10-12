@@ -11,5 +11,5 @@
     "noFallthroughCasesInSwitch": true,
     "isolatedModules": true
   },
-  "include": ["games"]
+  "include": ["games", "discord-player-name.ts"]
 }
