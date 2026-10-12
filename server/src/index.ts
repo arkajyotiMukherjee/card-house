@@ -46,6 +46,7 @@ import {
   dummyGameDefinition,
 } from '../../src/shared/games/dummy-counter';
 import { stubGameDefinition } from '../../src/shared/games/stub';
+import { discordProfile } from './discord-member';
 import { stateIfLobbyReady } from './lobby-deal';
 import { openingTableState } from './opening-state';
 import { statusTagForState, type TableStatusTag } from './table-status';
@@ -116,6 +117,10 @@ const LobbyMember = table(
     name: t.string(),
     connected: t.bool(),
     lastSeenAt: t.timestamp(),
+    discordUserId: t.string().default(''),
+    discordUsername: t.string().default(''),
+    discordGlobalName: t.string().default(''),
+    discordDiscriminator: t.option(t.string()).default(undefined),
   },
 );
 
@@ -383,6 +388,33 @@ export const close_lobby = spacetimedb.reducer(
   },
 );
 
+function joinRequest(
+  rawCode: string,
+  rawClientId: string,
+  rawName: string,
+): { lobbyCode: string; clientId: string; name: string } {
+  const lobbyCode = rawCode.trim().toUpperCase();
+  const clientId = rawClientId.trim();
+  const name = rawName.trim();
+  if (lobbyCode.length === 0) {
+    throw new SenderError('Room code is required');
+  }
+  if (clientId.length === 0) {
+    throw new SenderError('Client id is required');
+  }
+  if (name.length === 0) {
+    throw new SenderError('Name is required');
+  }
+  return { lobbyCode, clientId, name };
+}
+
+function firstRow<T>(rows: Iterable<T>): T | undefined {
+  for (const row of rows) {
+    return row;
+  }
+  return undefined;
+}
+
 export const join_lobby = spacetimedb.reducer(
   { name: 'join_lobby' },
   {
@@ -391,20 +423,8 @@ export const join_lobby = spacetimedb.reducer(
     name: t.string(),
   },
   (ctx, { lobbyCode: rawCode, clientId, name }) => {
-    const lobbyCode = rawCode.trim().toUpperCase();
-    const playerName = name.trim();
-    const memberClientId = clientId.trim();
-    if (lobbyCode.length === 0) {
-      throw new SenderError('Room code is required');
-    }
-    if (memberClientId.length === 0) {
-      throw new SenderError('Client id is required');
-    }
-    if (playerName.length === 0) {
-      throw new SenderError('Name is required');
-    }
-
-    const lobby = ctx.db.Lobby.code.find(lobbyCode);
+    const request = joinRequest(rawCode, clientId, name);
+    const lobby = ctx.db.Lobby.code.find(request.lobbyCode);
     if (!lobby) {
       throw new SenderError('Room not found');
     }
@@ -412,13 +432,13 @@ export const join_lobby = spacetimedb.reducer(
       throw new SenderError('Room closed');
     }
 
-    for (const member of ctx.db.LobbyMember.byLobbyAndClient.filter([
-      lobby.id,
-      memberClientId,
-    ])) {
+    const member = firstRow(
+      ctx.db.LobbyMember.byLobbyAndClient.filter([lobby.id, request.clientId]),
+    );
+    if (member) {
       ctx.db.LobbyMember.id.update({
         ...member,
-        name: playerName,
+        name: request.name,
         connected: true,
         lastSeenAt: ctx.timestamp,
       });
@@ -426,12 +446,99 @@ export const join_lobby = spacetimedb.reducer(
     }
 
     ctx.db.LobbyMember.insert({
-      id: `member_${lobby.id}_${memberClientId}`,
+      id: `member_${lobby.id}_${request.clientId}`,
       lobbyId: lobby.id,
-      clientId: memberClientId,
-      name: playerName,
+      clientId: request.clientId,
+      name: request.name,
       connected: true,
       lastSeenAt: ctx.timestamp,
+      discordUserId: '',
+      discordUsername: '',
+      discordGlobalName: '',
+      discordDiscriminator: undefined,
+    });
+  },
+);
+
+export const join_lobby_with_discord = spacetimedb.reducer(
+  { name: 'join_lobby_with_discord' },
+  {
+    lobbyCode: t.string(),
+    clientId: t.string(),
+    name: t.string(),
+    discordUserId: t.string(),
+    discordUsername: t.string(),
+    discordGlobalName: t.string(),
+    discordDiscriminator: t.option(t.string()),
+  },
+  (
+    ctx,
+    {
+      lobbyCode: rawCode,
+      clientId,
+      name,
+      discordUserId,
+      discordUsername,
+      discordGlobalName,
+      discordDiscriminator,
+    },
+  ) => {
+    const request = joinRequest(rawCode, clientId, name);
+    const lobby = ctx.db.Lobby.code.find(request.lobbyCode);
+    if (!lobby) {
+      throw new SenderError('Room not found');
+    }
+    if (lobby.status.tag !== 'open') {
+      throw new SenderError('Room closed');
+    }
+    let discord;
+    try {
+      discord = discordProfile(
+        discordUserId,
+        discordUsername,
+        discordGlobalName,
+        discordDiscriminator,
+      );
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : 'Discord identity is invalid';
+      throw new SenderError(message);
+    }
+
+    const member = firstRow(
+      ctx.db.LobbyMember.byLobbyAndClient.filter([lobby.id, request.clientId]),
+    );
+    if (member) {
+      if (
+        member.discordUserId.length > 0 &&
+        member.discordUserId !== discord.discordUserId
+      ) {
+        throw new SenderError('Discord user id is already set');
+      }
+      ctx.db.LobbyMember.id.update({
+        ...member,
+        name: request.name,
+        connected: true,
+        lastSeenAt: ctx.timestamp,
+        discordUserId: discord.discordUserId,
+        discordUsername: discord.discordUsername,
+        discordGlobalName: discord.discordGlobalName,
+        discordDiscriminator: discord.discordDiscriminator,
+      });
+      return;
+    }
+
+    ctx.db.LobbyMember.insert({
+      id: `member_${lobby.id}_${request.clientId}`,
+      lobbyId: lobby.id,
+      clientId: request.clientId,
+      name: request.name,
+      connected: true,
+      lastSeenAt: ctx.timestamp,
+      discordUserId: discord.discordUserId,
+      discordUsername: discord.discordUsername,
+      discordGlobalName: discord.discordGlobalName,
+      discordDiscriminator: discord.discordDiscriminator,
     });
   },
 );
