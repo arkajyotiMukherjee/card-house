@@ -92,6 +92,7 @@ import {
   idleTimeoutAllowed,
   shouldRemoveEmptyTable,
 } from './table-cleanup';
+import { spectateBlock, spectatorRowId } from './spectator';
 import { voiceScopeForChannel } from './voice-presence';
 import {
   DEV_LOBBY_IDLE_TIMEOUT_MICROS,
@@ -238,6 +239,31 @@ const GameSeat = table(
   },
 );
 
+const Spectator = table(
+  {
+    name: 'Spectator',
+    public: true,
+    indexes: [
+      {
+        accessor: 'byTable',
+        algorithm: 'btree',
+        columns: ['tableId'],
+      },
+      {
+        accessor: 'byMember',
+        algorithm: 'btree',
+        columns: ['lobbyMemberId'],
+      },
+    ],
+  },
+  {
+    id: t.string().primaryKey(),
+    tableId: t.string(),
+    lobbyMemberId: t.string(),
+    joinedAt: t.timestamp(),
+  },
+);
+
 const GameEvent = table(
   {
     name: 'GameEvent',
@@ -347,6 +373,7 @@ const spacetimedb = schema(
     LobbyMember,
     GameTable,
     GameSeat,
+    Spectator,
     GameEvent,
     VoicePresence,
     SpeakingState,
@@ -655,6 +682,10 @@ interface TableRows {
     byTable: { filter(tableId: string): Iterable<{ id: string }> };
     id: { delete(id: string): unknown };
   };
+  Spectator: {
+    byTable: { filter(tableId: string): Iterable<{ id: string }> };
+    id: { delete(id: string): unknown };
+  };
   GameEvent: {
     byTable: { filter(tableId: string): Iterable<{ id: string }> };
     id: { delete(id: string): unknown };
@@ -682,6 +713,13 @@ function deleteGameTable(
   }
   for (const seatId of seatIds) {
     db.GameSeat.id.delete(seatId);
+  }
+  const spectatorIds: string[] = [];
+  for (const row of db.Spectator.byTable.filter(gameTable.id)) {
+    spectatorIds.push(row.id);
+  }
+  for (const spectatorId of spectatorIds) {
+    db.Spectator.id.delete(spectatorId);
   }
   const eventIds: string[] = [];
   for (const event of db.GameEvent.byTable.filter(gameTable.id)) {
@@ -1587,6 +1625,14 @@ export const join_table = spacetimedb.reducer(
       );
     }
 
+    const watchingIds: string[] = [];
+    for (const row of ctx.db.Spectator.byMember.filter(member.id)) {
+      watchingIds.push(row.id);
+    }
+    for (const watchingId of watchingIds) {
+      ctx.db.Spectator.id.delete(watchingId);
+    }
+
     ctx.db.GameSeat.insert({
       id: `seat_${gameTable.id}_${member.id}`,
       tableId: gameTable.id,
@@ -1619,6 +1665,76 @@ export const join_table = spacetimedb.reducer(
       ...gameTable,
       stateJson,
       status,
+      lastActivityAt: ctx.timestamp,
+    });
+    rememberTable(ctx.db, ctx.sender.toHexString(), lobby.id, gameTable.id);
+    noteLobbyActivity(ctx, lobby.id);
+  },
+);
+
+export const spectate_table = spacetimedb.reducer(
+  { name: 'spectate_table' },
+  {
+    tableId: t.string(),
+    lobbyMemberId: t.string(),
+  },
+  (ctx, { tableId: rawTableId, lobbyMemberId: rawLobbyMemberId }) => {
+    const tableId = rawTableId.trim();
+    const lobbyMemberId = rawLobbyMemberId.trim();
+    if (tableId.length === 0) {
+      throw new SenderError('Table id is required');
+    }
+    if (lobbyMemberId.length === 0) {
+      throw new SenderError('Lobby member id is required');
+    }
+
+    const gameTable = ctx.db.GameTable.id.find(tableId);
+    if (!gameTable) {
+      throw new SenderError('Table not found');
+    }
+
+    const lobby = ctx.db.Lobby.id.find(gameTable.lobbyId);
+    if (!lobby) {
+      throw new SenderError('Room not found');
+    }
+    if (lobby.status.tag !== 'open') {
+      throw new SenderError('Room closed');
+    }
+
+    const member = ctx.db.LobbyMember.id.find(lobbyMemberId);
+    if (!member) {
+      throw new SenderError('Member not found');
+    }
+    if (member.lobbyId !== gameTable.lobbyId) {
+      throw new SenderError('Member is not in this room');
+    }
+
+    let seated = false;
+    for (const seat of ctx.db.GameSeat.iter()) {
+      if (seat.lobbyMemberId === member.id) {
+        seated = true;
+        break;
+      }
+    }
+    let watchingThis = false;
+    let watchingOther = false;
+    for (const row of ctx.db.Spectator.byMember.filter(member.id)) {
+      if (row.tableId === gameTable.id) {
+        watchingThis = true;
+      } else {
+        watchingOther = true;
+      }
+    }
+    reject(spectateBlock({ seated, watchingThis, watchingOther }));
+
+    ctx.db.Spectator.insert({
+      id: spectatorRowId(gameTable.id, member.id),
+      tableId: gameTable.id,
+      lobbyMemberId: member.id,
+      joinedAt: ctx.timestamp,
+    });
+    ctx.db.GameTable.id.update({
+      ...gameTable,
       lastActivityAt: ctx.timestamp,
     });
     rememberTable(ctx.db, ctx.sender.toHexString(), lobby.id, gameTable.id);
@@ -1666,11 +1782,20 @@ export const leave_table = spacetimedb.reducer(
         seatIds.push(seat.id);
       }
     }
-    if (seatIds.length === 0) {
+    const spectatorIds: string[] = [];
+    for (const row of ctx.db.Spectator.byTable.filter(gameTable.id)) {
+      if (row.lobbyMemberId === member.id) {
+        spectatorIds.push(row.id);
+      }
+    }
+    if (seatIds.length === 0 && spectatorIds.length === 0) {
       throw new SenderError('Not seated');
     }
     for (const seatId of seatIds) {
       ctx.db.GameSeat.id.delete(seatId);
+    }
+    for (const spectatorId of spectatorIds) {
+      ctx.db.Spectator.id.delete(spectatorId);
     }
     ctx.db.GameTable.id.update({
       ...gameTable,

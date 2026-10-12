@@ -65,8 +65,10 @@ import {
   dummyIntentPayload,
   dummyStateFromJson,
   LEAVE_TABLE_BUTTON,
+  memberIsWatching,
   placeSeats,
   seatLabels,
+  spectatingLine,
   tableSubscriptionQueries,
   type MemberRef,
   type PlacedSeat,
@@ -111,6 +113,7 @@ export class GameScene extends ex.Scene {
   private seatActors: ex.Actor[] = [];
   private errorText!: ex.Text;
   private waitingText!: ex.Text;
+  private spectatingText!: ex.Text;
   private subscription: SubscriptionHandle | undefined;
   private subscribedTableId = '';
   private dummy = false;
@@ -196,6 +199,15 @@ export class GameScene extends ex.Scene {
     waiting.graphics.use(this.waitingText);
     this.add(waiting);
 
+    this.spectatingText = canvasText('', 8, DIM);
+    const spectating = new ex.Actor({
+      pos: ex.vec(16, 50),
+      anchor: ex.vec(0, 0),
+      z: 8,
+    });
+    spectating.graphics.use(this.spectatingText);
+    this.add(spectating);
+
     this.errorText = canvasText('', 8, DANGER);
     const error = new ex.Actor({
       pos: ex.vec(200, 24),
@@ -244,6 +256,15 @@ export class GameScene extends ex.Scene {
       this.paintSeats();
     });
     this.connection.db.gameSeat.onDelete(() => {
+      this.paintSeats();
+    });
+    this.connection.db.spectator.onInsert(() => {
+      this.paintSeats();
+    });
+    this.connection.db.spectator.onUpdate(() => {
+      this.paintSeats();
+    });
+    this.connection.db.spectator.onDelete(() => {
       this.paintSeats();
     });
     this.connection.db.lobbyMember.onUpdate(() => {
@@ -347,6 +368,14 @@ export class GameScene extends ex.Scene {
     );
     this.placed = placed;
     this.waitingText.text = placed.length === 0 ? 'Waiting for seats' : '';
+    this.spectatingText.text = spectatingLine(
+      placed.some((seat) => seat.self),
+      memberIsWatching(
+        readSpectators(this.connection),
+        this.tableId,
+        this.lobbyMemberId,
+      ),
+    );
     for (const seat of placed) {
       this.addSeat(
         seat.name,
@@ -463,7 +492,11 @@ export class GameScene extends ex.Scene {
   }
 
   private sendPayload(intentPayload: string, intent: unknown): void {
-    if (this.howToPlay.isOpen || this.tableId.length === 0) {
+    if (
+      this.howToPlay.isOpen ||
+      this.tableId.length === 0 ||
+      this.watchingWithoutSeat()
+    ) {
       return;
     }
     const tableId = this.tableId;
@@ -1074,6 +1107,19 @@ export class GameScene extends ex.Scene {
     this.counterPlate = actor;
   }
 
+  private watchingWithoutSeat(): boolean {
+    return (
+      spectatingLine(
+        this.placed.some((seat) => seat.self),
+        memberIsWatching(
+          readSpectators(this.connection),
+          this.tableId,
+          this.lobbyMemberId,
+        ),
+      ) === 'Spectating'
+    );
+  }
+
   private leave(): void {
     if (this.leaving || this.howToPlay.isOpen || this.tableId.length === 0) {
       return;
@@ -1101,6 +1147,19 @@ export class GameScene extends ex.Scene {
     }
     this.errorText.text = message;
   }
+}
+
+function readSpectators(
+  connection: DbConnection,
+): Array<{ tableId: string; lobbyMemberId: string }> {
+  const rows: Array<{ tableId: string; lobbyMemberId: string }> = [];
+  for (const row of connection.db.spectator.iter()) {
+    rows.push({
+      tableId: row.tableId,
+      lobbyMemberId: row.lobbyMemberId,
+    });
+  }
+  return rows;
 }
 
 function readSeats(connection: DbConnection): SeatRef[] {

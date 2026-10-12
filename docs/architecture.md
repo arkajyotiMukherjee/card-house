@@ -161,6 +161,17 @@ A `LobbyMember`:
 - can be in **zero or one** `GameSeat` at a time (to start simple),
 - always remains a `LobbyMember` in the lobby even after leaving a table.
 
+### Spectator
+
+A lobby member watching a table without a player seat.
+
+- `id: string`.
+- `tableId: string`.
+- `lobbyMemberId: string`.
+- `joinedAt: number`.
+
+`spectate_table` inserts that row. It does not insert a `GameSeat`, does not take a `seatIndex`, and does not change `stateJson`. The seated count stays the number of `GameSeat` rows, so a spectator does not count toward `maxPlayers` and is not dealt a hand. A full table, a game in progress, and a finished game still accept a viewer. `leave_table` removes the row. `handle_game_intent` still requires a `GameSeat`.
+
 ### GameEvent
 
 An applied intent appends one row. A rejected intent does not.

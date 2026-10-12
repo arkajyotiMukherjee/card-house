@@ -137,4 +137,17 @@ describe('tableToReopen', () => {
     ).toBe('');
     expect(tableToReopen('', tables, seats, 'member_me', 'lobby_1')).toBe('');
   });
+
+  it('returns the table when this member is watching and has no seat', () => {
+    expect(
+      tableToReopen('table_a', tables, [], 'member_me', 'lobby_1', [
+        { tableId: 'table_a', lobbyMemberId: 'member_me' },
+      ]),
+    ).toBe('table_a');
+    expect(
+      tableToReopen('table_a', tables, [], 'member_me', 'lobby_1', [
+        { tableId: 'table_b', lobbyMemberId: 'member_me' },
+      ]),
+    ).toBe('');
+  });
 });

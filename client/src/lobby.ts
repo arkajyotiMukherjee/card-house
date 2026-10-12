@@ -109,6 +109,8 @@ export interface TableLine {
   statusLabel: string;
   seatsLabel: string;
   seated: boolean;
+  /** This member is watching and does not hold a player seat. */
+  watching: boolean;
 }
 
 export interface TableGroup {
@@ -131,10 +133,22 @@ export const TABLE_LIST = {
   create: { x: 808, y: 70, w: 136, h: 26 },
   list: { x: 808, y: 108, bottom: 468 },
   header: { h: 14, gap: 4 },
-  row: { w: 136, h: 30, gap: 4 },
+  row: { w: 136, h: 44, gap: 4 },
   more: { x: 808, y: 468 },
   error: { x: 808, y: 480 },
 } as const;
+
+/** Watch control on a table row. A spectator does not take a player seat. */
+export const WATCH_BUTTON = { x: 16, y: 30, w: 48, h: 12 } as const;
+
+export function watchHit(localX: number, localY: number): boolean {
+  return (
+    localX >= WATCH_BUTTON.x &&
+    localX < WATCH_BUTTON.x + WATCH_BUTTON.w &&
+    localY >= WATCH_BUTTON.y &&
+    localY < WATCH_BUTTON.y + WATCH_BUTTON.h
+  );
+}
 
 export const ROOM_BANNER = {
   panel: { x: 380, y: 6, w: 200, h: 54 },
@@ -407,11 +421,19 @@ export function seatedTableIds(
   return ids;
 }
 
+export function watchingTableIds(
+  spectators: Iterable<SeatRef>,
+  lobbyMemberId: string,
+): Set<string> {
+  return seatedTableIds(spectators, lobbyMemberId);
+}
+
 export function tableLines(
   tables: Iterable<TableRow>,
   seats: Iterable<SeatRef>,
   lobbyId: string,
   seatedIds: ReadonlySet<string> = new Set(),
+  watchingIds: ReadonlySet<string> = new Set(),
 ): TableLine[] {
   const counts = new Map<string, number>();
   for (const seat of seats) {
@@ -423,6 +445,7 @@ export function tableLines(
       continue;
     }
     const currentSeats = counts.get(table.id) ?? 0;
+    const seated = seatedIds.has(table.id);
     lines.push({
       id: table.id,
       gameType: table.gameType,
@@ -432,7 +455,8 @@ export function tableLines(
       maxPlayers: table.maxPlayers,
       statusLabel: tableStatusLabel(table.statusTag),
       seatsLabel: seatsLabel(currentSeats, table.maxPlayers),
-      seated: seatedIds.has(table.id),
+      seated,
+      watching: !seated && watchingIds.has(table.id),
     });
   }
   lines.sort((a, b) => {
@@ -513,10 +537,11 @@ export function listLayout(groups: readonly TableGroup[]): ListLayout {
   return { slots, hidden };
 }
 
-export function lobbyTableQueries(lobbyId: string): [string, string] {
+export function lobbyTableQueries(lobbyId: string): [string, string, string] {
   const id = `'${lobbyId.replaceAll("'", "''")}'`;
   return [
     `SELECT * FROM "GameTable" WHERE "lobbyId" = ${id}`,
     `SELECT "GameSeat".* FROM "GameTable" JOIN "GameSeat" ON "GameSeat"."tableId" = "GameTable"."id" WHERE "GameTable"."lobbyId" = ${id}`,
+    `SELECT "Spectator".* FROM "GameTable" JOIN "Spectator" ON "Spectator"."tableId" = "GameTable"."id" WHERE "GameTable"."lobbyId" = ${id}`,
   ];
 }

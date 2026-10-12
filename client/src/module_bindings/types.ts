@@ -140,6 +140,14 @@ export const SpeakingState = __t.object("SpeakingState", {
 });
 export type SpeakingState = __Infer<typeof SpeakingState>;
 
+export const Spectator = __t.object("Spectator", {
+  id: __t.string(),
+  tableId: __t.string(),
+  lobbyMemberId: __t.string(),
+  joinedAt: __t.timestamp(),
+});
+export type Spectator = __Infer<typeof Spectator>;
+
 export const TableCleanupSchedule = __t.object("TableCleanupSchedule", {
   scheduledId: __t.u64(),
   scheduledAt: __t.scheduleAt(),

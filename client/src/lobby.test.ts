@@ -31,6 +31,8 @@ import {
   tableGroups,
   tableLines,
   tableSettingsJson,
+  WATCH_BUTTON,
+  watchHit,
 } from './lobby';
 
 describe('lobby fields', () => {
@@ -368,10 +370,11 @@ describe('lobby tables', () => {
     ).toBe('member_lobby_1_self');
   });
 
-  it('subscribes to tables and seats for one lobby', () => {
+  it('subscribes to tables, seats, and spectators for one lobby', () => {
     expect(lobbyTableQueries("lobby_a'b")).toEqual([
       `SELECT * FROM "GameTable" WHERE "lobbyId" = 'lobby_a''b'`,
       `SELECT "GameSeat".* FROM "GameTable" JOIN "GameSeat" ON "GameSeat"."tableId" = "GameTable"."id" WHERE "GameTable"."lobbyId" = 'lobby_a''b'`,
+      `SELECT "Spectator".* FROM "GameTable" JOIN "Spectator" ON "Spectator"."tableId" = "GameTable"."id" WHERE "GameTable"."lobbyId" = 'lobby_a''b'`,
     ]);
     expect(tableSettingsJson(2, 6, 'Bluff #1')).toBe(
       '{"name":"Bluff #1","minPlayers":2,"maxPlayers":6}',
@@ -393,6 +396,43 @@ describe('grouped table list', () => {
     { tableId: 'b2', lobbyMemberId: 'me' },
     { tableId: 'd1', lobbyMemberId: 'other' },
   ];
+
+  it('keeps a full table’s seat count when someone is watching', () => {
+    const lines = tableLines(
+      [
+        {
+          id: 'b1',
+          lobbyId: 'lobby_1',
+          gameType: 'bluff',
+          name: 'Bluff #1',
+          statusTag: 'in_progress',
+          maxPlayers: 2,
+        },
+      ],
+      [
+        { tableId: 'b1', lobbyMemberId: 'ada' },
+        { tableId: 'b1', lobbyMemberId: 'bea' },
+      ],
+      'lobby_1',
+      new Set(),
+      new Set(['b1']),
+    );
+    expect(lines[0]).toMatchObject({
+      currentSeats: 2,
+      maxPlayers: 2,
+      seatsLabel: '2/2',
+      seated: false,
+      watching: true,
+    });
+    expect(WATCH_BUTTON.x + WATCH_BUTTON.w).toBeLessThanOrEqual(
+      TABLE_LIST.row.w,
+    );
+    expect(WATCH_BUTTON.y + WATCH_BUTTON.h).toBeLessThanOrEqual(
+      TABLE_LIST.row.h,
+    );
+    expect(watchHit(WATCH_BUTTON.x, WATCH_BUTTON.y)).toBe(true);
+    expect(watchHit(WATCH_BUTTON.x - 1, WATCH_BUTTON.y)).toBe(false);
+  });
 
   it('marks only the tables this member sits at', () => {
     const seated = seatedTableIds(seats, 'me');
