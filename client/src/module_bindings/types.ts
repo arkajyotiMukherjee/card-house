@@ -10,6 +10,13 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const ConnectionRate = __t.object("ConnectionRate", {
+  id: __t.string(),
+  windowStartMicros: __t.u64(),
+  count: __t.u32(),
+});
+export type ConnectionRate = __Infer<typeof ConnectionRate>;
+
 export const GameEvent = __t.object("GameEvent", {
   id: __t.string(),
   tableId: __t.string(),
@@ -98,6 +105,14 @@ export const LobbyStatus = __t.enum("LobbyStatus", {
   Closed: __t.unit(),
 });
 export type LobbyStatus = __Infer<typeof LobbyStatus>;
+
+export const OperatorSession = __t.object("OperatorSession", {
+  identity: __t.string(),
+  lobbyId: __t.string(),
+  tableId: __t.string(),
+  connected: __t.bool(),
+});
+export type OperatorSession = __Infer<typeof OperatorSession>;
 
 export const RoomCaps = __t.object("RoomCaps", {
   id: __t.string(),
