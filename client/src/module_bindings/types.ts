@@ -55,6 +55,7 @@ export const Lobby = __t.object("Lobby", {
     return LobbyStatus;
   },
   createdAt: __t.timestamp(),
+  discordChannelId: __t.string(),
 });
 export type Lobby = __Infer<typeof Lobby>;
 

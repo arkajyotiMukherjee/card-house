@@ -7,6 +7,7 @@ A browser card room. One Excalibur canvas draws the table. SpacetimeDB holds lob
 - [Architecture](docs/architecture.md)
 - [Implementation milestones](docs/implementation.md)
 - [UI and UX](docs/ui-ux.md)
+- [Discord bot](docs/discord-bot-architecture.md)
 
 ## Art
 
@@ -21,8 +22,9 @@ From the repo root, after `./scripts/bootstrap.sh`:
 - `pnpm dev` — Vite client on `0.0.0.0:5173`
 - `pnpm build` — production client build
 - `pnpm lint` — ESLint and Prettier
-- `pnpm test` — hearts sheet slice test
-- `pnpm typecheck` — TypeScript for the client, the SpacetimeDB module, and `src/shared`
+- `pnpm test` — client tests, server rules tests, and discord-bot tests
+- `pnpm typecheck` — TypeScript for the client, the SpacetimeDB module, the Discord bot, and `src/shared`
+- `pnpm --filter discord-bot start` — Discord `/interactions` service for `/cardroom create`
 
 ## Local SpacetimeDB
 
@@ -40,3 +42,5 @@ The client reads:
 - `SPACETIMEDB_DB` (default `cardroom`)
 
 Do not commit an auth token. A hosted database can be selected later by setting those variables in the environment.
+
+The Discord service reads the same `SPACETIMEDB_HOST` and `SPACETIMEDB_DB`. It also reads `DISCORD_PUBLIC_KEY` (required to start), `DISCORD_BOT_TOKEN` and `DISCORD_APPLICATION_ID` (required only to register `/cardroom create`), optional `DISCORD_GUILD_ID`, `CARDROOM_PUBLIC_URL` (default `http://127.0.0.1:5173`), and `PORT` (default `8787`).

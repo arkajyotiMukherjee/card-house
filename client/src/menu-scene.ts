@@ -133,6 +133,14 @@ export class MenuScene extends ex.Scene {
     this.onEntered = onEntered;
   }
 
+  /** Opens Join Room with the code from a `/cardroom create` join URL. */
+  openJoin(code: string): void {
+    if (this.mode !== 'main') {
+      return;
+    }
+    this.openPrompt('join', code);
+  }
+
   onInitialize(engine: ex.Engine): void {
     this.backgroundColor = FELT;
     this.buildTable();
@@ -311,10 +319,10 @@ export class MenuScene extends ex.Scene {
     this.overlay.push(shade);
   }
 
-  private openPrompt(kind: PromptKind): void {
+  private openPrompt(kind: PromptKind, code = ''): void {
     this.mode = kind;
     this.name = '';
-    this.code = '';
+    this.code = code;
     this.focused = 'name';
     this.shade();
 

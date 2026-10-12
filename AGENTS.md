@@ -10,3 +10,4 @@ Folder guides:
 - [server/AGENTS.md](server/AGENTS.md) — SpacetimeDB module
 - [docs/AGENTS.md](docs/AGENTS.md) — architecture, milestones, UI spec
 - [scripts/AGENTS.md](scripts/AGENTS.md) — local bootstrap
+- [discord-bot/AGENTS.md](discord-bot/AGENTS.md) — Discord `/cardroom create`

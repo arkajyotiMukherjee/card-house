@@ -73,9 +73,10 @@ SpacetimeDB is the **single source of truth** for game state and lobby structure
 
 A small bot / HTTP service:
 
-- Handles slash commands like `/cardroom create`.
+- Handles slash commands like `/cardroom create` from the `discord-bot/` service.
 - On “create”:
-  - creates a `Lobby` in SpacetimeDB,
+  - calls `create_lobby`, the same reducer the web app uses,
+  - stores the Discord channel on that lobby with `set_lobby_discord_channel`,
   - returns a link (`https://yourgame.com/ROOMCODE`) into that lobby.
 - Optionally supports:
   - `/cardroom status ROOMCODE` to show number of tables and players in that lobby.
@@ -94,6 +95,7 @@ Represents a single card room.
 - `code: string` – short human code used in URLs (e.g. `AB3D`).
 - `status: "open" | "closed"`.
 - `createdAt: number` – timestamp.
+- `discordChannelId: string` – Discord channel that ran `/cardroom create`, or empty for a web lobby.
 
 There can be many lobbies in the system, each with their own members and tables.
 

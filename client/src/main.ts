@@ -3,12 +3,14 @@ import { BootScene, demoImages } from './boot-scene';
 import { getOrCreateClientId } from './client-id';
 import { connectCardroom } from './connect';
 import { GameScene } from './game-scene-view';
+import { roomCodeFromPath } from './join-path';
 import { LobbyScene } from './lobby-scene';
 import { mountLobbyPanel } from './lobby-panel';
 import { MenuScene } from './menu-scene';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH, integerScale } from './sheets';
 
 const clientId = getOrCreateClientId();
+const joinCode = roomCodeFromPath(window.location.pathname);
 
 const canvas = document.createElement('canvas');
 document.querySelector('#app')?.append(canvas);
@@ -79,6 +81,9 @@ void engine.start(loader).then(() => {
           engine.goToScene('boot');
         },
       );
+      if (joinCode) {
+        menu.openJoin(joinCode);
+      }
     },
   });
 });

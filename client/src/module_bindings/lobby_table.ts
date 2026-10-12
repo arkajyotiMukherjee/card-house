@@ -21,4 +21,5 @@ export default __t.row({
     return LobbyStatus;
   },
   createdAt: __t.timestamp().name("created_at"),
+  discordChannelId: __t.string().name("discord_channel_id"),
 });

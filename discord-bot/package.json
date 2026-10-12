@@ -1,0 +1,22 @@
+{
+  "name": "discord-bot",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test src/*.test.ts"
+  },
+  "dependencies": {
+    "discord-interactions": "^4.4.0",
+    "express": "^4.21.2",
+    "spacetimedb": "2.10.2"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.19.0",
+    "tsx": "^4.20.6",
+    "tweetnacl": "^1.0.3",
+    "typescript": "5.9.3"
+  }
+}
