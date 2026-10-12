@@ -39,6 +39,7 @@ export interface MemberRow {
 }
 
 export interface MemberLine {
+  id: string;
   name: string;
   clientId: string;
   self: boolean;
@@ -226,7 +227,7 @@ export function findCreatedLobby<T extends LobbyRow>(
 }
 
 export function memberLines(
-  members: Iterable<MemberRow>,
+  members: Iterable<MemberRecord>,
   lobbyId: string,
   selfClientId: string,
 ): MemberLine[] {
@@ -236,6 +237,7 @@ export function memberLines(
       continue;
     }
     lines.push({
+      id: member.id,
       name: member.name,
       clientId: member.clientId,
       self: member.clientId === selfClientId,

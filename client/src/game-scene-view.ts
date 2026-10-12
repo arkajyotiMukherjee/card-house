@@ -70,6 +70,8 @@ import {
 import type { GameDriver, RenderContext } from './game-driver';
 import { HowToPlayOverlay } from './how-to-play-overlay';
 import type { DbConnection, SubscriptionHandle } from './module_bindings';
+import { SpeakingFader, tableSpeakers, type SpeakingRow } from './speaking';
+import { seatGlow, speechBubble } from './speaking-view';
 import {
   bluffStatusHud,
   crazyEightsStatusHud,
@@ -119,6 +121,8 @@ export class GameScene extends ex.Scene {
   private lastRow: { id: string; gameType: string; stateJson: string } | null =
     null;
   private placed: PlacedSeat[] = [];
+  private readonly speakingFader = new SpeakingFader();
+  private speaking = new Set<string>();
   private strip: ex.Actor | null = null;
   private eventsLive = false;
   private readonly shownEvents = new Set<string>();
@@ -240,6 +244,15 @@ export class GameScene extends ex.Scene {
     this.connection.db.lobbyMember.onUpdate(() => {
       this.paintSeats();
     });
+    this.connection.db.speakingState.onInsert(() => {
+      this.refreshSpeaking();
+    });
+    this.connection.db.speakingState.onUpdate(() => {
+      this.refreshSpeaking();
+    });
+    this.connection.db.speakingState.onDelete(() => {
+      this.refreshSpeaking();
+    });
     this.connection.db.gameEvent.onInsert((_ctx, row) => {
       this.announce(row);
     });
@@ -296,10 +309,15 @@ export class GameScene extends ex.Scene {
     handle.unsubscribe();
   }
 
+  private refreshSpeaking(): void {
+    this.speaking = tableSpeakers(readSpeaking(this.connection), this.tableId);
+  }
+
   private paintSeats(): void {
     if (!this.ready || this.tableId.length === 0) {
       return;
     }
+    this.refreshSpeaking();
     for (const actor of this.seatActors) {
       actor.kill();
     }
@@ -315,12 +333,18 @@ export class GameScene extends ex.Scene {
     this.placed = placed;
     this.waitingText.text = placed.length === 0 ? 'Waiting for seats' : '';
     for (const seat of placed) {
-      this.addSeat(seat.name, seat.x, seat.y, seat.self);
+      this.addSeat(seat.name, seat.x, seat.y, seat.self, seat.lobbyMemberId);
     }
     this.paintGame();
   }
 
-  private addSeat(name: string, x: number, y: number, self: boolean): void {
+  private addSeat(
+    name: string,
+    x: number,
+    y: number,
+    self: boolean,
+    lobbyMemberId: string,
+  ): void {
     const width = Math.max(48, name.length * 8 + 16);
     const plate = new ex.Actor({
       pos: ex.vec(x - width / 2, y),
@@ -337,6 +361,29 @@ export class GameScene extends ex.Scene {
     });
     label.graphics.use(text);
     plate.addChild(label);
+    const key = `${this.tableId}:${lobbyMemberId}`;
+    const isSpeaking = (): boolean => this.speaking.has(lobbyMemberId);
+    plate.addChild(
+      seatGlow(
+        ex.vec(0, 0),
+        width,
+        20,
+        -1,
+        this.speakingFader,
+        key,
+        isSpeaking,
+      ),
+    );
+    plate.addChild(
+      speechBubble(
+        ex.vec(width + 2, -15),
+        2,
+        1,
+        this.speakingFader,
+        key,
+        isSpeaking,
+      ),
+    );
     this.add(plate);
     this.seatActors.push(plate);
   }
@@ -1036,6 +1083,19 @@ function readSeats(connection: DbConnection): SeatRef[] {
       tableId: seat.tableId,
       lobbyMemberId: seat.lobbyMemberId,
       seatIndex: seat.seatIndex,
+    });
+  }
+  return rows;
+}
+
+function readSpeaking(connection: DbConnection): SpeakingRow[] {
+  const rows: SpeakingRow[] = [];
+  for (const row of connection.db.speakingState.iter()) {
+    rows.push({
+      lobbyId: row.lobbyId,
+      tableId: row.tableId,
+      lobbyMemberId: row.lobbyMemberId,
+      isSpeaking: row.isSpeaking,
     });
   }
   return rows;
