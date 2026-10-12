@@ -45,6 +45,7 @@ export const GameTable = __t.object("GameTable", {
   maxPlayers: __t.u32(),
   stateJson: __t.string(),
   createdAt: __t.timestamp(),
+  discordVoiceChannelId: __t.string(),
 });
 export type GameTable = __Infer<typeof GameTable>;
 
@@ -56,6 +57,8 @@ export const Lobby = __t.object("Lobby", {
   },
   createdAt: __t.timestamp(),
   discordChannelId: __t.string(),
+  discordGuildId: __t.string(),
+  discordLobbyVoiceChannelId: __t.string(),
 });
 export type Lobby = __Infer<typeof Lobby>;
 

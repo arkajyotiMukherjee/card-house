@@ -26,4 +26,5 @@ export default __t.row({
   maxPlayers: __t.u32().name("max_players"),
   stateJson: __t.string().name("state_json"),
   createdAt: __t.timestamp().name("created_at"),
+  discordVoiceChannelId: __t.string().name("discord_voice_channel_id"),
 });

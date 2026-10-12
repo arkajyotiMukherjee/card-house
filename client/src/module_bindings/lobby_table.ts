@@ -22,4 +22,6 @@ export default __t.row({
   },
   createdAt: __t.timestamp().name("created_at"),
   discordChannelId: __t.string().name("discord_channel_id"),
+  discordGuildId: __t.string().name("discord_guild_id"),
+  discordLobbyVoiceChannelId: __t.string().name("discord_lobby_voice_channel_id"),
 });

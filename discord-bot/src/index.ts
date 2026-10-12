@@ -1,10 +1,17 @@
 import { createServer } from 'node:http';
 import { pathToFileURL } from 'node:url';
 import { registerSlashCommands } from './commands.ts';
+import { discordRestApi } from './discord-http.ts';
 import { lookupDefaultPlayerName } from './discord-user.ts';
-import { connectLobby, createDiscordLobby } from './lobby-client.ts';
+import { connectLobby } from './lobby-client.ts';
 import { readLobbyStatus } from './lobby-status.ts';
 import { createApp } from './server.ts';
+import {
+  attachVoiceWatch,
+  createDiscordLobbyWithVoice,
+  voiceChannelClient,
+  type VoiceChannelClient,
+} from './voice-channels.ts';
 
 export async function main(): Promise<void> {
   const publicKey = process.env.DISCORD_PUBLIC_KEY?.trim() ?? '';
@@ -17,6 +24,10 @@ export async function main(): Promise<void> {
   const port = Number(process.env.PORT ?? '8787');
   const token = process.env.DISCORD_BOT_TOKEN?.trim() ?? '';
   const applicationId = process.env.DISCORD_APPLICATION_ID?.trim() ?? '';
+  const voice: VoiceChannelClient | undefined =
+    token.length > 0
+      ? voiceChannelClient(discordRestApi({ token }))
+      : undefined;
   if (token.length > 0 && applicationId.length > 0) {
     await registerSlashCommands({
       token,
@@ -31,10 +42,19 @@ export async function main(): Promise<void> {
   }
 
   const connection = await connectLobby(host, database);
+  if (voice) {
+    attachVoiceWatch(connection, voice);
+  }
   const app = createApp({
     publicKey,
-    createLobby: (discordChannelId) =>
-      createDiscordLobby(connection, discordChannelId, publicUrl),
+    createLobby: (discordChannelId, guildId) =>
+      createDiscordLobbyWithVoice(
+        connection,
+        voice,
+        discordChannelId,
+        guildId,
+        publicUrl,
+      ),
     lookupPlayerName: (discordUserId) =>
       lookupDefaultPlayerName(discordUserId, token),
     lobbyStatus: (roomCode) => readLobbyStatus(connection, roomCode),

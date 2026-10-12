@@ -21,6 +21,7 @@ export interface DiscordOption {
 export interface DiscordInteraction {
   type: number;
   channel_id?: string;
+  guild_id?: string;
   data?: {
     name?: string;
     options?: DiscordOption[];
@@ -36,7 +37,10 @@ export interface DiscordReply {
 }
 
 export interface InteractionDeps {
-  createLobby: (discordChannelId: string) => Promise<CreatedLobby>;
+  createLobby: (
+    discordChannelId: string,
+    guildId?: string,
+  ) => Promise<CreatedLobby>;
   lobbyStatus: (
     roomCode: string,
   ) => Promise<LobbyStatusReport> | LobbyStatusReport;
@@ -87,7 +91,8 @@ async function handleCreate(
   if (!DISCORD_CHANNEL_ID.test(channelId)) {
     return ephemeral('This command needs a Discord channel');
   }
-  const created = await deps.createLobby(channelId);
+  const guildId = interaction.guild_id?.trim() ?? '';
+  const created = await deps.createLobby(channelId, guildId);
   return {
     type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
     data: {

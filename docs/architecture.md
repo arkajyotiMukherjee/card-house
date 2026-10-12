@@ -95,6 +95,8 @@ Represents a single card room.
 - `status: "open" | "closed"`.
 - `createdAt: number` – timestamp.
 - `discordChannelId: string` – Discord channel that ran `/cardroom create`, or empty for a web lobby.
+- `discordGuildId: string` – guild that owns the lobby voice channel, or empty.
+- `discordLobbyVoiceChannelId: string` – lobby voice channel, or empty.
 
 There can be many lobbies in the system, each with their own members and tables.
 
@@ -130,6 +132,7 @@ Represents one table running one card game.
 - `maxPlayers: number`.
 - `stateJson: string` – serialized game state (game-type-specific).
 - `createdAt: number`.
+- `discordVoiceChannelId: string` – table voice channel, or empty for a web lobby.
 
 There can be many `GameTable` rows of the same `gameType` in the same lobby, allowing multiple poker tables, multiple bluff tables, etc.
 

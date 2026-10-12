@@ -93,6 +93,8 @@ const Lobby = table(
     status: LobbyStatus,
     createdAt: t.timestamp(),
     discordChannelId: t.string().default(''),
+    discordGuildId: t.string().default(''),
+    discordLobbyVoiceChannelId: t.string().default(''),
   },
 );
 
@@ -144,6 +146,7 @@ const GameTable = table(
     maxPlayers: t.u32(),
     stateJson: t.string(),
     createdAt: t.timestamp(),
+    discordVoiceChannelId: t.string().default(''),
   },
 );
 
@@ -231,16 +234,38 @@ export const create_lobby = spacetimedb.reducer(
       status: { tag: 'open' },
       createdAt: ctx.timestamp,
       discordChannelId: '',
+      discordGuildId: '',
+      discordLobbyVoiceChannelId: '',
     });
   },
 );
 
 function discordChannelId(raw: string): string {
-  const channelId = raw.trim();
-  if (!DISCORD_CHANNEL_ID.test(channelId)) {
-    throw new SenderError('Discord channel id is invalid');
+  return discordSnowflake(raw, 'Discord channel id');
+}
+
+function discordSnowflake(raw: string, label: string): string {
+  const id = raw.trim();
+  if (!DISCORD_CHANNEL_ID.test(id)) {
+    throw new SenderError(`${label} is invalid`);
   }
-  return channelId;
+  return id;
+}
+
+function openDiscordLobby<
+  T extends { status: { tag: string }; discordChannelId: string },
+>(find: (code: string) => T | null, lobbyCode: string): T {
+  const lobby = find(lobbyCode);
+  if (!lobby) {
+    throw new SenderError('Room not found');
+  }
+  if (lobby.status.tag !== 'open') {
+    throw new SenderError('Room closed');
+  }
+  if (lobby.discordChannelId.length === 0) {
+    throw new SenderError('Room is not linked to Discord');
+  }
+  return lobby;
 }
 
 export const set_lobby_discord_channel = spacetimedb.reducer(
@@ -273,6 +298,92 @@ export const set_lobby_discord_channel = spacetimedb.reducer(
     ctx.db.Lobby.id.update({
       ...lobby,
       discordChannelId: channelId,
+    });
+  },
+);
+
+export const set_lobby_discord_voice = spacetimedb.reducer(
+  { name: 'set_lobby_discord_voice' },
+  {
+    lobbyCode: t.string(),
+    discordGuildId: t.string(),
+    discordLobbyVoiceChannelId: t.string(),
+  },
+  (
+    ctx,
+    {
+      lobbyCode: rawCode,
+      discordGuildId: rawGuildId,
+      discordLobbyVoiceChannelId: rawVoiceId,
+    },
+  ) => {
+    const lobbyCode = rawCode.trim().toUpperCase();
+    const guildId = discordSnowflake(rawGuildId, 'Discord guild id');
+    const voiceId = discordSnowflake(rawVoiceId, 'Discord voice channel id');
+    if (lobbyCode.length === 0) {
+      throw new SenderError('Room code is required');
+    }
+    const lobby = openDiscordLobby(
+      (code) => ctx.db.Lobby.code.find(code),
+      lobbyCode,
+    );
+    if (lobby.discordGuildId.length > 0 && lobby.discordGuildId !== guildId) {
+      throw new SenderError('Room already linked to a Discord guild');
+    }
+    if (
+      lobby.discordLobbyVoiceChannelId.length > 0 &&
+      lobby.discordLobbyVoiceChannelId !== voiceId
+    ) {
+      throw new SenderError('Room already has a Discord voice channel');
+    }
+    ctx.db.Lobby.id.update({
+      ...lobby,
+      discordGuildId: guildId,
+      discordLobbyVoiceChannelId: voiceId,
+    });
+  },
+);
+
+export const clear_lobby_discord_voice = spacetimedb.reducer(
+  { name: 'clear_lobby_discord_voice' },
+  { lobbyCode: t.string() },
+  (ctx, { lobbyCode: rawCode }) => {
+    const lobbyCode = rawCode.trim().toUpperCase();
+    if (lobbyCode.length === 0) {
+      throw new SenderError('Room code is required');
+    }
+    const lobby = ctx.db.Lobby.code.find(lobbyCode);
+    if (!lobby) {
+      throw new SenderError('Room not found');
+    }
+    if (lobby.discordLobbyVoiceChannelId.length === 0) {
+      return;
+    }
+    ctx.db.Lobby.id.update({
+      ...lobby,
+      discordLobbyVoiceChannelId: '',
+    });
+  },
+);
+
+export const close_lobby = spacetimedb.reducer(
+  { name: 'close_lobby' },
+  { lobbyCode: t.string() },
+  (ctx, { lobbyCode: rawCode }) => {
+    const lobbyCode = rawCode.trim().toUpperCase();
+    if (lobbyCode.length === 0) {
+      throw new SenderError('Room code is required');
+    }
+    const lobby = ctx.db.Lobby.code.find(lobbyCode);
+    if (!lobby) {
+      throw new SenderError('Room not found');
+    }
+    if (lobby.status.tag === 'closed') {
+      return;
+    }
+    ctx.db.Lobby.id.update({
+      ...lobby,
+      status: { tag: 'closed' },
     });
   },
 );
@@ -590,7 +701,102 @@ export const create_game_table = spacetimedb.reducer(
       maxPlayers,
       stateJson,
       createdAt: ctx.timestamp,
+      discordVoiceChannelId: '',
     });
+  },
+);
+
+export const set_table_discord_voice = spacetimedb.reducer(
+  { name: 'set_table_discord_voice' },
+  {
+    tableId: t.string(),
+    discordVoiceChannelId: t.string(),
+  },
+  (ctx, { tableId: rawTableId, discordVoiceChannelId: rawVoiceId }) => {
+    const tableId = rawTableId.trim();
+    const voiceId = discordSnowflake(rawVoiceId, 'Discord voice channel id');
+    if (tableId.length === 0) {
+      throw new SenderError('Table id is required');
+    }
+    const gameTable = ctx.db.GameTable.id.find(tableId);
+    if (!gameTable) {
+      throw new SenderError('Table not found');
+    }
+    const lobby = ctx.db.Lobby.id.find(gameTable.lobbyId);
+    if (!lobby) {
+      throw new SenderError('Room not found');
+    }
+    if (lobby.status.tag !== 'open') {
+      throw new SenderError('Room closed');
+    }
+    if (lobby.discordGuildId.length === 0) {
+      throw new SenderError('Room is not linked to Discord');
+    }
+    if (gameTable.status.tag === 'finished') {
+      throw new SenderError('Table finished');
+    }
+    if (
+      gameTable.discordVoiceChannelId.length > 0 &&
+      gameTable.discordVoiceChannelId !== voiceId
+    ) {
+      throw new SenderError('Table already has a Discord voice channel');
+    }
+    ctx.db.GameTable.id.update({
+      ...gameTable,
+      discordVoiceChannelId: voiceId,
+    });
+  },
+);
+
+export const clear_table_discord_voice = spacetimedb.reducer(
+  { name: 'clear_table_discord_voice' },
+  { tableId: t.string() },
+  (ctx, { tableId: rawTableId }) => {
+    const tableId = rawTableId.trim();
+    if (tableId.length === 0) {
+      throw new SenderError('Table id is required');
+    }
+    const gameTable = ctx.db.GameTable.id.find(tableId);
+    if (!gameTable) {
+      throw new SenderError('Table not found');
+    }
+    if (gameTable.discordVoiceChannelId.length === 0) {
+      return;
+    }
+    ctx.db.GameTable.id.update({
+      ...gameTable,
+      discordVoiceChannelId: '',
+    });
+  },
+);
+
+export const remove_game_table = spacetimedb.reducer(
+  { name: 'remove_game_table' },
+  { tableId: t.string() },
+  (ctx, { tableId: rawTableId }) => {
+    const tableId = rawTableId.trim();
+    if (tableId.length === 0) {
+      throw new SenderError('Table id is required');
+    }
+    const gameTable = ctx.db.GameTable.id.find(tableId);
+    if (!gameTable) {
+      throw new SenderError('Table not found');
+    }
+    const seatIds: string[] = [];
+    for (const seat of ctx.db.GameSeat.byTable.filter(gameTable.id)) {
+      seatIds.push(seat.id);
+    }
+    for (const seatId of seatIds) {
+      ctx.db.GameSeat.id.delete(seatId);
+    }
+    const eventIds: string[] = [];
+    for (const event of ctx.db.GameEvent.byTable.filter(gameTable.id)) {
+      eventIds.push(event.id);
+    }
+    for (const eventId of eventIds) {
+      ctx.db.GameEvent.id.delete(eventId);
+    }
+    ctx.db.GameTable.id.delete(gameTable.id);
   },
 );
 

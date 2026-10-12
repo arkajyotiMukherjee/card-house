@@ -6,6 +6,9 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
+import ClearLobbyDiscordVoiceReducer from "../clear_lobby_discord_voice_reducer";
+import ClearTableDiscordVoiceReducer from "../clear_table_discord_voice_reducer";
+import CloseLobbyReducer from "../close_lobby_reducer";
 import CreateGameTableReducer from "../create_game_table_reducer";
 import CreateLobbyReducer from "../create_lobby_reducer";
 import HandleGameIntentReducer from "../handle_game_intent_reducer";
@@ -13,8 +16,14 @@ import JoinLobbyReducer from "../join_lobby_reducer";
 import JoinLobbyWithDiscordReducer from "../join_lobby_with_discord_reducer";
 import JoinTableReducer from "../join_table_reducer";
 import LeaveTableReducer from "../leave_table_reducer";
+import RemoveGameTableReducer from "../remove_game_table_reducer";
 import SetLobbyDiscordChannelReducer from "../set_lobby_discord_channel_reducer";
+import SetLobbyDiscordVoiceReducer from "../set_lobby_discord_voice_reducer";
+import SetTableDiscordVoiceReducer from "../set_table_discord_voice_reducer";
 
+export type ClearLobbyDiscordVoiceParams = __Infer<typeof ClearLobbyDiscordVoiceReducer>;
+export type ClearTableDiscordVoiceParams = __Infer<typeof ClearTableDiscordVoiceReducer>;
+export type CloseLobbyParams = __Infer<typeof CloseLobbyReducer>;
 export type CreateGameTableParams = __Infer<typeof CreateGameTableReducer>;
 export type CreateLobbyParams = __Infer<typeof CreateLobbyReducer>;
 export type HandleGameIntentParams = __Infer<typeof HandleGameIntentReducer>;
@@ -22,5 +31,8 @@ export type JoinLobbyParams = __Infer<typeof JoinLobbyReducer>;
 export type JoinLobbyWithDiscordParams = __Infer<typeof JoinLobbyWithDiscordReducer>;
 export type JoinTableParams = __Infer<typeof JoinTableReducer>;
 export type LeaveTableParams = __Infer<typeof LeaveTableReducer>;
+export type RemoveGameTableParams = __Infer<typeof RemoveGameTableReducer>;
 export type SetLobbyDiscordChannelParams = __Infer<typeof SetLobbyDiscordChannelReducer>;
+export type SetLobbyDiscordVoiceParams = __Infer<typeof SetLobbyDiscordVoiceReducer>;
+export type SetTableDiscordVoiceParams = __Infer<typeof SetTableDiscordVoiceReducer>;
 
