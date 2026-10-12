@@ -105,8 +105,8 @@ export function roomGoneMessage(message: string): boolean {
 }
 
 /**
- * The table to open on reload. Both the `GameTable` row and this member's
- * `GameSeat` have to still be in the joined lobby.
+ * The table to open on reload. The `GameTable` row has to still be in the
+ * joined lobby, and this member needs a `GameSeat` or a `Spectator` row there.
  */
 export function tableToReopen(
   tableId: string,
@@ -114,6 +114,7 @@ export function tableToReopen(
   seats: Iterable<{ tableId: string; lobbyMemberId?: string }>,
   lobbyMemberId: string,
   lobbyId = '',
+  spectators: Iterable<{ tableId: string; lobbyMemberId?: string }> = [],
 ): string {
   const id = tableId.trim();
   const memberId = lobbyMemberId.trim();
@@ -140,6 +141,11 @@ export function tableToReopen(
   }
   for (const seat of seats) {
     if (seat.tableId === id && seat.lobbyMemberId === memberId) {
+      return id;
+    }
+  }
+  for (const spectator of spectators) {
+    if (spectator.tableId === id && spectator.lobbyMemberId === memberId) {
       return id;
     }
   }

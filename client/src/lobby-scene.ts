@@ -28,6 +28,9 @@ import {
   tableLines,
   tableSettingsJson,
   TABLE_LIST,
+  WATCH_BUTTON,
+  watchHit,
+  watchingTableIds,
   type ListSlot,
   type MemberRecord,
   type SeatRef,
@@ -160,6 +163,15 @@ export class LobbyScene {
     this.connection.db.gameSeat.onDelete(() => {
       this.render();
     });
+    this.connection.db.spectator.onInsert(() => {
+      this.render();
+    });
+    this.connection.db.spectator.onUpdate(() => {
+      this.render();
+    });
+    this.connection.db.spectator.onDelete(() => {
+      this.render();
+    });
     this.connection.db.lobby.onInsert(() => {
       this.paintDiscordBadge();
     });
@@ -200,8 +212,8 @@ export class LobbyScene {
   }
 
   /**
-   * Opens the stored table when this member's seat and the table row
-   * are both still in the joined lobby.
+   * Opens the stored table when this member's seat or spectator row
+   * and the table row are both still in the joined lobby.
    */
   reopenIfSeated(tableId: string): boolean {
     const member = memberByClient(
@@ -218,6 +230,7 @@ export class LobbyScene {
       this.readSeats(),
       member.id,
       this.lobbyId,
+      this.readSpectators(),
     );
     if (openId.length === 0) {
       return false;
@@ -644,9 +657,56 @@ export class LobbyScene {
     this.onSeated(tableId, member.id);
   }
 
+  private async spectateTable(tableId: string): Promise<void> {
+    if (this.busy || this.lobbyId.length === 0) {
+      return;
+    }
+    const member = memberByClient(
+      this.readMembers(),
+      this.lobbyId,
+      this.clientId,
+    );
+    if (!member) {
+      this.setError('Join the room first');
+      return;
+    }
+    this.busy = true;
+    this.setError('');
+    try {
+      await this.connection.reducers.spectateTable({
+        tableId,
+        lobbyMemberId: member.id,
+      });
+    } catch (error: unknown) {
+      const message = joinFailureMessage(error, 'Could not watch the table');
+      if (
+        message === 'Already watching' &&
+        this.memberWatchingHere(tableId, member.id)
+      ) {
+        this.onSeated(tableId, member.id);
+        return;
+      }
+      this.setError(message);
+      return;
+    } finally {
+      this.busy = false;
+    }
+    this.render();
+    this.onSeated(tableId, member.id);
+  }
+
   private memberSeatedHere(tableId: string, lobbyMemberId: string): boolean {
     for (const seat of this.connection.db.gameSeat.iter()) {
       if (seat.tableId === tableId && seat.lobbyMemberId === lobbyMemberId) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private memberWatchingHere(tableId: string, lobbyMemberId: string): boolean {
+    for (const row of this.connection.db.spectator.iter()) {
+      if (row.tableId === tableId && row.lobbyMemberId === lobbyMemberId) {
         return true;
       }
     }
@@ -668,6 +728,7 @@ export class LobbyScene {
       seats,
       this.lobbyId,
       seatedTableIds(seats, member?.id ?? ''),
+      watchingTableIds(this.readSpectators(), member?.id ?? ''),
     );
     const layout = listLayout(tableGroups(lines));
     if (this.emptyText) {
@@ -756,6 +817,8 @@ export class LobbyScene {
     );
     if (line.seated) {
       this.seatBadge(actor, row.w - 33, 3);
+    } else {
+      this.watchControl(actor, line.watching);
     }
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;
@@ -763,11 +826,39 @@ export class LobbyScene {
     actor.on('pointerleave', () => {
       face.strokeColor = restStroke;
     });
-    actor.on('pointerup', () => {
+    actor.on('pointerup', (event) => {
+      const localX = event.worldPos.x - actor.pos.x;
+      const localY = event.worldPos.y - actor.pos.y;
+      if (!line.seated && (full || watchHit(localX, localY))) {
+        void this.spectateTable(line.id);
+        return;
+      }
       void this.joinTable(line.id);
     });
     this.scene.add(actor);
     return actor;
+  }
+
+  private watchControl(parent: ex.Actor, watching: boolean): void {
+    const box = WATCH_BUTTON;
+    const button = new ex.Actor({
+      pos: ex.vec(box.x, box.y),
+      anchor: ex.vec(0, 0),
+    });
+    button.pointer.useGraphicsBounds = false;
+    button.pointer.useColliderShape = false;
+    button.graphics.use(
+      solidRect(box.w, box.h, watching ? STROKE_HOT : BUTTON),
+    );
+    parent.addChild(button);
+    const caption = new ex.Actor({
+      pos: ex.vec(4, 2),
+      anchor: ex.vec(0, 0),
+    });
+    caption.pointer.useGraphicsBounds = false;
+    caption.pointer.useColliderShape = false;
+    caption.graphics.use(canvasText('Watch', 8, watching ? INK : GOLD));
+    button.addChild(caption);
   }
 
   private seatBadge(parent: ex.Actor, x: number, y: number): void {
@@ -806,6 +897,17 @@ export class LobbyScene {
       rows.push({
         tableId: seat.tableId,
         lobbyMemberId: seat.lobbyMemberId,
+      });
+    }
+    return rows;
+  }
+
+  private readSpectators(): SeatRef[] {
+    const rows: SeatRef[] = [];
+    for (const row of this.connection.db.spectator.iter()) {
+      rows.push({
+        tableId: row.tableId,
+        lobbyMemberId: row.lobbyMemberId,
       });
     }
     return rows;

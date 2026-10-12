@@ -179,13 +179,41 @@ function quoteSqlString(value: string): string {
  * SQL uses the module's camelCase columns (`CaseConversionPolicy.None`).
  * The generated client `.name("table_id")` is not the column SpacetimeDB stores.
  */
+export function memberIsWatching(
+  spectators: Iterable<{ tableId: string; lobbyMemberId: string }>,
+  tableId: string,
+  lobbyMemberId: string,
+): boolean {
+  if (tableId.length === 0 || lobbyMemberId.length === 0) {
+    return false;
+  }
+  for (const row of spectators) {
+    if (row.tableId === tableId && row.lobbyMemberId === lobbyMemberId) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Shown when this member is watching and has no player seat. */
+export function spectatingLine(
+  seatedHere: boolean,
+  watchingHere: boolean,
+): string {
+  if (seatedHere || !watchingHere) {
+    return '';
+  }
+  return 'Spectating';
+}
+
 export function tableSubscriptionQueries(
   tableId: string,
-): readonly [string, string, string] {
+): readonly [string, string, string, string] {
   const id = quoteSqlString(tableId);
   return [
     `SELECT * FROM GameTable WHERE id = ${id}`,
     `SELECT * FROM GameSeat WHERE tableId = ${id}`,
     `SELECT * FROM GameEvent WHERE tableId = ${id}`,
+    `SELECT * FROM Spectator WHERE tableId = ${id}`,
   ];
 }

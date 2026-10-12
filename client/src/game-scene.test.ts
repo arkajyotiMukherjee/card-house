@@ -4,9 +4,11 @@ import {
   dummyStateFromJson,
   knownTableId,
   memberForClient,
+  memberIsWatching,
   placeSeats,
   seatLabels,
   SEAT_ANCHORS,
+  spectatingLine,
   tableSubscriptionQueries,
   type MemberRef,
   type NamedSeat,
@@ -114,11 +116,24 @@ describe('dummy counter state', () => {
 });
 
 describe('table subscription', () => {
-  it('subscribes to that table’s GameTable and GameSeat rows', () => {
+  it('subscribes to that table’s GameTable, GameSeat, and Spectator rows', () => {
     expect(tableSubscriptionQueries("table_a'b")).toEqual([
       `SELECT * FROM GameTable WHERE id = 'table_a''b'`,
       `SELECT * FROM GameSeat WHERE tableId = 'table_a''b'`,
       `SELECT * FROM GameEvent WHERE tableId = 'table_a''b'`,
+      `SELECT * FROM Spectator WHERE tableId = 'table_a''b'`,
     ]);
+  });
+});
+
+describe('spectating line', () => {
+  const spectators = [{ tableId: 'table-1', lobbyMemberId: 'member-c' }];
+
+  it('names a watcher who has no seat', () => {
+    expect(memberIsWatching(spectators, 'table-1', 'member-c')).toBe(true);
+    expect(memberIsWatching(spectators, 'table-1', 'member-a')).toBe(false);
+    expect(spectatingLine(false, true)).toBe('Spectating');
+    expect(spectatingLine(true, true)).toBe('');
+    expect(spectatingLine(false, false)).toBe('');
   });
 });
