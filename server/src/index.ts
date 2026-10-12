@@ -50,7 +50,11 @@ import { discordProfile } from './discord-member';
 import { speakingRowId, voicePlace } from './speaking-state';
 import { stateIfLobbyReady } from './lobby-deal';
 import { openingTableState } from './opening-state';
-import { statusTagForState, type TableStatusTag } from './table-status';
+import {
+  joinBlockForStatus,
+  statusTagForState,
+  type TableStatusTag,
+} from './table-status';
 import { registerGameRules, rulesByType } from './rules-by-type';
 import { stubIntentRules } from './stub-rules';
 import { voiceScopeForChannel } from './voice-presence';
@@ -1055,6 +1059,11 @@ export const join_table = spacetimedb.reducer(
     }
     if (seated >= gameTable.maxPlayers) {
       throw new SenderError('Table is full');
+    }
+
+    const blocked = joinBlockForStatus(currentStatusTag(gameTable.status.tag));
+    if (blocked) {
+      throw new SenderError(blocked);
     }
 
     let seatIndex = 0;

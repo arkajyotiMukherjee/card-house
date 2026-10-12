@@ -1,6 +1,7 @@
 import * as ex from 'excalibur';
 import { cardAtlas, pixelFont } from './boot-scene';
 import { subscribeLobbyTables } from './connect';
+import { joinFailureMessage, wrapTableError } from './join-errors';
 import {
   IDLE_CARDS,
   IDLE_OPACITY,
@@ -594,7 +595,7 @@ export class LobbyScene {
         lobbyMemberId: member.id,
       });
     } catch (error: unknown) {
-      const message = errorMessage(error);
+      const message = joinFailureMessage(error, 'Could not join the table');
       if (
         message === 'Already seated' &&
         this.memberSeatedHere(tableId, member.id)
@@ -793,7 +794,7 @@ export class LobbyScene {
 
   private setError(message: string): void {
     if (this.errorText) {
-      this.errorText.text = message;
+      this.errorText.text = wrapTableError(message);
     }
   }
 

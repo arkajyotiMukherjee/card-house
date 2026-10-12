@@ -14,7 +14,9 @@ import {
   type MemberLine,
   type MemberRecord,
 } from './lobby';
+import { joinFailureMessage } from './join-errors';
 import type { DiscordJoinIdentity } from './join-path';
+import { wrapText } from './menu-layout';
 import type { DbConnection } from './module_bindings';
 import { lobbySpeakers, SpeakingFader, type SpeakingRow } from './speaking';
 import { speechBubble } from './speaking-view';
@@ -303,7 +305,7 @@ export function mountLobbyPanel(
   };
 
   const fail = (message: string): void => {
-    errorText.text = message;
+    errorText.text = wrapText(message, 16).join('\n');
   };
 
   const submit = (kind: SubmitKind): Promise<string | undefined> => {
@@ -336,8 +338,7 @@ export function mountLobbyPanel(
         return undefined;
       })
       .catch((error: unknown) => {
-        const message =
-          error instanceof Error ? error.message : 'Could not join';
+        const message = joinFailureMessage(error, 'Could not join');
         fail(message);
         return message;
       })

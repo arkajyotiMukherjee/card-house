@@ -22,3 +22,18 @@ export function statusTagForState(
   }
   return current;
 }
+
+/**
+ * `join_table` refuses a table whose game already started or ended.
+ * `waiting_for_players` stays open. The message is the `SenderError` text the
+ * client maps to its own line.
+ */
+export function joinBlockForStatus(status: TableStatusTag): string | undefined {
+  if (status === 'in_progress') {
+    return 'Game already started';
+  }
+  if (status === 'finished') {
+    return 'Game already ended';
+  }
+  return undefined;
+}

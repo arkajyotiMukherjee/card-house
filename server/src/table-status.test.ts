@@ -1,4 +1,4 @@
-import { statusTagForState } from './table-status.ts';
+import { joinBlockForStatus, statusTagForState } from './table-status.ts';
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -38,3 +38,16 @@ assert(
 );
 
 console.log(JSON.stringify({ ok: true }));
+
+assert(
+  joinBlockForStatus('waiting_for_players') === undefined,
+  'a waiting table can be joined',
+);
+assert(
+  joinBlockForStatus('in_progress') === 'Game already started',
+  'a dealt table cannot be joined',
+);
+assert(
+  joinBlockForStatus('finished') === 'Game already ended',
+  'a finished table cannot be joined',
+);
