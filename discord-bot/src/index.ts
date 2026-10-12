@@ -2,7 +2,9 @@ import { createServer } from 'node:http';
 import { pathToFileURL } from 'node:url';
 import { registerSlashCommands } from './commands.ts';
 import { discordRestApi } from './discord-http.ts';
+import { lookupDefaultPlayerName } from './discord-user.ts';
 import { connectLobby } from './lobby-client.ts';
+import { readLobbyStatus } from './lobby-status.ts';
 import { createApp } from './server.ts';
 import { attachSpeakingWatch } from './speaking.ts';
 import {
@@ -37,7 +39,7 @@ export async function main(): Promise<void> {
       applicationId,
       guildId: process.env.DISCORD_GUILD_ID,
     });
-    console.log('Registered /cardroom create');
+    console.log('Registered /cardroom create and /cardroom status');
   } else {
     console.log(
       'DISCORD_BOT_TOKEN or DISCORD_APPLICATION_ID is unset; slash command registration skipped',
@@ -68,6 +70,9 @@ export async function main(): Promise<void> {
         guildId,
         publicUrl,
       ),
+    lookupPlayerName: (discordUserId) =>
+      lookupDefaultPlayerName(discordUserId, token),
+    lobbyStatus: (roomCode) => readLobbyStatus(connection, roomCode),
   });
   const server = createServer(app);
   await new Promise<void>((resolve) => {

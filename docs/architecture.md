@@ -78,8 +78,7 @@ A small bot / HTTP service:
   - calls `create_lobby`, the same reducer the web app uses,
   - stores the Discord channel on that lobby with `set_lobby_discord_channel`,
   - returns a link (`https://yourgame.com/ROOMCODE`) into that lobby.
-- Optionally supports:
-  - `/cardroom status ROOMCODE` to show number of tables and players in that lobby.
+- `/cardroom status ROOMCODE` reads that lobby and replies whether it is live, with the number of tables and players. A missing code says the room was not found.
 
 Discord is just an entry point; it never owns or mutates game state directly.
 
@@ -358,8 +357,8 @@ To keep things simple and anonymous but still reconnectable:
   - generate a `clientId` (UUID) and store it in `localStorage`.
 - On lobby join:
   - client sends `clientId` + user-chosen `name`.
-  - a join URL with `discordUserId` also sends `discordUsername`, `discordGlobalName`, and `discordDiscriminator` when Discord included one. That calls `join_lobby_with_discord`. The display name is still the typed `name`.
-  - a URL without `discordUserId` calls `join_lobby`. Discord fields stay empty.
+  - a join URL with a Discord user id (`discordUserId` or `discord_user_id`) plus a username also sends `discordUsername`, `discordGlobalName`, and `discordDiscriminator` when Discord included one. That calls `join_lobby_with_discord`. The display name is the mapped default (global name, otherwise username) and the join submits without typing.
+  - a URL without a Discord user id calls `join_lobby`. Discord fields stay empty.
   - backend:
     - if a `LobbyMember` with that `(lobbyId, clientId)` exists, reuse it and update name.
     - a later name change keeps the stored `discordUserId`.

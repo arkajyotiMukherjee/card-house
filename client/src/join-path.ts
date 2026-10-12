@@ -1,7 +1,7 @@
 /** Same 32 characters as `CODE_ALPHABET` in `server/src/index.ts`. */
 const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
-/** Discord identity carried on a join URL. Display name is not taken from these fields. */
+/** Discord identity carried on a join URL. The lobby name is mapped separately. */
 export interface DiscordJoinIdentity {
   discordUserId: string;
   discordUsername: string;
@@ -27,23 +27,38 @@ export function roomCodeFromPath(pathname: string): string | undefined {
   return code;
 }
 
+function queryValue(params: URLSearchParams, ...keys: string[]): string {
+  for (const key of keys) {
+    const value = params.get(key);
+    if (value !== null && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return '';
+}
+
 /**
  * Discord identity from a join URL query.
- * Absent `discordUserId` is a web-only join.
+ * Accepts `discordUserId` or `discord_user_id`.
+ * Absent user id is a web-only join.
  * A blank or `0` discriminator is left off so the module does not store one.
  */
 export function discordIdentityFromSearch(
   search: string,
 ): DiscordJoinIdentity | undefined {
   const params = new URLSearchParams(search);
-  const discordUserId = (params.get('discordUserId') ?? '').trim();
+  const discordUserId = queryValue(params, 'discordUserId', 'discord_user_id');
   if (discordUserId.length === 0) {
     return undefined;
   }
   const identity: DiscordJoinIdentity = {
     discordUserId,
-    discordUsername: (params.get('discordUsername') ?? '').trim(),
-    discordGlobalName: (params.get('discordGlobalName') ?? '').trim(),
+    discordUsername: queryValue(params, 'discordUsername', 'discord_username'),
+    discordGlobalName: queryValue(
+      params,
+      'discordGlobalName',
+      'discord_global_name',
+    ),
   };
   const rawDiscriminator = params.get('discordDiscriminator');
   if (rawDiscriminator !== null) {
