@@ -47,6 +47,7 @@ import {
 } from '../../src/shared/games/dummy-counter';
 import { stubGameDefinition } from '../../src/shared/games/stub';
 import { discordProfile } from './discord-member';
+import { speakingRowId, voicePlace } from './speaking-state';
 import { stateIfLobbyReady } from './lobby-deal';
 import { openingTableState } from './opening-state';
 import { statusTagForState, type TableStatusTag } from './table-status';
@@ -107,6 +108,11 @@ const LobbyMember = table(
         accessor: 'byLobbyAndClient',
         algorithm: 'btree',
         columns: ['lobbyId', 'clientId'],
+      },
+      {
+        accessor: 'byLobbyAndDiscordUser',
+        algorithm: 'btree',
+        columns: ['lobbyId', 'discordUserId'],
       },
     ],
   },
@@ -195,8 +201,30 @@ const GameEvent = table(
   },
 );
 
+const SpeakingState = table(
+  {
+    name: 'SpeakingState',
+    public: true,
+    indexes: [
+      {
+        accessor: 'byLobbyMemberAndTable',
+        algorithm: 'btree',
+        columns: ['lobbyMemberId', 'tableId'],
+      },
+    ],
+  },
+  {
+    id: t.string().primaryKey(),
+    lobbyId: t.string().index('btree'),
+    tableId: t.string(),
+    lobbyMemberId: t.string(),
+    isSpeaking: t.bool(),
+    lastUpdatedAt: t.timestamp(),
+  },
+);
+
 const spacetimedb = schema(
-  { Lobby, LobbyMember, GameTable, GameSeat, GameEvent },
+  { Lobby, LobbyMember, GameTable, GameSeat, GameEvent, SpeakingState },
   { CASE_CONVERSION_POLICY: CaseConversionPolicy.None },
 );
 
@@ -539,6 +567,67 @@ export const join_lobby_with_discord = spacetimedb.reducer(
       discordUsername: discord.discordUsername,
       discordGlobalName: discord.discordGlobalName,
       discordDiscriminator: discord.discordDiscriminator,
+    });
+  },
+);
+
+export const update_speaking_state = spacetimedb.reducer(
+  { name: 'update_speaking_state' },
+  {
+    discordUserId: t.string(),
+    discordVoiceChannelId: t.string(),
+    isSpeaking: t.bool(),
+  },
+  (
+    ctx,
+    {
+      discordUserId: rawUserId,
+      discordVoiceChannelId: rawChannelId,
+      isSpeaking,
+    },
+  ) => {
+    const discordUserId = discordSnowflake(rawUserId, 'Discord user id');
+    const channelId = discordSnowflake(
+      rawChannelId,
+      'Discord voice channel id',
+    );
+    const place = voicePlace(
+      ctx.db.Lobby.iter(),
+      ctx.db.GameTable.iter(),
+      channelId,
+    );
+    if (!place) {
+      return;
+    }
+    const member = firstRow(
+      ctx.db.LobbyMember.byLobbyAndDiscordUser.filter([
+        place.lobbyId,
+        discordUserId,
+      ]),
+    );
+    if (!member) {
+      return;
+    }
+    const id = speakingRowId(member.id, place.tableId);
+    const existing = ctx.db.SpeakingState.id.find(id);
+    if (existing) {
+      ctx.db.SpeakingState.id.update({
+        ...existing,
+        lobbyId: place.lobbyId,
+        tableId: place.tableId,
+        lobbyMemberId: member.id,
+        isSpeaking,
+        lastUpdatedAt: ctx.timestamp,
+      });
+      return;
+    }
+    ctx.db.SpeakingState.insert({
+      id,
+      lobbyId: place.lobbyId,
+      tableId: place.tableId,
+      lobbyMemberId: member.id,
+      isSpeaking,
+      lastUpdatedAt: ctx.timestamp,
     });
   },
 );

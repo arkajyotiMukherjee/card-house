@@ -33,7 +33,7 @@ Voice slice:
 
 `/cardroom create` calls `create_lobby` with no arguments. That is the client's `createLobby({})`, and it is the call that mints the lobby code. The bot then calls `set_lobby_discord_channel` with that code and the Discord channel id from the interaction. `Lobby.discordChannelId` stores the channel. A lobby created from the web leaves the column empty. The reply is the code and a join URL `{CARDROOM_PUBLIC_URL}/{code}`. Opening that path in the client opens Join Room with the code filled in.
 
-`discordChannelId` is the channel where the command ran. It is not the lobby voice channel. The bot stores voice channel ids with `set_lobby_discord_voice` and `set_table_discord_voice`. Discord identity is stored on `LobbyMember` by `join_lobby_with_discord`. Speaking state stays on its own issue.
+`discordChannelId` is the channel where the command ran. It is not the lobby voice channel. The bot stores voice channel ids with `set_lobby_discord_voice` and `set_table_discord_voice`. Discord identity is stored on `LobbyMember` by `join_lobby_with_discord`. Speaking updates call `update_speaking_state`.
 
 ## Two TypeScript services
 

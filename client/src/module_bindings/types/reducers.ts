@@ -20,6 +20,7 @@ import RemoveGameTableReducer from "../remove_game_table_reducer";
 import SetLobbyDiscordChannelReducer from "../set_lobby_discord_channel_reducer";
 import SetLobbyDiscordVoiceReducer from "../set_lobby_discord_voice_reducer";
 import SetTableDiscordVoiceReducer from "../set_table_discord_voice_reducer";
+import UpdateSpeakingStateReducer from "../update_speaking_state_reducer";
 
 export type ClearLobbyDiscordVoiceParams = __Infer<typeof ClearLobbyDiscordVoiceReducer>;
 export type ClearTableDiscordVoiceParams = __Infer<typeof ClearTableDiscordVoiceReducer>;
@@ -35,4 +36,5 @@ export type RemoveGameTableParams = __Infer<typeof RemoveGameTableReducer>;
 export type SetLobbyDiscordChannelParams = __Infer<typeof SetLobbyDiscordChannelReducer>;
 export type SetLobbyDiscordVoiceParams = __Infer<typeof SetLobbyDiscordVoiceReducer>;
 export type SetTableDiscordVoiceParams = __Infer<typeof SetTableDiscordVoiceReducer>;
+export type UpdateSpeakingStateParams = __Infer<typeof UpdateSpeakingStateReducer>;
 

@@ -83,7 +83,7 @@ A small bot / HTTP service:
 
 Discord is just an entry point; it never owns or mutates game state directly.
 
-Voice channels and speaking indicators are planned in [discord-bot-architecture.md](discord-bot-architecture.md). A browser that arrives with a Discord user id calls `join_lobby_with_discord`. A web join calls `join_lobby` and leaves the Discord columns empty.
+Voice channels are in [discord-bot-architecture.md](discord-bot-architecture.md). `SpeakingState` rows say who is speaking. Speaking indicators on the canvas are still planned there. A browser that arrives with a Discord user id calls `join_lobby_with_discord`. A web join calls `join_lobby` and leaves the Discord columns empty.
 
 ## Data Model
 
@@ -166,6 +166,16 @@ An applied intent appends one row. A rejected intent does not.
 - `createdAt: number`.
 
 A later replay reads `GameEvent` for that table in `order`.
+
+### SpeakingState
+
+One row is one `LobbyMember` in one voice channel. The bot calls `update_speaking_state` with a Discord user id, a channel id, and `isSpeaking`. A user who has not joined that lobby is ignored. The row carries no audio.
+
+- `lobbyId: string`.
+- `tableId: string` – empty for lobby voice.
+- `lobbyMemberId: string`.
+- `isSpeaking: boolean`.
+- `lastUpdatedAt: number`.
 
 ## Game Rules Abstraction (Server)
 

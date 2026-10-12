@@ -6,7 +6,9 @@ Conventions: [../repo-conventions.md](../repo-conventions.md). The plan is [../d
 
 ## Files
 
-- `src/index.ts` — starts the interactions server. Registers `/cardroom create` when `DISCORD_BOT_TOKEN` and `DISCORD_APPLICATION_ID` are set. When the token is set, watches lobbies and tables and creates or deletes voice channels.
+- `src/index.ts` — starts the interactions server. Registers `/cardroom create` when `DISCORD_BOT_TOKEN` and `DISCORD_APPLICATION_ID` are set. When the token is set, watches lobbies and tables and creates or deletes voice channels, and listens for speaking on those channels.
+- `src/speaking.ts` — debounces speaking updates and calls `updateSpeakingState` with the user id, the channel, and the boolean.
+- `src/speaking-gateway.ts` — Discord gateway probe and deafened voice control frames. UDP datagrams after discovery are dropped. A 401 does not open a socket.
 - `src/commands.ts` — the slash command list. Later commands are added to `SLASH_COMMANDS`.
 - `src/interactions.ts` — routes a Discord interaction to a subcommand. `/cardroom create` passes `guild_id` through.
 - `src/lobby-client.ts` — calls `createLobby({})` on the generated client, then `setLobbyDiscordChannel`.
@@ -15,7 +17,7 @@ Conventions: [../repo-conventions.md](../repo-conventions.md). The plan is [../d
 - `src/voice-channels.ts` — lobby and table voice channel names, create, delete, and the subscription watch.
 - `src/join-url.ts` — `{CARDROOM_PUBLIC_URL}/{code}`.
 - `src/server.ts` — Express `POST /interactions` with the Discord signature check.
-- `src/*.test.ts` — command shape, reply text, rate limits, and the signature check. `create-lobby.live.test.ts` and `voice-channels.live.test.ts` send one signed `POST /interactions` when `CARDROOM_LIVE=1`. `web-without-bot.live.test.ts` deals a web lobby without starting this process.
+- `src/*.test.ts` — command shape, reply text, rate limits, the signature check, and speaking updates. `create-lobby.live.test.ts` and `voice-channels.live.test.ts` send one signed `POST /interactions` when `CARDROOM_LIVE=1`. `web-without-bot.live.test.ts` deals a web lobby without starting this process. `speaking.live.test.ts` drives speaking through `updateSpeakingState` when `CARDROOM_LIVE=1`.
 
 The generated client is `client/src/module_bindings/`. Do not hand-edit it.
 
@@ -27,9 +29,11 @@ A new `GameTable` in a lobby that has `discordGuildId` gets a channel such as `#
 
 Keep new commands on this service. Do not put reducer logic here. A bad channel id is rejected before the reducer, and the module rejects it again.
 
+Speaking updates send only the Discord user id, the voice channel id, and `isSpeaking`. The gateway joins a watched channel muted and deafened. It does not read, store, log, or forward audio.
+
 ## Leave alone
 
-Do not add `/cardroom status`, a Discord display name, a Launched from Discord badge, speaking state, or headset presence in this package until those issues are in scope.
+Do not add `/cardroom status`, a Discord display name, a Launched from Discord badge, or headset presence in this package until those issues are in scope. Do not draw speaking indicators here.
 
 Do not commit a bot token, application id, or public key.
 

@@ -91,6 +91,16 @@ export const SeatState = __t.enum("SeatState", {
 });
 export type SeatState = __Infer<typeof SeatState>;
 
+export const SpeakingState = __t.object("SpeakingState", {
+  id: __t.string(),
+  lobbyId: __t.string(),
+  tableId: __t.string(),
+  lobbyMemberId: __t.string(),
+  isSpeaking: __t.bool(),
+  lastUpdatedAt: __t.timestamp(),
+});
+export type SpeakingState = __Infer<typeof SpeakingState>;
+
 // The tagged union or sum type for the algebraic type `TableStatus`.
 export const TableStatus = __t.enum("TableStatus", {
   WaitingForPlayers: __t.unit(),
