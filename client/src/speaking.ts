@@ -18,7 +18,7 @@ export interface PixelRect {
 
 const BUBBLE_INK = '#0a2e1c';
 const BUBBLE_FILL = '#fff6d0';
-const GLOW_COLOR = '#f4e4b3';
+const GLOW_COLOR = '#6dff9f';
 
 export const BUBBLE_SIZE = { w: 14, h: 11 } as const;
 
@@ -36,9 +36,9 @@ export const BUBBLE_RECTS: readonly PixelRect[] = [
   { x: 9, y: 4, w: 2, h: 2, color: BUBBLE_INK, alpha: 1 },
 ];
 
-export const GLOW_PAD = 6;
+export const GLOW_PAD = 8;
 const GLOW_RING = 2;
-const GLOW_ALPHAS = [0.18, 0.35, 0.55] as const;
+const GLOW_ALPHAS = [0.15, 0.3, 0.55, 0.9] as const;
 
 /**
  * Stepped glow around a `w`×`h` plate. Coordinates are in a canvas that is

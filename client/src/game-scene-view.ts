@@ -376,9 +376,9 @@ export class GameScene extends ex.Scene {
     );
     plate.addChild(
       speechBubble(
-        ex.vec(width + 2, -15),
+        ex.vec(width - 8, -26),
         2,
-        1,
+        2,
         this.speakingFader,
         key,
         isSpeaking,
