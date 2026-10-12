@@ -47,7 +47,9 @@ If the bot is down, play continues. Lobbies and tables still work through the ex
 
 Three flows share one `Lobby` and the same `GameTable` rows.
 
-**Discord joiners.** The primary id is the Discord user id. The display name is editable. The browser still keeps a `clientId` so the member fits the existing `(lobbyId, clientId)` row. `join_lobby_with_discord` attaches `discordUserId`, `discordUsername`, and `discordGlobalName` to that `LobbyMember`. [#43](https://github.com/arkajyotiMukherjee/discordcardgames/issues/43) still chooses the default `name` from Discord. Changing `name` later does not change `discordUserId`.
+**Discord joiners.** The primary id is the Discord user id. The display name is editable. The browser still keeps a `clientId` so the member fits the existing `(lobbyId, clientId)` row. `join_lobby_with_discord` attaches `discordUserId`, `discordUsername`, and `discordGlobalName` to that `LobbyMember`. Changing `name` later does not change `discordUserId`.
+
+[#43](https://github.com/arkajyotiMukherjee/discordcardgames/issues/43) chooses that default `name` and does not add those columns. The default is the Discord global name when it still has letters or digits, otherwise the username. It is cut to the lobby name length (12) and keeps letters, digits, and spaces. The `/cardroom create` reply stays `{CARDROOM_PUBLIC_URL}/{code}`. Opening that path with `discord_user_id` plus `discord_username` or `discord_global_name` joins through `join_lobby` using the mapped name, without asking the player to type one. A `discord_user_id` alone is resolved by the bot with Discord `GET /users/{id}` at `GET /default-player-name`. A 401 returns no name and does not invent a user.
 
 **Web-only joiners.** The browser generates a random `clientId` and calls `join_lobby`. Discord fields stay empty. There is no Discord user id.
 
