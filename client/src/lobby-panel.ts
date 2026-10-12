@@ -12,13 +12,16 @@ import {
   normalizeRoomCode,
   type LobbyRow,
   type MemberLine,
-  type MemberRow,
+  type MemberRecord,
 } from './lobby';
 import type { DiscordJoinIdentity } from './join-path';
 import type { DbConnection } from './module_bindings';
+import { lobbySpeakers, SpeakingFader, type SpeakingRow } from './speaking';
+import { speechBubble } from './speaking-view';
 import {
   headsetActor,
   HEADSET_HEIGHT,
+  HEADSET_WIDTH,
   lobbyVoiceMemberIds,
   type PresenceRef,
 } from './voice-presence';
@@ -148,6 +151,16 @@ export function mountLobbyPanel(
   let busy = false;
   let joinedCode = '';
   const nameActors: ex.Actor[] = [];
+  const fader = new SpeakingFader();
+  let joinedLobbyId = '';
+  let speaking = new Set<string>();
+
+  const refreshSpeaking = (): void => {
+    speaking =
+      joinedLobbyId.length === 0
+        ? new Set<string>()
+        : lobbySpeakers(readSpeaking(connection), joinedLobbyId);
+  };
 
   const paintFields = (): void => {
     nameBox.graphics.use(
@@ -238,15 +251,27 @@ export function mountLobbyPanel(
       actor.graphics.use(graphic);
       scene.add(actor);
       nameActors.push(actor);
+      let markerX = 16 + line.name.length * 8 + 4;
       if (line.inVoice) {
         const headset = headsetActor(
-          16 + line.name.length * 8 + 6,
+          markerX,
           y + Math.floor((8 - HEADSET_HEIGHT) / 2) + 1,
           21,
         );
         scene.add(headset);
         nameActors.push(headset);
+        markerX += HEADSET_WIDTH + 4;
       }
+      const bubble = speechBubble(
+        ex.vec(markerX, y - 2),
+        21,
+        1,
+        fader,
+        line.id,
+        () => speaking.has(line.id),
+      );
+      scene.add(bubble);
+      nameActors.push(bubble);
     }
     const self = lines.find((line) => line.self);
     if (self && !renameFocused && !busy) {
@@ -263,6 +288,8 @@ export function mountLobbyPanel(
     if (!lobby) {
       return;
     }
+    joinedLobbyId = lobby.id;
+    refreshSpeaking();
     renderLobby(
       lobby.code,
       memberLines(
@@ -457,6 +484,9 @@ export function mountLobbyPanel(
   connection.db.lobbyMember.onDelete(() => {
     syncJoinedLobby();
   });
+  connection.db.speakingState.onInsert(refreshSpeaking);
+  connection.db.speakingState.onUpdate(refreshSpeaking);
+  connection.db.speakingState.onDelete(refreshSpeaking);
 
   paintFields();
 
@@ -543,8 +573,21 @@ function readLobbies(connection: DbConnection): LobbyRow[] {
   return rows;
 }
 
-function readMembers(connection: DbConnection): MemberRow[] {
-  const rows: MemberRow[] = [];
+function readSpeaking(connection: DbConnection): SpeakingRow[] {
+  const rows: SpeakingRow[] = [];
+  for (const row of connection.db.speakingState.iter()) {
+    rows.push({
+      lobbyId: row.lobbyId,
+      tableId: row.tableId,
+      lobbyMemberId: row.lobbyMemberId,
+      isSpeaking: row.isSpeaking,
+    });
+  }
+  return rows;
+}
+
+function readMembers(connection: DbConnection): MemberRecord[] {
+  const rows: MemberRecord[] = [];
   for (const member of connection.db.lobbyMember.iter()) {
     rows.push({
       id: member.id,

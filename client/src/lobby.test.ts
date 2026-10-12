@@ -100,6 +100,7 @@ describe('lobby rows', () => {
       'self',
     );
     expect(lines.map((line) => line.name)).toEqual(['Ada', 'Bea']);
+    expect(lines.map((line) => line.id)).toEqual(['m_ada', 'm_bea']);
     expect(lines.find((line) => line.name === 'Bea')?.self).toBe(true);
     expect(lines.find((line) => line.name === 'Ada')?.self).toBe(false);
   });
