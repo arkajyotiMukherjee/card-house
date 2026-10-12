@@ -78,8 +78,7 @@ A small bot / HTTP service:
   - calls `create_lobby`, the same reducer the web app uses,
   - stores the Discord channel on that lobby with `set_lobby_discord_channel`,
   - returns a link (`https://yourgame.com/ROOMCODE`) into that lobby.
-- Optionally supports:
-  - `/cardroom status ROOMCODE` to show number of tables and players in that lobby.
+- `/cardroom status ROOMCODE` reads that lobby and replies whether it is live, with the number of tables and players. A missing code says the room was not found.
 
 Discord is just an entry point; it never owns or mutates game state directly.
 

@@ -29,9 +29,11 @@ Voice slice:
 
 ## Slash command
 
-`discord-bot/` is the slash-command service. It registers `/cardroom create` and leaves room for later commands on the same process.
+`discord-bot/` is the slash-command service. It registers `/cardroom create` and `/cardroom status`, and leaves room for later commands on the same process.
 
 `/cardroom create` calls `create_lobby` with no arguments. That is the client's `createLobby({})`, and it is the call that mints the lobby code. The bot then calls `set_lobby_discord_channel` with that code and the Discord channel id from the interaction. `Lobby.discordChannelId` stores the channel. A lobby created from the web leaves the column empty. The reply is the code and a join URL `{CARDROOM_PUBLIC_URL}/{code}`. Opening that path in the client opens Join Room with the code filled in.
+
+`/cardroom status` takes a room code. It reads the subscribed `Lobby` row for that code. A matching open lobby is live. The reply names that code and the number of `GameTable` rows and `LobbyMember` rows in the lobby. A code with no row replies that the room was not found. Status does not call a reducer.
 
 `discordChannelId` is the channel where the command ran. It is not the lobby voice channel. Voice channels and speaking state stay on their own issues. Discord identity is stored on `LobbyMember` by `join_lobby_with_discord`.
 

@@ -6,10 +6,14 @@ import {
 import express, { type Express } from 'express';
 import { handleInteraction, type DiscordInteraction } from './interactions.ts';
 import type { CreatedLobby } from './lobby-client.ts';
+import type { LobbyStatusReport } from './lobby-status.ts';
 
 export interface AppOptions {
   publicKey: string;
   createLobby: (discordChannelId: string) => Promise<CreatedLobby>;
+  lobbyStatus: (
+    roomCode: string,
+  ) => Promise<LobbyStatusReport> | LobbyStatusReport;
 }
 
 export function createApp(options: AppOptions): Express {
@@ -25,13 +29,16 @@ export function createApp(options: AppOptions): Express {
       }
       void handleInteraction(interaction, {
         createLobby: options.createLobby,
+        lobbyStatus: options.lobbyStatus,
       })
         .then((body) => {
           res.json(body);
         })
         .catch((error: unknown) => {
           const message =
-            error instanceof Error ? error.message : 'Could not create a lobby';
+            error instanceof Error
+              ? error.message
+              : 'Could not handle that command';
           res.json({
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
             data: { content: message, flags: 1 << 6 },

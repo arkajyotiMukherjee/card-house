@@ -12,11 +12,14 @@ import {
   applyCodeKey,
   applyFieldKey,
   clampPlayerCount,
+  discordBadgeBox,
   findCreatedLobby,
   GAME_CATALOG,
   gameOption,
   listLayout,
   lobbyByCode,
+  lobbyLaunchedFromDiscord,
+  ROOM_BANNER,
   lobbyTableQueries,
   memberByClient,
   memberLines,
@@ -421,5 +424,33 @@ describe('grouped table list', () => {
     const shown = crowded.slots.filter((slot) => slot.kind === 'row').length;
     expect(shown + crowded.hidden).toBe(40);
     expect(crowded.hidden).toBeGreaterThan(0);
+  });
+});
+
+describe('Launched from Discord badge', () => {
+  const lobbies = [
+    { id: 'lobby_discord', discordChannelId: '123456789012345678' },
+    { id: 'lobby_web', discordChannelId: '' },
+    { id: 'lobby_blank', discordChannelId: '  ' },
+  ];
+
+  it('shows only for a lobby with a linked Discord channel', () => {
+    expect(lobbyLaunchedFromDiscord(lobbies, 'lobby_discord')).toBe(true);
+    expect(lobbyLaunchedFromDiscord(lobbies, 'lobby_web')).toBe(false);
+    expect(lobbyLaunchedFromDiscord(lobbies, 'lobby_blank')).toBe(false);
+  });
+
+  it('is hidden when the lobby is unknown or not joined yet', () => {
+    expect(lobbyLaunchedFromDiscord(lobbies, 'missing')).toBe(false);
+    expect(lobbyLaunchedFromDiscord(lobbies, '')).toBe(false);
+    expect(lobbyLaunchedFromDiscord([], 'lobby_discord')).toBe(false);
+  });
+
+  it('sits centered under the room code banner', () => {
+    const box = discordBadgeBox();
+    const banner = ROOM_BANNER.panel;
+    expect(box.y).toBeGreaterThanOrEqual(banner.y + banner.h);
+    expect(box.x + box.w / 2).toBeCloseTo(banner.x + banner.w / 2, 0);
+    expect(box.w).toBeLessThanOrEqual(banner.w);
   });
 });

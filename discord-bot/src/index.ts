@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import { pathToFileURL } from 'node:url';
 import { registerSlashCommands } from './commands.ts';
 import { connectLobby, createDiscordLobby } from './lobby-client.ts';
+import { readLobbyStatus } from './lobby-status.ts';
 import { createApp } from './server.ts';
 
 export async function main(): Promise<void> {
@@ -21,7 +22,7 @@ export async function main(): Promise<void> {
       applicationId,
       guildId: process.env.DISCORD_GUILD_ID,
     });
-    console.log('Registered /cardroom create');
+    console.log('Registered /cardroom create and /cardroom status');
   } else {
     console.log(
       'DISCORD_BOT_TOKEN or DISCORD_APPLICATION_ID is unset; slash command registration skipped',
@@ -33,6 +34,7 @@ export async function main(): Promise<void> {
     publicKey,
     createLobby: (discordChannelId) =>
       createDiscordLobby(connection, discordChannelId, publicUrl),
+    lobbyStatus: (roomCode) => readLobbyStatus(connection, roomCode),
   });
   const server = createServer(app);
   await new Promise<void>((resolve) => {
