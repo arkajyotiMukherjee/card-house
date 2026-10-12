@@ -1,9 +1,12 @@
 import {
   CaseConversionPolicy,
+  ScheduleAt,
   schema,
   SenderError,
   t,
   table,
+  type InferSchema,
+  type ReducerCtx,
 } from 'spacetimedb/server';
 import type {
   GameSeat as RulesSeat,
@@ -46,14 +49,56 @@ import {
   dummyGameDefinition,
 } from '../../src/shared/games/dummy-counter';
 import { stubGameDefinition } from '../../src/shared/games/stub';
+import {
+  disconnectActivity,
+  forgetTable,
+  forgetTableForEveryone,
+  lobbyCreatedLine,
+  reconnectActivity,
+  rememberLobby,
+  rememberTable,
+  rulesErrorLine,
+  tableCreatedLine,
+} from './activity-log';
 import { discordProfile } from './discord-member';
 import { speakingRowId, voicePlace } from './speaking-state';
 import { stateIfLobbyReady } from './lobby-deal';
 import { openingTableState } from './opening-state';
 import { statusTagForState, type TableStatusTag } from './table-status';
-import { registerGameRules, rulesByType } from './rules-by-type';
+import {
+  definitionByType,
+  registerGameRules,
+  rulesByType,
+} from './rules-by-type';
+import {
+  DEFAULT_ROOM_CAPS,
+  ROOM_CAPS_ID,
+  joinSeatRejection,
+  lobbyCapRejection,
+  openSeatCount,
+  roomCapsRejection,
+  tableCapRejection,
+  tableSeatLimits,
+  type RoomCaps,
+} from './room-caps';
 import { stubIntentRules } from './stub-rules';
+import {
+  EMPTY_TABLE_IDLE_MICROS,
+  TABLE_CLEANUP_INTERVAL_MICROS,
+  idleTimeoutAllowed,
+  shouldRemoveEmptyTable,
+} from './table-cleanup';
 import { voiceScopeForChannel } from './voice-presence';
+import {
+  DEV_LOBBY_IDLE_TIMEOUT_MICROS,
+  LOBBY_IDLE_CONFIG_ID,
+  LOBBY_IDLE_SWEEP_INTERVAL_MICROS,
+  PRODUCTION_LOBBY_IDLE_TIMEOUT_MICROS,
+  activeLobbyIdleTimeoutMicros,
+  lobbyIdleTimeoutError,
+  lobbyIdleTimeoutMicros,
+  lobbyIsIdle,
+} from './lobby-idle';
 
 registerGameRules(stubGameDefinition, stubIntentRules);
 registerGameRules(dummyGameDefinition, dummyCounterRules);
@@ -76,8 +121,6 @@ const TableStatus = t.enum('TableStatus', [
 const SeatState = t.enum('SeatState', ['active', 'folded', 'disconnected']);
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const DEFAULT_MIN_PLAYERS = 2;
-const DEFAULT_MAX_PLAYERS = 8;
 const TABLE_SETTING_KEYS = [
   'name',
   'minPlayers',
@@ -97,6 +140,7 @@ const Lobby = table(
     discordChannelId: t.string().default(''),
     discordGuildId: t.string().default(''),
     discordLobbyVoiceChannelId: t.string().default(''),
+    lastActivityAt: t.option(t.timestamp()).default(undefined),
   },
 );
 
@@ -154,6 +198,16 @@ const GameTable = table(
     stateJson: t.string(),
     createdAt: t.timestamp(),
     discordVoiceChannelId: t.string().default(''),
+    lastActivityAt: t.option(t.timestamp()).default(undefined),
+  },
+);
+
+const TableCleanupSchedule = table(
+  { name: 'TableCleanupSchedule', public: true },
+  {
+    scheduledId: t.u64().primaryKey().autoInc(),
+    scheduledAt: t.scheduleAt(),
+    idleAfterMicros: t.u64(),
   },
 );
 
@@ -214,6 +268,35 @@ const VoicePresence = table(
   },
 );
 
+const OperatorSession = table(
+  { name: 'OperatorSession', public: false },
+  {
+    identity: t.string().primaryKey(),
+    lobbyId: t.string(),
+    tableId: t.string(),
+    connected: t.bool(),
+  },
+);
+
+const ConnectionRate = table(
+  { name: 'ConnectionRate', public: false },
+  {
+    id: t.string().primaryKey(),
+    windowStartMicros: t.u64(),
+    count: t.u32(),
+  },
+);
+
+const RoomCaps = table(
+  { name: 'RoomCaps', public: true },
+  {
+    id: t.string().primaryKey(),
+    maxLobbies: t.u32(),
+    maxTablesPerLobby: t.u32(),
+    maxSeatsPerTable: t.u32(),
+  },
+);
+
 const SpeakingState = table(
   {
     name: 'SpeakingState',
@@ -236,6 +319,24 @@ const SpeakingState = table(
   },
 );
 
+const LobbyIdleConfig = table(
+  { name: 'LobbyIdleConfig', public: true },
+  {
+    id: t.string().primaryKey(),
+    idleTimeoutMicros: t.u64(),
+    devTimeoutMicros: t.u64(),
+    dev: t.bool(),
+  },
+);
+
+const LobbyIdleSweep = table(
+  { name: 'LobbyIdleSweep' },
+  {
+    scheduledId: t.u64().primaryKey().autoInc(),
+    scheduledAt: t.scheduleAt(),
+  },
+);
+
 const spacetimedb = schema(
   {
     Lobby,
@@ -245,11 +346,95 @@ const spacetimedb = schema(
     GameEvent,
     VoicePresence,
     SpeakingState,
+    OperatorSession,
+    ConnectionRate,
+    RoomCaps,
+    TableCleanupSchedule,
+    LobbyIdleConfig,
+    LobbyIdleSweep,
   },
   { CASE_CONVERSION_POLICY: CaseConversionPolicy.None },
 );
 
 export default spacetimedb;
+
+type ModuleCtx = ReducerCtx<InferSchema<typeof spacetimedb>>;
+
+function ensureLobbyIdleJob(ctx: ModuleCtx): void {
+  if (ctx.db.LobbyIdleConfig.id.find(LOBBY_IDLE_CONFIG_ID) === null) {
+    ctx.db.LobbyIdleConfig.insert({
+      id: LOBBY_IDLE_CONFIG_ID,
+      idleTimeoutMicros: PRODUCTION_LOBBY_IDLE_TIMEOUT_MICROS,
+      devTimeoutMicros: DEV_LOBBY_IDLE_TIMEOUT_MICROS,
+      dev: false,
+    });
+  }
+  if (firstRow(ctx.db.LobbyIdleSweep.iter()) === undefined) {
+    ctx.db.LobbyIdleSweep.insert({
+      scheduledId: 0n,
+      scheduledAt: ScheduleAt.interval(LOBBY_IDLE_SWEEP_INTERVAL_MICROS),
+    });
+  }
+}
+
+function noteLobbyActivity(ctx: ModuleCtx, lobbyId: string): void {
+  const lobby = ctx.db.Lobby.id.find(lobbyId);
+  if (!lobby || lobby.status.tag !== 'open') {
+    return;
+  }
+  ctx.db.Lobby.id.update({
+    ...lobby,
+    lastActivityAt: ctx.timestamp,
+  });
+}
+
+function markLobbyClosed(ctx: ModuleCtx, lobbyId: string): void {
+  const lobby = ctx.db.Lobby.id.find(lobbyId);
+  if (!lobby) {
+    return;
+  }
+  clearPresence(ctx.db, lobby.id);
+  if (lobby.status.tag === 'closed') {
+    return;
+  }
+  ctx.db.Lobby.id.update({
+    ...lobby,
+    status: { tag: 'closed' },
+  });
+}
+
+function closeIdleLobbies(ctx: ModuleCtx): void {
+  ensureLobbyIdleJob(ctx);
+  const config = ctx.db.LobbyIdleConfig.id.find(LOBBY_IDLE_CONFIG_ID);
+  if (!config) {
+    return;
+  }
+  const timeout = activeLobbyIdleTimeoutMicros(config);
+  const now = ctx.timestamp.microsSinceUnixEpoch;
+  const openIds: string[] = [];
+  for (const lobby of ctx.db.Lobby.iter()) {
+    if (lobby.status.tag === 'open') {
+      openIds.push(lobby.id);
+    }
+  }
+  for (const lobbyId of openIds) {
+    const lobby = ctx.db.Lobby.id.find(lobbyId);
+    if (!lobby || lobby.status.tag !== 'open') {
+      continue;
+    }
+    const activity = lobby.lastActivityAt?.microsSinceUnixEpoch;
+    if (activity === undefined) {
+      ctx.db.Lobby.id.update({
+        ...lobby,
+        lastActivityAt: ctx.timestamp,
+      });
+      continue;
+    }
+    if (lobbyIsIdle(activity, now, timeout)) {
+      markLobbyClosed(ctx, lobby.id);
+    }
+  }
+}
 
 function lobbyCode(micros: bigint, attempt: number): string {
   let n = micros + BigInt(attempt);
@@ -261,9 +446,96 @@ function lobbyCode(micros: bigint, attempt: number): string {
   return code;
 }
 
+interface RoomCapsRow extends RoomCaps {
+  id: string;
+}
+
+interface RoomCapsDb {
+  RoomCaps: {
+    id: {
+      find(id: string): RoomCapsRow | null;
+      update(row: RoomCapsRow): unknown;
+    };
+    insert(row: RoomCapsRow): unknown;
+  };
+}
+
+function currentRoomCaps(db: RoomCapsDb): RoomCaps {
+  const existing = db.RoomCaps.id.find(ROOM_CAPS_ID);
+  if (existing) {
+    return {
+      maxLobbies: existing.maxLobbies,
+      maxTablesPerLobby: existing.maxTablesPerLobby,
+      maxSeatsPerTable: existing.maxSeatsPerTable,
+    };
+  }
+  db.RoomCaps.insert({ id: ROOM_CAPS_ID, ...DEFAULT_ROOM_CAPS });
+  return { ...DEFAULT_ROOM_CAPS };
+}
+
+function reject(message: string | undefined): void {
+  if (message !== undefined) {
+    throw new SenderError(message);
+  }
+}
+
+function rowCount(rows: Iterable<unknown>): number {
+  let count = 0;
+  for (const _row of rows) {
+    count += 1;
+  }
+  return count;
+}
+
+function ensureRoomCaps(ctx: ModuleCtx): void {
+  if (ctx.db.RoomCaps.id.find(ROOM_CAPS_ID) === null) {
+    ctx.db.RoomCaps.insert({ id: ROOM_CAPS_ID, ...DEFAULT_ROOM_CAPS });
+  }
+}
+
+export const init = spacetimedb.init({ name: 'init' }, (ctx) => {
+  ensureRoomCaps(ctx);
+  ensureLobbyIdleJob(ctx);
+  ensureTableCleanup(ctx);
+});
+
+export const on_connect = spacetimedb.clientConnected(
+  { name: 'on_connect' },
+  (ctx) => {
+    ensureRoomCaps(ctx);
+    ensureLobbyIdleJob(ctx);
+    ensureTableCleanup(ctx);
+    const line = reconnectActivity(
+      ctx.db,
+      ctx.sender.toHexString(),
+      ctx.timestamp.microsSinceUnixEpoch,
+    );
+    if (line !== undefined) {
+      console.log(line);
+    }
+  },
+);
+
+export const client_disconnected = spacetimedb.clientDisconnected(
+  { name: 'client_disconnected' },
+  (ctx) => {
+    const line = disconnectActivity(
+      ctx.db,
+      ctx.sender.toHexString(),
+      ctx.timestamp.microsSinceUnixEpoch,
+    );
+    if (line !== undefined) {
+      console.log(line);
+    }
+  },
+);
+
 export const create_lobby = spacetimedb.reducer(
   { name: 'create_lobby' },
   (ctx) => {
+    ensureLobbyIdleJob(ctx);
+    const caps = currentRoomCaps(ctx.db);
+    reject(lobbyCapRejection(rowCount(ctx.db.Lobby.iter()), caps));
     const sender = ctx.sender.toHexString();
     const micros = ctx.timestamp.microsSinceUnixEpoch;
     let code = '';
@@ -277,15 +549,36 @@ export const create_lobby = spacetimedb.reducer(
     if (code === '') {
       throw new SenderError('Could not allocate a lobby code');
     }
+    const id = `lobby_${sender}_${micros.toString()}`;
     ctx.db.Lobby.insert({
-      id: `lobby_${sender}_${micros.toString()}`,
+      id,
       code,
       status: { tag: 'open' },
       createdAt: ctx.timestamp,
+      lastActivityAt: ctx.timestamp,
       discordChannelId: '',
       discordGuildId: '',
       discordLobbyVoiceChannelId: '',
     });
+    console.log(lobbyCreatedLine(id));
+  },
+);
+
+export const set_room_caps = spacetimedb.reducer(
+  { name: 'set_room_caps' },
+  {
+    maxLobbies: t.u32(),
+    maxTablesPerLobby: t.u32(),
+    maxSeatsPerTable: t.u32(),
+  },
+  (ctx, caps) => {
+    reject(roomCapsRejection(caps));
+    const existing = ctx.db.RoomCaps.id.find(ROOM_CAPS_ID);
+    if (!existing) {
+      ctx.db.RoomCaps.insert({ id: ROOM_CAPS_ID, ...caps });
+      return;
+    }
+    ctx.db.RoomCaps.id.update({ ...existing, ...caps });
   },
 );
 
@@ -325,6 +618,103 @@ function clearPresence(
   for (const id of ids) {
     db.VoicePresence.id.delete(id);
   }
+}
+
+interface SpeakingRow {
+  id: string;
+  tableId: string;
+}
+
+function clearSpeaking(
+  db: {
+    SpeakingState: {
+      lobbyId: { filter(lobbyId: string): Iterable<SpeakingRow> };
+      id: { delete(id: string): unknown };
+    };
+  },
+  lobbyId: string,
+  tableId: string,
+): void {
+  const ids: string[] = [];
+  for (const row of db.SpeakingState.lobbyId.filter(lobbyId)) {
+    if (row.tableId === tableId) {
+      ids.push(row.id);
+    }
+  }
+  for (const id of ids) {
+    db.SpeakingState.id.delete(id);
+  }
+}
+
+interface TableRows {
+  GameSeat: {
+    byTable: { filter(tableId: string): Iterable<{ id: string }> };
+    id: { delete(id: string): unknown };
+  };
+  GameEvent: {
+    byTable: { filter(tableId: string): Iterable<{ id: string }> };
+    id: { delete(id: string): unknown };
+  };
+  GameTable: {
+    id: { delete(id: string): unknown };
+  };
+  VoicePresence: {
+    lobbyId: { filter(lobbyId: string): Iterable<PresenceRow> };
+    id: { delete(id: string): unknown };
+  };
+  SpeakingState: {
+    lobbyId: { filter(lobbyId: string): Iterable<SpeakingRow> };
+    id: { delete(id: string): unknown };
+  };
+}
+
+function deleteGameTable(
+  db: TableRows,
+  gameTable: { id: string; lobbyId: string },
+): void {
+  const seatIds: string[] = [];
+  for (const seat of db.GameSeat.byTable.filter(gameTable.id)) {
+    seatIds.push(seat.id);
+  }
+  for (const seatId of seatIds) {
+    db.GameSeat.id.delete(seatId);
+  }
+  const eventIds: string[] = [];
+  for (const event of db.GameEvent.byTable.filter(gameTable.id)) {
+    eventIds.push(event.id);
+  }
+  for (const eventId of eventIds) {
+    db.GameEvent.id.delete(eventId);
+  }
+  clearPresence(db, gameTable.lobbyId, gameTable.id);
+  clearSpeaking(db, gameTable.lobbyId, gameTable.id);
+  db.GameTable.id.delete(gameTable.id);
+}
+
+function ensureTableCleanup(ctx: {
+  db: {
+    TableCleanupSchedule: {
+      iter(): Iterable<unknown>;
+      insert(row: {
+        scheduledId: bigint;
+        scheduledAt: ReturnType<typeof ScheduleAt.interval>;
+        idleAfterMicros: bigint;
+      }): unknown;
+    };
+  };
+}): void {
+  let count = 0;
+  for (const _row of ctx.db.TableCleanupSchedule.iter()) {
+    count += 1;
+  }
+  if (count > 0) {
+    return;
+  }
+  ctx.db.TableCleanupSchedule.insert({
+    scheduledId: 0n,
+    scheduledAt: ScheduleAt.interval(TABLE_CLEANUP_INTERVAL_MICROS),
+    idleAfterMicros: EMPTY_TABLE_IDLE_MICROS,
+  });
 }
 
 function openDiscordLobby<
@@ -373,6 +763,7 @@ export const set_lobby_discord_channel = spacetimedb.reducer(
     ctx.db.Lobby.id.update({
       ...lobby,
       discordChannelId: channelId,
+      lastActivityAt: ctx.timestamp,
     });
   },
 );
@@ -415,6 +806,7 @@ export const set_lobby_discord_voice = spacetimedb.reducer(
       ...lobby,
       discordGuildId: guildId,
       discordLobbyVoiceChannelId: voiceId,
+      lastActivityAt: ctx.timestamp,
     });
   },
 );
@@ -454,14 +846,51 @@ export const close_lobby = spacetimedb.reducer(
     if (!lobby) {
       throw new SenderError('Room not found');
     }
-    clearPresence(ctx.db, lobby.id);
-    if (lobby.status.tag === 'closed') {
+    markLobbyClosed(ctx, lobby.id);
+  },
+);
+
+export const set_lobby_idle_timeout = spacetimedb.reducer(
+  { name: 'set_lobby_idle_timeout' },
+  { timeoutMs: t.u32(), dev: t.bool() },
+  (ctx, { timeoutMs, dev }) => {
+    const error = lobbyIdleTimeoutError(dev, timeoutMs);
+    if (error !== undefined) {
+      throw new SenderError(error);
+    }
+    ensureLobbyIdleJob(ctx);
+    const config = ctx.db.LobbyIdleConfig.id.find(LOBBY_IDLE_CONFIG_ID);
+    if (!config) {
+      throw new SenderError('Lobby idle config is missing');
+    }
+    const timeoutMicros = lobbyIdleTimeoutMicros(timeoutMs);
+    if (dev) {
+      ctx.db.LobbyIdleConfig.id.update({
+        ...config,
+        dev: true,
+        devTimeoutMicros: timeoutMicros,
+      });
       return;
     }
-    ctx.db.Lobby.id.update({
-      ...lobby,
-      status: { tag: 'closed' },
+    ctx.db.LobbyIdleConfig.id.update({
+      ...config,
+      dev: false,
+      idleTimeoutMicros: timeoutMicros,
     });
+  },
+);
+
+export const close_idle_lobbies = spacetimedb.reducer(
+  { name: 'close_idle_lobbies', onSchedule: LobbyIdleSweep },
+  { sweep: LobbyIdleSweep.rowType },
+  (ctx, { sweep: _sweep }) => {
+    closeIdleLobbies(ctx);
+    if (firstRow(ctx.db.LobbyIdleSweep.iter()) === undefined) {
+      ctx.db.LobbyIdleSweep.insert({
+        scheduledId: 0n,
+        scheduledAt: ScheduleAt.interval(LOBBY_IDLE_SWEEP_INTERVAL_MICROS),
+      });
+    }
   },
 );
 
@@ -519,6 +948,8 @@ export const join_lobby = spacetimedb.reducer(
         connected: true,
         lastSeenAt: ctx.timestamp,
       });
+      rememberLobby(ctx.db, ctx.sender.toHexString(), lobby.id);
+      noteLobbyActivity(ctx, lobby.id);
       return;
     }
 
@@ -534,6 +965,8 @@ export const join_lobby = spacetimedb.reducer(
       discordGlobalName: '',
       discordDiscriminator: undefined,
     });
+    rememberLobby(ctx.db, ctx.sender.toHexString(), lobby.id);
+    noteLobbyActivity(ctx, lobby.id);
   },
 );
 
@@ -602,6 +1035,8 @@ export const join_lobby_with_discord = spacetimedb.reducer(
         discordGlobalName: discord.discordGlobalName,
         discordDiscriminator: discord.discordDiscriminator,
       });
+      rememberLobby(ctx.db, ctx.sender.toHexString(), lobby.id);
+      noteLobbyActivity(ctx, lobby.id);
       return;
     }
 
@@ -617,6 +1052,8 @@ export const join_lobby_with_discord = spacetimedb.reducer(
       discordGlobalName: discord.discordGlobalName,
       discordDiscriminator: discord.discordDiscriminator,
     });
+    rememberLobby(ctx.db, ctx.sender.toHexString(), lobby.id);
+    noteLobbyActivity(ctx, lobby.id);
   },
 );
 
@@ -668,6 +1105,7 @@ export const update_speaking_state = spacetimedb.reducer(
         isSpeaking,
         lastUpdatedAt: ctx.timestamp,
       });
+      noteLobbyActivity(ctx, place.lobbyId);
       return;
     }
     ctx.db.SpeakingState.insert({
@@ -678,6 +1116,7 @@ export const update_speaking_state = spacetimedb.reducer(
       isSpeaking,
       lastUpdatedAt: ctx.timestamp,
     });
+    noteLobbyActivity(ctx, place.lobbyId);
   },
 );
 
@@ -797,11 +1236,7 @@ export const create_game_table = spacetimedb.reducer(
     }
 
     const settings = tableSettings(rawSettings);
-    const minPlayers = settings.minPlayers ?? DEFAULT_MIN_PLAYERS;
-    const maxPlayers = settings.maxPlayers ?? DEFAULT_MAX_PLAYERS;
-    if (maxPlayers < minPlayers) {
-      throw new SenderError('maxPlayers must be at least minPlayers');
-    }
+    const caps = currentRoomCaps(ctx.db);
 
     let existing = 0;
     let sameType = 0;
@@ -811,6 +1246,23 @@ export const create_game_table = spacetimedb.reducer(
         sameType += 1;
       }
     }
+    reject(tableCapRejection(existing, caps));
+    const definition = definitionByType[gameType];
+    const seats = tableSeatLimits(
+      definition
+        ? {
+            minPlayers: definition.minPlayers,
+            maxPlayers: definition.maxPlayers,
+          }
+        : undefined,
+      { minPlayers: settings.minPlayers, maxPlayers: settings.maxPlayers },
+      caps,
+    );
+    if ('error' in seats) {
+      throw new SenderError(seats.error);
+    }
+    const minPlayers = seats.minPlayers;
+    const maxPlayers = seats.maxPlayers;
 
     const micros = ctx.timestamp.microsSinceUnixEpoch;
     const id = `table_${lobby.id}_${micros.toString()}_${existing}`;
@@ -839,8 +1291,11 @@ export const create_game_table = spacetimedb.reducer(
       maxPlayers,
       stateJson,
       createdAt: ctx.timestamp,
+      lastActivityAt: ctx.timestamp,
       discordVoiceChannelId: '',
     });
+    console.log(tableCreatedLine(id, lobby.id));
+    noteLobbyActivity(ctx, lobby.id);
   },
 );
 
@@ -883,6 +1338,7 @@ export const set_table_discord_voice = spacetimedb.reducer(
       ...gameTable,
       discordVoiceChannelId: voiceId,
     });
+    noteLobbyActivity(ctx, lobby.id);
   },
 );
 
@@ -969,7 +1425,10 @@ export const update_voice_presence = spacetimedb.reducer(
       ctx.db.VoicePresence.insert(row);
     } else if (current.tableId !== desired.tableId) {
       ctx.db.VoicePresence.id.update(row);
+    } else {
+      return;
     }
+    noteLobbyActivity(ctx, desired.lobbyId);
   },
 );
 
@@ -985,22 +1444,72 @@ export const remove_game_table = spacetimedb.reducer(
     if (!gameTable) {
       throw new SenderError('Table not found');
     }
-    const seatIds: string[] = [];
-    for (const seat of ctx.db.GameSeat.byTable.filter(gameTable.id)) {
-      seatIds.push(seat.id);
+    forgetTableForEveryone(ctx.db, gameTable.id);
+    deleteGameTable(ctx.db, gameTable);
+    noteLobbyActivity(ctx, gameTable.lobbyId);
+  },
+);
+
+export const clean_empty_tables = spacetimedb.reducer(
+  { name: 'clean_empty_tables', onSchedule: TableCleanupSchedule },
+  { schedule: TableCleanupSchedule.rowType },
+  (ctx, _args) => {
+    let idleLimit = EMPTY_TABLE_IDLE_MICROS;
+    for (const row of ctx.db.TableCleanupSchedule.iter()) {
+      idleLimit = row.idleAfterMicros;
+      break;
     }
-    for (const seatId of seatIds) {
-      ctx.db.GameSeat.id.delete(seatId);
+    const now = ctx.timestamp.microsSinceUnixEpoch;
+    const doomed: string[] = [];
+    for (const gameTable of ctx.db.GameTable.iter()) {
+      let seats = 0;
+      for (const _seat of ctx.db.GameSeat.byTable.filter(gameTable.id)) {
+        seats += 1;
+      }
+      const activity = gameTable.lastActivityAt ?? gameTable.createdAt;
+      const idleMicros = now - activity.microsSinceUnixEpoch;
+      if (
+        shouldRemoveEmptyTable(
+          seats,
+          gameTable.status.tag,
+          idleMicros,
+          idleLimit,
+        )
+      ) {
+        doomed.push(gameTable.id);
+      }
     }
-    const eventIds: string[] = [];
-    for (const event of ctx.db.GameEvent.byTable.filter(gameTable.id)) {
-      eventIds.push(event.id);
+    for (const id of doomed) {
+      const gameTable = ctx.db.GameTable.id.find(id);
+      if (gameTable) {
+        forgetTableForEveryone(ctx.db, gameTable.id);
+        deleteGameTable(ctx.db, gameTable);
+      }
     }
-    for (const eventId of eventIds) {
-      ctx.db.GameEvent.id.delete(eventId);
+    ensureTableCleanup(ctx);
+  },
+);
+
+export const set_empty_table_idle_timeout = spacetimedb.reducer(
+  { name: 'set_empty_table_idle_timeout' },
+  { idleMicros: t.u64() },
+  (ctx, { idleMicros }) => {
+    if (!idleTimeoutAllowed(idleMicros)) {
+      throw new SenderError(
+        'Idle timeout must be between 1 second and 24 hours',
+      );
     }
-    clearPresence(ctx.db, gameTable.lobbyId, gameTable.id);
-    ctx.db.GameTable.id.delete(gameTable.id);
+    ensureTableCleanup(ctx);
+    const rows = [];
+    for (const row of ctx.db.TableCleanupSchedule.iter()) {
+      rows.push(row);
+    }
+    for (const row of rows) {
+      ctx.db.TableCleanupSchedule.scheduledId.update({
+        ...row,
+        idleAfterMicros: idleMicros,
+      });
+    }
   },
 );
 
@@ -1053,16 +1562,20 @@ export const join_table = spacetimedb.reducer(
       taken.push(seat.seatIndex);
       seated += 1;
     }
-    if (seated >= gameTable.maxPlayers) {
-      throw new SenderError('Table is full');
-    }
+    const caps = currentRoomCaps(ctx.db);
+    reject(joinSeatRejection(seated, gameTable.maxPlayers, caps));
+    const openSeats = openSeatCount(gameTable.maxPlayers, caps);
 
     let seatIndex = 0;
-    while (seatIndex < gameTable.maxPlayers && taken.includes(seatIndex)) {
+    while (seatIndex < openSeats && taken.includes(seatIndex)) {
       seatIndex += 1;
     }
-    if (seatIndex >= gameTable.maxPlayers) {
-      throw new SenderError('Table is full');
+    if (seatIndex >= openSeats) {
+      throw new SenderError(
+        openSeats >= gameTable.maxPlayers
+          ? 'Table is full'
+          : 'Seat cap reached',
+      );
     }
 
     ctx.db.GameSeat.insert({
@@ -1079,24 +1592,28 @@ export const join_table = spacetimedb.reducer(
     for (const seat of ctx.db.GameSeat.byTable.filter(gameTable.id)) {
       seatedNow.push(rulesSeat(seat));
     }
+    let stateJson = gameTable.stateJson;
+    let status = gameTable.status;
     const rules = rulesByType[gameTable.gameType];
     if (
       rules &&
-      stateIfLobbyReady(
-        gameTable.stateJson,
-        seatedNow.length,
-        gameTable.minPlayers,
-      ) === 'deal'
+      stateIfLobbyReady(stateJson, seatedNow.length, gameTable.minPlayers) ===
+        'deal'
     ) {
       const next = rules.initialState(seatedNow, rulesTable(gameTable));
-      ctx.db.GameTable.id.update({
-        ...gameTable,
-        stateJson: storedState(next),
-        status: storedStatus(
-          statusTagForState(next, currentStatusTag(gameTable.status.tag)),
-        ),
-      });
+      stateJson = storedState(next);
+      status = storedStatus(
+        statusTagForState(next, currentStatusTag(gameTable.status.tag)),
+      );
     }
+    ctx.db.GameTable.id.update({
+      ...gameTable,
+      stateJson,
+      status,
+      lastActivityAt: ctx.timestamp,
+    });
+    rememberTable(ctx.db, ctx.sender.toHexString(), lobby.id, gameTable.id);
+    noteLobbyActivity(ctx, lobby.id);
   },
 );
 
@@ -1146,6 +1663,12 @@ export const leave_table = spacetimedb.reducer(
     for (const seatId of seatIds) {
       ctx.db.GameSeat.id.delete(seatId);
     }
+    ctx.db.GameTable.id.update({
+      ...gameTable,
+      lastActivityAt: ctx.timestamp,
+    });
+    forgetTable(ctx.db, ctx.sender.toHexString(), gameTable.id);
+    noteLobbyActivity(ctx, lobby.id);
   },
 );
 
@@ -1356,10 +1879,11 @@ export const handle_game_intent = spacetimedb.reducer(
         now: Number(ctx.timestamp.toMillis()),
       });
     } catch (err) {
+      const message = err instanceof Error ? err.message : 'Intent rejected';
+      console.error(rulesErrorLine(gameTable.id, gameTable.lobbyId, message));
       if (err instanceof SenderError) {
         throw err;
       }
-      const message = err instanceof Error ? err.message : 'Intent rejected';
       throw new SenderError(message);
     }
 
@@ -1380,6 +1904,7 @@ export const handle_game_intent = spacetimedb.reducer(
       status: storedStatus(
         statusTagForState(next, currentStatusTag(gameTable.status.tag)),
       ),
+      lastActivityAt: ctx.timestamp,
     });
 
     let order = 0;
@@ -1394,5 +1919,6 @@ export const handle_game_intent = spacetimedb.reducer(
       payloadJson: appliedIntentPayload(order, intent, note),
       createdAt: ctx.timestamp,
     });
+    noteLobbyActivity(ctx, lobby.id);
   },
 );

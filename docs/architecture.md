@@ -6,7 +6,7 @@ This project is an online, browser-based **multiplayer card room**:
 
 - A **lobby** (room) can hold up to ~50 anonymous people.
 - Inside a lobby, there are many **tables** (GameTables), each running one specific card game (Bluff, Poker, etc.).
-- Any number of tables of the same game type can exist (e.g., 10 poker tables).
+- Several tables of the same game type can exist in one lobby, up to `RoomCaps.maxTablesPerLobby`.
 - Players can:
   - join/leave the lobby via a link (web or Discord),
   - create new tables of any supported game,
@@ -94,11 +94,18 @@ Represents a single card room.
 - `code: string` – short human code used in URLs (e.g. `AB3D`).
 - `status: "open" | "closed"`.
 - `createdAt: number` – timestamp.
+- `lastActivityAt: number | null` – last join, table change, intent, speaking update, or voice presence. Null on a row from before the column existed; the next idle sweep stamps it and waits out a full timeout.
 - `discordChannelId: string` – Discord channel that ran `/cardroom create`, or empty for a web lobby.
 - `discordGuildId: string` – guild that owns the lobby voice channel, or empty.
 - `discordLobbyVoiceChannelId: string` – lobby voice channel, or empty.
 
-There can be many lobbies in the system, each with their own members and tables.
+Lobbies share the system until `RoomCaps.maxLobbies`. Each lobby has its own members and tables.
+
+### RoomCaps
+
+One row (`id` `room`) holds the soft caps `maxLobbies`, `maxTablesPerLobby`, and `maxSeatsPerTable`. `init` seeds 64, 16, and 8. `set_room_caps` replaces them. A game's catalog `maxPlayers` stays the seat count when `maxSeatsPerTable` is higher. `create_game_table` rejects a seat count above the catalog or above the seat cap. `join_table` rejects a seat past the tighter of the two.
+
+`close_idle_lobbies` runs every second from the private `LobbyIdleSweep` schedule. It closes an open lobby that has been idle longer than the timeout in `LobbyIdleConfig`, using the same closed status as `close_lobby`. The production timeout is 24 hours. `set_lobby_idle_timeout` with `dev` true stores a 1 to 60 second timeout for a local check. A closed lobby rejects `join_lobby`.
 
 ### LobbyMember
 
@@ -133,8 +140,9 @@ Represents one table running one card game.
 - `stateJson: string` – serialized game state (game-type-specific).
 - `createdAt: number`.
 - `discordVoiceChannelId: string` – table voice channel, or empty for a web lobby.
+- `lastActivityAt: number | null` – last create, join, leave, or applied intent. Empty until one of those writes it, and then idle time falls back to `createdAt`.
 
-There can be many `GameTable` rows of the same `gameType` in the same lobby, allowing multiple poker tables, multiple bluff tables, etc.
+Several `GameTable` rows of the same `gameType` can share a lobby, up to `RoomCaps.maxTablesPerLobby`. `maxPlayers` stays the catalog seat count when the seat cap is higher.
 
 ### GameSeat
 

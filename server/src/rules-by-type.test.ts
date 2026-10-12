@@ -1,5 +1,9 @@
 import { stubGameDefinition, stubRules } from '../../src/shared/games/stub.ts';
-import { registerGameRules, rulesByType } from './rules-by-type.ts';
+import {
+  definitionByType,
+  registerGameRules,
+  rulesByType,
+} from './rules-by-type.ts';
 
 const unknownGameType = 'unknown-game';
 
@@ -29,6 +33,15 @@ assert(
 );
 assert(unknown === undefined, 'unknown gameType does not resolve');
 assert(unknown !== resolved, 'unknown gameType does not return the stub rules');
+assert(
+  definitionByType[stubGameDefinition.gameType] === stubGameDefinition,
+  'registered stub gameType keeps its catalog seat count',
+);
+assert(
+  definitionByType[stubGameDefinition.gameType]?.maxPlayers ===
+    stubGameDefinition.maxPlayers,
+  'catalog maxPlayers stays on the registered definition',
+);
 
 console.log(
   JSON.stringify({

@@ -10,6 +10,13 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const ConnectionRate = __t.object("ConnectionRate", {
+  id: __t.string(),
+  windowStartMicros: __t.u64(),
+  count: __t.u32(),
+});
+export type ConnectionRate = __Infer<typeof ConnectionRate>;
+
 export const GameEvent = __t.object("GameEvent", {
   id: __t.string(),
   tableId: __t.string(),
@@ -46,6 +53,7 @@ export const GameTable = __t.object("GameTable", {
   stateJson: __t.string(),
   createdAt: __t.timestamp(),
   discordVoiceChannelId: __t.string(),
+  lastActivityAt: __t.option(__t.timestamp()),
 });
 export type GameTable = __Infer<typeof GameTable>;
 
@@ -59,8 +67,23 @@ export const Lobby = __t.object("Lobby", {
   discordChannelId: __t.string(),
   discordGuildId: __t.string(),
   discordLobbyVoiceChannelId: __t.string(),
+  lastActivityAt: __t.option(__t.timestamp()),
 });
 export type Lobby = __Infer<typeof Lobby>;
+
+export const LobbyIdleConfig = __t.object("LobbyIdleConfig", {
+  id: __t.string(),
+  idleTimeoutMicros: __t.u64(),
+  devTimeoutMicros: __t.u64(),
+  dev: __t.bool(),
+});
+export type LobbyIdleConfig = __Infer<typeof LobbyIdleConfig>;
+
+export const LobbyIdleSweep = __t.object("LobbyIdleSweep", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+});
+export type LobbyIdleSweep = __Infer<typeof LobbyIdleSweep>;
 
 export const LobbyMember = __t.object("LobbyMember", {
   id: __t.string(),
@@ -83,6 +106,22 @@ export const LobbyStatus = __t.enum("LobbyStatus", {
 });
 export type LobbyStatus = __Infer<typeof LobbyStatus>;
 
+export const OperatorSession = __t.object("OperatorSession", {
+  identity: __t.string(),
+  lobbyId: __t.string(),
+  tableId: __t.string(),
+  connected: __t.bool(),
+});
+export type OperatorSession = __Infer<typeof OperatorSession>;
+
+export const RoomCaps = __t.object("RoomCaps", {
+  id: __t.string(),
+  maxLobbies: __t.u32(),
+  maxTablesPerLobby: __t.u32(),
+  maxSeatsPerTable: __t.u32(),
+});
+export type RoomCaps = __Infer<typeof RoomCaps>;
+
 // The tagged union or sum type for the algebraic type `SeatState`.
 export const SeatState = __t.enum("SeatState", {
   Active: __t.unit(),
@@ -100,6 +139,13 @@ export const SpeakingState = __t.object("SpeakingState", {
   lastUpdatedAt: __t.timestamp(),
 });
 export type SpeakingState = __Infer<typeof SpeakingState>;
+
+export const TableCleanupSchedule = __t.object("TableCleanupSchedule", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  idleAfterMicros: __t.u64(),
+});
+export type TableCleanupSchedule = __Infer<typeof TableCleanupSchedule>;
 
 // The tagged union or sum type for the algebraic type `TableStatus`.
 export const TableStatus = __t.enum("TableStatus", {
