@@ -123,14 +123,22 @@ describe('client voice boundary', () => {
       /new Audio\b/,
       /SpeechRecognition/,
     ];
+    // Default-name lookup asks the local bot. Speaking still does not fetch.
+    const fetchAllowed = new Set(['discord-join.ts']);
     expect(files.length).toBeGreaterThan(10);
     for (const name of files) {
       const source = readFileSync(join(root, name), 'utf8');
       for (const pattern of banned) {
+        if (fetchAllowed.has(name) && pattern.source === '\\bfetch\\s*\\(') {
+          continue;
+        }
         expect(`${name} ${pattern}: ${pattern.test(source)}`).toBe(
           `${name} ${pattern}: false`,
         );
       }
     }
+    const lookup = readFileSync(join(root, 'discord-join.ts'), 'utf8');
+    expect(lookup).toContain('/default-player-name');
+    expect(lookup).not.toMatch(/discord\.com/i);
   });
 });
