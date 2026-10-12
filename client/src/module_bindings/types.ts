@@ -46,6 +46,7 @@ export const GameTable = __t.object("GameTable", {
   stateJson: __t.string(),
   createdAt: __t.timestamp(),
   discordVoiceChannelId: __t.string(),
+  lastActivityAt: __t.option(__t.timestamp()),
 });
 export type GameTable = __Infer<typeof GameTable>;
 
@@ -115,6 +116,13 @@ export const SpeakingState = __t.object("SpeakingState", {
   lastUpdatedAt: __t.timestamp(),
 });
 export type SpeakingState = __Infer<typeof SpeakingState>;
+
+export const TableCleanupSchedule = __t.object("TableCleanupSchedule", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  idleAfterMicros: __t.u64(),
+});
+export type TableCleanupSchedule = __Infer<typeof TableCleanupSchedule>;
 
 // The tagged union or sum type for the algebraic type `TableStatus`.
 export const TableStatus = __t.enum("TableStatus", {
