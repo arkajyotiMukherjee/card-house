@@ -38,6 +38,13 @@ test(
               );
             },
           }),
+        lobbyStatus: () => ({
+          code: '',
+          found: false,
+          live: false,
+          tables: 0,
+          players: 0,
+        }),
       });
       server = createServer(app);
       await new Promise<void>((resolve) => {

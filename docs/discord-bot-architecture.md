@@ -29,11 +29,13 @@ Voice slice:
 
 ## Slash command
 
-`discord-bot/` is the slash-command service. It registers `/cardroom create` and leaves room for later commands on the same process.
+`discord-bot/` is the slash-command service. It registers `/cardroom create` and `/cardroom status`, and leaves room for later commands on the same process.
 
 `/cardroom create` calls `create_lobby` with no arguments. That is the client's `createLobby({})`, and it is the call that mints the lobby code. The bot then calls `set_lobby_discord_channel` with that code and the Discord channel id from the interaction. `Lobby.discordChannelId` stores the channel. A lobby created from the web leaves the column empty. The reply is the code and a join URL `{CARDROOM_PUBLIC_URL}/{code}`. Opening that path in the client opens Join Room with the code filled in.
 
-`discordChannelId` is the channel where the command ran. It is not the lobby voice channel. The bot stores voice channel ids with `set_lobby_discord_voice` and `set_table_discord_voice`. Speaking state and Discord identity columns stay on their own issues.
+`/cardroom status` takes a room code. It reads the subscribed `Lobby` row for that code. A matching open lobby is live. The reply names that code and the number of `GameTable` rows and `LobbyMember` rows in the lobby. A code with no row replies that the room was not found. Status does not call a reducer.
+
+`discordChannelId` is the channel where the command ran. It is not the lobby voice channel. The bot stores voice channel ids with `set_lobby_discord_voice` and `set_table_discord_voice`. Speaking state stays on its own issue. Discord identity is stored on `LobbyMember` by `join_lobby_with_discord`.
 
 ## Two TypeScript services
 
@@ -47,9 +49,11 @@ If the bot is down, play continues. Lobbies and tables still work through the ex
 
 Three flows share one `Lobby` and the same `GameTable` rows.
 
-**Discord joiners.** The primary id is the Discord user id. The display name is editable. The browser still keeps a `clientId` so the member fits the existing `(lobbyId, clientId)` row. `join_lobby_with_discord` attaches `discordUserId`, `discordUsername`, and `discordGlobalName` to that `LobbyMember`. [#43](https://github.com/arkajyotiMukherjee/discordcardgames/issues/43) still chooses the default `name` from Discord. Changing `name` later does not change `discordUserId`.
+**Discord joiners.** The primary id is the Discord user id. The display name is editable. The browser still keeps a `clientId` so the member fits the existing `(lobbyId, clientId)` row. `join_lobby_with_discord` attaches `discordUserId`, `discordUsername`, and `discordGlobalName` to that `LobbyMember`. The join URL can carry that identity as `discordUserId` or `discord_user_id`, plus the username and global name in either style, and `discordDiscriminator` only when Discord sends one. Changing `name` later does not change `discordUserId`.
 
-**Web-only joiners.** The browser generates a random `clientId` and calls `join_lobby`. Discord fields stay empty. There is no Discord user id.
+The default `name` is the Discord global name when it still has letters or digits, otherwise the username. It is cut to the lobby name length (12) and keeps letters, digits, and spaces. The `/cardroom create` reply stays `{CARDROOM_PUBLIC_URL}/{code}`. Opening that path with a Discord user id and a username stores that id and joins with the mapped name, without asking the player to type one. A user id alone is resolved by the bot with Discord `GET /users/{id}` at `GET /default-player-name`. A 401 returns no name and does not invent a user.
+
+**Web-only joiners.** The browser generates a random `clientId` and calls `join_lobby`. Discord fields stay empty. There is no Discord user id. A URL with no `discordUserId` and no `discord_user_id` is this path.
 
 **Both together.** A Discord joiner and a web-only joiner can be in the same lobby and can sit at the same table. There is still no host. `handle_game_intent` does not care which path created the member.
 
