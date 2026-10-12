@@ -67,7 +67,7 @@ The default `name` is the Discord global name when it still has letters or digit
 
 ## Voice channels
 
-The bot creates and deletes the channels. [#100](https://github.com/arkajyotiMukherjee/discordcardgames/issues/100). `close_lobby` and `remove_game_table` are the module transitions it watches. A finished table uses the existing `status`.
+The bot creates and deletes the channels. [#100](https://github.com/arkajyotiMukherjee/discordcardgames/issues/100). `close_lobby` and `remove_game_table` are the module transitions it watches. `close_idle_lobbies` sets that same closed status, so the bot deletes those voice channels too. A finished table uses the existing `status`.
 
 - One lobby voice channel, created with `/cardroom create`. Example name: `#room-ab3d-voice`.
 - One voice channel per table, created when a table is created in a Discord-linked lobby. Example name: `#ab3d-bluff-1`.
