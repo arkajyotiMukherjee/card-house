@@ -245,11 +245,11 @@ For each game (e.g., Crazy Eights, Blackjack, Hearts, Spades, Rummy, Go Fish, Pr
 
 Backend service (can be a small Node/Express or serverless function):
 
-`discord-bot/` registers `/cardroom create`. It calls `create_lobby`, then `set_lobby_discord_channel` so `Lobby.discordChannelId` is the Discord channel. `/cardroom status`, the default Discord name, and the Launched from Discord badge are still open.
+`discord-bot/` registers `/cardroom create` and `/cardroom status`. Create calls `create_lobby`, then `set_lobby_discord_channel` so `Lobby.discordChannelId` is the Discord channel. Status reads that lobby and replies whether it is live, with the table count and the player count. A missing code replies that the room was not found. The default Discord name and the Launched from Discord badge are still open.
 
 - Register slash commands:
   - `/cardroom create`
-  - `/cardroom status ROOMCODE` (optional)
+  - `/cardroom status ROOMCODE`
 - For `/cardroom create`:
   - Call the same `createLobby()` used by web.
   - Respond with:

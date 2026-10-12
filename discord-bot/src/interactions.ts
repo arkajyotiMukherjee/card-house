@@ -1,16 +1,29 @@
 import { InteractionResponseType, InteractionType } from 'discord-interactions';
+import { ROOM_CODE_OPTION } from './commands.ts';
 import { createReplyContent } from './join-url.ts';
 import type { CreatedLobby } from './lobby-client.ts';
+import {
+  normalizeRoomCode,
+  statusReplyContent,
+  type LobbyStatusReport,
+} from './lobby-status.ts';
 
 const EPHEMERAL = 1 << 6;
 const DISCORD_CHANNEL_ID = /^\d{17,20}$/;
+
+export interface DiscordOption {
+  name?: string;
+  type?: number;
+  value?: string | number | boolean;
+  options?: DiscordOption[];
+}
 
 export interface DiscordInteraction {
   type: number;
   channel_id?: string;
   data?: {
     name?: string;
-    options?: Array<{ name?: string; type?: number }>;
+    options?: DiscordOption[];
   };
 }
 
@@ -24,6 +37,9 @@ export interface DiscordReply {
 
 export interface InteractionDeps {
   createLobby: (discordChannelId: string) => Promise<CreatedLobby>;
+  lobbyStatus: (
+    roomCode: string,
+  ) => Promise<LobbyStatusReport> | LobbyStatusReport;
 }
 
 type Subcommand = (
@@ -33,6 +49,7 @@ type Subcommand = (
 
 const subcommands: Record<string, Subcommand> = {
   create: handleCreate,
+  status: handleStatus,
 };
 
 export async function handleInteraction(
@@ -57,7 +74,7 @@ export async function handleInteraction(
     return await handler(interaction, deps);
   } catch (error: unknown) {
     const message =
-      error instanceof Error ? error.message : 'Could not create a lobby';
+      error instanceof Error ? error.message : 'Could not handle that command';
     return ephemeral(message);
   }
 }
@@ -77,6 +94,32 @@ async function handleCreate(
       content: createReplyContent(created.code, created.joinUrl),
     },
   };
+}
+
+async function handleStatus(
+  interaction: DiscordInteraction,
+  deps: InteractionDeps,
+): Promise<DiscordReply> {
+  const raw = optionValue(interaction, ROOM_CODE_OPTION);
+  if (normalizeRoomCode(raw).length === 0) {
+    return ephemeral('Room code is required');
+  }
+  const report = await deps.lobbyStatus(raw);
+  return {
+    type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+    data: {
+      content: statusReplyContent(report),
+    },
+  };
+}
+
+function optionValue(interaction: DiscordInteraction, name: string): string {
+  const sub = interaction.data?.options?.[0];
+  const option = sub?.options?.find((item) => item.name === name);
+  if (typeof option?.value !== 'string') {
+    return '';
+  }
+  return option.value;
 }
 
 function ephemeral(content: string): DiscordReply {
