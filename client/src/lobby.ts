@@ -33,6 +33,7 @@ export interface LobbyRow {
 }
 
 export interface MemberRow {
+  id: string;
   lobbyId: string;
   clientId: string;
   name: string;
@@ -42,11 +43,11 @@ export interface MemberLine {
   name: string;
   clientId: string;
   self: boolean;
+  /** The bot saw this member in the lobby voice channel. */
+  inVoice: boolean;
 }
 
-export interface MemberRecord extends MemberRow {
-  id: string;
-}
+export type MemberRecord = MemberRow;
 
 export interface GameOption {
   gameType: string;
@@ -229,6 +230,7 @@ export function memberLines(
   members: Iterable<MemberRow>,
   lobbyId: string,
   selfClientId: string,
+  inVoice: ReadonlySet<string> = new Set(),
 ): MemberLine[] {
   const lines: MemberLine[] = [];
   for (const member of members) {
@@ -239,6 +241,7 @@ export function memberLines(
       name: member.name,
       clientId: member.clientId,
       self: member.clientId === selfClientId,
+      inVoice: inVoice.has(member.id),
     });
   }
   lines.sort((a, b) => {

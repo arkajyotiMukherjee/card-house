@@ -52,6 +52,7 @@ import { openingTableState } from './opening-state';
 import { statusTagForState, type TableStatusTag } from './table-status';
 import { registerGameRules, rulesByType } from './rules-by-type';
 import { stubIntentRules } from './stub-rules';
+import { voiceScopeForChannel } from './voice-presence';
 
 registerGameRules(stubGameDefinition, stubIntentRules);
 registerGameRules(dummyGameDefinition, dummyCounterRules);
@@ -195,8 +196,20 @@ const GameEvent = table(
   },
 );
 
+const VoicePresence = table(
+  { name: 'VoicePresence', public: true },
+  {
+    id: t.string().primaryKey(),
+    lobbyId: t.string().index('btree'),
+    tableId: t.string(),
+    lobbyMemberId: t.string(),
+    discordUserId: t.string().index('btree'),
+    updatedAt: t.timestamp(),
+  },
+);
+
 const spacetimedb = schema(
-  { Lobby, LobbyMember, GameTable, GameSeat, GameEvent },
+  { Lobby, LobbyMember, GameTable, GameSeat, GameEvent, VoicePresence },
   { CASE_CONVERSION_POLICY: CaseConversionPolicy.None },
 );
 
@@ -250,6 +263,32 @@ function discordSnowflake(raw: string, label: string): string {
     throw new SenderError(`${label} is invalid`);
   }
   return id;
+}
+
+interface PresenceRow {
+  id: string;
+  tableId: string;
+}
+
+function clearPresence(
+  db: {
+    VoicePresence: {
+      lobbyId: { filter(lobbyId: string): Iterable<PresenceRow> };
+      id: { delete(id: string): unknown };
+    };
+  },
+  lobbyId: string,
+  tableId?: string,
+): void {
+  const ids: string[] = [];
+  for (const row of db.VoicePresence.lobbyId.filter(lobbyId)) {
+    if (tableId === undefined || row.tableId === tableId) {
+      ids.push(row.id);
+    }
+  }
+  for (const id of ids) {
+    db.VoicePresence.id.delete(id);
+  }
 }
 
 function openDiscordLobby<
@@ -356,6 +395,7 @@ export const clear_lobby_discord_voice = spacetimedb.reducer(
     if (!lobby) {
       throw new SenderError('Room not found');
     }
+    clearPresence(ctx.db, lobby.id, '');
     if (lobby.discordLobbyVoiceChannelId.length === 0) {
       return;
     }
@@ -378,6 +418,7 @@ export const close_lobby = spacetimedb.reducer(
     if (!lobby) {
       throw new SenderError('Room not found');
     }
+    clearPresence(ctx.db, lobby.id);
     if (lobby.status.tag === 'closed') {
       return;
     }
@@ -760,6 +801,7 @@ export const clear_table_discord_voice = spacetimedb.reducer(
     if (!gameTable) {
       throw new SenderError('Table not found');
     }
+    clearPresence(ctx.db, gameTable.lobbyId, gameTable.id);
     if (gameTable.discordVoiceChannelId.length === 0) {
       return;
     }
@@ -767,6 +809,70 @@ export const clear_table_discord_voice = spacetimedb.reducer(
       ...gameTable,
       discordVoiceChannelId: '',
     });
+  },
+);
+
+export const update_voice_presence = spacetimedb.reducer(
+  { name: 'update_voice_presence' },
+  {
+    discordUserId: t.string(),
+    discordVoiceChannelId: t.string(),
+  },
+  (ctx, { discordUserId: rawUserId, discordVoiceChannelId: rawChannelId }) => {
+    const userId = discordSnowflake(rawUserId, 'Discord user id');
+    const channelId = rawChannelId.trim();
+    if (channelId.length > 0) {
+      discordSnowflake(channelId, 'Discord voice channel id');
+    }
+
+    let desired:
+      { memberId: string; lobbyId: string; tableId: string } | undefined;
+    const scope = voiceScopeForChannel(
+      channelId,
+      ctx.db.Lobby.iter(),
+      ctx.db.GameTable.iter(),
+    );
+    if (scope) {
+      for (const member of ctx.db.LobbyMember.lobbyId.filter(scope.lobbyId)) {
+        if (member.discordUserId === userId) {
+          desired = {
+            memberId: member.id,
+            lobbyId: scope.lobbyId,
+            tableId: scope.tableId,
+          };
+          break;
+        }
+      }
+    }
+
+    const staleIds: string[] = [];
+    let current: { id: string; tableId: string } | undefined;
+    for (const row of ctx.db.VoicePresence.discordUserId.filter(userId)) {
+      if (desired && row.lobbyMemberId === desired.memberId) {
+        current = row;
+      } else {
+        staleIds.push(row.id);
+      }
+    }
+    for (const id of staleIds) {
+      ctx.db.VoicePresence.id.delete(id);
+    }
+    if (!desired) {
+      return;
+    }
+    const row = {
+      id: `presence_${desired.memberId}`,
+      lobbyId: desired.lobbyId,
+      tableId: desired.tableId,
+      lobbyMemberId: desired.memberId,
+      discordUserId: userId,
+      updatedAt: ctx.timestamp,
+    };
+    if (!current) {
+      ctx.db.VoicePresence.insert(row);
+    } else if (current.tableId !== desired.tableId) {
+      ctx.db.VoicePresence.id.update(row);
+    }
   },
 );
 
@@ -796,6 +902,7 @@ export const remove_game_table = spacetimedb.reducer(
     for (const eventId of eventIds) {
       ctx.db.GameEvent.id.delete(eventId);
     }
+    clearPresence(ctx.db, gameTable.lobbyId, gameTable.id);
     ctx.db.GameTable.id.delete(gameTable.id);
   },
 );

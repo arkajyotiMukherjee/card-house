@@ -4,6 +4,8 @@ import { registerSlashCommands } from './commands.ts';
 import { discordRestApi } from './discord-http.ts';
 import { connectLobby } from './lobby-client.ts';
 import { createApp } from './server.ts';
+import { connectVoiceGateway } from './voice-gateway.ts';
+import { recordVoiceState, syncGuildVoice } from './voice-presence.ts';
 import {
   attachVoiceWatch,
   createDiscordLobbyWithVoice,
@@ -42,6 +44,21 @@ export async function main(): Promise<void> {
   const connection = await connectLobby(host, database);
   if (voice) {
     attachVoiceWatch(connection, voice);
+    let queue: Promise<void> = Promise.resolve();
+    const enqueue = (task: () => Promise<void>): void => {
+      queue = queue.then(task, task);
+    };
+    connectVoiceGateway({
+      token,
+      handlers: {
+        onGuildVoice: (guildId, states) => {
+          enqueue(() => syncGuildVoice(connection, guildId, states));
+        },
+        onVoiceState: (_guildId, state) => {
+          enqueue(() => recordVoiceState(connection, state));
+        },
+      },
+    });
   }
   const app = createApp({
     publicKey,

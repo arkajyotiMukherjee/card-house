@@ -89,9 +89,9 @@ describe('lobby rows', () => {
   it('lists only the joined lobby and marks this client', () => {
     const lines = memberLines(
       [
-        { lobbyId: 'lobby_1', clientId: 'self', name: 'Bea' },
-        { lobbyId: 'lobby_2', clientId: 'nope', name: 'Cara' },
-        { lobbyId: 'lobby_1', clientId: 'other', name: 'Ada' },
+        { id: 'm_bea', lobbyId: 'lobby_1', clientId: 'self', name: 'Bea' },
+        { id: 'm_cara', lobbyId: 'lobby_2', clientId: 'nope', name: 'Cara' },
+        { id: 'm_ada', lobbyId: 'lobby_1', clientId: 'other', name: 'Ada' },
       ],
       'lobby_1',
       'self',
@@ -99,6 +99,20 @@ describe('lobby rows', () => {
     expect(lines.map((line) => line.name)).toEqual(['Ada', 'Bea']);
     expect(lines.find((line) => line.name === 'Bea')?.self).toBe(true);
     expect(lines.find((line) => line.name === 'Ada')?.self).toBe(false);
+  });
+
+  it('marks only members with a voice presence row', () => {
+    const lines = memberLines(
+      [
+        { id: 'm_bea', lobbyId: 'lobby_1', clientId: 'self', name: 'Bea' },
+        { id: 'm_ada', lobbyId: 'lobby_1', clientId: 'other', name: 'Ada' },
+      ],
+      'lobby_1',
+      'self',
+      new Set(['m_ada']),
+    );
+    expect(lines.find((line) => line.name === 'Ada')?.inVoice).toBe(true);
+    expect(lines.find((line) => line.name === 'Bea')?.inVoice).toBe(false);
   });
 });
 

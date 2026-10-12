@@ -14,8 +14,10 @@ Conventions: [../repo-conventions.md](../repo-conventions.md). The plan is [../d
 - `src/recorded-discord.ts` — in-memory Discord API that records create and delete. Tests use it when the live token is unauthorized.
 - `src/voice-channels.ts` — lobby and table voice channel names, create, delete, and the subscription watch.
 - `src/join-url.ts` — `{CARDROOM_PUBLIC_URL}/{code}`.
+- `src/voice-presence.ts` — `recordVoiceState` sends a user id and voice channel id to `update_voice_presence`, skipping channels the module does not store. `syncGuildVoice` applies a guild's voice states and clears rows for users who are gone.
+- `src/voice-gateway.ts` — Discord gateway client for `GUILDS` and `GUILD_VOICE_STATES`. Passes user and channel ids to those handlers. It never reads or stores audio.
 - `src/server.ts` — Express `POST /interactions` with the Discord signature check.
-- `src/*.test.ts` — command shape, reply text, rate limits, and the signature check. `create-lobby.live.test.ts` and `voice-channels.live.test.ts` send one signed `POST /interactions` when `CARDROOM_LIVE=1`. `web-without-bot.live.test.ts` deals a web lobby without starting this process.
+- `src/*.test.ts` — command shape, reply text, rate limits, and the signature check. `create-lobby.live.test.ts` and `voice-channels.live.test.ts` send one signed `POST /interactions` when `CARDROOM_LIVE=1`. `web-without-bot.live.test.ts` deals a web lobby without starting this process. `voice-presence.test.ts` uses fixture voice states and a fake gateway socket.
 
 The generated client is `client/src/module_bindings/`. Do not hand-edit it.
 
@@ -25,11 +27,13 @@ The generated client is `client/src/module_bindings/`. Do not hand-edit it.
 
 A new `GameTable` in a lobby that has `discordGuildId` gets a channel such as `#ab3d-bluff-1`, stored with `set_table_discord_voice`. A finished or removed table loses that channel. `close_lobby` makes the bot delete the lobby channel and any table channels still open.
 
+When `DISCORD_BOT_TOKEN` is set, `src/index.ts` also opens the voice gateway and records who is in the lobby or a table voice channel through `update_voice_presence`. The token is sent only in Identify and is never logged.
+
 Keep new commands on this service. Do not put reducer logic here. A bad channel id is rejected before the reducer, and the module rejects it again.
 
 ## Leave alone
 
-Do not add `/cardroom status`, a Discord display name, a Launched from Discord badge, speaking state, or headset presence in this package until those issues are in scope.
+Do not add `/cardroom status`, a Discord display name, a Launched from Discord badge, speaking state, in this package until those issues are in scope.
 
 Do not commit a bot token, application id, or public key.
 
