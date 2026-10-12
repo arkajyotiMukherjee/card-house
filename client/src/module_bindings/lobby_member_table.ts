@@ -17,4 +17,8 @@ export default __t.row({
   name: __t.string(),
   connected: __t.bool(),
   lastSeenAt: __t.timestamp().name("last_seen_at"),
+  discordUserId: __t.string().name("discord_user_id"),
+  discordUsername: __t.string().name("discord_username"),
+  discordGlobalName: __t.string().name("discord_global_name"),
+  discordDiscriminator: __t.option(__t.string()).name("discord_discriminator"),
 });

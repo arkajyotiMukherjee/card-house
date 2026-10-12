@@ -33,7 +33,7 @@ Voice slice:
 
 `/cardroom create` calls `create_lobby` with no arguments. That is the client's `createLobby({})`, and it is the call that mints the lobby code. The bot then calls `set_lobby_discord_channel` with that code and the Discord channel id from the interaction. `Lobby.discordChannelId` stores the channel. A lobby created from the web leaves the column empty. The reply is the code and a join URL `{CARDROOM_PUBLIC_URL}/{code}`. Opening that path in the client opens Join Room with the code filled in.
 
-`discordChannelId` is the channel where the command ran. It is not the lobby voice channel. Voice channels, speaking state, and Discord identity columns stay on their own issues.
+`discordChannelId` is the channel where the command ran. It is not the lobby voice channel. Voice channels and speaking state stay on their own issues. Discord identity is stored on `LobbyMember` by `join_lobby_with_discord`.
 
 ## Two TypeScript services
 
@@ -47,9 +47,9 @@ If the bot is down, play continues. Lobbies and tables still work through the ex
 
 Three flows share one `Lobby` and the same `GameTable` rows.
 
-**Discord joiners.** The primary id is the Discord user id. The display name is editable. The browser still keeps a `clientId` so the member fits the existing `(lobbyId, clientId)` row. `join_lobby_with_discord` attaches `discordUserId`, `discordUsername`, and `discordGlobalName` to that `LobbyMember`. [#43](https://github.com/arkajyotiMukherjee/discordcardgames/issues/43) still chooses the default `name` from Discord. Changing `name` later does not change `discordUserId`.
+**Discord joiners.** The primary id is the Discord user id. The display name is editable. The browser still keeps a `clientId` so the member fits the existing `(lobbyId, clientId)` row. `join_lobby_with_discord` attaches `discordUserId`, `discordUsername`, and `discordGlobalName` to that `LobbyMember`. The join URL can carry that identity as a query: `discordUserId`, `discordUsername`, `discordGlobalName`, and `discordDiscriminator` only when Discord sends one. [#43](https://github.com/arkajyotiMukherjee/discordcardgames/issues/43) still chooses the default `name` from Discord. Changing `name` later does not change `discordUserId`.
 
-**Web-only joiners.** The browser generates a random `clientId` and calls `join_lobby`. Discord fields stay empty. There is no Discord user id.
+**Web-only joiners.** The browser generates a random `clientId` and calls `join_lobby`. Discord fields stay empty. There is no Discord user id. A URL with no `discordUserId` is this path.
 
 **Both together.** A Discord joiner and a web-only joiner can be in the same lobby and can sit at the same table. There is still no host. `handle_game_intent` does not care which path created the member.
 
