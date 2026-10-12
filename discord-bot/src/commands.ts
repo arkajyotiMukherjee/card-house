@@ -1,4 +1,7 @@
 const SUB_COMMAND = 1;
+const STRING_OPTION = 3;
+
+export const ROOM_CODE_OPTION = 'roomcode';
 
 export const CARDROOM_COMMAND = {
   name: 'cardroom',
@@ -8,6 +11,19 @@ export const CARDROOM_COMMAND = {
       type: SUB_COMMAND,
       name: 'create',
       description: 'Create a lobby and get a code and join link',
+    },
+    {
+      type: SUB_COMMAND,
+      name: 'status',
+      description: 'Check whether a room code is still live',
+      options: [
+        {
+          type: STRING_OPTION,
+          name: ROOM_CODE_OPTION,
+          description: 'Lobby room code',
+          required: true,
+        },
+      ],
     },
   ],
 } as const;
