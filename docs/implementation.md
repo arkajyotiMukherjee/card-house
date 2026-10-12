@@ -245,7 +245,7 @@ For each game (e.g., Crazy Eights, Blackjack, Hearts, Spades, Rummy, Go Fish, Pr
 
 Backend service (can be a small Node/Express or serverless function):
 
-`discord-bot/` registers `/cardroom create`. It calls `create_lobby`, then `set_lobby_discord_channel` so `Lobby.discordChannelId` is the Discord channel. `/cardroom status`, the default Discord name, and the Launched from Discord badge are still open.
+`discord-bot/` registers `/cardroom create`. It calls `create_lobby`, then `set_lobby_discord_channel` so `Lobby.discordChannelId` is the Discord channel. The lobby scene shows a Launched from Discord badge when that column is not empty. `/cardroom status` and the default Discord name are still open.
 
 - Register slash commands:
   - `/cardroom create`
