@@ -45,6 +45,7 @@ export function connectCardroom(handlers: CardroomHandlers): void {
           query.lobbyMember,
           query.gameTable,
           query.voicePresence,
+          query.speakingState,
         ]);
     })
     .onConnectError((_ctx, error) => {

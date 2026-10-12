@@ -2,8 +2,15 @@ import { createServer } from 'node:http';
 import { pathToFileURL } from 'node:url';
 import { registerSlashCommands } from './commands.ts';
 import { discordRestApi } from './discord-http.ts';
+import { lookupDefaultPlayerName } from './discord-user.ts';
 import { connectLobby } from './lobby-client.ts';
+import { readLobbyStatus } from './lobby-status.ts';
 import { createApp } from './server.ts';
+import { attachSpeakingWatch } from './speaking.ts';
+import {
+  createSpeakingGateway,
+  probeSpeakingGateway,
+} from './speaking-gateway.ts';
 import { connectVoiceGateway } from './voice-gateway.ts';
 import { recordVoiceState, syncGuildVoice } from './voice-presence.ts';
 import {
@@ -34,7 +41,7 @@ export async function main(): Promise<void> {
       applicationId,
       guildId: process.env.DISCORD_GUILD_ID,
     });
-    console.log('Registered /cardroom create');
+    console.log('Registered /cardroom create and /cardroom status');
   } else {
     console.log(
       'DISCORD_BOT_TOKEN or DISCORD_APPLICATION_ID is unset; slash command registration skipped',
@@ -60,6 +67,16 @@ export async function main(): Promise<void> {
       },
     });
   }
+  if (token.length > 0) {
+    const speakingProbe = await probeSpeakingGateway(token);
+    if (speakingProbe.status === 401) {
+      console.log('Discord speaking gateway unauthorized (401)');
+    }
+    attachSpeakingWatch(
+      connection,
+      createSpeakingGateway(token, speakingProbe),
+    );
+  }
   const app = createApp({
     publicKey,
     createLobby: (discordChannelId, guildId) =>
@@ -70,6 +87,9 @@ export async function main(): Promise<void> {
         guildId,
         publicUrl,
       ),
+    lookupPlayerName: (discordUserId) =>
+      lookupDefaultPlayerName(discordUserId, token),
+    lobbyStatus: (roomCode) => readLobbyStatus(connection, roomCode),
   });
   const server = createServer(app);
   await new Promise<void>((resolve) => {

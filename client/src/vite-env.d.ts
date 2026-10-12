@@ -2,3 +2,4 @@
 
 declare const __SPACETIMEDB_HOST__: string;
 declare const __SPACETIMEDB_DB__: string;
+declare const __CARDROOM_BOT_URL__: string;

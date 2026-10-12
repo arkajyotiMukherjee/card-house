@@ -10,7 +10,10 @@ import {
 import {
   clampPlayerCount,
   CREATE_TABLE,
+  discordBadgeBox,
+  DISCORD_BADGE,
   gameOption,
+  lobbyLaunchedFromDiscord,
   POKER_GAME_TYPE,
   POKER_VARIATION_LABELS,
   POKER_VARIATIONS,
@@ -119,6 +122,7 @@ export class LobbyScene {
   private dealLabel: ex.Text | undefined;
   private variationActors: ex.Actor[] = [];
   private popup: ex.Actor | undefined;
+  private discordBadge: ex.Actor | undefined;
 
   constructor(
     private readonly scene: ex.Scene,
@@ -153,6 +157,15 @@ export class LobbyScene {
     this.connection.db.gameSeat.onDelete(() => {
       this.render();
     });
+    this.connection.db.lobby.onInsert(() => {
+      this.paintDiscordBadge();
+    });
+    this.connection.db.lobby.onUpdate(() => {
+      this.paintDiscordBadge();
+    });
+    this.connection.db.lobby.onDelete(() => {
+      this.paintDiscordBadge();
+    });
   }
 
   openLobby(lobbyId: string, code = ''): void {
@@ -160,6 +173,7 @@ export class LobbyScene {
     this.lobbyCode = code;
     this.ensurePanel();
     this.paintCode();
+    this.paintDiscordBadge();
     if (this.subscribedLobbyId === lobbyId) {
       this.render();
       return;
@@ -283,6 +297,43 @@ export class LobbyScene {
       this.centeredX(code, ROOM_BANNER.code.size),
       ROOM_BANNER.code.y,
     );
+  }
+
+  private paintDiscordBadge(): void {
+    const linked =
+      this.panelReady &&
+      this.lobbyId.length > 0 &&
+      lobbyLaunchedFromDiscord(this.connection.db.lobby.iter(), this.lobbyId);
+    if (!linked) {
+      this.discordBadge?.kill();
+      this.discordBadge = undefined;
+      return;
+    }
+    if (this.discordBadge) {
+      return;
+    }
+    const box = discordBadgeBox();
+    const badge = new ex.Actor({
+      pos: ex.vec(box.x, box.y),
+      anchor: ex.vec(0, 0),
+      width: box.w,
+      height: box.h,
+      z: 21,
+    });
+    badge.graphics.use(panelRect(box.w, box.h, BANNER_FILL, STROKE));
+    const caption = new ex.Actor({
+      pos: ex.vec(
+        DISCORD_BADGE.padX,
+        Math.floor((box.h - DISCORD_BADGE.size) / 2),
+      ),
+      anchor: ex.vec(0, 0),
+    });
+    caption.graphics.use(
+      canvasText(DISCORD_BADGE.label, DISCORD_BADGE.size, GOLD),
+    );
+    badge.addChild(caption);
+    this.scene.add(badge);
+    this.discordBadge = badge;
   }
 
   private buildIdleCards(): void {

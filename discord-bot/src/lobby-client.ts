@@ -70,6 +70,7 @@ export function connectLobby(
           })
           .subscribe((query) => [
             query.lobby,
+            query.lobbyMember,
             query.gameTable,
             query.voicePresence,
           ]);

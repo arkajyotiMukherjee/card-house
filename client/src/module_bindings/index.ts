@@ -49,6 +49,7 @@ import SetLobbyDiscordChannelReducer from "./set_lobby_discord_channel_reducer";
 import SetLobbyDiscordVoiceReducer from "./set_lobby_discord_voice_reducer";
 import SetTableDiscordVoiceReducer from "./set_table_discord_voice_reducer";
 import UpdateVoicePresenceReducer from "./update_voice_presence_reducer";
+import UpdateSpeakingStateReducer from "./update_speaking_state_reducer";
 
 // Import all procedure arg schemas
 
@@ -59,6 +60,7 @@ import GameTableRow from "./game_table_table";
 import LobbyRow from "./lobby_table";
 import LobbyMemberRow from "./lobby_member_table";
 import VoicePresenceRow from "./voice_presence_table";
+import SpeakingStateRow from "./speaking_state_table";
 
 /** Type-only namespace exports for generated type groups. */
 
@@ -131,6 +133,10 @@ const tablesSchema = __schema({
         'lobbyId',
         'clientId',
       ] },
+      { accessor: 'byLobbyAndDiscordUser', name: 'LobbyMember_lobby_id_discord_user_id_idx_btree', algorithm: 'btree', columns: [
+        'lobbyId',
+        'discordUserId',
+      ] },
       { accessor: 'lobbyId', name: 'LobbyMember_lobby_id_idx_btree', algorithm: 'btree', columns: [
         'lobbyId',
       ] },
@@ -156,6 +162,24 @@ const tablesSchema = __schema({
       { name: 'VoicePresence_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, VoicePresenceRow),
+  speakingState: __table({
+    name: 'SpeakingState',
+    indexes: [
+      { accessor: 'id', name: 'SpeakingState_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'lobbyId', name: 'SpeakingState_lobby_id_idx_btree', algorithm: 'btree', columns: [
+        'lobbyId',
+      ] },
+      { accessor: 'byLobbyMemberAndTable', name: 'SpeakingState_lobby_member_id_table_id_idx_btree', algorithm: 'btree', columns: [
+        'lobbyMemberId',
+        'tableId',
+      ] },
+    ],
+    constraints: [
+      { name: 'SpeakingState_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, SpeakingStateRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
@@ -175,6 +199,7 @@ const reducersSchema = __reducers(
   __reducerSchema("set_lobby_discord_voice", SetLobbyDiscordVoiceReducer),
   __reducerSchema("set_table_discord_voice", SetTableDiscordVoiceReducer),
   __reducerSchema("update_voice_presence", UpdateVoicePresenceReducer),
+  __reducerSchema("update_speaking_state", UpdateSpeakingStateReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */
@@ -195,6 +220,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "LobbyMember": Omit<typeof tablesSchema.schemaType.tables["lobbyMember"], "accessorName"> & { readonly accessorName: "LobbyMember" };
     /** @deprecated Use `voicePresence` instead. This alias will be removed in the next major version. */
     readonly "VoicePresence": Omit<typeof tablesSchema.schemaType.tables["voicePresence"], "accessorName"> & { readonly accessorName: "VoicePresence" };
+    /** @deprecated Use `speakingState` instead. This alias will be removed in the next major version. */
+    readonly "SpeakingState": Omit<typeof tablesSchema.schemaType.tables["speakingState"], "accessorName"> & { readonly accessorName: "SpeakingState" };
   };
 };
 
@@ -219,6 +246,7 @@ const tableAccessorAliases = {
   "Lobby": "lobby",
   "LobbyMember": "lobbyMember",
   "VoicePresence": "voicePresence",
+  "SpeakingState": "speakingState",
 } as const;
 
 function __withTableAccessorAliases<T extends object>(target: T, freeze = false): T {
@@ -251,6 +279,8 @@ export type DbView = __DbViewBase & {
   readonly "LobbyMember": __DbViewBase["lobbyMember"];
   /** @deprecated Use `voicePresence` instead. This alias will be removed in the next major version. */
   readonly "VoicePresence": __DbViewBase["voicePresence"];
+  /** @deprecated Use `speakingState` instead. This alias will be removed in the next major version. */
+  readonly "SpeakingState": __DbViewBase["speakingState"];
 };
 
 type __TablesBase = __QueryBuilder<typeof tablesSchema.schemaType>;
@@ -267,6 +297,8 @@ export type Tables = __TablesBase & {
   readonly "LobbyMember": __TablesBase["lobbyMember"];
   /** @deprecated Use `voicePresence` instead. This alias will be removed in the next major version. */
   readonly "VoicePresence": __TablesBase["voicePresence"];
+  /** @deprecated Use `speakingState` instead. This alias will be removed in the next major version. */
+  readonly "SpeakingState": __TablesBase["speakingState"];
 };
 
 /** The tables available in this remote SpacetimeDB module. Each table reference doubles as a query builder. */

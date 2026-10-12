@@ -44,6 +44,18 @@ describe('join path', () => {
     ).toBeUndefined();
   });
 
+  it('reads the snake_case Discord profile used for the default name', () => {
+    expect(
+      discordIdentityFromSearch(
+        '?discord_user_id=80351110224678912&discord_username=nelly',
+      ),
+    ).toEqual({
+      discordUserId: '80351110224678912',
+      discordUsername: 'nelly',
+      discordGlobalName: '',
+    });
+  });
+
   it('treats a URL without a Discord user id as a web join', () => {
     expect(discordIdentityFromSearch('')).toBeUndefined();
     expect(
