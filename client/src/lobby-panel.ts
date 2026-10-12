@@ -15,6 +15,7 @@ import {
   type MemberRecord,
 } from './lobby';
 import type { DiscordJoinIdentity } from './join-path';
+import { rememberLobby } from './last-room';
 import type { DbConnection } from './module_bindings';
 import { lobbySpeakers, SpeakingFader, type SpeakingRow } from './speaking';
 import { speechBubble } from './speaking-view';
@@ -326,6 +327,7 @@ export function mountLobbyPanel(
         joinedCode = room;
         renameName = playerName;
         renameFocused = false;
+        rememberLobby(room, playerName);
         syncJoinedLobby();
         if (
           joinedCode.length > 0 &&
@@ -367,6 +369,7 @@ export function mountLobbyPanel(
     )
       .then(() => {
         renameName = playerName;
+        rememberLobby(joinedCode, playerName);
         paintRename();
         syncJoinedLobby();
       })

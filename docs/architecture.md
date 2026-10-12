@@ -363,11 +363,13 @@ To keep things simple and anonymous but still reconnectable:
     - if a `LobbyMember` with that `(lobbyId, clientId)` exists, reuse it and update name.
     - a later name change keeps the stored `discordUserId`.
     - otherwise, create a new `LobbyMember`.
-- On reconnect:
-  - same `clientId` is reused.
-  - backend marks member as reconnected.
-  - if they still have a `GameSeat` in some table:
-    - client can automatically offer to re-open that table.
+- On reconnect (a reload with no room code in the path):
+  - same `clientId` is reused from `localStorage`.
+  - the client calls `join_lobby` again with the stored room code and name. That reuses the `LobbyMember` and marks it connected.
+  - the stored room is `lastRoom`: lobby code, display name, and table id while the player is seated. Leave Table clears the table id and keeps the lobby.
+  - if that `GameTable` and this member's `GameSeat` are both still in the lobby, the client opens the table.
+  - if the seat or the table is gone, the client opens the lobby.
+  - a missing or closed lobby clears `lastRoom` and stays on the menu.
 
 No passwords, email, or long-term accounts; just soft identity.
 
