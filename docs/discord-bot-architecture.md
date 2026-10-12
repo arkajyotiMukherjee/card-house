@@ -35,7 +35,7 @@ Voice slice:
 
 `/cardroom status` takes a room code. It reads the subscribed `Lobby` row for that code. A matching open lobby is live. The reply names that code and the number of `GameTable` rows and `LobbyMember` rows in the lobby. A code with no row replies that the room was not found. Status does not call a reducer.
 
-`discordChannelId` is the channel where the command ran. It is not the lobby voice channel. The bot stores voice channel ids with `set_lobby_discord_voice` and `set_table_discord_voice`. Discord identity is stored on `LobbyMember` by `join_lobby_with_discord`. Speaking updates call `update_speaking_state`.
+`discordChannelId` is the channel where the command ran. It is not the lobby voice channel. The bot stores voice channel ids with `set_lobby_discord_voice` and `set_table_discord_voice`. Discord identity is stored on `LobbyMember` by `join_lobby_with_discord`. Speaking updates call `update_speaking_state`. Who is in a voice channel is stored by `update_voice_presence`.
 
 ## Two TypeScript services
 
@@ -110,6 +110,21 @@ The client subscribes to `SpeakingState` and draws from those rows. It never ope
 - If speaking state is missing because the bot is down, show no indicator. Do not block the game.
 
 [#103](https://github.com/arkajyotiMukherjee/discordcardgames/issues/103) is optional. The bot records which mapped members are in the lobby voice channel and which are in a table voice channel. The client shows a small headset on that lobby row or seat. Web-only members never show the headset. This is presence, not speaking, and it still carries no audio.
+
+`VoicePresence` is a public table. One row is one `LobbyMember` in one voice channel, so a member has at most one row.
+
+- `id` — `presence_{lobbyMemberId}`
+- `lobbyId`
+- `tableId` — empty for the lobby voice channel
+- `lobbyMemberId`
+- `discordUserId`
+- `updatedAt`
+
+`update_voice_presence` takes `discordUserId` and `discordVoiceChannelId`. An empty channel id means the user left voice. The module matches the channel id against `Lobby.discordLobbyVoiceChannelId` and `GameTable.discordVoiceChannelId`, then finds the `LobbyMember` in that lobby whose `discordUserId` matches. It upserts that member's row and deletes any other row for the same Discord user. A channel the module does not store, or a Discord user with no mapped member, leaves no row. A web-only member has no `discordUserId`, so it never gets a row. `clear_lobby_discord_voice`, `clear_table_discord_voice`, `remove_game_table`, and `close_lobby` delete the rows for the channel they end.
+
+The bot listens to Discord's gateway for guild and voice-state events. A voice state is a user id and a channel id. On connect it applies every user in each guild's voice channels and clears a stored row for a user the guild no longer lists. It skips voice states for channels the module does not store.
+
+The client subscribes to `VoicePresence`. The lobby Players list draws the headset after a name when the member has a row with an empty `tableId`. A seat at the table draws it beside the name plate when that member has a row for that table id. No row, no headset. If the bot is down, no headset shows and play is unaffected.
 
 ## Out of scope
 

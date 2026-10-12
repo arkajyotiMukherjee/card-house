@@ -54,6 +54,20 @@ describe('seat labels', () => {
     expect(labels.find((seat) => seat.name === 'Bea')?.self).toBe(false);
   });
 
+  it('marks only seated members who are in this table voice channel', () => {
+    const labels = seatLabels(
+      [
+        { tableId: 'table-1', lobbyMemberId: 'member-a', seatIndex: 0 },
+        { tableId: 'table-1', lobbyMemberId: 'member-b', seatIndex: 1 },
+      ],
+      members,
+      'table-1',
+      'client-a',
+      new Set(['member-b', 'member-elsewhere']),
+    );
+    expect(labels.map((seat) => seat.inVoice)).toEqual([false, true]);
+  });
+
   it('finds this client member row', () => {
     expect(memberForClient(members, 'lobby-1', 'client-b')?.id).toBe(
       'member-b',
@@ -63,8 +77,20 @@ describe('seat labels', () => {
 
   it('puts this client at the bottom-center seat', () => {
     const labels: NamedSeat[] = [
-      { seatIndex: 0, name: 'Ada', self: false, lobbyMemberId: 'member-a' },
-      { seatIndex: 1, name: 'Bea', self: true, lobbyMemberId: 'member-b' },
+      {
+        seatIndex: 0,
+        name: 'Ada',
+        self: false,
+        lobbyMemberId: 'member-a',
+        inVoice: false,
+      },
+      {
+        seatIndex: 1,
+        name: 'Bea',
+        self: true,
+        lobbyMemberId: 'member-b',
+        inVoice: false,
+      },
     ];
     const placed = placeSeats(labels);
     const bea = placed.find((seat) => seat.name === 'Bea');

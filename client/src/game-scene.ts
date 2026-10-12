@@ -67,6 +67,8 @@ export interface NamedSeat {
   name: string;
   self: boolean;
   lobbyMemberId: string;
+  /** The bot saw this member in this table's voice channel. */
+  inVoice: boolean;
 }
 
 export interface PlacedSeat extends NamedSeat {
@@ -113,6 +115,7 @@ export function seatLabels(
   members: Iterable<MemberRef>,
   tableId: string,
   selfClientId: string,
+  inVoice: ReadonlySet<string> = new Set(),
 ): NamedSeat[] {
   const byId = new Map<string, MemberRef>();
   for (const member of members) {
@@ -129,6 +132,7 @@ export function seatLabels(
       name: member?.name ?? 'Player',
       self: member?.clientId === selfClientId,
       lobbyMemberId: seat.lobbyMemberId,
+      inVoice: inVoice.has(seat.lobbyMemberId),
     });
   }
   labels.sort((a, b) => a.seatIndex - b.seatIndex);

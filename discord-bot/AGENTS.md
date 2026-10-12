@@ -18,8 +18,10 @@ Conventions: [../repo-conventions.md](../repo-conventions.md). The plan is [../d
 - `src/voice-channels.ts` — lobby and table voice channel names, create, delete, and the subscription watch.
 - `src/discord-user.ts` — Discord `GET /users/{id}`. A 401 returns no user and no name. The default name comes from `src/shared/discord-player-name.ts`.
 - `src/join-url.ts` — `{CARDROOM_PUBLIC_URL}/{code}`.
+- `src/voice-presence.ts` — `recordVoiceState` sends a user id and voice channel id to `update_voice_presence`, skipping channels the module does not store. `syncGuildVoice` applies a guild's voice states and clears rows for users who are gone.
+- `src/voice-gateway.ts` — Discord gateway client for `GUILDS` and `GUILD_VOICE_STATES`. Passes user and channel ids to those handlers. It never reads or stores audio.
 - `src/server.ts` — Express `POST /interactions` with the Discord signature check, and `GET /default-player-name`.
-- `src/*.test.ts` — command shape, reply text, the name mapping, rate limits, the signature check, and speaking updates. `create-lobby.live.test.ts`, `voice-channels.live.test.ts`, and `status-lobby.live.test.ts` send signed `POST /interactions` when `CARDROOM_LIVE=1`. `web-without-bot.live.test.ts` deals a web lobby without starting this process. `speaking.live.test.ts` drives speaking through `updateSpeakingState` when `CARDROOM_LIVE=1`. `discord-user.live.test.ts` calls Discord when `DISCORD_NAME_LIVE=1` and expects a 401 with no invented user.
+- `src/*.test.ts` — command shape, reply text, the name mapping, rate limits, the signature check, speaking updates, and voice presence. `create-lobby.live.test.ts`, `voice-channels.live.test.ts`, and `status-lobby.live.test.ts` send signed `POST /interactions` when `CARDROOM_LIVE=1`. `web-without-bot.live.test.ts` deals a web lobby without starting this process. `speaking.live.test.ts` drives speaking through `updateSpeakingState` when `CARDROOM_LIVE=1`. `voice-presence.test.ts` uses fixture voice states and a fake gateway socket. `discord-user.live.test.ts` calls Discord when `DISCORD_NAME_LIVE=1` and expects a 401 with no invented user.
 
 The generated client is `client/src/module_bindings/`. Do not hand-edit it.
 
@@ -28,6 +30,8 @@ The generated client is `client/src/module_bindings/`. Do not hand-edit it.
 `/cardroom create` reads `channel_id` and `guild_id` from the interaction. `create_lobby` mints the code. `set_lobby_discord_channel` stores that text channel on `Lobby.discordChannelId`. The bot then creates `#room-{code}-voice` and calls `set_lobby_discord_voice`. The reply is still the code and the join URL. A Discord error or rate limit skips the voice channel and still returns the lobby.
 
 A new `GameTable` in a lobby that has `discordGuildId` gets a channel such as `#ab3d-bluff-1`, stored with `set_table_discord_voice`. A finished or removed table loses that channel. `close_lobby` makes the bot delete the lobby channel and any table channels still open.
+
+When `DISCORD_BOT_TOKEN` is set, `src/index.ts` also opens the voice gateway and records who is in the lobby or a table voice channel through `update_voice_presence`. The token is sent only in Identify and is never logged.
 
 `/cardroom status` reads `roomcode`. It looks up that `Lobby` and counts `GameTable` and `LobbyMember` rows for the lobby. An open lobby is live. The reply names the code, says live or closed, and gives those counts. A code with no row says the room was not found. Status does not call a reducer.
 
@@ -39,7 +43,7 @@ Speaking updates send only the Discord user id, the voice channel id, and `isSpe
 
 ## Leave alone
 
-Do not add headset presence in this package until that issue is in scope. Do not draw speaking indicators here. The default player name is the mapping in `src/shared/discord-player-name.ts`. Discord member columns stay on `LobbyMember` in the module.
+Do not draw speaking indicators here. The default player name is the mapping in `src/shared/discord-player-name.ts`. Discord member columns stay on `LobbyMember` in the module.
 
 Do not commit a bot token, application id, or public key.
 

@@ -109,3 +109,13 @@ export const TableStatus = __t.enum("TableStatus", {
 });
 export type TableStatus = __Infer<typeof TableStatus>;
 
+export const VoicePresence = __t.object("VoicePresence", {
+  id: __t.string(),
+  lobbyId: __t.string(),
+  tableId: __t.string(),
+  lobbyMemberId: __t.string(),
+  discordUserId: __t.string(),
+  updatedAt: __t.timestamp(),
+});
+export type VoicePresence = __Infer<typeof VoicePresence>;
+
