@@ -160,8 +160,8 @@ const GameTable = table(
     maxPlayers: t.u32(),
     stateJson: t.string(),
     createdAt: t.timestamp(),
-    lastActivityAt: t.option(t.timestamp()).default(undefined),
     discordVoiceChannelId: t.string().default(''),
+    lastActivityAt: t.option(t.timestamp()).default(undefined),
   },
 );
 

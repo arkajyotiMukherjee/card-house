@@ -132,8 +132,8 @@ Represents one table running one card game.
 - `maxPlayers: number`.
 - `stateJson: string` – serialized game state (game-type-specific).
 - `createdAt: number`.
-- `lastActivityAt: number | null` – last create, join, leave, or applied intent. Empty until one of those writes it, and then idle time falls back to `createdAt`.
 - `discordVoiceChannelId: string` – table voice channel, or empty for a web lobby.
+- `lastActivityAt: number | null` – last create, join, leave, or applied intent. Empty until one of those writes it, and then idle time falls back to `createdAt`.
 
 There can be many `GameTable` rows of the same `gameType` in the same lobby, allowing multiple poker tables, multiple bluff tables, etc.
 
