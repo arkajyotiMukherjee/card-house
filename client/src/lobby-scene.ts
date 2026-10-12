@@ -2,6 +2,7 @@ import * as ex from 'excalibur';
 import { cardAtlas, pixelFont } from './boot-scene';
 import { subscribeLobbyTables } from './connect';
 import { joinFailureMessage, wrapTableError } from './join-errors';
+import { tableToReopen } from './last-room';
 import {
   IDLE_CARDS,
   IDLE_OPACITY,
@@ -124,6 +125,7 @@ export class LobbyScene {
   private variationActors: ex.Actor[] = [];
   private popup: ex.Actor | undefined;
   private discordBadge: ex.Actor | undefined;
+  private tablesReady: Promise<boolean> = Promise.resolve(false);
 
   constructor(
     private readonly scene: ex.Scene,
@@ -169,7 +171,7 @@ export class LobbyScene {
     });
   }
 
-  openLobby(lobbyId: string, code = ''): void {
+  openLobby(lobbyId: string, code = ''): Promise<boolean> {
     this.lobbyId = lobbyId;
     this.lobbyCode = code;
     this.ensurePanel();
@@ -177,21 +179,51 @@ export class LobbyScene {
     this.paintDiscordBadge();
     if (this.subscribedLobbyId === lobbyId) {
       this.render();
-      return;
+      return this.tablesReady;
     }
     this.subscribedLobbyId = lobbyId;
-    void subscribeLobbyTables(this.connection, lobbyId)
+    this.tablesReady = subscribeLobbyTables(this.connection, lobbyId)
       .then(() => {
         if (this.lobbyId === lobbyId) {
           this.render();
         }
+        return true;
       })
       .catch((error: unknown) => {
         if (this.subscribedLobbyId === lobbyId) {
           this.subscribedLobbyId = '';
         }
         this.setError(errorMessage(error));
+        return false;
       });
+    return this.tablesReady;
+  }
+
+  /**
+   * Opens the stored table when this member's seat and the table row
+   * are both still in the joined lobby.
+   */
+  reopenIfSeated(tableId: string): boolean {
+    const member = memberByClient(
+      this.readMembers(),
+      this.lobbyId,
+      this.clientId,
+    );
+    if (!member) {
+      return false;
+    }
+    const openId = tableToReopen(
+      tableId,
+      this.readTables(),
+      this.readSeats(),
+      member.id,
+      this.lobbyId,
+    );
+    if (openId.length === 0) {
+      return false;
+    }
+    this.onSeated(openId, member.id);
+    return true;
   }
 
   private ensurePanel(): void {

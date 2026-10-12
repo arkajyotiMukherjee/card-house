@@ -2,6 +2,15 @@ import * as ex from 'excalibur';
 import { BootScene, demoImages } from './boot-scene';
 import { getOrCreateClientId } from './client-id';
 import { connectCardroom } from './connect';
+import {
+  clearLastRoom,
+  forgetTable,
+  readLastRoom,
+  rememberTable,
+  roomGoneMessage,
+  type LastRoom,
+} from './last-room';
+import { lobbyByCode, type LobbyRow } from './lobby';
 import { GameScene } from './game-scene-view';
 import {
   cardroomBotUrl,
@@ -12,6 +21,7 @@ import { discordIdentityFromSearch, roomCodeFromPath } from './join-path';
 import { LobbyScene } from './lobby-scene';
 import { mountLobbyPanel } from './lobby-panel';
 import { MenuScene } from './menu-scene';
+import type { DbConnection } from './module_bindings';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH, integerScale } from './sheets';
 
 const clientId = getOrCreateClientId();
@@ -67,6 +77,7 @@ void engine.start(loader).then(() => {
     },
     onSubscribed: (connection) => {
       const game = new GameScene(connection, clientId, () => {
+        forgetTable();
         engine.goToScene('boot');
       });
       engine.add('game', game);
@@ -75,6 +86,7 @@ void engine.start(loader).then(() => {
         connection,
         clientId,
         (tableId, lobbyMemberId) => {
+          rememberTable(tableId);
           game.open(tableId, lobbyMemberId);
           engine.goToScene('game');
         },
@@ -88,7 +100,7 @@ void engine.start(loader).then(() => {
         discordIdentity,
         {
           onJoined: (lobby) => {
-            lobbyScene.openLobby(lobby.id, lobby.code);
+            void lobbyScene.openLobby(lobby.id, lobby.code);
           },
         },
       );
@@ -98,6 +110,7 @@ void engine.start(loader).then(() => {
           engine.goToScene('boot');
         },
       );
+      const savedRoom = joinCode ? undefined : readLastRoom();
       if (joinCode) {
         const joinName = joinNameFromSearch(window.location.search);
         if (joinName.state === 'ready') {
@@ -110,7 +123,45 @@ void engine.start(loader).then(() => {
             menu.openJoin(joinCode, name);
           });
         }
+      } else if (savedRoom) {
+        void rejoinSavedRoom(connection, savedRoom);
+      }
+
+      async function rejoinSavedRoom(
+        db: DbConnection,
+        saved: LastRoom,
+      ): Promise<void> {
+        const error = await panel.enter('join', saved.name, saved.lobbyCode);
+        if (error) {
+          if (roomGoneMessage(error)) {
+            clearLastRoom();
+          }
+          return;
+        }
+        engine.goToScene('boot');
+        if (saved.tableId.length === 0) {
+          return;
+        }
+        const lobby = lobbyByCode(lobbyRows(db), saved.lobbyCode);
+        if (!lobby) {
+          return;
+        }
+        const ready = await lobbyScene.openLobby(lobby.id, lobby.code);
+        if (!ready) {
+          return;
+        }
+        if (!lobbyScene.reopenIfSeated(saved.tableId)) {
+          forgetTable();
+        }
       }
     },
   });
 });
+
+function lobbyRows(connection: DbConnection): LobbyRow[] {
+  const rows: LobbyRow[] = [];
+  for (const lobby of connection.db.lobby.iter()) {
+    rows.push({ id: lobby.id, code: lobby.code });
+  }
+  return rows;
+}

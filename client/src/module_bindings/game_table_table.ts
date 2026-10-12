@@ -27,4 +27,5 @@ export default __t.row({
   stateJson: __t.string().name("state_json"),
   createdAt: __t.timestamp().name("created_at"),
   discordVoiceChannelId: __t.string().name("discord_voice_channel_id"),
+  lastActivityAt: __t.option(__t.timestamp()).name("last_activity_at"),
 });
