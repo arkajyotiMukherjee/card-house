@@ -14,6 +14,7 @@ import {
   type MemberLine,
   type MemberRow,
 } from './lobby';
+import type { DiscordJoinIdentity } from './join-path';
 import type { DbConnection } from './module_bindings';
 
 const GOLD = ex.Color.fromHex('#f4e4b3');
@@ -96,6 +97,7 @@ export function mountLobbyPanel(
   scene: ex.Scene,
   connection: DbConnection,
   clientId: string,
+  discordIdentity: DiscordJoinIdentity | undefined,
   handlers: { onJoined?: (lobby: LobbyRow) => void } = {},
 ): LobbyPanel {
   const backdrop = new ex.Actor({
@@ -123,10 +125,20 @@ export function mountLobbyPanel(
   const codeBox = fieldActor(scene, LOBBY_PANEL.codeField);
   const createButton = buttonActor(scene, LOBBY_PANEL.createButton, 'Create');
   const joinButton = buttonActor(scene, LOBBY_PANEL.joinButton, 'Join');
+  const renameLabel = labelActor(scene, 16, 412, 'Name', 8, DIM);
+  const renameText = labelActor(scene, 22, 436, '', 8, GOLD);
+  const renameBox = fieldActor(scene, LOBBY_PANEL.renameField);
+  const saveButton = buttonActor(scene, LOBBY_PANEL.saveButton, 'Save');
+  renameLabel.opacity = 0;
+  renameText.opacity = 0;
+  renameBox.graphics.opacity = 0;
+  saveButton.graphics.opacity = 0;
 
   let name = '';
   let code = '';
+  let renameName = '';
   let focused: FieldId = 'name';
+  let renameFocused = false;
   let busy = false;
   let joinedCode = '';
   const nameActors: ex.Actor[] = [];
@@ -172,6 +184,24 @@ export function mountLobbyPanel(
     codeBox.graphics.opacity = opacity;
     createButton.graphics.opacity = opacity;
     joinButton.graphics.opacity = opacity;
+    const renameOpacity = visible ? 0 : 1;
+    renameLabel.opacity = renameOpacity;
+    renameText.opacity = renameOpacity;
+    renameBox.graphics.opacity = renameOpacity;
+    saveButton.graphics.opacity = renameOpacity;
+  };
+
+  const paintRename = (): void => {
+    renameBox.graphics.use(
+      panelRect(
+        LOBBY_PANEL.renameField.w,
+        LOBBY_PANEL.renameField.h,
+        FIELD,
+        renameFocused ? STROKE_HOT : STROKE,
+      ),
+    );
+    renameText.text = renameName.length > 0 ? renameName : '_';
+    renameText.color = GOLD;
   };
 
   const renderLobby = (room: string, lines: MemberLine[]): void => {
@@ -186,12 +216,16 @@ export function mountLobbyPanel(
     nameActors.length = 0;
     for (let index = 0; index < lines.length; index += 1) {
       const line = lines[index];
+      const y = 118 + index * 16;
       if (!line) {
         continue;
       }
+      if (y >= 400) {
+        break;
+      }
       const graphic = canvasText(line.name, 8, line.self ? SELF : GOLD);
       const actor = new ex.Actor({
-        pos: ex.vec(16, 118 + index * 16),
+        pos: ex.vec(16, y),
         anchor: ex.vec(0, 0),
         z: 21,
       });
@@ -199,6 +233,11 @@ export function mountLobbyPanel(
       scene.add(actor);
       nameActors.push(actor);
     }
+    const self = lines.find((line) => line.self);
+    if (self && !renameFocused && !busy) {
+      renameName = self.name.slice(0, NAME_MAX);
+    }
+    paintRename();
   };
 
   const syncJoinedLobby = (): void => {
@@ -233,11 +272,13 @@ export function mountLobbyPanel(
     busy = true;
     const task =
       kind === 'create'
-        ? createThenJoin(connection, clientId, playerName)
-        : joinExisting(connection, clientId, playerName, code);
+        ? createThenJoin(connection, clientId, playerName, discordIdentity)
+        : joinExisting(connection, clientId, playerName, code, discordIdentity);
     return task
       .then((room) => {
         joinedCode = room;
+        renameName = playerName;
+        renameFocused = false;
         syncJoinedLobby();
         if (
           joinedCode.length > 0 &&
@@ -252,6 +293,41 @@ export function mountLobbyPanel(
           error instanceof Error ? error.message : 'Could not join';
         fail(message);
         return message;
+      })
+      .finally(() => {
+        busy = false;
+      });
+  };
+
+  const saveName = (): Promise<void> => {
+    if (busy || joinedCode.length === 0) {
+      return Promise.resolve();
+    }
+    const playerName = normalizePlayerName(renameName);
+    if (playerName.length === 0) {
+      fail('Name is required');
+      return Promise.resolve();
+    }
+    errorText.text = '';
+    busy = true;
+    renameFocused = false;
+    return joinMember(
+      connection,
+      clientId,
+      playerName,
+      joinedCode,
+      discordIdentity,
+    )
+      .then(() => {
+        renameName = playerName;
+        paintRename();
+        syncJoinedLobby();
+      })
+      .catch((error: unknown) => {
+        renameFocused = true;
+        const message =
+          error instanceof Error ? error.message : 'Could not rename';
+        fail(message);
       })
       .finally(() => {
         busy = false;
@@ -278,15 +354,46 @@ export function mountLobbyPanel(
   joinButton.on('pointerup', () => {
     void submit('join');
   });
+  renameBox.on('pointerup', () => {
+    if (joinedCode.length === 0 || busy) {
+      return;
+    }
+    renameFocused = true;
+    paintRename();
+  });
+  saveButton.on('pointerup', () => {
+    void saveName();
+  });
 
   engine.input.keyboard.on('press', (evt) => {
     if (engine.currentScene !== scene) {
       return;
     }
-    if (busy || joinedCode.length > 0) {
+    if (evt.originalEvent?.ctrlKey || evt.originalEvent?.metaKey) {
       return;
     }
-    if (evt.originalEvent?.ctrlKey || evt.originalEvent?.metaKey) {
+    if (joinedCode.length > 0) {
+      if (!renameFocused || busy) {
+        return;
+      }
+      if (evt.key === ex.Keys.Backspace) {
+        renameName = applyFieldKey(renameName, 'Backspace', NAME_MAX);
+        paintRename();
+        return;
+      }
+      if (evt.key === ex.Keys.Enter) {
+        void saveName();
+        return;
+      }
+      const typedName = evt.value ?? '';
+      if (typedName.length !== 1) {
+        return;
+      }
+      renameName = applyFieldKey(renameName, typedName, NAME_MAX);
+      paintRename();
+      return;
+    }
+    if (busy) {
       return;
     }
     if (evt.key === ex.Keys.Backspace) {
@@ -423,6 +530,7 @@ async function createThenJoin(
   connection: DbConnection,
   clientId: string,
   playerName: string,
+  discordIdentity: DiscordJoinIdentity | undefined,
 ): Promise<string> {
   const knownIds = new Set(readLobbies(connection).map((lobby) => lobby.id));
   await connection.reducers.createLobby({});
@@ -434,11 +542,13 @@ async function createThenJoin(
   if (!created) {
     throw new Error('Could not read the new room');
   }
-  await connection.reducers.joinLobby({
-    lobbyCode: created.code,
+  await joinMember(
+    connection,
     clientId,
-    name: playerName,
-  });
+    playerName,
+    created.code,
+    discordIdentity,
+  );
   return created.code;
 }
 
@@ -447,15 +557,44 @@ async function joinExisting(
   clientId: string,
   playerName: string,
   rawCode: string,
+  discordIdentity: DiscordJoinIdentity | undefined,
 ): Promise<string> {
   const lobbyCode = normalizeRoomCode(rawCode);
   if (lobbyCode.length === 0) {
     throw new Error('Room code is required');
+  }
+  await joinMember(
+    connection,
+    clientId,
+    playerName,
+    lobbyCode,
+    discordIdentity,
+  );
+  return lobbyCode;
+}
+
+async function joinMember(
+  connection: DbConnection,
+  clientId: string,
+  playerName: string,
+  lobbyCode: string,
+  discordIdentity: DiscordJoinIdentity | undefined,
+): Promise<void> {
+  if (discordIdentity) {
+    await connection.reducers.joinLobbyWithDiscord({
+      lobbyCode,
+      clientId,
+      name: playerName,
+      discordUserId: discordIdentity.discordUserId,
+      discordUsername: discordIdentity.discordUsername,
+      discordGlobalName: discordIdentity.discordGlobalName,
+      discordDiscriminator: discordIdentity.discordDiscriminator,
+    });
+    return;
   }
   await connection.reducers.joinLobby({
     lobbyCode,
     clientId,
     name: playerName,
   });
-  return lobbyCode;
 }
