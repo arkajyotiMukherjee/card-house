@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import { pathToFileURL } from 'node:url';
 import { registerSlashCommands } from './commands.ts';
+import { lookupDefaultPlayerName } from './discord-user.ts';
 import { connectLobby, createDiscordLobby } from './lobby-client.ts';
 import { readLobbyStatus } from './lobby-status.ts';
 import { createApp } from './server.ts';
@@ -34,6 +35,8 @@ export async function main(): Promise<void> {
     publicKey,
     createLobby: (discordChannelId) =>
       createDiscordLobby(connection, discordChannelId, publicUrl),
+    lookupPlayerName: (discordUserId) =>
+      lookupDefaultPlayerName(discordUserId, token),
     lobbyStatus: (roomCode) => readLobbyStatus(connection, roomCode),
   });
   const server = createServer(app);

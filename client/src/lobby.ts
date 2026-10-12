@@ -14,8 +14,9 @@ import {
   type PokerVariation,
 } from '../../src/shared/games/poker';
 import type { GameDefinition } from '../../src/shared/games/game-definition';
+import { PLAYER_NAME_MAX } from '../../src/shared/discord-player-name';
 
-export const NAME_MAX = 12;
+export const NAME_MAX = PLAYER_NAME_MAX;
 export const CODE_MAX = 6;
 
 export const LOBBY_PANEL = {

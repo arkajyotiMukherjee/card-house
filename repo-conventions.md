@@ -18,6 +18,8 @@ server/                    SpacetimeDB module
 discord-bot/               Discord slash commands
   src/                     TypeScript service
 src/shared/games/          GameRules and GameDefinition
+src/shared/discord-player-name.ts
+                           Discord user id to the default lobby name
 docs/                      architecture, milestones, UI spec
 scripts/bootstrap.sh       local tools, publish, generate bindings
 card-assest -pack/         Pixel Poker Pack source art

@@ -245,7 +245,7 @@ For each game (e.g., Crazy Eights, Blackjack, Hearts, Spades, Rummy, Go Fish, Pr
 
 Backend service (can be a small Node/Express or serverless function):
 
-`discord-bot/` registers `/cardroom create` and `/cardroom status`. Create calls `create_lobby`, then `set_lobby_discord_channel` so `Lobby.discordChannelId` is the Discord channel. Status reads that lobby and replies whether it is live, with the table count and the player count. A missing code replies that the room was not found. The lobby scene shows a Launched from Discord badge when that column is not empty. The default Discord name is still open.
+`discord-bot/` registers `/cardroom create` and `/cardroom status`. Create calls `create_lobby`, then `set_lobby_discord_channel` so `Lobby.discordChannelId` is the Discord channel. Status reads that lobby and replies whether it is live, with the table count and the player count. A missing code replies that the room was not found. The lobby scene shows a Launched from Discord badge when that column is not empty. A join URL with a Discord user id stores that id and uses the mapped default name (global name, otherwise username) without typing.
 
 - Register slash commands:
   - `/cardroom create`
@@ -255,8 +255,9 @@ Backend service (can be a small Node/Express or serverless function):
   - Respond with:
     - lobby code,
     - join URL.
-- Optionally:
-  - Add mapping from Discord user ID -> default player name when they join via link.
+- Default player name:
+  - Map a Discord user id to the lobby `name` when they join via the link.
+  - Use the global name when Discord set one, otherwise the username.
 
 Front-end:
 
