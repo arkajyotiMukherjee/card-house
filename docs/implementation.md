@@ -272,7 +272,7 @@ Voice channels and speaking indicators are now part of this milestone. The plan 
 **Goal:** Make the system durable and manageable with real users.
 
 - **Cleanup / lifecycle:**
-  - auto-close lobbies after long inactivity,
+  - auto-close lobbies after long inactivity (`close_idle_lobbies`, 24 hours, or a 1–60 second dev timeout),
   - auto-clean tables that:
     - have zero seats,
     - and `status = "finished"` or idle for too long.

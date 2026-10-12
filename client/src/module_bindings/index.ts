@@ -48,6 +48,7 @@ import RemoveGameTableReducer from "./remove_game_table_reducer";
 import SetEmptyTableIdleTimeoutReducer from "./set_empty_table_idle_timeout_reducer";
 import SetLobbyDiscordChannelReducer from "./set_lobby_discord_channel_reducer";
 import SetLobbyDiscordVoiceReducer from "./set_lobby_discord_voice_reducer";
+import SetLobbyIdleTimeoutReducer from "./set_lobby_idle_timeout_reducer";
 import SetTableDiscordVoiceReducer from "./set_table_discord_voice_reducer";
 import UpdateSpeakingStateReducer from "./update_speaking_state_reducer";
 import UpdateVoicePresenceReducer from "./update_voice_presence_reducer";
@@ -59,6 +60,7 @@ import GameEventRow from "./game_event_table";
 import GameSeatRow from "./game_seat_table";
 import GameTableRow from "./game_table_table";
 import LobbyRow from "./lobby_table";
+import LobbyIdleConfigRow from "./lobby_idle_config_table";
 import LobbyMemberRow from "./lobby_member_table";
 import SpeakingStateRow from "./speaking_state_table";
 import TableCleanupScheduleRow from "./table_cleanup_schedule_table";
@@ -125,6 +127,17 @@ const tablesSchema = __schema({
       { name: 'Lobby_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, LobbyRow),
+  lobbyIdleConfig: __table({
+    name: 'LobbyIdleConfig',
+    indexes: [
+      { accessor: 'id', name: 'LobbyIdleConfig_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'LobbyIdleConfig_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, LobbyIdleConfigRow),
   lobbyMember: __table({
     name: 'LobbyMember',
     indexes: [
@@ -211,6 +224,7 @@ const reducersSchema = __reducers(
   __reducerSchema("set_empty_table_idle_timeout", SetEmptyTableIdleTimeoutReducer),
   __reducerSchema("set_lobby_discord_channel", SetLobbyDiscordChannelReducer),
   __reducerSchema("set_lobby_discord_voice", SetLobbyDiscordVoiceReducer),
+  __reducerSchema("set_lobby_idle_timeout", SetLobbyIdleTimeoutReducer),
   __reducerSchema("set_table_discord_voice", SetTableDiscordVoiceReducer),
   __reducerSchema("update_speaking_state", UpdateSpeakingStateReducer),
   __reducerSchema("update_voice_presence", UpdateVoicePresenceReducer),
@@ -230,6 +244,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "GameTable": Omit<typeof tablesSchema.schemaType.tables["gameTable"], "accessorName"> & { readonly accessorName: "GameTable" };
     /** @deprecated Use `lobby` instead. This alias will be removed in the next major version. */
     readonly "Lobby": Omit<typeof tablesSchema.schemaType.tables["lobby"], "accessorName"> & { readonly accessorName: "Lobby" };
+    /** @deprecated Use `lobbyIdleConfig` instead. This alias will be removed in the next major version. */
+    readonly "LobbyIdleConfig": Omit<typeof tablesSchema.schemaType.tables["lobbyIdleConfig"], "accessorName"> & { readonly accessorName: "LobbyIdleConfig" };
     /** @deprecated Use `lobbyMember` instead. This alias will be removed in the next major version. */
     readonly "LobbyMember": Omit<typeof tablesSchema.schemaType.tables["lobbyMember"], "accessorName"> & { readonly accessorName: "LobbyMember" };
     /** @deprecated Use `speakingState` instead. This alias will be removed in the next major version. */
@@ -260,6 +276,7 @@ const tableAccessorAliases = {
   "GameSeat": "gameSeat",
   "GameTable": "gameTable",
   "Lobby": "lobby",
+  "LobbyIdleConfig": "lobbyIdleConfig",
   "LobbyMember": "lobbyMember",
   "SpeakingState": "speakingState",
   "TableCleanupSchedule": "tableCleanupSchedule",
@@ -292,6 +309,8 @@ export type DbView = __DbViewBase & {
   readonly "GameTable": __DbViewBase["gameTable"];
   /** @deprecated Use `lobby` instead. This alias will be removed in the next major version. */
   readonly "Lobby": __DbViewBase["lobby"];
+  /** @deprecated Use `lobbyIdleConfig` instead. This alias will be removed in the next major version. */
+  readonly "LobbyIdleConfig": __DbViewBase["lobbyIdleConfig"];
   /** @deprecated Use `lobbyMember` instead. This alias will be removed in the next major version. */
   readonly "LobbyMember": __DbViewBase["lobbyMember"];
   /** @deprecated Use `speakingState` instead. This alias will be removed in the next major version. */
@@ -312,6 +331,8 @@ export type Tables = __TablesBase & {
   readonly "GameTable": __TablesBase["gameTable"];
   /** @deprecated Use `lobby` instead. This alias will be removed in the next major version. */
   readonly "Lobby": __TablesBase["lobby"];
+  /** @deprecated Use `lobbyIdleConfig` instead. This alias will be removed in the next major version. */
+  readonly "LobbyIdleConfig": __TablesBase["lobbyIdleConfig"];
   /** @deprecated Use `lobbyMember` instead. This alias will be removed in the next major version. */
   readonly "LobbyMember": __TablesBase["lobbyMember"];
   /** @deprecated Use `speakingState` instead. This alias will be removed in the next major version. */
