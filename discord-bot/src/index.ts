@@ -6,6 +6,11 @@ import { lookupDefaultPlayerName } from './discord-user.ts';
 import { connectLobby } from './lobby-client.ts';
 import { readLobbyStatus } from './lobby-status.ts';
 import { createApp } from './server.ts';
+import { attachSpeakingWatch } from './speaking.ts';
+import {
+  createSpeakingGateway,
+  probeSpeakingGateway,
+} from './speaking-gateway.ts';
 import {
   attachVoiceWatch,
   createDiscordLobbyWithVoice,
@@ -44,6 +49,16 @@ export async function main(): Promise<void> {
   const connection = await connectLobby(host, database);
   if (voice) {
     attachVoiceWatch(connection, voice);
+  }
+  if (token.length > 0) {
+    const speakingProbe = await probeSpeakingGateway(token);
+    if (speakingProbe.status === 401) {
+      console.log('Discord speaking gateway unauthorized (401)');
+    }
+    attachSpeakingWatch(
+      connection,
+      createSpeakingGateway(token, speakingProbe),
+    );
   }
   const app = createApp({
     publicKey,

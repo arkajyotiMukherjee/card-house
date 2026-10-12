@@ -35,7 +35,7 @@ Voice slice:
 
 `/cardroom status` takes a room code. It reads the subscribed `Lobby` row for that code. A matching open lobby is live. The reply names that code and the number of `GameTable` rows and `LobbyMember` rows in the lobby. A code with no row replies that the room was not found. Status does not call a reducer.
 
-`discordChannelId` is the channel where the command ran. It is not the lobby voice channel. The bot stores voice channel ids with `set_lobby_discord_voice` and `set_table_discord_voice`. Speaking state stays on its own issue. Discord identity is stored on `LobbyMember` by `join_lobby_with_discord`.
+`discordChannelId` is the channel where the command ran. It is not the lobby voice channel. The bot stores voice channel ids with `set_lobby_discord_voice` and `set_table_discord_voice`. Discord identity is stored on `LobbyMember` by `join_lobby_with_discord`. Speaking updates call `update_speaking_state`.
 
 ## Two TypeScript services
 
