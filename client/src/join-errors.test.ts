@@ -8,21 +8,21 @@ import {
 describe('joinFailureMessage', () => {
   it('gives a full table its own line', () => {
     expect(joinFailureMessage(new Error('Table is full'), 'x')).toBe(
-      'Table is full. Pick another table.',
+      'Table is full. Try another.',
     );
   });
 
   it('gives a started game and an ended game their own lines', () => {
     const started = joinFailureMessage(new Error('Game already started'), 'x');
     const ended = joinFailureMessage(new Error('Game already ended'), 'x');
-    expect(started).toBe('Game already started. Pick another table.');
-    expect(ended).toBe('Game already ended. Pick another table.');
+    expect(started).toBe('Game has started. Try another.');
+    expect(ended).toBe('Game has ended. Try another.');
     expect(started).not.toBe(ended);
   });
 
   it('gives a closed room its own line', () => {
     expect(joinFailureMessage(new Error('Room closed'), 'x')).toBe(
-      'This room is closed. Ask for a new code.',
+      'Room is closed. Get a new code.',
     );
   });
 
@@ -46,6 +46,7 @@ describe('wrapTableError', () => {
       for (const line of wrapped.split('\n')) {
         expect(line.length).toBeLessThanOrEqual(TABLE_ERROR_COLUMNS);
       }
+      expect(wrapped.split('\n').length).toBeLessThanOrEqual(2);
     }
   });
 });

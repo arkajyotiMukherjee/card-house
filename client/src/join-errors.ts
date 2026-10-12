@@ -4,10 +4,10 @@ import { wrapText } from './menu-layout';
 export const TABLE_ERROR_COLUMNS = 17;
 
 const JOIN_MESSAGES: ReadonlyArray<readonly [string, string]> = [
-  ['Table is full', 'Table is full. Pick another table.'],
-  ['Game already started', 'Game already started. Pick another table.'],
-  ['Game already ended', 'Game already ended. Pick another table.'],
-  ['Room closed', 'This room is closed. Ask for a new code.'],
+  ['Table is full', 'Table is full. Try another.'],
+  ['Game already started', 'Game has started. Try another.'],
+  ['Game already ended', 'Game has ended. Try another.'],
+  ['Room closed', 'Room is closed. Get a new code.'],
 ];
 
 /**
