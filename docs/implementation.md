@@ -262,6 +262,8 @@ Front-end:
 
 **Deliverable:** A working Discord slash command that returns a joinable room link.
 
+Voice channels and speaking indicators are now part of this milestone. The plan is in [discord-bot-architecture.md](discord-bot-architecture.md).
+
 ## Milestone 10 – Stability, Scaling & Cleanup
 
 **Goal:** Make the system durable and manageable with real users.
