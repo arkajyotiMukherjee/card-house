@@ -33,7 +33,7 @@ Voice slice:
 
 `/cardroom create` calls `create_lobby` with no arguments. That is the client's `createLobby({})`, and it is the call that mints the lobby code. The bot then calls `set_lobby_discord_channel` with that code and the Discord channel id from the interaction. `Lobby.discordChannelId` stores the channel. A lobby created from the web leaves the column empty. The reply is the code and a join URL `{CARDROOM_PUBLIC_URL}/{code}`. Opening that path in the client opens Join Room with the code filled in.
 
-`discordChannelId` is the channel where the command ran. It is not the lobby voice channel. Voice channels, speaking state, and Discord identity columns stay on their own issues.
+`discordChannelId` is the channel where the command ran. It is not the lobby voice channel. The bot stores voice channel ids with `set_lobby_discord_voice` and `set_table_discord_voice`. Speaking state and Discord identity columns stay on their own issues.
 
 ## Two TypeScript services
 
@@ -63,7 +63,7 @@ Three flows share one `Lobby` and the same `GameTable` rows.
 
 ## Voice channels
 
-The bot creates and deletes the channels. [#100](https://github.com/arkajyotiMukherjee/discordcardgames/issues/100).
+The bot creates and deletes the channels. [#100](https://github.com/arkajyotiMukherjee/discordcardgames/issues/100). `close_lobby` and `remove_game_table` are the module transitions it watches. A finished table uses the existing `status`.
 
 - One lobby voice channel, created with `/cardroom create`. Example name: `#room-ab3d-voice`.
 - One voice channel per table, created when a table is created in a Discord-linked lobby. Example name: `#ab3d-bluff-1`.

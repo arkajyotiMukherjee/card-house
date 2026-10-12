@@ -34,13 +34,19 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
+import ClearLobbyDiscordVoiceReducer from "./clear_lobby_discord_voice_reducer";
+import ClearTableDiscordVoiceReducer from "./clear_table_discord_voice_reducer";
+import CloseLobbyReducer from "./close_lobby_reducer";
 import CreateGameTableReducer from "./create_game_table_reducer";
 import CreateLobbyReducer from "./create_lobby_reducer";
 import HandleGameIntentReducer from "./handle_game_intent_reducer";
 import JoinLobbyReducer from "./join_lobby_reducer";
 import JoinTableReducer from "./join_table_reducer";
 import LeaveTableReducer from "./leave_table_reducer";
+import RemoveGameTableReducer from "./remove_game_table_reducer";
 import SetLobbyDiscordChannelReducer from "./set_lobby_discord_channel_reducer";
+import SetLobbyDiscordVoiceReducer from "./set_lobby_discord_voice_reducer";
+import SetTableDiscordVoiceReducer from "./set_table_discord_voice_reducer";
 
 // Import all procedure arg schemas
 
@@ -134,13 +140,19 @@ const tablesSchema = __schema({
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
+  __reducerSchema("clear_lobby_discord_voice", ClearLobbyDiscordVoiceReducer),
+  __reducerSchema("clear_table_discord_voice", ClearTableDiscordVoiceReducer),
+  __reducerSchema("close_lobby", CloseLobbyReducer),
   __reducerSchema("create_game_table", CreateGameTableReducer),
   __reducerSchema("create_lobby", CreateLobbyReducer),
   __reducerSchema("handle_game_intent", HandleGameIntentReducer),
   __reducerSchema("join_lobby", JoinLobbyReducer),
   __reducerSchema("join_table", JoinTableReducer),
   __reducerSchema("leave_table", LeaveTableReducer),
+  __reducerSchema("remove_game_table", RemoveGameTableReducer),
   __reducerSchema("set_lobby_discord_channel", SetLobbyDiscordChannelReducer),
+  __reducerSchema("set_lobby_discord_voice", SetLobbyDiscordVoiceReducer),
+  __reducerSchema("set_table_discord_voice", SetTableDiscordVoiceReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */

@@ -68,7 +68,7 @@ export function connectLobby(
                 : 'subscription failed';
             reject(new Error(detail));
           })
-          .subscribe((query) => [query.lobby]);
+          .subscribe((query) => [query.lobby, query.gameTable]);
       })
       .onConnectError((_ctx, error) => {
         clearTimeout(timer);

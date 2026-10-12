@@ -9,7 +9,10 @@ import type { CreatedLobby } from './lobby-client.ts';
 
 export interface AppOptions {
   publicKey: string;
-  createLobby: (discordChannelId: string) => Promise<CreatedLobby>;
+  createLobby: (
+    discordChannelId: string,
+    guildId?: string,
+  ) => Promise<CreatedLobby>;
 }
 
 export function createApp(options: AppOptions): Express {
