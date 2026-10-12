@@ -276,6 +276,7 @@ Voice channels and speaking indicators are now part of this milestone. The plan 
   - auto-clean tables that:
     - have zero seats,
     - and `status = "finished"` or idle for too long.
+    - `clean_empty_tables` does this. The default idle time is 15 minutes (`lastActivityAt`, or `createdAt` when that is empty). A seated table stays. `set_empty_table_idle_timeout` can shorten the wait.
 - **Limits:**
   - config-driven soft caps on:
     - max lobbies,

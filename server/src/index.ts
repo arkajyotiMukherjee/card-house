@@ -1,5 +1,6 @@
 import {
   CaseConversionPolicy,
+  ScheduleAt,
   schema,
   SenderError,
   t,
@@ -53,6 +54,12 @@ import { openingTableState } from './opening-state';
 import { statusTagForState, type TableStatusTag } from './table-status';
 import { registerGameRules, rulesByType } from './rules-by-type';
 import { stubIntentRules } from './stub-rules';
+import {
+  EMPTY_TABLE_IDLE_MICROS,
+  TABLE_CLEANUP_INTERVAL_MICROS,
+  idleTimeoutAllowed,
+  shouldRemoveEmptyTable,
+} from './table-cleanup';
 import { voiceScopeForChannel } from './voice-presence';
 
 registerGameRules(stubGameDefinition, stubIntentRules);
@@ -153,7 +160,17 @@ const GameTable = table(
     maxPlayers: t.u32(),
     stateJson: t.string(),
     createdAt: t.timestamp(),
+    lastActivityAt: t.option(t.timestamp()).default(undefined),
     discordVoiceChannelId: t.string().default(''),
+  },
+);
+
+const TableCleanupSchedule = table(
+  { name: 'TableCleanupSchedule', public: true },
+  {
+    scheduledId: t.u64().primaryKey().autoInc(),
+    scheduledAt: t.scheduleAt(),
+    idleAfterMicros: t.u64(),
   },
 );
 
@@ -245,11 +262,23 @@ const spacetimedb = schema(
     GameEvent,
     VoicePresence,
     SpeakingState,
+    TableCleanupSchedule,
   },
   { CASE_CONVERSION_POLICY: CaseConversionPolicy.None },
 );
 
 export default spacetimedb;
+
+export const init = spacetimedb.init({ name: 'init' }, (ctx) => {
+  ensureTableCleanup(ctx);
+});
+
+export const on_client_connected = spacetimedb.clientConnected(
+  { name: 'on_client_connected' },
+  (ctx) => {
+    ensureTableCleanup(ctx);
+  },
+);
 
 function lobbyCode(micros: bigint, attempt: number): string {
   let n = micros + BigInt(attempt);
@@ -325,6 +354,103 @@ function clearPresence(
   for (const id of ids) {
     db.VoicePresence.id.delete(id);
   }
+}
+
+interface SpeakingRow {
+  id: string;
+  tableId: string;
+}
+
+function clearSpeaking(
+  db: {
+    SpeakingState: {
+      lobbyId: { filter(lobbyId: string): Iterable<SpeakingRow> };
+      id: { delete(id: string): unknown };
+    };
+  },
+  lobbyId: string,
+  tableId: string,
+): void {
+  const ids: string[] = [];
+  for (const row of db.SpeakingState.lobbyId.filter(lobbyId)) {
+    if (row.tableId === tableId) {
+      ids.push(row.id);
+    }
+  }
+  for (const id of ids) {
+    db.SpeakingState.id.delete(id);
+  }
+}
+
+interface TableRows {
+  GameSeat: {
+    byTable: { filter(tableId: string): Iterable<{ id: string }> };
+    id: { delete(id: string): unknown };
+  };
+  GameEvent: {
+    byTable: { filter(tableId: string): Iterable<{ id: string }> };
+    id: { delete(id: string): unknown };
+  };
+  GameTable: {
+    id: { delete(id: string): unknown };
+  };
+  VoicePresence: {
+    lobbyId: { filter(lobbyId: string): Iterable<PresenceRow> };
+    id: { delete(id: string): unknown };
+  };
+  SpeakingState: {
+    lobbyId: { filter(lobbyId: string): Iterable<SpeakingRow> };
+    id: { delete(id: string): unknown };
+  };
+}
+
+function deleteGameTable(
+  db: TableRows,
+  gameTable: { id: string; lobbyId: string },
+): void {
+  const seatIds: string[] = [];
+  for (const seat of db.GameSeat.byTable.filter(gameTable.id)) {
+    seatIds.push(seat.id);
+  }
+  for (const seatId of seatIds) {
+    db.GameSeat.id.delete(seatId);
+  }
+  const eventIds: string[] = [];
+  for (const event of db.GameEvent.byTable.filter(gameTable.id)) {
+    eventIds.push(event.id);
+  }
+  for (const eventId of eventIds) {
+    db.GameEvent.id.delete(eventId);
+  }
+  clearPresence(db, gameTable.lobbyId, gameTable.id);
+  clearSpeaking(db, gameTable.lobbyId, gameTable.id);
+  db.GameTable.id.delete(gameTable.id);
+}
+
+function ensureTableCleanup(ctx: {
+  db: {
+    TableCleanupSchedule: {
+      iter(): Iterable<unknown>;
+      insert(row: {
+        scheduledId: bigint;
+        scheduledAt: ReturnType<typeof ScheduleAt.interval>;
+        idleAfterMicros: bigint;
+      }): unknown;
+    };
+  };
+}): void {
+  let count = 0;
+  for (const _row of ctx.db.TableCleanupSchedule.iter()) {
+    count += 1;
+  }
+  if (count > 0) {
+    return;
+  }
+  ctx.db.TableCleanupSchedule.insert({
+    scheduledId: 0n,
+    scheduledAt: ScheduleAt.interval(TABLE_CLEANUP_INTERVAL_MICROS),
+    idleAfterMicros: EMPTY_TABLE_IDLE_MICROS,
+  });
 }
 
 function openDiscordLobby<
@@ -839,6 +965,7 @@ export const create_game_table = spacetimedb.reducer(
       maxPlayers,
       stateJson,
       createdAt: ctx.timestamp,
+      lastActivityAt: ctx.timestamp,
       discordVoiceChannelId: '',
     });
   },
@@ -985,22 +1112,69 @@ export const remove_game_table = spacetimedb.reducer(
     if (!gameTable) {
       throw new SenderError('Table not found');
     }
-    const seatIds: string[] = [];
-    for (const seat of ctx.db.GameSeat.byTable.filter(gameTable.id)) {
-      seatIds.push(seat.id);
+    deleteGameTable(ctx.db, gameTable);
+  },
+);
+
+export const clean_empty_tables = spacetimedb.reducer(
+  { name: 'clean_empty_tables', onSchedule: TableCleanupSchedule },
+  { schedule: TableCleanupSchedule.rowType },
+  (ctx, _args) => {
+    let idleLimit = EMPTY_TABLE_IDLE_MICROS;
+    for (const row of ctx.db.TableCleanupSchedule.iter()) {
+      idleLimit = row.idleAfterMicros;
+      break;
     }
-    for (const seatId of seatIds) {
-      ctx.db.GameSeat.id.delete(seatId);
+    const now = ctx.timestamp.microsSinceUnixEpoch;
+    const doomed: string[] = [];
+    for (const gameTable of ctx.db.GameTable.iter()) {
+      let seats = 0;
+      for (const _seat of ctx.db.GameSeat.byTable.filter(gameTable.id)) {
+        seats += 1;
+      }
+      const activity = gameTable.lastActivityAt ?? gameTable.createdAt;
+      const idleMicros = now - activity.microsSinceUnixEpoch;
+      if (
+        shouldRemoveEmptyTable(
+          seats,
+          gameTable.status.tag,
+          idleMicros,
+          idleLimit,
+        )
+      ) {
+        doomed.push(gameTable.id);
+      }
     }
-    const eventIds: string[] = [];
-    for (const event of ctx.db.GameEvent.byTable.filter(gameTable.id)) {
-      eventIds.push(event.id);
+    for (const id of doomed) {
+      const gameTable = ctx.db.GameTable.id.find(id);
+      if (gameTable) {
+        deleteGameTable(ctx.db, gameTable);
+      }
     }
-    for (const eventId of eventIds) {
-      ctx.db.GameEvent.id.delete(eventId);
+    ensureTableCleanup(ctx);
+  },
+);
+
+export const set_empty_table_idle_timeout = spacetimedb.reducer(
+  { name: 'set_empty_table_idle_timeout' },
+  { idleMicros: t.u64() },
+  (ctx, { idleMicros }) => {
+    if (!idleTimeoutAllowed(idleMicros)) {
+      throw new SenderError(
+        'Idle timeout must be between 1 second and 24 hours',
+      );
     }
-    clearPresence(ctx.db, gameTable.lobbyId, gameTable.id);
-    ctx.db.GameTable.id.delete(gameTable.id);
+    ensureTableCleanup(ctx);
+    const rows = [];
+    for (const row of ctx.db.TableCleanupSchedule.iter()) {
+      rows.push(row);
+    }
+    for (const row of rows) {
+      ctx.db.TableCleanupSchedule.scheduledId.update({
+        ...row,
+        idleAfterMicros: idleMicros,
+      });
+    }
   },
 );
 
@@ -1079,24 +1253,26 @@ export const join_table = spacetimedb.reducer(
     for (const seat of ctx.db.GameSeat.byTable.filter(gameTable.id)) {
       seatedNow.push(rulesSeat(seat));
     }
+    let stateJson = gameTable.stateJson;
+    let status = gameTable.status;
     const rules = rulesByType[gameTable.gameType];
     if (
       rules &&
-      stateIfLobbyReady(
-        gameTable.stateJson,
-        seatedNow.length,
-        gameTable.minPlayers,
-      ) === 'deal'
+      stateIfLobbyReady(stateJson, seatedNow.length, gameTable.minPlayers) ===
+        'deal'
     ) {
       const next = rules.initialState(seatedNow, rulesTable(gameTable));
-      ctx.db.GameTable.id.update({
-        ...gameTable,
-        stateJson: storedState(next),
-        status: storedStatus(
-          statusTagForState(next, currentStatusTag(gameTable.status.tag)),
-        ),
-      });
+      stateJson = storedState(next);
+      status = storedStatus(
+        statusTagForState(next, currentStatusTag(gameTable.status.tag)),
+      );
     }
+    ctx.db.GameTable.id.update({
+      ...gameTable,
+      stateJson,
+      status,
+      lastActivityAt: ctx.timestamp,
+    });
   },
 );
 
@@ -1146,6 +1322,10 @@ export const leave_table = spacetimedb.reducer(
     for (const seatId of seatIds) {
       ctx.db.GameSeat.id.delete(seatId);
     }
+    ctx.db.GameTable.id.update({
+      ...gameTable,
+      lastActivityAt: ctx.timestamp,
+    });
   },
 );
 
@@ -1380,6 +1560,7 @@ export const handle_game_intent = spacetimedb.reducer(
       status: storedStatus(
         statusTagForState(next, currentStatusTag(gameTable.status.tag)),
       ),
+      lastActivityAt: ctx.timestamp,
     });
 
     let order = 0;
