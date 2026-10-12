@@ -6,11 +6,11 @@ import { InteractionType } from 'discord-interactions';
 import { connectLobby, createDiscordLobby } from './lobby-client.ts';
 import { createApp } from './server.ts';
 
-const CHANNEL = '123456789012345678';
+const CHANNEL = '323456789012345678';
 const live = process.env.CARDROOM_LIVE === '1';
 
 test(
-  'create_lobby mints the code and the lobby stores the Discord channel',
+  'one /interactions create mints the code, stores the channel, and returns that join URL',
   { skip: live ? false : 'set CARDROOM_LIVE=1 to call the published module' },
   async () => {
     const host = process.env.SPACETIMEDB_HOST ?? 'ws://127.0.0.1:3000';
@@ -21,29 +21,27 @@ test(
     let server: Server | undefined;
     try {
       const calls: string[] = [];
-      const created = await createDiscordLobby(connection, CHANNEL, publicUrl, {
-        onCreateLobby: (args) => {
-          calls.push(`createLobby:${JSON.stringify(args)}`);
-        },
-        onSetChannel: (args) => {
-          calls.push(
-            `setLobbyDiscordChannel:${args.lobbyCode}:${args.discordChannelId}`,
-          );
-        },
-      });
-      const row = [...connection.db.lobby.iter()].find(
-        (lobby) => lobby.code === created.code,
+      const knownIds = new Set(
+        [...connection.db.lobby.iter()].map((lobby) => lobby.id),
       );
-
       const keyPair = nacl.sign.keyPair();
       const app = createApp({
         publicKey: Buffer.from(keyPair.publicKey).toString('hex'),
         createLobby: (channelId) =>
-          createDiscordLobby(connection, channelId, publicUrl),
+          createDiscordLobby(connection, channelId, publicUrl, {
+            onCreateLobby: (args) => {
+              calls.push(`createLobby:${JSON.stringify(args)}`);
+            },
+            onSetChannel: (args) => {
+              calls.push(
+                `setLobbyDiscordChannel:${args.lobbyCode}:${args.discordChannelId}`,
+              );
+            },
+          }),
       });
       server = createServer(app);
       await new Promise<void>((resolve) => {
-        server.listen(0, '127.0.0.1', () => {
+        server?.listen(0, '127.0.0.1', () => {
           resolve();
         });
       });
@@ -53,7 +51,7 @@ test(
       }
       const body = JSON.stringify({
         type: InteractionType.APPLICATION_COMMAND,
-        channel_id: '223456789012345678',
+        channel_id: CHANNEL,
         data: { name: 'cardroom', options: [{ name: 'create', type: 1 }] },
       });
       const timestamp = String(Math.floor(Date.now() / 1000));
@@ -76,34 +74,38 @@ test(
         type: number;
         data?: { content?: string };
       };
+      const content = payload.data?.content ?? '';
+      const parsed = /^Lobby ([A-Z0-9]+)\n(\S+)$/.exec(content);
+      const code = parsed?.[1] ?? '';
+      const joinUrl = parsed?.[2] ?? '';
+      const created = [...connection.db.lobby.iter()].filter(
+        (lobby) => !knownIds.has(lobby.id),
+      );
 
       const evidence = {
-        reducer: created.reducer,
-        calls,
-        lobby: row
-          ? {
-              id: row.id,
-              code: row.code,
-              discordChannelId: row.discordChannelId,
-              status: row.status,
-            }
-          : null,
         discordReply: payload,
+        codeFromReply: code,
+        joinUrlFromReply: joinUrl,
+        calls,
+        lobby: created.map((lobby) => ({
+          id: lobby.id,
+          code: lobby.code,
+          discordChannelId: lobby.discordChannelId,
+        })),
       };
       console.log(JSON.stringify(evidence, null, 2));
 
-      assert.equal(created.reducer, 'create_lobby');
-      assert.equal(calls[0], 'createLobby:{}');
-      assert.match(
-        calls[1] ?? '',
-        new RegExp(`^setLobbyDiscordChannel:${created.code}:${CHANNEL}$`),
-      );
-      assert.equal(row?.discordChannelId, CHANNEL);
-      assert.equal(row?.code, created.code);
-      assert.match(created.joinUrl, new RegExp(`/${created.code}$`));
       assert.equal(response.status, 200);
-      assert.match(payload.data?.content ?? '', /Lobby /);
-      assert.match(payload.data?.content ?? '', /https?:\/\/\S+/);
+      assert.equal(payload.type, 4);
+      assert.ok(parsed, `reply did not contain a code and URL: ${content}`);
+      assert.equal(created.length, 1);
+      assert.equal(created[0]?.code, code);
+      assert.equal(created[0]?.discordChannelId, CHANNEL);
+      assert.equal(joinUrl, `${publicUrl}/${code}`);
+      assert.deepEqual(calls, [
+        'createLobby:{}',
+        `setLobbyDiscordChannel:${code}:${CHANNEL}`,
+      ]);
     } finally {
       connection.disconnect();
       if (server?.listening) {

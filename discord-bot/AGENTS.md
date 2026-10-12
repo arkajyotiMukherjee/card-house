@@ -12,7 +12,7 @@ Conventions: [../repo-conventions.md](../repo-conventions.md). The plan is [../d
 - `src/lobby-client.ts` — calls `createLobby({})` on the generated client, then `setLobbyDiscordChannel`.
 - `src/join-url.ts` — `{CARDROOM_PUBLIC_URL}/{code}`.
 - `src/server.ts` — Express `POST /interactions` with the Discord signature check.
-- `src/*.test.ts` — command shape, reply text, and the signature check. `create-lobby.live.test.ts` calls the published module when `CARDROOM_LIVE=1`.
+- `src/*.test.ts` — command shape, reply text, and the signature check. `create-lobby.live.test.ts` sends one signed `POST /interactions` when `CARDROOM_LIVE=1` and checks that reply's code against the lobby `create_lobby` just inserted.
 
 The generated client is `client/src/module_bindings/`. Do not hand-edit it.
 
