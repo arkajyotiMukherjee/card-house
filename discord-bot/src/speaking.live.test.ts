@@ -14,10 +14,6 @@ const live = process.env.CARDROOM_LIVE === '1';
 const USER_A = '111111111111111111';
 const USER_B = '222222222222222222';
 const STRANGER = '333333333333333333';
-const TEXT = '323456789012345678';
-const GUILD = '223456789012345678';
-const LOBBY_VOICE = '423456789012345678';
-const TABLE_VOICE = '523456789012345678';
 const AUDIO_MARKERS = [
   'opus',
   'pcm',
@@ -33,6 +29,10 @@ test(
   { skip: live ? false : 'set CARDROOM_LIVE=1 to call the published module' },
   async () => {
     const logs: string[] = [];
+    const TEXT = snowflake(1);
+    const GUILD = snowflake(2);
+    const LOBBY_VOICE = snowflake(3);
+    const TABLE_VOICE = snowflake(4);
     const token = process.env.DISCORD_BOT_TOKEN ?? '';
     assert.ok(token.length > 0, 'DISCORD_BOT_TOKEN is unset');
     const probe = await probeSpeakingGateway(token);
@@ -417,6 +417,11 @@ async function waitFor<T>(
   throw new Error(label);
 }
 
+function snowflake(offset: number): string {
+  const value = BigInt(Date.now()) * 10000n + BigInt(offset);
+  return value.toString().padStart(18, '0');
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
@@ -449,15 +454,21 @@ function portOpen(port: number): Promise<boolean> {
 }
 
 async function readSpeakingSql(database: string): Promise<string> {
-  try {
-    const result = await execFileAsync(
-      'spacetime',
-      ['sql', database, 'SELECT * FROM "SpeakingState"'],
-      { timeout: 15000 },
-    );
-    return `${result.stdout}${result.stderr}`.trim();
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'sql failed';
-    return `sql unavailable: ${message.split('\n')[0] ?? message}`;
-  }
+  const host = process.env.SPACETIMEDB_HOST ?? 'ws://127.0.0.1:3000';
+  const server = host.replace(/^ws/, 'http');
+  const result = await execFileAsync(
+    'spacetime',
+    [
+      'sql',
+      '--server',
+      server,
+      '--yes',
+      '--format',
+      'json',
+      database,
+      'SELECT * FROM SpeakingState',
+    ],
+    { timeout: 15000 },
+  );
+  return `${result.stdout}${result.stderr}`.trim();
 }
