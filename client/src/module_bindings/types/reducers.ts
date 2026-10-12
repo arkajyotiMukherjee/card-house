@@ -12,6 +12,7 @@ import HandleGameIntentReducer from "../handle_game_intent_reducer";
 import JoinLobbyReducer from "../join_lobby_reducer";
 import JoinTableReducer from "../join_table_reducer";
 import LeaveTableReducer from "../leave_table_reducer";
+import SetLobbyDiscordChannelReducer from "../set_lobby_discord_channel_reducer";
 
 export type CreateGameTableParams = __Infer<typeof CreateGameTableReducer>;
 export type CreateLobbyParams = __Infer<typeof CreateLobbyReducer>;
@@ -19,4 +20,5 @@ export type HandleGameIntentParams = __Infer<typeof HandleGameIntentReducer>;
 export type JoinLobbyParams = __Infer<typeof JoinLobbyReducer>;
 export type JoinTableParams = __Infer<typeof JoinTableReducer>;
 export type LeaveTableParams = __Infer<typeof LeaveTableReducer>;
+export type SetLobbyDiscordChannelParams = __Infer<typeof SetLobbyDiscordChannelReducer>;
 

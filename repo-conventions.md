@@ -4,7 +4,7 @@ Shared layout and style for this repository. Each `AGENTS.md` says what that fol
 
 ## Layout
 
-pnpm workspace (`pnpm-workspace.yaml`) with two packages, `client` and `server`.
+pnpm workspace (`pnpm-workspace.yaml`) with `client`, `server`, and `discord-bot`.
 
 ```
 client/                    Vite + Excalibur app
@@ -15,6 +15,8 @@ client/                    Vite + Excalibur app
 server/                    SpacetimeDB module
   src/index.ts             tables and reducers
   src/rules-by-type.ts     rulesByType registry
+discord-bot/               Discord slash commands
+  src/                     TypeScript service
 src/shared/games/          GameRules and GameDefinition
 docs/                      architecture, milestones, UI spec
 scripts/bootstrap.sh       local tools, publish, generate bindings
@@ -32,14 +34,14 @@ The space and the spelling in `card-assest -pack` are the folder name. Leave it.
 - `pnpm dev` — Vite client on `0.0.0.0:5173`
 - `pnpm build` — client production build
 - `pnpm lint` — `eslint .` and `prettier --check .`
-- `pnpm test` — client Vitest suite, then the server rules tests
-- `pnpm typecheck` — `tsc --noEmit` in `client`, `server`, and `src/shared`
+- `pnpm test` — client Vitest suite, then the server rules tests, then the discord-bot tests
+- `pnpm typecheck` — `tsc --noEmit` in `client`, `server`, `discord-bot`, and `src/shared`
 
 `scripts/bootstrap.sh` installs with `pnpm install --frozen-lockfile` when `pnpm-lock.yaml` is present.
 
 ## TypeScript
 
-TypeScript `5.9.3` is pinned in the root, `client`, and `server` package files. Both packages are `"type": "module"`.
+TypeScript `5.9.3` is pinned in the root, `client`, `server`, and `discord-bot` package files. The workspace packages are `"type": "module"`.
 
 `client/tsconfig.json` and `server/tsconfig.json` share:
 
@@ -86,7 +88,7 @@ Vite `8` (`client/vite.config.ts`): `host` `0.0.0.0`, port `5173`, `strictPort: 
 
 ## SpacetimeDB
 
-`spacetimedb` `2.10.2` is the source of truth for lobby membership and table rows. The client renders subscribed `stateJson` and sends intents. It does not decide whether a move is legal. The module today implements `create_lobby`, `join_lobby`, `create_game_table`, `join_table`, `leave_table`, and `handle_game_intent`. GameType `dummy` is a shared counter. GameType `bluff` is Bluff: one deck, hands, a discard pile, and a required rank. GameType `president` is President: one deck, hands, a play pile, and a finish order. GameType `go_fish` is Go Fish: one deck, hands, a stock, and books. GameType `crazy_eights` is Crazy Eights: one deck, hands, a stock, a face-up discard, and a suit in play. GameType `rummy` is Rummy: one deck, hands, a stock, a discard pile, and melds. GameType `blackjack` is Blackjack: one deck, a dealer hand, player hands, and bets. GameType `spades` is Spades: four players, partnership bids, and trump tricks. GameType `hearts` is Hearts: one deck, a three-card pass, tricks, and scores for hearts and the queen of spades. GameType `poker` is Poker: Texas Hold'em, Omaha, and Oklahoma share one betting table. `join_table` deals a table whose `stateJson` is still `phase: "lobby"` once the seated count reaches `minPlayers`. A stored `phase` of `play` or `pass` sets the table status to `in_progress`, and `finished` sets it to `finished`. Dummy and stub rows have no phase, so their status stays.
+`spacetimedb` `2.10.2` is the source of truth for lobby membership and table rows. The client renders subscribed `stateJson` and sends intents. It does not decide whether a move is legal. The module today implements `create_lobby`, `join_lobby`, `set_lobby_discord_channel`, `create_game_table`, `join_table`, `leave_table`, and `handle_game_intent`. `Lobby.discordChannelId` is empty until `set_lobby_discord_channel` stores the Discord channel id. GameType `dummy` is a shared counter. GameType `bluff` is Bluff: one deck, hands, a discard pile, and a required rank. GameType `president` is President: one deck, hands, a play pile, and a finish order. GameType `go_fish` is Go Fish: one deck, hands, a stock, and books. GameType `crazy_eights` is Crazy Eights: one deck, hands, a stock, a face-up discard, and a suit in play. GameType `rummy` is Rummy: one deck, hands, a stock, a discard pile, and melds. GameType `blackjack` is Blackjack: one deck, a dealer hand, player hands, and bets. GameType `spades` is Spades: four players, partnership bids, and trump tricks. GameType `hearts` is Hearts: one deck, a three-card pass, tricks, and scores for hearts and the queen of spades. GameType `poker` is Poker: Texas Hold'em, Omaha, and Oklahoma share one betting table. `join_table` deals a table whose `stateJson` is still `phase: "lobby"` once the seated count reaches `minPlayers`. A stored `phase` of `play` or `pass` sets the table status to `in_progress`, and `finished` sets it to `finished`. Dummy and stub rows have no phase, so their status stays.
 
 Schema and reducers are `server/src/index.ts`. `CaseConversionPolicy.None` keeps names as written: PascalCase tables (`Lobby`, `LobbyMember`, `GameTable`, `GameSeat`, `GameEvent`), camelCase columns, snake_case reducers. Tables are `public: true`.
 

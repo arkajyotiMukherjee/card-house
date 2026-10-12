@@ -7,7 +7,7 @@
     "dev": "pnpm --filter client dev",
     "build": "pnpm --filter client build",
     "lint": "eslint . && prettier --check .",
-    "test": "pnpm --filter client test && pnpm --filter server test",
+    "test": "pnpm --filter client test && pnpm --filter server test && pnpm --filter discord-bot test",
     "typecheck": "pnpm -r typecheck && tsc -p src/shared/tsconfig.json --noEmit"
   },
   "devDependencies": {

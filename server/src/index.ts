@@ -82,6 +82,8 @@ const TABLE_SETTING_KEYS = [
   'variation',
 ] as const;
 
+const DISCORD_CHANNEL_ID = /^\d{17,20}$/;
+
 const Lobby = table(
   { name: 'Lobby', public: true },
   {
@@ -89,6 +91,7 @@ const Lobby = table(
     code: t.string().unique(),
     status: LobbyStatus,
     createdAt: t.timestamp(),
+    discordChannelId: t.string().default(''),
   },
 );
 
@@ -222,6 +225,49 @@ export const create_lobby = spacetimedb.reducer(
       code,
       status: { tag: 'open' },
       createdAt: ctx.timestamp,
+      discordChannelId: '',
+    });
+  },
+);
+
+function discordChannelId(raw: string): string {
+  const channelId = raw.trim();
+  if (!DISCORD_CHANNEL_ID.test(channelId)) {
+    throw new SenderError('Discord channel id is invalid');
+  }
+  return channelId;
+}
+
+export const set_lobby_discord_channel = spacetimedb.reducer(
+  { name: 'set_lobby_discord_channel' },
+  {
+    lobbyCode: t.string(),
+    discordChannelId: t.string(),
+  },
+  (ctx, { lobbyCode: rawCode, discordChannelId: rawChannelId }) => {
+    const lobbyCode = rawCode.trim().toUpperCase();
+    const channelId = discordChannelId(rawChannelId);
+    if (lobbyCode.length === 0) {
+      throw new SenderError('Room code is required');
+    }
+
+    const lobby = ctx.db.Lobby.code.find(lobbyCode);
+    if (!lobby) {
+      throw new SenderError('Room not found');
+    }
+    if (lobby.status.tag !== 'open') {
+      throw new SenderError('Room closed');
+    }
+    if (
+      lobby.discordChannelId.length > 0 &&
+      lobby.discordChannelId !== channelId
+    ) {
+      throw new SenderError('Room already linked to a Discord channel');
+    }
+
+    ctx.db.Lobby.id.update({
+      ...lobby,
+      discordChannelId: channelId,
     });
   },
 );

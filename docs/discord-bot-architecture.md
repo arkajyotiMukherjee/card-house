@@ -6,7 +6,7 @@ Milestone 9 has two slices. The slash-command slice is already described in [imp
 
 The SpacetimeDB module stays TypeScript. The Discord bot is a separate TypeScript service.
 
-The module remains the source of truth for `Lobby`, `LobbyMember`, `GameTable`, `GameSeat`, and `GameEvent`. Existing reducers stay `create_lobby`, `join_lobby`, `create_game_table`, `join_table`, `leave_table`, and `handle_game_intent`. The bot calls reducers. It does not own game state and it does not run game rules.
+The module remains the source of truth for `Lobby`, `LobbyMember`, `GameTable`, `GameSeat`, and `GameEvent`. Existing reducers stay `create_lobby`, `join_lobby`, `create_game_table`, `join_table`, `leave_table`, and `handle_game_intent`. `set_lobby_discord_channel` records the Discord channel for `/cardroom create`. The bot calls reducers. It does not own game state and it does not run game rules.
 
 The client shows who is speaking from SpacetimeDB only. It never receives, stores, or processes audio. No transcripts, no volume meters, no waveforms. The client does not call the Discord API.
 
@@ -26,6 +26,14 @@ Voice slice:
 - [#102 Sync who is speaking without handling audio](https://github.com/arkajyotiMukherjee/discordcardgames/issues/102), blocked by [#100](https://github.com/arkajyotiMukherjee/discordcardgames/issues/100) and [#101](https://github.com/arkajyotiMukherjee/discordcardgames/issues/101)
 - [#103 Show who is in the Discord voice channel](https://github.com/arkajyotiMukherjee/discordcardgames/issues/103), optional, blocked by [#100](https://github.com/arkajyotiMukherjee/discordcardgames/issues/100) and [#101](https://github.com/arkajyotiMukherjee/discordcardgames/issues/101)
 - [#104 Show speaking indicators in the lobby and at the table](https://github.com/arkajyotiMukherjee/discordcardgames/issues/104), blocked by [#102](https://github.com/arkajyotiMukherjee/discordcardgames/issues/102)
+
+## Slash command
+
+`discord-bot/` is the slash-command service. It registers `/cardroom create` and leaves room for later commands on the same process.
+
+`/cardroom create` calls `create_lobby` with no arguments. That is the client's `createLobby({})`, and it is the call that mints the lobby code. The bot then calls `set_lobby_discord_channel` with that code and the Discord channel id from the interaction. `Lobby.discordChannelId` stores the channel. A lobby created from the web leaves the column empty. The reply is the code and a join URL `{CARDROOM_PUBLIC_URL}/{code}`. Opening that path in the client opens Join Room with the code filled in.
+
+`discordChannelId` is the channel where the command ran. It is not the lobby voice channel. Voice channels, speaking state, and Discord identity columns stay on their own issues.
 
 ## Two TypeScript services
 

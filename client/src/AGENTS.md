@@ -6,11 +6,12 @@ Style, resolution, and pixel filtering: [../../repo-conventions.md](../../repo-c
 
 ## Files
 
-- `main.ts` — reads or creates `clientId`, then the engine at 960×540, fixed display, integer scale, loader, and `connectCardroom`. The app starts on `MenuScene`. After the lobby subscription applies, it mounts the lobby panel, `LobbyScene`, and `GameScene` with that `clientId`, and hands the panel to the menu. Entering a room from the menu opens the lobby scene (`boot`). Joining a table opens `GameScene`. Leave returns to the lobby.
+- `main.ts` — reads or creates `clientId`, then the engine at 960×540, fixed display, integer scale, loader, and `connectCardroom`. The app starts on `MenuScene`. After the lobby subscription applies, it mounts the lobby panel, `LobbyScene`, and `GameScene` with that `clientId`, and hands the panel to the menu. If the page path is a four-character room code, `openJoin` runs with that code. Entering a room from the menu opens the lobby scene (`boot`). Joining a table opens `GameScene`. Leave returns to the lobby.
 - `client-id.ts` — `getOrCreateClientId` reads `clientId` from `localStorage` or stores a new UUID. The key name is `clientId`.
 - `boot-scene.ts` — boot scene. Draws the green table, two hearts, the card back, one chip, and a status line along the bottom edge.
 - `menu-layout.ts` — menu geometry and pure logic: the three button boxes, prompt boxes, how-to-play layout, markdown heading split and word wrap, and the looping pose of each background card or chip.
-- `menu-scene.ts` — `MenuScene`, the first scene. Title logo, drifting cards and chips, and Create Room, Join Room, and How to Play (All Games). Create and Join open a canvas prompt (name, plus room code for Join). Submit calls the lobby panel, shows its error in the prompt, and on success opens the lobby scene. How to Play lists `GAME_CATALOG` and shows the selected game's `howToPlay` text. Escape closes a prompt or the overlay.
+- `menu-scene.ts` — `MenuScene`, the first scene. Title logo, drifting cards and chips, and Create Room, Join Room, and How to Play (All Games). Create and Join open a canvas prompt (name, plus room code for Join). `openJoin` fills that room code from a join URL. Submit calls the lobby panel, shows its error in the prompt, and on success opens the lobby scene. How to Play lists `GAME_CATALOG` and shows the selected game's `howToPlay` text. Escape closes a prompt or the overlay.
+- `join-path.ts` — `roomCodeFromPath` reads a four-character lobby code from the URL path. The alphabet matches `CODE_ALPHABET` in the module.
 - `sheets.ts` — pixel sizes and grid math (`CARD_SIZE` 64, chip 32×44, table 129×80, logical 960×540).
 - `card-atlas.ts` — `{ rank, suit }` to a sprite. Hearts, diamonds, clubs, and spades share one grid. A suit with no sheet throws.
 - `game-driver.ts` — `GameDriver<State>`, the render context, and pointer input.
