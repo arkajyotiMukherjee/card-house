@@ -22,6 +22,14 @@ describe('discord join name', () => {
     expect(joinNameFromSearch('')).toEqual({ state: 'ready', name: '' });
   });
 
+  it('maps the camelCase Discord profile stored on the member', () => {
+    expect(
+      joinNameFromSearch(
+        '?discordUserId=424242424242424242&discordUsername=bea_cards&discordGlobalName=Bea%20Cards',
+      ),
+    ).toEqual({ state: 'ready', name: 'Bea Cards' });
+  });
+
   it('asks for a lookup when only the Discord user id is known', () => {
     expect(joinNameFromSearch(`?discord_user_id=${USER_ID}`)).toEqual({
       state: 'lookup',

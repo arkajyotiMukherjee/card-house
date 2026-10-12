@@ -99,6 +99,13 @@ test('the name route reports a 401 without a player name', async () => {
         discordUserId,
         name: null,
       }),
+    lobbyStatus: () => ({
+      code: '',
+      found: false,
+      live: false,
+      tables: 0,
+      players: 0,
+    }),
   });
   const server = createServer(app);
   await new Promise<void>((resolve) => {

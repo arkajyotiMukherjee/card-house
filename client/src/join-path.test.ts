@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { roomCodeFromPath } from './join-path';
+import { discordIdentityFromSearch, roomCodeFromPath } from './join-path';
 
 describe('join path', () => {
   it('reads a four-character room code from the URL path', () => {
@@ -12,5 +12,55 @@ describe('join path', () => {
     expect(roomCodeFromPath('/assets/cards-hearts.png')).toBeUndefined();
     expect(roomCodeFromPath('/IO01')).toBeUndefined();
     expect(roomCodeFromPath('/ABC')).toBeUndefined();
+  });
+
+  it('reads a Discord identity fixture from the query string', () => {
+    expect(
+      discordIdentityFromSearch(
+        '?discordUserId=424242424242424242&discordUsername=bea_cards&discordGlobalName=Bea%20Cards&discordDiscriminator=0042',
+      ),
+    ).toEqual({
+      discordUserId: '424242424242424242',
+      discordUsername: 'bea_cards',
+      discordGlobalName: 'Bea Cards',
+      discordDiscriminator: '0042',
+    });
+  });
+
+  it('leaves the discriminator off when Discord does not send one', () => {
+    expect(
+      discordIdentityFromSearch(
+        '?discordUserId=424242424242424242&discordUsername=bea_cards&discordGlobalName=Bea',
+      ),
+    ).toEqual({
+      discordUserId: '424242424242424242',
+      discordUsername: 'bea_cards',
+      discordGlobalName: 'Bea',
+    });
+    expect(
+      discordIdentityFromSearch(
+        '?discordUserId=424242424242424242&discordUsername=bea_cards&discordDiscriminator=0',
+      )?.discordDiscriminator,
+    ).toBeUndefined();
+  });
+
+  it('reads the snake_case Discord profile used for the default name', () => {
+    expect(
+      discordIdentityFromSearch(
+        '?discord_user_id=80351110224678912&discord_username=nelly',
+      ),
+    ).toEqual({
+      discordUserId: '80351110224678912',
+      discordUsername: 'nelly',
+      discordGlobalName: '',
+    });
+  });
+
+  it('treats a URL without a Discord user id as a web join', () => {
+    expect(discordIdentityFromSearch('')).toBeUndefined();
+    expect(
+      discordIdentityFromSearch('?discordUsername=bea_cards'),
+    ).toBeUndefined();
+    expect(discordIdentityFromSearch('?discordUserId=')).toBeUndefined();
   });
 });

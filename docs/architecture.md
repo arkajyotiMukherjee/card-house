@@ -78,12 +78,11 @@ A small bot / HTTP service:
   - calls `create_lobby`, the same reducer the web app uses,
   - stores the Discord channel on that lobby with `set_lobby_discord_channel`,
   - returns a link (`https://yourgame.com/ROOMCODE`) into that lobby.
-- Optionally supports:
-  - `/cardroom status ROOMCODE` to show number of tables and players in that lobby.
+- `/cardroom status ROOMCODE` reads that lobby and replies whether it is live, with the number of tables and players. A missing code says the room was not found.
 
 Discord is just an entry point; it never owns or mutates game state directly.
 
-Voice channels, Discord identity, and speaking indicators are planned in [discord-bot-architecture.md](discord-bot-architecture.md).
+Voice channels and speaking indicators are planned in [discord-bot-architecture.md](discord-bot-architecture.md). A browser that arrives with a Discord user id calls `join_lobby_with_discord`. A web join calls `join_lobby` and leaves the Discord columns empty.
 
 ## Data Model
 
@@ -106,9 +105,13 @@ Represents a person inside a lobby.
 - `id: string`.
 - `lobbyId: string`.
 - `clientId: string` – anonymous per-browser identity, stable via localStorage.
-- `name: string` – display name chosen by user.
+- `name: string` – editable display name. Changing it does not change `discordUserId`.
 - `connected: boolean`.
 - `lastSeenAt: number`.
+- `discordUserId: string` – Discord snowflake, or empty for a web-only member.
+- `discordUsername: string`.
+- `discordGlobalName: string`.
+- `discordDiscriminator: string | null` – stored only when Discord sends a four-digit discriminator.
 
 There is **no host flag**. Every member is equal.
 
@@ -341,8 +344,11 @@ To keep things simple and anonymous but still reconnectable:
   - generate a `clientId` (UUID) and store it in `localStorage`.
 - On lobby join:
   - client sends `clientId` + user-chosen `name`.
+  - a join URL with a Discord user id (`discordUserId` or `discord_user_id`) plus a username also sends `discordUsername`, `discordGlobalName`, and `discordDiscriminator` when Discord included one. That calls `join_lobby_with_discord`. The display name is the mapped default (global name, otherwise username) and the join submits without typing.
+  - a URL without a Discord user id calls `join_lobby`. Discord fields stay empty.
   - backend:
     - if a `LobbyMember` with that `(lobbyId, clientId)` exists, reuse it and update name.
+    - a later name change keeps the stored `discordUserId`.
     - otherwise, create a new `LobbyMember`.
 - On reconnect:
   - same `clientId` is reused.

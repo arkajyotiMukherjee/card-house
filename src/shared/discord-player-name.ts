@@ -42,12 +42,20 @@ export function readDiscordJoinIdentity(
   const params = new URLSearchParams(
     search.startsWith('?') ? search.slice(1) : search,
   );
-  const id = (params.get(DISCORD_USER_ID_PARAM) ?? '').trim();
+  const id = (
+    firstQuery(params, DISCORD_USER_ID_PARAM, 'discordUserId') ?? ''
+  ).trim();
   if (!DISCORD_USER_ID.test(id)) {
     return undefined;
   }
-  const username = (params.get(DISCORD_USERNAME_PARAM) ?? '').trim();
-  const globalRaw = params.get(DISCORD_GLOBAL_NAME_PARAM);
+  const username = (
+    firstQuery(params, DISCORD_USERNAME_PARAM, 'discordUsername') ?? ''
+  ).trim();
+  const globalRaw = firstQuery(
+    params,
+    DISCORD_GLOBAL_NAME_PARAM,
+    'discordGlobalName',
+  );
   const globalName = globalRaw === null ? '' : globalRaw.trim();
   if (username.length === 0 && globalName.length === 0) {
     return { source: 'id', discordUserId: id };
@@ -78,6 +86,18 @@ export function withDiscordIdentity(
     url.searchParams.set(DISCORD_GLOBAL_NAME_PARAM, globalName);
   }
   return url.toString();
+}
+
+function firstQuery(
+  params: URLSearchParams,
+  ...keys: string[]
+): string | null {
+  for (const key of keys) {
+    if (params.has(key)) {
+      return params.get(key);
+    }
+  }
+  return null;
 }
 
 function visibleName(raw: string): string {
