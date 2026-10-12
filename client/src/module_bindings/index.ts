@@ -38,6 +38,7 @@ import CreateGameTableReducer from "./create_game_table_reducer";
 import CreateLobbyReducer from "./create_lobby_reducer";
 import HandleGameIntentReducer from "./handle_game_intent_reducer";
 import JoinLobbyReducer from "./join_lobby_reducer";
+import JoinLobbyWithDiscordReducer from "./join_lobby_with_discord_reducer";
 import JoinTableReducer from "./join_table_reducer";
 import LeaveTableReducer from "./leave_table_reducer";
 import SetLobbyDiscordChannelReducer from "./set_lobby_discord_channel_reducer";
@@ -138,6 +139,7 @@ const reducersSchema = __reducers(
   __reducerSchema("create_lobby", CreateLobbyReducer),
   __reducerSchema("handle_game_intent", HandleGameIntentReducer),
   __reducerSchema("join_lobby", JoinLobbyReducer),
+  __reducerSchema("join_lobby_with_discord", JoinLobbyWithDiscordReducer),
   __reducerSchema("join_table", JoinTableReducer),
   __reducerSchema("leave_table", LeaveTableReducer),
   __reducerSchema("set_lobby_discord_channel", SetLobbyDiscordChannelReducer),

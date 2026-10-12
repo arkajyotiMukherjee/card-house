@@ -66,6 +66,10 @@ export const LobbyMember = __t.object("LobbyMember", {
   name: __t.string(),
   connected: __t.bool(),
   lastSeenAt: __t.timestamp(),
+  discordUserId: __t.string(),
+  discordUsername: __t.string(),
+  discordGlobalName: __t.string(),
+  discordDiscriminator: __t.option(__t.string()),
 });
 export type LobbyMember = __Infer<typeof LobbyMember>;
 

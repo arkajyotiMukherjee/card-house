@@ -3,7 +3,7 @@ import { BootScene, demoImages } from './boot-scene';
 import { getOrCreateClientId } from './client-id';
 import { connectCardroom } from './connect';
 import { GameScene } from './game-scene-view';
-import { roomCodeFromPath } from './join-path';
+import { discordIdentityFromSearch, roomCodeFromPath } from './join-path';
 import { LobbyScene } from './lobby-scene';
 import { mountLobbyPanel } from './lobby-panel';
 import { MenuScene } from './menu-scene';
@@ -11,6 +11,7 @@ import { LOGICAL_HEIGHT, LOGICAL_WIDTH, integerScale } from './sheets';
 
 const clientId = getOrCreateClientId();
 const joinCode = roomCodeFromPath(window.location.pathname);
+const discordIdentity = discordIdentityFromSearch(window.location.search);
 
 const canvas = document.createElement('canvas');
 document.querySelector('#app')?.append(canvas);
@@ -70,11 +71,18 @@ void engine.start(loader).then(() => {
         },
       );
       lobbyScene.mount();
-      const panel = mountLobbyPanel(engine, scene, connection, clientId, {
-        onJoined: (lobby) => {
-          lobbyScene.openLobby(lobby.id, lobby.code);
+      const panel = mountLobbyPanel(
+        engine,
+        scene,
+        connection,
+        clientId,
+        discordIdentity,
+        {
+          onJoined: (lobby) => {
+            lobbyScene.openLobby(lobby.id, lobby.code);
+          },
         },
-      });
+      );
       menu.connect(
         (entry) => panel.enter(entry.kind, entry.name, entry.code),
         () => {
