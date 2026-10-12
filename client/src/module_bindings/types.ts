@@ -99,6 +99,14 @@ export const LobbyStatus = __t.enum("LobbyStatus", {
 });
 export type LobbyStatus = __Infer<typeof LobbyStatus>;
 
+export const RoomCaps = __t.object("RoomCaps", {
+  id: __t.string(),
+  maxLobbies: __t.u32(),
+  maxTablesPerLobby: __t.u32(),
+  maxSeatsPerTable: __t.u32(),
+});
+export type RoomCaps = __Infer<typeof RoomCaps>;
+
 // The tagged union or sum type for the algebraic type `SeatState`.
 export const SeatState = __t.enum("SeatState", {
   Active: __t.unit(),

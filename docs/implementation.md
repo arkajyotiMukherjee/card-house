@@ -278,10 +278,9 @@ Voice channels and speaking indicators are now part of this milestone. The plan 
     - and `status = "finished"` or idle for too long.
     - `clean_empty_tables` does this. The default idle time is 15 minutes (`lastActivityAt`, or `createdAt` when that is empty). A seated table stays. `set_empty_table_idle_timeout` can shorten the wait.
 - **Limits:**
-  - config-driven soft caps on:
-    - max lobbies,
-    - max tables per lobby,
-    - max seats per table (already game-specific).
+  - `RoomCaps` stores soft caps. The seeded row is 64 lobbies, 16 tables per lobby, and 8 seats per table. `set_room_caps` replaces those three numbers.
+  - `create_lobby` rejects another lobby at `maxLobbies`. `create_game_table` rejects another table in that lobby at `maxTablesPerLobby`.
+  - Seat counts stay on the game catalog. A higher `maxSeatsPerTable` does not raise a catalog max. `create_game_table` rejects `maxPlayers` above the catalog max or above the seat cap. `join_table` rejects a seat past the tighter of the two.
 - **Monitoring & logs:**
   - log:
     - lobby and table creation,

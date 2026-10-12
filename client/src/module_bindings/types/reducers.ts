@@ -21,6 +21,7 @@ import SetEmptyTableIdleTimeoutReducer from "../set_empty_table_idle_timeout_red
 import SetLobbyDiscordChannelReducer from "../set_lobby_discord_channel_reducer";
 import SetLobbyDiscordVoiceReducer from "../set_lobby_discord_voice_reducer";
 import SetLobbyIdleTimeoutReducer from "../set_lobby_idle_timeout_reducer";
+import SetRoomCapsReducer from "../set_room_caps_reducer";
 import SetTableDiscordVoiceReducer from "../set_table_discord_voice_reducer";
 import UpdateSpeakingStateReducer from "../update_speaking_state_reducer";
 import UpdateVoicePresenceReducer from "../update_voice_presence_reducer";
@@ -40,6 +41,7 @@ export type SetEmptyTableIdleTimeoutParams = __Infer<typeof SetEmptyTableIdleTim
 export type SetLobbyDiscordChannelParams = __Infer<typeof SetLobbyDiscordChannelReducer>;
 export type SetLobbyDiscordVoiceParams = __Infer<typeof SetLobbyDiscordVoiceReducer>;
 export type SetLobbyIdleTimeoutParams = __Infer<typeof SetLobbyIdleTimeoutReducer>;
+export type SetRoomCapsParams = __Infer<typeof SetRoomCapsReducer>;
 export type SetTableDiscordVoiceParams = __Infer<typeof SetTableDiscordVoiceReducer>;
 export type UpdateSpeakingStateParams = __Infer<typeof UpdateSpeakingStateReducer>;
 export type UpdateVoicePresenceParams = __Infer<typeof UpdateVoicePresenceReducer>;
