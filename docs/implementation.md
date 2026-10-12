@@ -272,10 +272,11 @@ Voice channels and speaking indicators are now part of this milestone. The plan 
 **Goal:** Make the system durable and manageable with real users.
 
 - **Cleanup / lifecycle:**
-  - auto-close lobbies after long inactivity,
+  - auto-close lobbies after long inactivity (`close_idle_lobbies`, 24 hours, or a 1–60 second dev timeout),
   - auto-clean tables that:
     - have zero seats,
     - and `status = "finished"` or idle for too long.
+    - `clean_empty_tables` does this. The default idle time is 15 minutes (`lastActivityAt`, or `createdAt` when that is empty). A seated table stays. `set_empty_table_idle_timeout` can shorten the wait.
 - **Limits:**
   - `RoomCaps` stores soft caps. The seeded row is 64 lobbies, 16 tables per lobby, and 8 seats per table. `set_room_caps` replaces those three numbers.
   - `create_lobby` rejects another lobby at `maxLobbies`. `create_game_table` rejects another table in that lobby at `maxTablesPerLobby`.
