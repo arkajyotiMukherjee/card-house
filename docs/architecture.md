@@ -94,11 +94,14 @@ Represents a single card room.
 - `code: string` – short human code used in URLs (e.g. `AB3D`).
 - `status: "open" | "closed"`.
 - `createdAt: number` – timestamp.
+- `lastActivityAt: number | null` – last join, table change, intent, speaking update, or voice presence. Null on a row from before the column existed; the next idle sweep stamps it and waits out a full timeout.
 - `discordChannelId: string` – Discord channel that ran `/cardroom create`, or empty for a web lobby.
 - `discordGuildId: string` – guild that owns the lobby voice channel, or empty.
 - `discordLobbyVoiceChannelId: string` – lobby voice channel, or empty.
 
 There can be many lobbies in the system, each with their own members and tables.
+
+`close_idle_lobbies` runs every second from the private `LobbyIdleSweep` schedule. It closes an open lobby that has been idle longer than the timeout in `LobbyIdleConfig`, using the same closed status as `close_lobby`. The production timeout is 24 hours. `set_lobby_idle_timeout` with `dev` true stores a 1 to 60 second timeout for a local check. A closed lobby rejects `join_lobby`.
 
 ### LobbyMember
 
