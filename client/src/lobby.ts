@@ -137,6 +137,49 @@ export const ROOM_BANNER = {
   code: { size: 24, y: 28 },
 } as const;
 
+export const DISCORD_BADGE = {
+  label: 'Launched from Discord',
+  size: 8,
+  padX: 8,
+  h: 16,
+  y: ROOM_BANNER.panel.y + ROOM_BANNER.panel.h + 6,
+} as const;
+
+export interface LobbyDiscordRow {
+  id: string;
+  discordChannelId: string;
+}
+
+/** True when `/cardroom create` stored a Discord channel on this lobby. */
+export function lobbyLaunchedFromDiscord(
+  lobbies: Iterable<LobbyDiscordRow>,
+  lobbyId: string,
+): boolean {
+  for (const lobby of lobbies) {
+    if (lobby.id === lobbyId) {
+      return lobby.discordChannelId.trim().length > 0;
+    }
+  }
+  return false;
+}
+
+export function discordBadgeBox(): {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+} {
+  const w =
+    DISCORD_BADGE.label.length * DISCORD_BADGE.size + DISCORD_BADGE.padX * 2;
+  const banner = ROOM_BANNER.panel;
+  return {
+    x: banner.x + Math.floor((banner.w - w) / 2),
+    y: DISCORD_BADGE.y,
+    w,
+    h: DISCORD_BADGE.h,
+  };
+}
+
 export const CREATE_TABLE = {
   panel: { x: 188, y: 140, w: 440, h: 250 },
   prev: { x: 204, y: 220, w: 72, h: 26 },
