@@ -82,6 +82,8 @@ A small bot / HTTP service:
 
 Discord is just an entry point; it never owns or mutates game state directly.
 
+Voice channels, Discord identity, and speaking indicators are planned in [discord-bot-architecture.md](discord-bot-architecture.md).
+
 ## Data Model
 
 ### Lobby
