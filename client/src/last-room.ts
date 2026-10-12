@@ -92,9 +92,16 @@ export function clearLastRoom(storage: RoomStorage = localStorage): void {
   storage.removeItem(LAST_ROOM_STORAGE_KEY);
 }
 
-/** True when `join_lobby` rejected because the stored lobby is gone. */
+/**
+ * True when `join_lobby` rejected because the stored lobby is gone.
+ * The module says `Room closed`. The lobby prompt shows `Room is closed`.
+ */
 export function roomGoneMessage(message: string): boolean {
-  return message.includes('Room not found') || message.includes('Room closed');
+  return (
+    message.includes('Room not found') ||
+    message.includes('Room closed') ||
+    message.includes('Room is closed')
+  );
 }
 
 /**

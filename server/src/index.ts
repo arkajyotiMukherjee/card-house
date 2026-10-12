@@ -64,7 +64,11 @@ import { discordProfile } from './discord-member';
 import { speakingRowId, voicePlace } from './speaking-state';
 import { stateIfLobbyReady } from './lobby-deal';
 import { openingTableState } from './opening-state';
-import { statusTagForState, type TableStatusTag } from './table-status';
+import {
+  joinBlockForStatus,
+  statusTagForState,
+  type TableStatusTag,
+} from './table-status';
 import {
   definitionByType,
   registerGameRules,
@@ -1565,6 +1569,11 @@ export const join_table = spacetimedb.reducer(
     const caps = currentRoomCaps(ctx.db);
     reject(joinSeatRejection(seated, gameTable.maxPlayers, caps));
     const openSeats = openSeatCount(gameTable.maxPlayers, caps);
+
+    const blocked = joinBlockForStatus(currentStatusTag(gameTable.status.tag));
+    if (blocked) {
+      throw new SenderError(blocked);
+    }
 
     let seatIndex = 0;
     while (seatIndex < openSeats && taken.includes(seatIndex)) {

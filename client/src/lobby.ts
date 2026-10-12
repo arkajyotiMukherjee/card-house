@@ -133,7 +133,7 @@ export const TABLE_LIST = {
   header: { h: 14, gap: 4 },
   row: { w: 136, h: 30, gap: 4 },
   more: { x: 808, y: 468 },
-  error: { x: 808, y: 484 },
+  error: { x: 808, y: 480 },
 } as const;
 
 export const ROOM_BANNER = {
