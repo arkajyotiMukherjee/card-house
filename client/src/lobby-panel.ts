@@ -18,6 +18,13 @@ import type { DiscordJoinIdentity } from './join-path';
 import type { DbConnection } from './module_bindings';
 import { lobbySpeakers, SpeakingFader, type SpeakingRow } from './speaking';
 import { speechBubble } from './speaking-view';
+import {
+  headsetActor,
+  HEADSET_HEIGHT,
+  HEADSET_WIDTH,
+  lobbyVoiceMemberIds,
+  type PresenceRef,
+} from './voice-presence';
 
 const GOLD = ex.Color.fromHex('#f4e4b3');
 const SELF = ex.Color.fromHex('#fff6d0');
@@ -244,8 +251,19 @@ export function mountLobbyPanel(
       actor.graphics.use(graphic);
       scene.add(actor);
       nameActors.push(actor);
+      let markerX = 16 + line.name.length * 8 + 4;
+      if (line.inVoice) {
+        const headset = headsetActor(
+          markerX,
+          y + Math.floor((8 - HEADSET_HEIGHT) / 2) + 1,
+          21,
+        );
+        scene.add(headset);
+        nameActors.push(headset);
+        markerX += HEADSET_WIDTH + 4;
+      }
       const bubble = speechBubble(
-        ex.vec(16 + line.name.length * 8 + 4, y - 2),
+        ex.vec(markerX, y - 2),
         21,
         1,
         fader,
@@ -274,7 +292,12 @@ export function mountLobbyPanel(
     refreshSpeaking();
     renderLobby(
       lobby.code,
-      memberLines(readMembers(connection), lobby.id, clientId),
+      memberLines(
+        readMembers(connection),
+        lobby.id,
+        clientId,
+        lobbyVoiceMemberIds(readPresence(connection), lobby.id),
+      ),
     );
     handlers.onJoined?.(lobby);
   };
@@ -449,6 +472,15 @@ export function mountLobbyPanel(
   connection.db.lobbyMember.onUpdate(() => {
     syncJoinedLobby();
   });
+  connection.db.voicePresence.onInsert(() => {
+    syncJoinedLobby();
+  });
+  connection.db.voicePresence.onUpdate(() => {
+    syncJoinedLobby();
+  });
+  connection.db.voicePresence.onDelete(() => {
+    syncJoinedLobby();
+  });
   connection.db.lobbyMember.onDelete(() => {
     syncJoinedLobby();
   });
@@ -562,6 +594,18 @@ function readMembers(connection: DbConnection): MemberRecord[] {
       lobbyId: member.lobbyId,
       clientId: member.clientId,
       name: member.name,
+    });
+  }
+  return rows;
+}
+
+function readPresence(connection: DbConnection): PresenceRef[] {
+  const rows: PresenceRef[] = [];
+  for (const row of connection.db.voicePresence.iter()) {
+    rows.push({
+      lobbyId: row.lobbyId,
+      tableId: row.tableId,
+      lobbyMemberId: row.lobbyMemberId,
     });
   }
   return rows;

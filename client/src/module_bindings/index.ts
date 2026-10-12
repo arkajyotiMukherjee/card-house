@@ -48,6 +48,7 @@ import RemoveGameTableReducer from "./remove_game_table_reducer";
 import SetLobbyDiscordChannelReducer from "./set_lobby_discord_channel_reducer";
 import SetLobbyDiscordVoiceReducer from "./set_lobby_discord_voice_reducer";
 import SetTableDiscordVoiceReducer from "./set_table_discord_voice_reducer";
+import UpdateVoicePresenceReducer from "./update_voice_presence_reducer";
 import UpdateSpeakingStateReducer from "./update_speaking_state_reducer";
 
 // Import all procedure arg schemas
@@ -58,6 +59,7 @@ import GameSeatRow from "./game_seat_table";
 import GameTableRow from "./game_table_table";
 import LobbyRow from "./lobby_table";
 import LobbyMemberRow from "./lobby_member_table";
+import VoicePresenceRow from "./voice_presence_table";
 import SpeakingStateRow from "./speaking_state_table";
 
 /** Type-only namespace exports for generated type groups. */
@@ -143,6 +145,23 @@ const tablesSchema = __schema({
       { name: 'LobbyMember_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, LobbyMemberRow),
+  voicePresence: __table({
+    name: 'VoicePresence',
+    indexes: [
+      { accessor: 'discordUserId', name: 'VoicePresence_discord_user_id_idx_btree', algorithm: 'btree', columns: [
+        'discordUserId',
+      ] },
+      { accessor: 'id', name: 'VoicePresence_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'lobbyId', name: 'VoicePresence_lobby_id_idx_btree', algorithm: 'btree', columns: [
+        'lobbyId',
+      ] },
+    ],
+    constraints: [
+      { name: 'VoicePresence_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, VoicePresenceRow),
   speakingState: __table({
     name: 'SpeakingState',
     indexes: [
@@ -179,6 +198,7 @@ const reducersSchema = __reducers(
   __reducerSchema("set_lobby_discord_channel", SetLobbyDiscordChannelReducer),
   __reducerSchema("set_lobby_discord_voice", SetLobbyDiscordVoiceReducer),
   __reducerSchema("set_table_discord_voice", SetTableDiscordVoiceReducer),
+  __reducerSchema("update_voice_presence", UpdateVoicePresenceReducer),
   __reducerSchema("update_speaking_state", UpdateSpeakingStateReducer),
 );
 
@@ -198,6 +218,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "Lobby": Omit<typeof tablesSchema.schemaType.tables["lobby"], "accessorName"> & { readonly accessorName: "Lobby" };
     /** @deprecated Use `lobbyMember` instead. This alias will be removed in the next major version. */
     readonly "LobbyMember": Omit<typeof tablesSchema.schemaType.tables["lobbyMember"], "accessorName"> & { readonly accessorName: "LobbyMember" };
+    /** @deprecated Use `voicePresence` instead. This alias will be removed in the next major version. */
+    readonly "VoicePresence": Omit<typeof tablesSchema.schemaType.tables["voicePresence"], "accessorName"> & { readonly accessorName: "VoicePresence" };
     /** @deprecated Use `speakingState` instead. This alias will be removed in the next major version. */
     readonly "SpeakingState": Omit<typeof tablesSchema.schemaType.tables["speakingState"], "accessorName"> & { readonly accessorName: "SpeakingState" };
   };
@@ -223,6 +245,7 @@ const tableAccessorAliases = {
   "GameTable": "gameTable",
   "Lobby": "lobby",
   "LobbyMember": "lobbyMember",
+  "VoicePresence": "voicePresence",
   "SpeakingState": "speakingState",
 } as const;
 
@@ -254,6 +277,8 @@ export type DbView = __DbViewBase & {
   readonly "Lobby": __DbViewBase["lobby"];
   /** @deprecated Use `lobbyMember` instead. This alias will be removed in the next major version. */
   readonly "LobbyMember": __DbViewBase["lobbyMember"];
+  /** @deprecated Use `voicePresence` instead. This alias will be removed in the next major version. */
+  readonly "VoicePresence": __DbViewBase["voicePresence"];
   /** @deprecated Use `speakingState` instead. This alias will be removed in the next major version. */
   readonly "SpeakingState": __DbViewBase["speakingState"];
 };
@@ -270,6 +295,8 @@ export type Tables = __TablesBase & {
   readonly "Lobby": __TablesBase["lobby"];
   /** @deprecated Use `lobbyMember` instead. This alias will be removed in the next major version. */
   readonly "LobbyMember": __TablesBase["lobbyMember"];
+  /** @deprecated Use `voicePresence` instead. This alias will be removed in the next major version. */
+  readonly "VoicePresence": __TablesBase["voicePresence"];
   /** @deprecated Use `speakingState` instead. This alias will be removed in the next major version. */
   readonly "SpeakingState": __TablesBase["speakingState"];
 };

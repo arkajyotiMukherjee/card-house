@@ -12,7 +12,7 @@ const DISCORD_DISCRIMINATOR = /^\d{4}$/;
 
 /**
  * Normalize a Discord identity from a join.
- * `name` is not derived here. Issue #43 still chooses the default display name.
+ * `name` is not derived here. The client maps the default display name.
  * A missing, blank, or `0` discriminator is not stored.
  */
 export function discordProfile(

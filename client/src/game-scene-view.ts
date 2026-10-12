@@ -38,6 +38,11 @@ import { RummyDriver } from './rummy-driver';
 import { BlackjackDriver } from './blackjack-driver';
 import { SpadesDriver } from './spades-driver';
 import { HeartsDriver } from './hearts-driver';
+import {
+  headsetActor,
+  tableVoiceMemberIds,
+  type PresenceRef,
+} from './voice-presence';
 import { PokerDriver } from './poker-driver';
 import { cardAtlas, greenTable } from './boot-scene';
 import {
@@ -253,6 +258,15 @@ export class GameScene extends ex.Scene {
     this.connection.db.speakingState.onDelete(() => {
       this.refreshSpeaking();
     });
+    this.connection.db.voicePresence.onInsert(() => {
+      this.paintSeats();
+    });
+    this.connection.db.voicePresence.onUpdate(() => {
+      this.paintSeats();
+    });
+    this.connection.db.voicePresence.onDelete(() => {
+      this.paintSeats();
+    });
     this.connection.db.gameEvent.onInsert((_ctx, row) => {
       this.announce(row);
     });
@@ -328,12 +342,20 @@ export class GameScene extends ex.Scene {
         readMembers(this.connection),
         this.tableId,
         this.clientId,
+        tableVoiceMemberIds(readPresence(this.connection), this.tableId),
       ),
     );
     this.placed = placed;
     this.waitingText.text = placed.length === 0 ? 'Waiting for seats' : '';
     for (const seat of placed) {
-      this.addSeat(seat.name, seat.x, seat.y, seat.self, seat.lobbyMemberId);
+      this.addSeat(
+        seat.name,
+        seat.x,
+        seat.y,
+        seat.self,
+        seat.lobbyMemberId,
+        seat.inVoice,
+      );
     }
     this.paintGame();
   }
@@ -344,6 +366,7 @@ export class GameScene extends ex.Scene {
     y: number,
     self: boolean,
     lobbyMemberId: string,
+    inVoice: boolean,
   ): void {
     const width = Math.max(48, name.length * 8 + 16);
     const plate = new ex.Actor({
@@ -384,6 +407,10 @@ export class GameScene extends ex.Scene {
         isSpeaking,
       ),
     );
+    if (inVoice) {
+      const headset = headsetActor(width + 4, 5, 0);
+      plate.addChild(headset);
+    }
     this.add(plate);
     this.seatActors.push(plate);
   }
@@ -1096,6 +1123,18 @@ function readSpeaking(connection: DbConnection): SpeakingRow[] {
       tableId: row.tableId,
       lobbyMemberId: row.lobbyMemberId,
       isSpeaking: row.isSpeaking,
+    });
+  }
+  return rows;
+}
+
+function readPresence(connection: DbConnection): PresenceRef[] {
+  const rows: PresenceRef[] = [];
+  for (const row of connection.db.voicePresence.iter()) {
+    rows.push({
+      lobbyId: row.lobbyId,
+      tableId: row.tableId,
+      lobbyMemberId: row.lobbyMemberId,
     });
   }
   return rows;

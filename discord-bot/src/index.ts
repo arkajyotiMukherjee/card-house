@@ -2,13 +2,17 @@ import { createServer } from 'node:http';
 import { pathToFileURL } from 'node:url';
 import { registerSlashCommands } from './commands.ts';
 import { discordRestApi } from './discord-http.ts';
+import { lookupDefaultPlayerName } from './discord-user.ts';
 import { connectLobby } from './lobby-client.ts';
+import { readLobbyStatus } from './lobby-status.ts';
 import { createApp } from './server.ts';
 import { attachSpeakingWatch } from './speaking.ts';
 import {
   createSpeakingGateway,
   probeSpeakingGateway,
 } from './speaking-gateway.ts';
+import { connectVoiceGateway } from './voice-gateway.ts';
+import { recordVoiceState, syncGuildVoice } from './voice-presence.ts';
 import {
   attachVoiceWatch,
   createDiscordLobbyWithVoice,
@@ -37,7 +41,7 @@ export async function main(): Promise<void> {
       applicationId,
       guildId: process.env.DISCORD_GUILD_ID,
     });
-    console.log('Registered /cardroom create');
+    console.log('Registered /cardroom create and /cardroom status');
   } else {
     console.log(
       'DISCORD_BOT_TOKEN or DISCORD_APPLICATION_ID is unset; slash command registration skipped',
@@ -47,6 +51,21 @@ export async function main(): Promise<void> {
   const connection = await connectLobby(host, database);
   if (voice) {
     attachVoiceWatch(connection, voice);
+    let queue: Promise<void> = Promise.resolve();
+    const enqueue = (task: () => Promise<void>): void => {
+      queue = queue.then(task, task);
+    };
+    connectVoiceGateway({
+      token,
+      handlers: {
+        onGuildVoice: (guildId, states) => {
+          enqueue(() => syncGuildVoice(connection, guildId, states));
+        },
+        onVoiceState: (_guildId, state) => {
+          enqueue(() => recordVoiceState(connection, state));
+        },
+      },
+    });
   }
   if (token.length > 0) {
     const speakingProbe = await probeSpeakingGateway(token);
@@ -68,6 +87,9 @@ export async function main(): Promise<void> {
         guildId,
         publicUrl,
       ),
+    lookupPlayerName: (discordUserId) =>
+      lookupDefaultPlayerName(discordUserId, token),
+    lobbyStatus: (roomCode) => readLobbyStatus(connection, roomCode),
   });
   const server = createServer(app);
   await new Promise<void>((resolve) => {

@@ -14,8 +14,9 @@ import {
   type PokerVariation,
 } from '../../src/shared/games/poker';
 import type { GameDefinition } from '../../src/shared/games/game-definition';
+import { PLAYER_NAME_MAX } from '../../src/shared/discord-player-name';
 
-export const NAME_MAX = 12;
+export const NAME_MAX = PLAYER_NAME_MAX;
 export const CODE_MAX = 6;
 
 export const LOBBY_PANEL = {
@@ -33,6 +34,7 @@ export interface LobbyRow {
 }
 
 export interface MemberRow {
+  id: string;
   lobbyId: string;
   clientId: string;
   name: string;
@@ -43,11 +45,11 @@ export interface MemberLine {
   name: string;
   clientId: string;
   self: boolean;
+  /** The bot saw this member in the lobby voice channel. */
+  inVoice: boolean;
 }
 
-export interface MemberRecord extends MemberRow {
-  id: string;
-}
+export type MemberRecord = MemberRow;
 
 export interface GameOption {
   gameType: string;
@@ -140,6 +142,49 @@ export const ROOM_BANNER = {
   code: { size: 24, y: 28 },
 } as const;
 
+export const DISCORD_BADGE = {
+  label: 'Launched from Discord',
+  size: 8,
+  padX: 8,
+  h: 16,
+  y: ROOM_BANNER.panel.y + ROOM_BANNER.panel.h + 6,
+} as const;
+
+export interface LobbyDiscordRow {
+  id: string;
+  discordChannelId: string;
+}
+
+/** True when `/cardroom create` stored a Discord channel on this lobby. */
+export function lobbyLaunchedFromDiscord(
+  lobbies: Iterable<LobbyDiscordRow>,
+  lobbyId: string,
+): boolean {
+  for (const lobby of lobbies) {
+    if (lobby.id === lobbyId) {
+      return lobby.discordChannelId.trim().length > 0;
+    }
+  }
+  return false;
+}
+
+export function discordBadgeBox(): {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+} {
+  const w =
+    DISCORD_BADGE.label.length * DISCORD_BADGE.size + DISCORD_BADGE.padX * 2;
+  const banner = ROOM_BANNER.panel;
+  return {
+    x: banner.x + Math.floor((banner.w - w) / 2),
+    y: DISCORD_BADGE.y,
+    w,
+    h: DISCORD_BADGE.h,
+  };
+}
+
 export const CREATE_TABLE = {
   panel: { x: 188, y: 140, w: 440, h: 250 },
   prev: { x: 204, y: 220, w: 72, h: 26 },
@@ -230,6 +275,7 @@ export function memberLines(
   members: Iterable<MemberRecord>,
   lobbyId: string,
   selfClientId: string,
+  inVoice: ReadonlySet<string> = new Set(),
 ): MemberLine[] {
   const lines: MemberLine[] = [];
   for (const member of members) {
@@ -241,6 +287,7 @@ export function memberLines(
       name: member.name,
       clientId: member.clientId,
       self: member.clientId === selfClientId,
+      inVoice: inVoice.has(member.id),
     });
   }
   lines.sort((a, b) => {

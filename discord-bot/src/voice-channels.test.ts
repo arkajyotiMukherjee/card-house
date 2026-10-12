@@ -50,6 +50,13 @@ test('a create interaction forwards the guild id', async () => {
           reducer: 'create_lobby',
         });
       },
+      lobbyStatus: () => ({
+        code: '',
+        found: false,
+        live: false,
+        tables: 0,
+        players: 0,
+      }),
     },
   );
   assert.deepEqual(seen, [`${TEXT}:${GUILD}`]);
