@@ -305,7 +305,7 @@ These aren’t needed for v1, but the architecture supports them cleanly:
   - lobby-wide (done: `send_lobby_chat_message` stores a `LobbyChatMessage` row every member of that lobby subscribes to),
   - per-table (done: `send_table_chat` stores a `TableChatMessage` row for a sender who is seated or watching that table; a lobby member elsewhere does not see it).
 - **Persistent soft profiles**:
-  - saved preferred name,
+  - saved preferred name (done: `preferredNames` in localStorage, keyed by `clientId`; Create Room and Join Room start with the name this client used last),
   - color theme,
   - card customizations (assest pack already has variations)
   - simple stats (hands played, games won).

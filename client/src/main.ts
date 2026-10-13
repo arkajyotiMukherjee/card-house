@@ -60,7 +60,7 @@ function applyIntegerScale(): void {
 
 const scene = new BootScene();
 engine.add('boot', scene);
-const menu = new MenuScene();
+const menu = new MenuScene(clientId);
 engine.add('menu', menu);
 
 window.addEventListener('resize', applyIntegerScale);

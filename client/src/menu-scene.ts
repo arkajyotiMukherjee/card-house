@@ -25,6 +25,10 @@ import {
   type MenuAction,
   type PromptKind,
 } from './menu-layout';
+import {
+  preferredNameForPrompt,
+  rememberPreferredName,
+} from './preferred-name';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from './sheets';
 
 const FELT = ex.Color.fromHex('#145c38');
@@ -100,6 +104,10 @@ interface Drifter {
 }
 
 export class MenuScene extends ex.Scene {
+  constructor(private readonly clientId = '') {
+    super();
+  }
+
   private mode: Mode = 'main';
   private enter: MenuEnter = () =>
     Promise.resolve('Still connecting to the server');
@@ -136,6 +144,7 @@ export class MenuScene extends ex.Scene {
   /**
    * Opens Join Room with the code from a `/cardroom create` join URL.
    * A default Discord name joins without asking the player to type one.
+   * A saved preferred name only fills the field. It does not submit.
    */
   openJoin(code: string, defaultName = ''): void {
     if (this.mode !== 'main') {
@@ -328,7 +337,7 @@ export class MenuScene extends ex.Scene {
 
   private openPrompt(kind: PromptKind, code = '', name = ''): void {
     this.mode = kind;
-    this.name = name.slice(0, NAME_MAX);
+    this.name = preferredNameForPrompt(this.clientId, name);
     this.code = code;
     this.focused = 'name';
     this.shade();
@@ -455,6 +464,7 @@ export class MenuScene extends ex.Scene {
       this.setError(problem);
       return;
     }
+    rememberPreferredName(this.clientId, this.name);
     this.busy = true;
     this.setError('Working...', DIM);
     let failure: string | undefined;
@@ -661,6 +671,7 @@ export class MenuScene extends ex.Scene {
     this.setError('');
     if (this.focused === 'name') {
       this.name = applyFieldKey(this.name, key, NAME_MAX);
+      rememberPreferredName(this.clientId, this.name);
     } else {
       this.code = applyCodeKey(this.code, key);
     }
