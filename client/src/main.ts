@@ -82,6 +82,7 @@ void engine.start(loader).then(() => {
       });
       engine.add('game', game);
       const lobbyScene = new LobbyScene(
+        engine,
         scene,
         connection,
         clientId,

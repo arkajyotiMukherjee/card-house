@@ -146,6 +146,7 @@ export class LobbyScene {
   private chatErrorText: ex.Text | undefined;
 
   constructor(
+    private readonly engine: ex.Engine,
     private readonly scene: ex.Scene,
     private readonly connection: DbConnection,
     private readonly clientId: string,
@@ -371,8 +372,8 @@ export class LobbyScene {
       return;
     }
     this.chatKeyboardBound = true;
-    this.scene.engine.input.keyboard.on('press', (evt) => {
-      if (!this.chatFocused || this.scene.engine.currentScene !== this.scene) {
+    this.engine.input.keyboard.on('press', (evt) => {
+      if (!this.chatFocused || this.engine.currentScene !== this.scene) {
         return;
       }
       if (evt.originalEvent?.ctrlKey || evt.originalEvent?.metaKey) {
