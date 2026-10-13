@@ -148,6 +148,15 @@ export const Spectator = __t.object("Spectator", {
 });
 export type Spectator = __Infer<typeof Spectator>;
 
+export const TableChatMessage = __t.object("TableChatMessage", {
+  id: __t.string(),
+  tableId: __t.string(),
+  lobbyMemberId: __t.string(),
+  body: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type TableChatMessage = __Infer<typeof TableChatMessage>;
+
 export const TableCleanupSchedule = __t.object("TableCleanupSchedule", {
   scheduledId: __t.u64(),
   scheduledAt: __t.scheduleAt(),
