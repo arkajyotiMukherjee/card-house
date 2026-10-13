@@ -27,6 +27,7 @@ import {
   type MenuAction,
   type PromptKind,
 } from './menu-layout';
+import { statsCaption } from './client-stats';
 import {
   preferredNameForPrompt,
   rememberPreferredName,
@@ -116,6 +117,12 @@ export class MenuScene extends ex.Scene {
     Promise.resolve('Still connecting to the server');
   private onEntered: () => void = () => {};
   private statusText = canvasText('SpacetimeDB: starting', 8, DIM);
+  private statsText = canvasText(
+    statsCaption({ handsPlayed: 0, gamesWon: 0 }),
+    8,
+    DIM,
+  );
+  private statsActor: ex.Actor | undefined;
   private readonly drifters: Drifter[] = [];
   private readonly overlay: ex.Actor[] = [];
   private elapsed = 0;
@@ -141,6 +148,17 @@ export class MenuScene extends ex.Scene {
 
   setStatus(line: string): void {
     this.statusText.text = line;
+  }
+
+  setStats(line: string): void {
+    this.statsText.text = line;
+    if (this.statsActor) {
+      const width = line.length * 8;
+      this.statsActor.pos = ex.vec(
+        Math.floor((LOGICAL_WIDTH - width) / 2),
+        424,
+      );
+    }
   }
 
   /**
@@ -353,6 +371,15 @@ export class MenuScene extends ex.Scene {
     });
     status.graphics.use(this.statusText);
     this.add(status);
+    const statsLine = this.statsText.text;
+    const statsWidth = statsLine.length * 8;
+    this.statsActor = new ex.Actor({
+      pos: ex.vec(Math.floor((LOGICAL_WIDTH - statsWidth) / 2), 424),
+      anchor: ex.vec(0, 0),
+      z: 10,
+    });
+    this.statsActor.graphics.use(this.statsText);
+    this.add(this.statsActor);
     const width = MENU_VERSION.length * 8;
     this.addText(
       LOGICAL_WIDTH - width - 12,

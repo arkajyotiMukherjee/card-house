@@ -93,6 +93,7 @@ import {
   shouldRemoveEmptyTable,
 } from './table-cleanup';
 import { chatBodyRejection, chatMessageId } from './lobby-chat';
+import { addSeatCredit, seatStatCredits } from './player-stats';
 import { spectateBlock, spectatorRowId } from './spectator';
 import {
   tableChatBodyError,
@@ -415,6 +416,15 @@ const LobbyIdleSweep = table(
   },
 );
 
+const ClientStats = table(
+  { name: 'ClientStats', public: true },
+  {
+    clientId: t.string().primaryKey(),
+    handsPlayed: t.u32(),
+    gamesWon: t.u32(),
+  },
+);
+
 const spacetimedb = schema(
   {
     Lobby,
@@ -433,6 +443,7 @@ const spacetimedb = schema(
     TableCleanupSchedule,
     LobbyIdleConfig,
     LobbyIdleSweep,
+    ClientStats,
   },
   { CASE_CONVERSION_POLICY: CaseConversionPolicy.None },
 );
@@ -440,6 +451,47 @@ const spacetimedb = schema(
 export default spacetimedb;
 
 type ModuleCtx = ReducerCtx<InferSchema<typeof spacetimedb>>;
+
+function recordClientStats(
+  ctx: ModuleCtx,
+  tableId: string,
+  gameType: string,
+  before: unknown,
+  after: unknown,
+): void {
+  const credits = seatStatCredits(gameType, before, after);
+  if (credits.length === 0) {
+    return;
+  }
+  const clientBySeat = new Map<number, string>();
+  for (const seat of ctx.db.GameSeat.byTable.filter(tableId)) {
+    const seated = ctx.db.LobbyMember.id.find(seat.lobbyMemberId);
+    if (seated) {
+      clientBySeat.set(seat.seatIndex, seated.clientId);
+    }
+  }
+  for (const credit of credits) {
+    const clientId = clientBySeat.get(credit.seatIndex);
+    if (clientId === undefined) {
+      continue;
+    }
+    const existing = ctx.db.ClientStats.clientId.find(clientId);
+    const next = addSeatCredit(existing ?? undefined, credit);
+    if (existing) {
+      ctx.db.ClientStats.clientId.update({
+        ...existing,
+        handsPlayed: next.handsPlayed,
+        gamesWon: next.gamesWon,
+      });
+    } else {
+      ctx.db.ClientStats.insert({
+        clientId,
+        handsPlayed: next.handsPlayed,
+        gamesWon: next.gamesWon,
+      });
+    }
+  }
+}
 
 function ensureLobbyIdleJob(ctx: ModuleCtx): void {
   if (ctx.db.LobbyIdleConfig.id.find(LOBBY_IDLE_CONFIG_ID) === null) {
@@ -2237,6 +2289,7 @@ export const handle_game_intent = spacetimedb.reducer(
       payloadJson: appliedIntentPayload(order, intent, note),
       createdAt: ctx.timestamp,
     });
+    recordClientStats(ctx, gameTable.id, gameTable.gameType, prev, next);
     noteLobbyActivity(ctx, lobby.id);
   },
 );

@@ -306,9 +306,9 @@ These aren’t needed for v1, but the architecture supports them cleanly:
   - per-table (done: `send_table_chat` stores a `TableChatMessage` row for a sender who is seated or watching that table; a lobby member elsewhere does not see it).
 - **Persistent soft profiles**:
   - saved preferred name (done: `preferredNames` in localStorage, keyed by `clientId`; Create Room and Join Room start with the name this client used last),
-  - color theme,
+  - color theme (done: `theme` in localStorage, keyed by `clientId`; the menu Theme button cycles green, purple, and red felt),
   - card customizations (assest pack already has variations)
-  - simple stats (hands played, games won).
+  - simple stats (hands played, games won). `ClientStats` stores both for a `clientId`. A finished hand adds one hand for each seated player, and a game win adds one win for each winner.
 - **Tournaments**:
   - structures composed of multiple tables and rounds.
 

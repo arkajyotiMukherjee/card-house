@@ -45,6 +45,7 @@ import {
 } from './voice-presence';
 import { PokerDriver } from './poker-driver';
 import { cardAtlas, tableSprites } from './boot-scene';
+import { statsCaption } from './client-stats';
 import { type TableStyle } from './table-atlas';
 import {
   BUTTON,
@@ -145,6 +146,8 @@ export class GameScene extends ex.Scene {
   private hudTurn!: ex.Text;
   private hudPhase!: ex.Text;
   private hudRound!: ex.Text;
+  private statsText!: ex.Text;
+  private statsLine = statsCaption({ handsPlayed: 0, gamesWon: 0 });
   private tableActor: ex.Actor | undefined;
 
   constructor(
@@ -154,6 +157,13 @@ export class GameScene extends ex.Scene {
     private style: TableStyle = 'green',
   ) {
     super();
+  }
+
+  setStats(line: string): void {
+    this.statsLine = line;
+    if (this.statsText) {
+      this.statsText.text = line;
+    }
   }
 
   /** Repaints the felt for a theme switch without waiting for a reload. */
@@ -229,6 +239,15 @@ export class GameScene extends ex.Scene {
     });
     error.graphics.use(this.errorText);
     this.add(error);
+
+    this.statsText = canvasText(this.statsLine, 8, GOLD);
+    const stats = new ex.Actor({
+      pos: ex.vec(280, 22),
+      anchor: ex.vec(0, 0),
+      z: 21,
+    });
+    stats.graphics.use(this.statsText);
+    this.add(stats);
 
     this.addLeaveButton();
     this.addCounterButton();
