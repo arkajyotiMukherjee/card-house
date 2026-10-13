@@ -95,6 +95,8 @@ interface CardRecord {
   restX: number;
   restY: number;
   faceUp: boolean;
+  /** True for a card still in the local player's own hand. */
+  personal: boolean;
   moving: boolean;
   placed: boolean;
   /** A finished trick: sweep it off the felt a moment after it lands. */
@@ -108,6 +110,7 @@ interface CardPlace {
   delay: number;
   z: number;
   sweep?: boolean;
+  personal: boolean;
 }
 
 interface BidButton {
@@ -507,6 +510,7 @@ export class SpadesDriver implements GameDriver<SpadesState> {
         faceUp: true,
         delay: index * 16,
         z: 12 + index,
+        personal: true,
       });
     }
     const trick = state.trick.length > 0 ? state.trick : [];
@@ -523,6 +527,7 @@ export class SpadesDriver implements GameDriver<SpadesState> {
         faceUp: true,
         delay: 0,
         z: 20 + index,
+        personal: false,
       });
     }
     const won = state.trick.length === 0 ? state.lastTrick : null;
@@ -548,6 +553,7 @@ export class SpadesDriver implements GameDriver<SpadesState> {
           delay: 0,
           z: 18 + index,
           sweep: true,
+          personal: false,
         });
       }
     }
@@ -573,6 +579,7 @@ export class SpadesDriver implements GameDriver<SpadesState> {
     place: CardPlace,
     ctx: RenderContext,
   ): void {
+    const atlas = place.personal ? ctx.myCards : ctx.cards;
     let record = this.cards.get(cardId);
     if (!record) {
       const actor = new ex.Actor({
@@ -582,7 +589,7 @@ export class SpadesDriver implements GameDriver<SpadesState> {
         height: CARD_DRAW,
         z: place.z,
       });
-      actor.graphics.use(cardSprite(ctx.cards, cardId, place.faceUp));
+      actor.graphics.use(cardSprite(atlas, cardId, place.faceUp));
       actor.on('pointerenter', () => {
         this.onCard('pointerenter', cardId);
       });
@@ -598,6 +605,7 @@ export class SpadesDriver implements GameDriver<SpadesState> {
         restX: place.x,
         restY: place.y,
         faceUp: place.faceUp,
+        personal: place.personal,
         moving: false,
         placed: false,
         sweep: false,
@@ -606,9 +614,10 @@ export class SpadesDriver implements GameDriver<SpadesState> {
     }
     record.sweep = place.sweep === true;
     record.actor.z = this.lifted(cardId) ? 30 : place.z;
-    if (record.faceUp !== place.faceUp) {
+    if (record.faceUp !== place.faceUp || record.personal !== place.personal) {
       record.faceUp = place.faceUp;
-      record.actor.graphics.use(cardSprite(ctx.cards, cardId, place.faceUp));
+      record.personal = place.personal;
+      record.actor.graphics.use(cardSprite(atlas, cardId, place.faceUp));
     }
     const moved = record.restX !== place.x || record.restY !== place.y;
     record.restX = place.x;

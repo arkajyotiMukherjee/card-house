@@ -118,6 +118,8 @@ interface CardRecord {
   restX: number;
   restY: number;
   faceUp: boolean;
+  /** True for a card in the local player's own seat. */
+  personal: boolean;
   moving: boolean;
   placed: boolean;
 }
@@ -352,7 +354,14 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
   private syncCards(state: BlackjackState, ctx: RenderContext): void {
     const desired = new Map<
       string,
-      { x: number; y: number; faceUp: boolean; delay: number; z: number }
+      {
+        x: number;
+        y: number;
+        faceUp: boolean;
+        delay: number;
+        z: number;
+        personal: boolean;
+      }
     >();
     const dealerSlots = dealerPositions(state.dealer.length);
     for (let index = 0; index < state.dealer.length; index += 1) {
@@ -367,6 +376,7 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
         faceUp: !(state.holeHidden && index === 1),
         delay: index * 16,
         z: 8 + index,
+        personal: false,
       });
     }
     for (const seat of ctx.seats) {
@@ -399,6 +409,7 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
             faceUp: true,
             delay: index * 16,
             z: (seat.self ? 12 : 6) + index,
+            personal: seat.self,
           });
         }
       }
@@ -416,9 +427,17 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
 
   private placeCard(
     cardId: string,
-    place: { x: number; y: number; faceUp: boolean; delay: number; z: number },
+    place: {
+      x: number;
+      y: number;
+      faceUp: boolean;
+      delay: number;
+      z: number;
+      personal: boolean;
+    },
     ctx: RenderContext,
   ): void {
+    const atlas = place.personal ? ctx.myCards : ctx.cards;
     let record = this.cards.get(cardId);
     if (!record) {
       const actor = new ex.Actor({
@@ -428,22 +447,24 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
         height: CARD_DRAW,
         z: place.z,
       });
-      actor.graphics.use(cardSprite(ctx.cards, cardId, place.faceUp));
+      actor.graphics.use(cardSprite(atlas, cardId, place.faceUp));
       ctx.scene.add(actor);
       record = {
         actor,
         restX: place.x,
         restY: place.y,
         faceUp: place.faceUp,
+        personal: place.personal,
         moving: false,
         placed: false,
       };
       this.cards.set(cardId, record);
     }
     record.actor.z = place.z;
-    if (record.faceUp !== place.faceUp) {
+    if (record.faceUp !== place.faceUp || record.personal !== place.personal) {
       record.faceUp = place.faceUp;
-      record.actor.graphics.use(cardSprite(ctx.cards, cardId, place.faceUp));
+      record.personal = place.personal;
+      record.actor.graphics.use(cardSprite(atlas, cardId, place.faceUp));
     }
     const moved = record.restX !== place.x || record.restY !== place.y;
     record.restX = place.x;

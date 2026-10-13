@@ -34,6 +34,7 @@ function context(
     ],
     meSeatIndex: seatIndex,
     cards: {} as CardAtlas,
+    myCards: {} as CardAtlas,
     sendIntent: (intent) => {
       sent.push(intent);
     },

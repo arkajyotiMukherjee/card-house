@@ -82,6 +82,8 @@ interface CardRecord {
   restX: number;
   restY: number;
   faceUp: boolean;
+  /** True for a card still in the local player's own hand. */
+  personal: boolean;
   moving: boolean;
   placed: boolean;
 }
@@ -350,7 +352,14 @@ export class BluffDriver implements GameDriver<BluffState> {
   private syncCards(state: BluffState, ctx: RenderContext): void {
     const desired = new Map<
       string,
-      { x: number; y: number; faceUp: boolean; delay: number; z: number }
+      {
+        x: number;
+        y: number;
+        faceUp: boolean;
+        delay: number;
+        z: number;
+        personal: boolean;
+      }
     >();
     const hand =
       ctx.meSeatIndex === null
@@ -369,6 +378,7 @@ export class BluffDriver implements GameDriver<BluffState> {
         faceUp: true,
         delay: index * 16,
         z: 12 + index,
+        personal: true,
       });
     }
     const pileSlots = pilePositions(state.discardPile.length);
@@ -385,6 +395,7 @@ export class BluffDriver implements GameDriver<BluffState> {
         faceUp: pileFaceUp(state, cardId, ctx.meSeatIndex),
         delay: 0,
         z: 5 + index,
+        personal: false,
       });
     }
     for (const cardId of [...this.selected]) {
@@ -406,9 +417,17 @@ export class BluffDriver implements GameDriver<BluffState> {
 
   private placeCard(
     cardId: string,
-    place: { x: number; y: number; faceUp: boolean; delay: number; z: number },
+    place: {
+      x: number;
+      y: number;
+      faceUp: boolean;
+      delay: number;
+      z: number;
+      personal: boolean;
+    },
     ctx: RenderContext,
   ): void {
+    const atlas = place.personal ? ctx.myCards : ctx.cards;
     let record = this.cards.get(cardId);
     if (!record) {
       const actor = new ex.Actor({
@@ -418,7 +437,7 @@ export class BluffDriver implements GameDriver<BluffState> {
         height: CARD_DRAW,
         z: place.z,
       });
-      actor.graphics.use(cardSprite(ctx.cards, cardId, place.faceUp));
+      actor.graphics.use(cardSprite(atlas, cardId, place.faceUp));
       actor.on('pointerenter', () => {
         this.onCard('pointerenter', cardId);
       });
@@ -434,15 +453,17 @@ export class BluffDriver implements GameDriver<BluffState> {
         restX: place.x,
         restY: place.y,
         faceUp: place.faceUp,
+        personal: place.personal,
         moving: false,
         placed: false,
       };
       this.cards.set(cardId, record);
     }
     record.actor.z = this.lifted(cardId) ? 30 : place.z;
-    if (record.faceUp !== place.faceUp) {
+    if (record.faceUp !== place.faceUp || record.personal !== place.personal) {
       record.faceUp = place.faceUp;
-      record.actor.graphics.use(cardSprite(ctx.cards, cardId, place.faceUp));
+      record.personal = place.personal;
+      record.actor.graphics.use(cardSprite(atlas, cardId, place.faceUp));
     }
     const moved = record.restX !== place.x || record.restY !== place.y;
     record.restX = place.x;

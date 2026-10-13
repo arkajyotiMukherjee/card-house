@@ -307,7 +307,7 @@ These aren’t needed for v1, but the architecture supports them cleanly:
 - **Persistent soft profiles**:
   - saved preferred name (done: `preferredNames` in localStorage, keyed by `clientId`; Create Room and Join Room start with the name this client used last),
   - color theme (done: `theme` in localStorage, keyed by `clientId`; the menu Theme button cycles green, purple, and red felt),
-  - card customizations (assest pack already has variations)
+  - card customizations (done: `cardAppearance` in localStorage stores a front style and a back style from the Pixel Poker Pack. Only the local player's own hand reads it (`RenderContext.myCards`); the table, piles, melds, and every other seat stay on the default `CardAtlas`. Not sent to SpacetimeDB),
   - simple stats (hands played, games won). `ClientStats` stores both for a `clientId`. A finished hand adds one hand for each seated player, and a game win adds one win for each winner.
 - **Tournaments**:
   - structures composed of multiple tables and rounds.
