@@ -15,11 +15,12 @@ import {
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from './sheets';
 
 describe('menu buttons', () => {
-  it('lists Create Room, Join Room, and How to Play in a centered stack', () => {
+  it('lists Create Room, Join Room, How to Play, and Card Style in a centered stack', () => {
     expect(MENU_BUTTONS.map((button) => button.caption)).toEqual([
       'Create Room',
       'Join Room',
       'How to Play (All Games)',
+      'Card Style',
     ]);
     for (const button of MENU_BUTTONS) {
       expect(button.x + button.w / 2).toBe(LOGICAL_WIDTH / 2);

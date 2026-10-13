@@ -2,7 +2,7 @@ import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from './sheets';
 
 export const MENU_VERSION = 'v0.1';
 
-export type MenuAction = 'create' | 'join' | 'howto';
+export type MenuAction = 'create' | 'join' | 'howto' | 'cards';
 
 export interface MenuButtonSpec {
   action: MenuAction;
@@ -23,6 +23,7 @@ const MENU_ENTRIES: ReadonlyArray<Pick<MenuButtonSpec, 'action' | 'caption'>> =
     { action: 'create', caption: 'Create Room' },
     { action: 'join', caption: 'Join Room' },
     { action: 'howto', caption: 'How to Play (All Games)' },
+    { action: 'cards', caption: 'Card Style' },
   ];
 
 export const MENU_BUTTONS: readonly MenuButtonSpec[] = MENU_ENTRIES.map(
@@ -35,7 +36,7 @@ export const MENU_BUTTONS: readonly MenuButtonSpec[] = MENU_ENTRIES.map(
   }),
 );
 
-export const MENU_BACKDROP = { x: 200, y: 72, w: 560, h: 372 } as const;
+export const MENU_BACKDROP = { x: 200, y: 72, w: 560, h: 412 } as const;
 
 export const MENU_TITLE = { text: 'CARD ROOM', size: 48, y: 96 } as const;
 export const MENU_TAGLINE = {
@@ -58,6 +59,16 @@ export const HOW_TO_PLAY = {
   list: { x: 56, y: 96, w: 240, rowH: 28 },
   body: { x: 320, y: 96, w: 584, lineH: 16, maxLines: 22 },
   back: { x: 56, y: 450, w: 120, h: 32 },
+} as const;
+
+export const CARD_STYLE = {
+  panel: { x: 240, y: 130, w: 480, h: 280 },
+  frontRow: { x: 264, y: 196, labelY: 180 },
+  backRow: { x: 264, y: 256, labelY: 240 },
+  arrow: { w: 24, h: 24 },
+  arrowGap: 180,
+  preview: { frontX: 560, backX: 632, y: 170 },
+  close: { x: 264, y: 360, w: 160, h: 32 },
 } as const;
 
 export type PromptKind = 'create' | 'join';

@@ -307,7 +307,7 @@ These aren’t needed for v1, but the architecture supports them cleanly:
 - **Persistent soft profiles**:
   - saved preferred name,
   - color theme,
-  - card customizations (assest pack already has variations)
+  - card customizations: done. `client/src/card-appearance.ts` stores a front style and a back style from the Pixel Poker Pack's standard deck variants in `localStorage`, keyed the same way as `clientId`. Only the local player's own hand reads it (`RenderContext.myCards`); the table, piles, melds, and every other seat stay on the default `CardAtlas`. Not sent to SpacetimeDB.
   - simple stats (hands played, games won).
 - **Tournaments**:
   - structures composed of multiple tables and rounds.

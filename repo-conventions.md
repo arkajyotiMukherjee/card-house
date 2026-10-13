@@ -104,8 +104,9 @@ Sprites are SoapBoy's Pixel Poker Pack, checked in under `card-assest -pack`. Th
 
 The client loads copies in `client/public/assets/`, not the pack directory:
 
-- `cards-hearts.png` — light hearts sheet, 320×256, five columns by four rows of 64×64. Column 0 row 0 is blank. The Ace is the next cell. The Jack, a joker, the King, and the Queen share row 2.
-- `card-back-01.png` — 192×128, three columns by two rows. The first cell is the back.
+- `cards-hearts.png`, `cards-diamonds.png`, `cards-clubs.png`, `cards-spades.png` — light suit sheets, 320×256, five columns by four rows of 64×64. Column 0 row 0 is blank. The Ace is the next cell. The Jack, a joker, the King, and the Queen share row 2.
+- `cards-hearts-dark.png`, `cards-diamonds-dark.png`, `cards-clubs-dark.png`, `cards-spades-dark.png` — the dark standard deck variant, same grid. `card-appearance.ts` offers this as the `dark` front style a player can pick for their own cards.
+- `card-back-01.png`, `card-back-02.png` — 192×128, three columns by two rows. The first cell is the back. `card-appearance.ts` offers these as the `classic` and `bold` back styles.
 - `chips-no-outline.png` — 192×44, six 32×44 chips, left to right: green, red, blue, yellow, black, white.
 - `table-green.png`, `table-purple.png`, `table-red.png` — 129×80, no guide overlay.
 - `press-start-2p.ttf` and `press-start-2p-LICENSE.txt` — Press Start 2P by Cody Boisclair, SIL Open Font License 1.1. The pack has no pixel font.

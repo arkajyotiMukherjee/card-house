@@ -44,7 +44,7 @@ import {
   type PresenceRef,
 } from './voice-presence';
 import { PokerDriver } from './poker-driver';
-import { cardAtlas, greenTable } from './boot-scene';
+import { cardAtlas, greenTable, personalCardAtlas } from './boot-scene';
 import {
   BUTTON,
   BUTTON_DOWN,
@@ -1025,6 +1025,7 @@ export class GameScene extends ex.Scene {
       seats: this.placed,
       meSeatIndex,
       cards: cardAtlas,
+      myCards: personalCardAtlas(),
       sendIntent: (intent) => {
         this.sendPayload(JSON.stringify(intent), intent);
       },
