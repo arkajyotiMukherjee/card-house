@@ -308,7 +308,7 @@ These aren’t needed for v1, but the architecture supports them cleanly:
   - saved preferred name,
   - color theme,
   - card customizations (assest pack already has variations)
-  - simple stats (hands played, games won).
+  - simple stats (hands played, games won). `ClientStats` stores both for a `clientId`. A finished hand adds one hand for each seated player, and a game win adds one win for each winner.
 - **Tournaments**:
   - structures composed of multiple tables and rounds.
 

@@ -1,3 +1,4 @@
+import { clientStatsQuery } from './client-stats';
 import { lobbyTableQueries } from './lobby';
 import { DbConnection } from './module_bindings';
 
@@ -19,7 +20,10 @@ export interface CardroomHandlers {
   onSubscribed: (connection: DbConnection) => void;
 }
 
-export function connectCardroom(handlers: CardroomHandlers): void {
+export function connectCardroom(
+  handlers: CardroomHandlers,
+  clientId: string,
+): void {
   const host = __SPACETIMEDB_HOST__;
   const database = __SPACETIMEDB_DB__;
   handlers.onStatus(connectionLine('connecting', host, database));
@@ -28,6 +32,7 @@ export function connectCardroom(handlers: CardroomHandlers): void {
     .withDatabaseName(database)
     .onConnect((connection) => {
       handlers.onStatus(connectionLine('connected', host, database));
+      connection.subscriptionBuilder().subscribe([clientStatsQuery(clientId)]);
       connection
         .subscriptionBuilder()
         .onApplied(() => {

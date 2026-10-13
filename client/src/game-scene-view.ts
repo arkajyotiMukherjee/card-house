@@ -45,6 +45,7 @@ import {
 } from './voice-presence';
 import { PokerDriver } from './poker-driver';
 import { cardAtlas, greenTable } from './boot-scene';
+import { statsCaption } from './client-stats';
 import {
   BUTTON,
   BUTTON_DOWN,
@@ -144,6 +145,8 @@ export class GameScene extends ex.Scene {
   private hudTurn!: ex.Text;
   private hudPhase!: ex.Text;
   private hudRound!: ex.Text;
+  private statsText!: ex.Text;
+  private statsLine = statsCaption({ handsPlayed: 0, gamesWon: 0 });
 
   constructor(
     private readonly connection: DbConnection,
@@ -151,6 +154,13 @@ export class GameScene extends ex.Scene {
     private readonly onLeft: () => void,
   ) {
     super();
+  }
+
+  setStats(line: string): void {
+    this.statsLine = line;
+    if (this.statsText) {
+      this.statsText.text = line;
+    }
   }
 
   open(tableId: string, lobbyMemberId: string): void {
@@ -219,6 +229,15 @@ export class GameScene extends ex.Scene {
     });
     error.graphics.use(this.errorText);
     this.add(error);
+
+    this.statsText = canvasText(this.statsLine, 8, GOLD);
+    const stats = new ex.Actor({
+      pos: ex.vec(280, 22),
+      anchor: ex.vec(0, 0),
+      z: 21,
+    });
+    stats.graphics.use(this.statsText);
+    this.add(stats);
 
     this.addLeaveButton();
     this.addCounterButton();

@@ -1,5 +1,6 @@
 import * as ex from 'excalibur';
 import { cardAtlas, pixelFont } from './boot-scene';
+import { statsCaption } from './client-stats';
 import { subscribeLobbyTables } from './connect';
 import { joinFailureMessage, wrapTableError } from './join-errors';
 import { tableToReopen } from './last-room';
@@ -136,6 +137,11 @@ export class LobbyScene {
   private popup: ex.Actor | undefined;
   private discordBadge: ex.Actor | undefined;
   private tablesReady: Promise<boolean> = Promise.resolve(false);
+  private statsText = canvasText(
+    statsCaption({ handsPlayed: 0, gamesWon: 0 }),
+    8,
+    DIM,
+  );
   private chatBody = '';
   private chatFocused = false;
   private chatBusy = false;
@@ -155,6 +161,10 @@ export class LobbyScene {
       lobbyMemberId: string,
     ) => void = () => {},
   ) {}
+
+  setStats(line: string): void {
+    this.statsText.text = line;
+  }
 
   mount(): void {
     if (this.watching) {
@@ -322,6 +332,13 @@ export class LobbyScene {
     this.buildBanner();
     this.buildIdleCards();
     this.buildChatPanel();
+    const stats = new ex.Actor({
+      pos: ex.vec(170, 500),
+      anchor: ex.vec(0, 0),
+      z: 20,
+    });
+    stats.graphics.use(this.statsText);
+    this.scene.add(stats);
   }
 
   private buildChatPanel(): void {
