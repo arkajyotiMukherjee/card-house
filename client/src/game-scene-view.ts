@@ -77,6 +77,7 @@ import {
 } from './game-scene';
 import type { GameDriver, RenderContext } from './game-driver';
 import { HowToPlayOverlay } from './how-to-play-overlay';
+import { TableChatOverlay } from './table-chat-overlay';
 import type { DbConnection, SubscriptionHandle } from './module_bindings';
 import { SpeakingFader, tableSpeakers, type SpeakingRow } from './speaking';
 import { seatGlow, speechBubble } from './speaking-view';
@@ -139,6 +140,7 @@ export class GameScene extends ex.Scene {
   private countValue!: ex.Actor;
   private counterPlate!: ex.Actor;
   private howToPlay!: HowToPlayOverlay;
+  private tableChat!: TableChatOverlay;
   private hudPlate!: ex.Actor;
   private hudTurn!: ex.Text;
   private hudPhase!: ex.Text;
@@ -171,6 +173,7 @@ export class GameScene extends ex.Scene {
       this.errorText.text = '';
       this.howToPlay.close();
       this.howToPlay.setGameType('');
+      this.tableChat.setTable(tableId, lobbyMemberId);
       this.bluffDriver.destroy(this.driverContext());
       this.presidentDriver.destroy(this.driverContext());
       this.goFishDriver.destroy(this.driverContext());
@@ -229,7 +232,15 @@ export class GameScene extends ex.Scene {
 
     this.addLeaveButton();
     this.addCounterButton();
-    this.howToPlay = new HowToPlayOverlay(this);
+    this.howToPlay = new HowToPlayOverlay(this, () => this.tableChat.close());
+    this.tableChat = new TableChatOverlay(
+      this,
+      this.connection,
+      this.clientId,
+      () => readMembers(this.connection),
+      () => this.howToPlay.close(),
+    );
+    this.tableChat.setTable(this.tableId, this.lobbyMemberId);
     this.addStatusHud();
     this.watchRows();
     this.ready = true;
@@ -245,10 +256,14 @@ export class GameScene extends ex.Scene {
     this.input.keyboard.off('press', this.onKeyPress);
     this.input.pointers.off('wheel', this.onWheel);
     this.howToPlay.close();
+    this.tableChat.close();
     this.endSubscription();
   }
 
   private readonly onKeyPress = (event: ex.KeyEvent): void => {
+    if (this.tableChat.handleKey(event)) {
+      return;
+    }
     if (event.key === ex.Keys.Escape) {
       this.howToPlay.close();
     }
@@ -301,6 +316,9 @@ export class GameScene extends ex.Scene {
     this.connection.db.gameEvent.onInsert((_ctx, row) => {
       this.announce(row);
     });
+    this.connection.db.tableChatMessage.onInsert(() => {
+      this.tableChat.refresh();
+    });
     this.connection.db.gameTable.onInsert((_ctx, row) => {
       this.applySubscribedState(row);
     });
@@ -317,6 +335,7 @@ export class GameScene extends ex.Scene {
     if (this.subscription && this.subscribedTableId === tableId) {
       this.paintSeats();
       this.readSubscribedState();
+      this.tableChat.refresh();
       return;
     }
     this.endSubscription();
@@ -330,6 +349,7 @@ export class GameScene extends ex.Scene {
           this.eventsLive = true;
           this.paintSeats();
           this.readSubscribedState();
+          this.tableChat.refresh();
         }
       })
       .onError((ctx) => {
@@ -504,6 +524,7 @@ export class GameScene extends ex.Scene {
   private sendPayload(intentPayload: string, intent: unknown): void {
     if (
       this.howToPlay.isOpen ||
+      this.tableChat.isOpen ||
       this.tableId.length === 0 ||
       this.watchingWithoutSeat()
     ) {
@@ -1038,7 +1059,7 @@ export class GameScene extends ex.Scene {
       sendIntent: (intent) => {
         this.sendPayload(JSON.stringify(intent), intent);
       },
-      inputBlocked: () => this.howToPlay.isOpen,
+      inputBlocked: () => this.howToPlay.isOpen || this.tableChat.isOpen,
     };
   }
 
@@ -1131,7 +1152,12 @@ export class GameScene extends ex.Scene {
   }
 
   private leave(): void {
-    if (this.leaving || this.howToPlay.isOpen || this.tableId.length === 0) {
+    if (
+      this.leaving ||
+      this.howToPlay.isOpen ||
+      this.tableChat.isOpen ||
+      this.tableId.length === 0
+    ) {
       return;
     }
     this.leaving = true;

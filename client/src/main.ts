@@ -62,7 +62,7 @@ function applyIntegerScale(): void {
 
 const scene = new BootScene(theme);
 engine.add('boot', scene);
-const menu = new MenuScene();
+const menu = new MenuScene(clientId);
 engine.add('menu', menu);
 
 window.addEventListener('resize', applyIntegerScale);
@@ -89,6 +89,7 @@ void engine.start(loader).then(() => {
       );
       engine.add('game', game);
       const lobbyScene = new LobbyScene(
+        engine,
         scene,
         connection,
         clientId,
