@@ -116,12 +116,13 @@ describe('dummy counter state', () => {
 });
 
 describe('table subscription', () => {
-  it('subscribes to that table’s GameTable, GameSeat, and Spectator rows', () => {
+  it('subscribes to that table’s GameTable, GameSeat, Spectator, and TableChatMessage rows', () => {
     expect(tableSubscriptionQueries("table_a'b")).toEqual([
       `SELECT * FROM GameTable WHERE id = 'table_a''b'`,
       `SELECT * FROM GameSeat WHERE tableId = 'table_a''b'`,
       `SELECT * FROM GameEvent WHERE tableId = 'table_a''b'`,
       `SELECT * FROM Spectator WHERE tableId = 'table_a''b'`,
+      `SELECT * FROM TableChatMessage WHERE tableId = 'table_a''b'`,
     ]);
   });
 });

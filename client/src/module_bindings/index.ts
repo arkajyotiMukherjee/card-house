@@ -46,6 +46,7 @@ import JoinTableReducer from "./join_table_reducer";
 import LeaveTableReducer from "./leave_table_reducer";
 import RemoveGameTableReducer from "./remove_game_table_reducer";
 import SendLobbyChatMessageReducer from "./send_lobby_chat_message_reducer";
+import SendTableChatReducer from "./send_table_chat_reducer";
 import SetEmptyTableIdleTimeoutReducer from "./set_empty_table_idle_timeout_reducer";
 import SetLobbyDiscordChannelReducer from "./set_lobby_discord_channel_reducer";
 import SetLobbyDiscordVoiceReducer from "./set_lobby_discord_voice_reducer";
@@ -69,6 +70,7 @@ import LobbyMemberRow from "./lobby_member_table";
 import RoomCapsRow from "./room_caps_table";
 import SpeakingStateRow from "./speaking_state_table";
 import SpectatorRow from "./spectator_table";
+import TableChatMessageRow from "./table_chat_message_table";
 import TableCleanupScheduleRow from "./table_cleanup_schedule_table";
 import VoicePresenceRow from "./voice_presence_table";
 
@@ -226,6 +228,20 @@ const tablesSchema = __schema({
       { name: 'Spectator_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, SpectatorRow),
+  tableChatMessage: __table({
+    name: 'TableChatMessage',
+    indexes: [
+      { accessor: 'id', name: 'TableChatMessage_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'byTable', name: 'TableChatMessage_table_id_idx_btree', algorithm: 'btree', columns: [
+        'tableId',
+      ] },
+    ],
+    constraints: [
+      { name: 'TableChatMessage_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, TableChatMessageRow),
   tableCleanupSchedule: __table({
     name: 'TableCleanupSchedule',
     indexes: [
@@ -270,6 +286,7 @@ const reducersSchema = __reducers(
   __reducerSchema("leave_table", LeaveTableReducer),
   __reducerSchema("remove_game_table", RemoveGameTableReducer),
   __reducerSchema("send_lobby_chat_message", SendLobbyChatMessageReducer),
+  __reducerSchema("send_table_chat", SendTableChatReducer),
   __reducerSchema("set_empty_table_idle_timeout", SetEmptyTableIdleTimeoutReducer),
   __reducerSchema("set_lobby_discord_channel", SetLobbyDiscordChannelReducer),
   __reducerSchema("set_lobby_discord_voice", SetLobbyDiscordVoiceReducer),
@@ -307,6 +324,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "SpeakingState": Omit<typeof tablesSchema.schemaType.tables["speakingState"], "accessorName"> & { readonly accessorName: "SpeakingState" };
     /** @deprecated Use `spectator` instead. This alias will be removed in the next major version. */
     readonly "Spectator": Omit<typeof tablesSchema.schemaType.tables["spectator"], "accessorName"> & { readonly accessorName: "Spectator" };
+    /** @deprecated Use `tableChatMessage` instead. This alias will be removed in the next major version. */
+    readonly "TableChatMessage": Omit<typeof tablesSchema.schemaType.tables["tableChatMessage"], "accessorName"> & { readonly accessorName: "TableChatMessage" };
     /** @deprecated Use `tableCleanupSchedule` instead. This alias will be removed in the next major version. */
     readonly "TableCleanupSchedule": Omit<typeof tablesSchema.schemaType.tables["tableCleanupSchedule"], "accessorName"> & { readonly accessorName: "TableCleanupSchedule" };
     /** @deprecated Use `voicePresence` instead. This alias will be removed in the next major version. */
@@ -339,6 +358,7 @@ const tableAccessorAliases = {
   "RoomCaps": "roomCaps",
   "SpeakingState": "speakingState",
   "Spectator": "spectator",
+  "TableChatMessage": "tableChatMessage",
   "TableCleanupSchedule": "tableCleanupSchedule",
   "VoicePresence": "voicePresence",
 } as const;
@@ -381,6 +401,8 @@ export type DbView = __DbViewBase & {
   readonly "SpeakingState": __DbViewBase["speakingState"];
   /** @deprecated Use `spectator` instead. This alias will be removed in the next major version. */
   readonly "Spectator": __DbViewBase["spectator"];
+  /** @deprecated Use `tableChatMessage` instead. This alias will be removed in the next major version. */
+  readonly "TableChatMessage": __DbViewBase["tableChatMessage"];
   /** @deprecated Use `tableCleanupSchedule` instead. This alias will be removed in the next major version. */
   readonly "TableCleanupSchedule": __DbViewBase["tableCleanupSchedule"];
   /** @deprecated Use `voicePresence` instead. This alias will be removed in the next major version. */
@@ -409,6 +431,8 @@ export type Tables = __TablesBase & {
   readonly "SpeakingState": __TablesBase["speakingState"];
   /** @deprecated Use `spectator` instead. This alias will be removed in the next major version. */
   readonly "Spectator": __TablesBase["spectator"];
+  /** @deprecated Use `tableChatMessage` instead. This alias will be removed in the next major version. */
+  readonly "TableChatMessage": __TablesBase["tableChatMessage"];
   /** @deprecated Use `tableCleanupSchedule` instead. This alias will be removed in the next major version. */
   readonly "TableCleanupSchedule": __TablesBase["tableCleanupSchedule"];
   /** @deprecated Use `voicePresence` instead. This alias will be removed in the next major version. */
