@@ -302,8 +302,8 @@ These aren’t needed for v1, but the architecture supports them cleanly:
 
 - **Spectator mode** (non-seated viewers per table). `spectate_table` stores a `Spectator` row, separate from `GameSeat`. The viewer does not count toward `maxPlayers` and is not dealt a hand. A full table can still be watched.
 - **Chat**:
-  - lobby-wide,
-  - per-table.
+  - per-table (done: `send_table_chat` stores a `TableChatMessage` row for a sender who is seated or watching that table; a lobby member elsewhere does not see it),
+  - lobby-wide.
 - **Persistent soft profiles**:
   - saved preferred name,
   - color theme,
