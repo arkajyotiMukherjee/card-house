@@ -59,6 +59,7 @@ import {
   rememberTable,
   rulesErrorLine,
   tableCreatedLine,
+  tournamentCreatedLine,
 } from './activity-log';
 import { discordProfile } from './discord-member';
 import { speakingRowId, voicePlace } from './speaking-state';
@@ -110,6 +111,13 @@ import {
   lobbyIdleTimeoutMicros,
   lobbyIsIdle,
 } from './lobby-idle';
+import {
+  isRoundComplete,
+  nextRoundError,
+  roundStatusTag,
+  tournamentTableCountError,
+  type TournamentTableRow,
+} from './tournament';
 
 registerGameRules(stubGameDefinition, stubIntentRules);
 registerGameRules(dummyGameDefinition, dummyCounterRules);
@@ -130,6 +138,10 @@ const TableStatus = t.enum('TableStatus', [
   'finished',
 ]);
 const SeatState = t.enum('SeatState', ['active', 'folded', 'disconnected']);
+const TournamentRoundStatus = t.enum('TournamentRoundStatus', [
+  'in_progress',
+  'complete',
+]);
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const TABLE_SETTING_KEYS = [
@@ -196,6 +208,11 @@ const GameTable = table(
         algorithm: 'btree',
         columns: ['lobbyId'],
       },
+      {
+        accessor: 'byTournament',
+        algorithm: 'btree',
+        columns: ['tournamentId'],
+      },
     ],
   },
   {
@@ -209,6 +226,36 @@ const GameTable = table(
     stateJson: t.string(),
     createdAt: t.timestamp(),
     discordVoiceChannelId: t.string().default(''),
+    lastActivityAt: t.option(t.timestamp()).default(undefined),
+    /** Empty when this table is not part of a tournament. */
+    tournamentId: t.string().default(''),
+    /** Round number within `tournamentId`. `0` outside a tournament. */
+    round: t.u32().default(0),
+  },
+);
+
+const Tournament = table(
+  {
+    name: 'Tournament',
+    public: true,
+    indexes: [
+      {
+        accessor: 'byLobby',
+        algorithm: 'btree',
+        columns: ['lobbyId'],
+      },
+    ],
+  },
+  {
+    id: t.string().primaryKey(),
+    lobbyId: t.string(),
+    gameType: t.string(),
+    name: t.string(),
+    /** The round whose tables are currently in play. Starts at `1`. */
+    currentRound: t.u32(),
+    /** Derived from the current round's tables. `complete` once every table there is finished. */
+    roundStatus: TournamentRoundStatus,
+    createdAt: t.timestamp(),
     lastActivityAt: t.option(t.timestamp()).default(undefined),
   },
 );
@@ -420,6 +467,7 @@ const spacetimedb = schema(
     Lobby,
     LobbyMember,
     GameTable,
+    Tournament,
     GameSeat,
     Spectator,
     GameEvent,
@@ -1359,6 +1407,93 @@ function pokerVariation(
   return variation;
 }
 
+interface NewTableRow {
+  id: string;
+  lobbyId: string;
+  gameType: string;
+  name: string;
+  status: { tag: 'waiting_for_players' };
+  minPlayers: number;
+  maxPlayers: number;
+  stateJson: string;
+  createdAt: ModuleCtx['timestamp'];
+  lastActivityAt: ModuleCtx['timestamp'];
+  discordVoiceChannelId: string;
+  tournamentId: string;
+  round: number;
+}
+
+/**
+ * Builds the row for a new table, enforcing the seat and table caps.
+ * `existingInLobby` and `sameTypeInLobby` are counts before this table, so a
+ * caller inserting several tables in one reducer call passes the running
+ * totals. `create_game_table` tags the row `tournamentId: ''`, `round: 0`;
+ * `create_tournament` and `create_tournament_round` tag it with their own ids.
+ */
+function openTableRow(
+  ctx: ModuleCtx,
+  lobby: { id: string },
+  gameType: string,
+  settings: ReturnType<typeof tableSettings>,
+  caps: RoomCaps,
+  existingInLobby: number,
+  sameTypeInLobby: number,
+  idSuffix: string,
+  tournamentId: string,
+  round: number,
+): NewTableRow {
+  reject(tableCapRejection(existingInLobby, caps));
+  const definition = definitionByType[gameType];
+  const seats = tableSeatLimits(
+    definition
+      ? {
+          minPlayers: definition.minPlayers,
+          maxPlayers: definition.maxPlayers,
+        }
+      : undefined,
+    { minPlayers: settings.minPlayers, maxPlayers: settings.maxPlayers },
+    caps,
+  );
+  if ('error' in seats) {
+    throw new SenderError(seats.error);
+  }
+  const minPlayers = seats.minPlayers;
+  const maxPlayers = seats.maxPlayers;
+
+  const micros = ctx.timestamp.microsSinceUnixEpoch;
+  const id = `table_${lobby.id}_${micros.toString()}_${idSuffix}`;
+  const name = settings.name ?? `${gameType} #${sameTypeInLobby + 1}`;
+  const stateJson = storedState(
+    openingTableState(
+      gameType,
+      {
+        id,
+        lobbyId: lobby.id,
+        name,
+        minPlayers,
+        maxPlayers,
+        createdAt: Number(ctx.timestamp.toMillis()),
+      },
+      pokerVariation(gameType, settings.variation),
+    ),
+  );
+  return {
+    id,
+    lobbyId: lobby.id,
+    gameType,
+    name,
+    status: { tag: 'waiting_for_players' },
+    minPlayers,
+    maxPlayers,
+    stateJson,
+    createdAt: ctx.timestamp,
+    lastActivityAt: ctx.timestamp,
+    discordVoiceChannelId: '',
+    tournamentId,
+    round,
+  };
+}
+
 export const create_game_table = spacetimedb.reducer(
   { name: 'create_game_table' },
   {
@@ -1398,55 +1533,205 @@ export const create_game_table = spacetimedb.reducer(
         sameType += 1;
       }
     }
-    reject(tableCapRejection(existing, caps));
-    const definition = definitionByType[gameType];
-    const seats = tableSeatLimits(
-      definition
-        ? {
-            minPlayers: definition.minPlayers,
-            maxPlayers: definition.maxPlayers,
-          }
-        : undefined,
-      { minPlayers: settings.minPlayers, maxPlayers: settings.maxPlayers },
+    const row = openTableRow(
+      ctx,
+      lobby,
+      gameType,
+      settings,
       caps,
+      existing,
+      sameType,
+      `${existing}`,
+      '',
+      0,
     );
-    if ('error' in seats) {
-      throw new SenderError(seats.error);
-    }
-    const minPlayers = seats.minPlayers;
-    const maxPlayers = seats.maxPlayers;
+    ctx.db.GameTable.insert(row);
+    console.log(tableCreatedLine(row.id, lobby.id));
+    noteLobbyActivity(ctx, lobby.id);
+  },
+);
 
-    const micros = ctx.timestamp.microsSinceUnixEpoch;
-    const id = `table_${lobby.id}_${micros.toString()}_${existing}`;
-    const name = settings.name ?? `${gameType} #${sameType + 1}`;
-    const stateJson = storedState(
-      openingTableState(
+/**
+ * `tableCount` tables of `gameType`, tagged `round` 1, grouped under one
+ * `Tournament` row. `create_tournament_round` adds later rounds the same way.
+ */
+function openTournamentRoundTables(
+  ctx: ModuleCtx,
+  lobby: { id: string },
+  gameType: string,
+  settings: ReturnType<typeof tableSettings>,
+  tableCount: number,
+  tournamentId: string,
+  round: number,
+): NewTableRow[] {
+  const caps = currentRoomCaps(ctx.db);
+  let existing = 0;
+  let sameType = 0;
+  for (const table of ctx.db.GameTable.byLobby.filter(lobby.id)) {
+    existing += 1;
+    if (table.gameType === gameType) {
+      sameType += 1;
+    }
+  }
+  const rows: NewTableRow[] = [];
+  for (let index = 0; index < tableCount; index += 1) {
+    rows.push(
+      openTableRow(
+        ctx,
+        lobby,
         gameType,
-        {
-          id,
-          lobbyId: lobby.id,
-          name,
-          minPlayers,
-          maxPlayers,
-          createdAt: Number(ctx.timestamp.toMillis()),
-        },
-        pokerVariation(gameType, settings.variation),
+        settings,
+        caps,
+        existing,
+        sameType,
+        `${existing}`,
+        tournamentId,
+        round,
       ),
     );
-    ctx.db.GameTable.insert({
-      id,
+    existing += 1;
+    sameType += 1;
+  }
+  return rows;
+}
+
+export const create_tournament = spacetimedb.reducer(
+  { name: 'create_tournament' },
+  {
+    lobbyId: t.string(),
+    gameType: t.string(),
+    tableCount: t.u32(),
+    settings: t.option(t.string()),
+  },
+  (
+    ctx,
+    {
+      lobbyId: rawLobbyId,
+      gameType: rawGameType,
+      tableCount,
+      settings: rawSettings,
+    },
+  ) => {
+    const lobbyId = rawLobbyId.trim();
+    const gameType = rawGameType.trim();
+    if (lobbyId.length === 0) {
+      throw new SenderError('Lobby id is required');
+    }
+    if (gameType.length === 0) {
+      throw new SenderError('Game type is required');
+    }
+    reject(tournamentTableCountError(tableCount));
+
+    const lobby = ctx.db.Lobby.id.find(lobbyId);
+    if (!lobby) {
+      throw new SenderError('Room not found');
+    }
+    if (lobby.status.tag !== 'open') {
+      throw new SenderError('Room closed');
+    }
+
+    const settings = tableSettings(rawSettings);
+    const micros = ctx.timestamp.microsSinceUnixEpoch;
+    const tournamentId = `tournament_${lobby.id}_${micros.toString()}`;
+    const name = settings.name ?? `${gameType} tournament`;
+    const rows = openTournamentRoundTables(
+      ctx,
+      lobby,
+      gameType,
+      settings,
+      tableCount,
+      tournamentId,
+      1,
+    );
+
+    ctx.db.Tournament.insert({
+      id: tournamentId,
       lobbyId: lobby.id,
       gameType,
       name,
-      status: { tag: 'waiting_for_players' },
-      minPlayers,
-      maxPlayers,
-      stateJson,
+      currentRound: 1,
+      roundStatus: { tag: 'in_progress' },
       createdAt: ctx.timestamp,
       lastActivityAt: ctx.timestamp,
-      discordVoiceChannelId: '',
     });
-    console.log(tableCreatedLine(id, lobby.id));
+    for (const row of rows) {
+      ctx.db.GameTable.insert(row);
+      console.log(tableCreatedLine(row.id, lobby.id));
+    }
+    console.log(tournamentCreatedLine(tournamentId, lobby.id));
+    noteLobbyActivity(ctx, lobby.id);
+  },
+);
+
+export const create_tournament_round = spacetimedb.reducer(
+  { name: 'create_tournament_round' },
+  {
+    tournamentId: t.string(),
+    tableCount: t.u32(),
+    settings: t.option(t.string()),
+  },
+  (
+    ctx,
+    { tournamentId: rawTournamentId, tableCount, settings: rawSettings },
+  ) => {
+    const tournamentId = rawTournamentId.trim();
+    if (tournamentId.length === 0) {
+      throw new SenderError('Tournament id is required');
+    }
+    reject(tournamentTableCountError(tableCount));
+
+    const tournament = ctx.db.Tournament.id.find(tournamentId);
+    if (!tournament) {
+      throw new SenderError('Tournament not found');
+    }
+
+    const lobby = ctx.db.Lobby.id.find(tournament.lobbyId);
+    if (!lobby) {
+      throw new SenderError('Room not found');
+    }
+    if (lobby.status.tag !== 'open') {
+      throw new SenderError('Room closed');
+    }
+
+    const currentRoundTables: TournamentTableRow[] = [];
+    for (const row of ctx.db.GameTable.byTournament.filter(tournamentId)) {
+      currentRoundTables.push({
+        tournamentId: row.tournamentId,
+        round: row.round,
+        status: row.status,
+      });
+    }
+    reject(
+      nextRoundError(
+        isRoundComplete(
+          currentRoundTables,
+          tournamentId,
+          tournament.currentRound,
+        ),
+      ),
+    );
+
+    const settings = tableSettings(rawSettings);
+    const nextRound = tournament.currentRound + 1;
+    const rows = openTournamentRoundTables(
+      ctx,
+      lobby,
+      tournament.gameType,
+      settings,
+      tableCount,
+      tournamentId,
+      nextRound,
+    );
+    for (const row of rows) {
+      ctx.db.GameTable.insert(row);
+      console.log(tableCreatedLine(row.id, lobby.id));
+    }
+    ctx.db.Tournament.id.update({
+      ...tournament,
+      currentRound: nextRound,
+      roundStatus: { tag: 'in_progress' },
+      lastActivityAt: ctx.timestamp,
+    });
     noteLobbyActivity(ctx, lobby.id);
   },
 );
@@ -2059,6 +2344,38 @@ function storedStatus(tag: TableStatusTag): {
   return { tag: 'waiting_for_players' };
 }
 
+/**
+ * Recomputes `Tournament.roundStatus` from its tables after a table's status
+ * may have changed. Called from `handle_game_intent`, the only place a
+ * table's `phase` (and so its status) reaches `finished`.
+ */
+function refreshTournamentRoundStatus(
+  ctx: ModuleCtx,
+  tournamentId: string,
+  round: number,
+): void {
+  const tournament = ctx.db.Tournament.id.find(tournamentId);
+  if (!tournament || tournament.currentRound !== round) {
+    return;
+  }
+  const roundRows: TournamentTableRow[] = [];
+  for (const row of ctx.db.GameTable.byTournament.filter(tournamentId)) {
+    roundRows.push({
+      tournamentId: row.tournamentId,
+      round: row.round,
+      status: row.status,
+    });
+  }
+  const tag = roundStatusTag(roundRows, tournamentId, round);
+  if (tournament.roundStatus.tag !== tag) {
+    ctx.db.Tournament.id.update({
+      ...tournament,
+      roundStatus: { tag },
+      lastActivityAt: ctx.timestamp,
+    });
+  }
+}
+
 function storedState(next: unknown): string {
   let stateJson: string;
   try {
@@ -2216,14 +2533,22 @@ export const handle_game_intent = spacetimedb.reducer(
     }
 
     const stateJson = storedState(next);
+    const status = storedStatus(
+      statusTagForState(next, currentStatusTag(gameTable.status.tag)),
+    );
     ctx.db.GameTable.id.update({
       ...gameTable,
       stateJson,
-      status: storedStatus(
-        statusTagForState(next, currentStatusTag(gameTable.status.tag)),
-      ),
+      status,
       lastActivityAt: ctx.timestamp,
     });
+    if (gameTable.tournamentId.length > 0) {
+      refreshTournamentRoundStatus(
+        ctx,
+        gameTable.tournamentId,
+        gameTable.round,
+      );
+    }
 
     let order = 0;
     for (const _event of ctx.db.GameEvent.byTable.filter(gameTable.id)) {

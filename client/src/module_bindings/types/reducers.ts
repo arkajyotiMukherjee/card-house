@@ -11,6 +11,8 @@ import ClearTableDiscordVoiceReducer from "../clear_table_discord_voice_reducer"
 import CloseLobbyReducer from "../close_lobby_reducer";
 import CreateGameTableReducer from "../create_game_table_reducer";
 import CreateLobbyReducer from "../create_lobby_reducer";
+import CreateTournamentReducer from "../create_tournament_reducer";
+import CreateTournamentRoundReducer from "../create_tournament_round_reducer";
 import HandleGameIntentReducer from "../handle_game_intent_reducer";
 import JoinLobbyReducer from "../join_lobby_reducer";
 import JoinLobbyWithDiscordReducer from "../join_lobby_with_discord_reducer";
@@ -34,6 +36,8 @@ export type ClearTableDiscordVoiceParams = __Infer<typeof ClearTableDiscordVoice
 export type CloseLobbyParams = __Infer<typeof CloseLobbyReducer>;
 export type CreateGameTableParams = __Infer<typeof CreateGameTableReducer>;
 export type CreateLobbyParams = __Infer<typeof CreateLobbyReducer>;
+export type CreateTournamentParams = __Infer<typeof CreateTournamentReducer>;
+export type CreateTournamentRoundParams = __Infer<typeof CreateTournamentRoundReducer>;
 export type HandleGameIntentParams = __Infer<typeof HandleGameIntentReducer>;
 export type JoinLobbyParams = __Infer<typeof JoinLobbyReducer>;
 export type JoinLobbyWithDiscordParams = __Infer<typeof JoinLobbyWithDiscordReducer>;

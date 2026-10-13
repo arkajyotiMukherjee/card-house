@@ -309,7 +309,6 @@ These aren’t needed for v1, but the architecture supports them cleanly:
   - color theme,
   - card customizations (assest pack already has variations)
   - simple stats (hands played, games won).
-- **Tournaments**:
-  - structures composed of multiple tables and rounds.
+- **Tournaments** (done): one event groups several tables of one `gameType` into numbered rounds. A `Tournament` row holds `lobbyId`, `gameType`, `currentRound`, and `roundStatus` (`in_progress` or `complete`). `create_tournament(lobbyId, gameType, tableCount, settings?)` opens round 1 and creates `tableCount` `GameTable` rows tagged with that `tournamentId` and `round`. `handle_game_intent` recomputes `roundStatus` after a tournament table's status changes, so it reports `complete` once every table in the current round is `finished`. `create_tournament_round(tournamentId, tableCount, settings?)` rejects the next round (`Round is not complete`) until that happens, then creates the next round's tables and advances `currentRound`.
 
-You can schedule these after the core loop (lobby → tables → play → back to lobby) is rock solid.
+You can schedule other optional milestones after the core loop (lobby → tables → play → back to lobby) is rock solid.
