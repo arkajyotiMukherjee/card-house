@@ -71,6 +71,15 @@ export const Lobby = __t.object("Lobby", {
 });
 export type Lobby = __Infer<typeof Lobby>;
 
+export const LobbyChatMessage = __t.object("LobbyChatMessage", {
+  id: __t.string(),
+  lobbyId: __t.string(),
+  lobbyMemberId: __t.string(),
+  body: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type LobbyChatMessage = __Infer<typeof LobbyChatMessage>;
+
 export const LobbyIdleConfig = __t.object("LobbyIdleConfig", {
   id: __t.string(),
   idleTimeoutMicros: __t.u64(),

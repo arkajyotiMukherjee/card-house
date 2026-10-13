@@ -45,6 +45,7 @@ import JoinLobbyWithDiscordReducer from "./join_lobby_with_discord_reducer";
 import JoinTableReducer from "./join_table_reducer";
 import LeaveTableReducer from "./leave_table_reducer";
 import RemoveGameTableReducer from "./remove_game_table_reducer";
+import SendLobbyChatMessageReducer from "./send_lobby_chat_message_reducer";
 import SetEmptyTableIdleTimeoutReducer from "./set_empty_table_idle_timeout_reducer";
 import SetLobbyDiscordChannelReducer from "./set_lobby_discord_channel_reducer";
 import SetLobbyDiscordVoiceReducer from "./set_lobby_discord_voice_reducer";
@@ -62,6 +63,7 @@ import GameEventRow from "./game_event_table";
 import GameSeatRow from "./game_seat_table";
 import GameTableRow from "./game_table_table";
 import LobbyRow from "./lobby_table";
+import LobbyChatMessageRow from "./lobby_chat_message_table";
 import LobbyIdleConfigRow from "./lobby_idle_config_table";
 import LobbyMemberRow from "./lobby_member_table";
 import RoomCapsRow from "./room_caps_table";
@@ -131,6 +133,20 @@ const tablesSchema = __schema({
       { name: 'Lobby_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, LobbyRow),
+  lobbyChatMessage: __table({
+    name: 'LobbyChatMessage',
+    indexes: [
+      { accessor: 'id', name: 'LobbyChatMessage_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'byLobby', name: 'LobbyChatMessage_lobby_id_idx_btree', algorithm: 'btree', columns: [
+        'lobbyId',
+      ] },
+    ],
+    constraints: [
+      { name: 'LobbyChatMessage_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, LobbyChatMessageRow),
   lobbyIdleConfig: __table({
     name: 'LobbyIdleConfig',
     indexes: [
@@ -253,6 +269,7 @@ const reducersSchema = __reducers(
   __reducerSchema("join_table", JoinTableReducer),
   __reducerSchema("leave_table", LeaveTableReducer),
   __reducerSchema("remove_game_table", RemoveGameTableReducer),
+  __reducerSchema("send_lobby_chat_message", SendLobbyChatMessageReducer),
   __reducerSchema("set_empty_table_idle_timeout", SetEmptyTableIdleTimeoutReducer),
   __reducerSchema("set_lobby_discord_channel", SetLobbyDiscordChannelReducer),
   __reducerSchema("set_lobby_discord_voice", SetLobbyDiscordVoiceReducer),
@@ -278,6 +295,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "GameTable": Omit<typeof tablesSchema.schemaType.tables["gameTable"], "accessorName"> & { readonly accessorName: "GameTable" };
     /** @deprecated Use `lobby` instead. This alias will be removed in the next major version. */
     readonly "Lobby": Omit<typeof tablesSchema.schemaType.tables["lobby"], "accessorName"> & { readonly accessorName: "Lobby" };
+    /** @deprecated Use `lobbyChatMessage` instead. This alias will be removed in the next major version. */
+    readonly "LobbyChatMessage": Omit<typeof tablesSchema.schemaType.tables["lobbyChatMessage"], "accessorName"> & { readonly accessorName: "LobbyChatMessage" };
     /** @deprecated Use `lobbyIdleConfig` instead. This alias will be removed in the next major version. */
     readonly "LobbyIdleConfig": Omit<typeof tablesSchema.schemaType.tables["lobbyIdleConfig"], "accessorName"> & { readonly accessorName: "LobbyIdleConfig" };
     /** @deprecated Use `lobbyMember` instead. This alias will be removed in the next major version. */
@@ -314,6 +333,7 @@ const tableAccessorAliases = {
   "GameSeat": "gameSeat",
   "GameTable": "gameTable",
   "Lobby": "lobby",
+  "LobbyChatMessage": "lobbyChatMessage",
   "LobbyIdleConfig": "lobbyIdleConfig",
   "LobbyMember": "lobbyMember",
   "RoomCaps": "roomCaps",
@@ -349,6 +369,8 @@ export type DbView = __DbViewBase & {
   readonly "GameTable": __DbViewBase["gameTable"];
   /** @deprecated Use `lobby` instead. This alias will be removed in the next major version. */
   readonly "Lobby": __DbViewBase["lobby"];
+  /** @deprecated Use `lobbyChatMessage` instead. This alias will be removed in the next major version. */
+  readonly "LobbyChatMessage": __DbViewBase["lobbyChatMessage"];
   /** @deprecated Use `lobbyIdleConfig` instead. This alias will be removed in the next major version. */
   readonly "LobbyIdleConfig": __DbViewBase["lobbyIdleConfig"];
   /** @deprecated Use `lobbyMember` instead. This alias will be removed in the next major version. */
@@ -375,6 +397,8 @@ export type Tables = __TablesBase & {
   readonly "GameTable": __TablesBase["gameTable"];
   /** @deprecated Use `lobby` instead. This alias will be removed in the next major version. */
   readonly "Lobby": __TablesBase["lobby"];
+  /** @deprecated Use `lobbyChatMessage` instead. This alias will be removed in the next major version. */
+  readonly "LobbyChatMessage": __TablesBase["lobbyChatMessage"];
   /** @deprecated Use `lobbyIdleConfig` instead. This alias will be removed in the next major version. */
   readonly "LobbyIdleConfig": __TablesBase["lobbyIdleConfig"];
   /** @deprecated Use `lobbyMember` instead. This alias will be removed in the next major version. */

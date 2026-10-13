@@ -10,12 +10,17 @@ import {
   type IdleCard,
 } from './lobby-ambience';
 import {
+  applyChatKey,
+  CHAT_BODY_MAX,
+  CHAT_PANEL,
+  chatLines,
   clampPlayerCount,
   CREATE_TABLE,
   discordBadgeBox,
   DISCORD_BADGE,
   gameOption,
   lobbyLaunchedFromDiscord,
+  normalizeChatBody,
   POKER_GAME_TYPE,
   POKER_VARIATION_LABELS,
   POKER_VARIATIONS,
@@ -31,6 +36,8 @@ import {
   WATCH_BUTTON,
   watchHit,
   watchingTableIds,
+  type ChatLine,
+  type ChatMessageRow,
   type ListSlot,
   type MemberRecord,
   type SeatRef,
@@ -129,6 +136,14 @@ export class LobbyScene {
   private popup: ex.Actor | undefined;
   private discordBadge: ex.Actor | undefined;
   private tablesReady: Promise<boolean> = Promise.resolve(false);
+  private chatBody = '';
+  private chatFocused = false;
+  private chatBusy = false;
+  private chatKeyboardBound = false;
+  private readonly chatMessageActors: ex.Actor[] = [];
+  private chatInputBox: ex.Actor | undefined;
+  private chatInputText: ex.Text | undefined;
+  private chatErrorText: ex.Text | undefined;
 
   constructor(
     private readonly scene: ex.Scene,
@@ -181,6 +196,22 @@ export class LobbyScene {
     this.connection.db.lobby.onDelete(() => {
       this.paintDiscordBadge();
     });
+    this.connection.db.lobbyChatMessage.onInsert(() => {
+      this.renderChat();
+    });
+    this.connection.db.lobbyChatMessage.onUpdate(() => {
+      this.renderChat();
+    });
+    this.connection.db.lobbyChatMessage.onDelete(() => {
+      this.renderChat();
+    });
+    this.connection.db.lobbyMember.onInsert(() => {
+      this.renderChat();
+    });
+    this.connection.db.lobbyMember.onUpdate(() => {
+      this.renderChat();
+    });
+    this.bindChatKeyboard();
   }
 
   openLobby(lobbyId: string, code = ''): Promise<boolean> {
@@ -189,8 +220,13 @@ export class LobbyScene {
     this.ensurePanel();
     this.paintCode();
     this.paintDiscordBadge();
+    this.chatBody = '';
+    this.chatFocused = false;
+    this.paintChatField();
+    this.setChatError('');
     if (this.subscribedLobbyId === lobbyId) {
       this.render();
+      this.renderChat();
       return this.tablesReady;
     }
     this.subscribedLobbyId = lobbyId;
@@ -198,6 +234,7 @@ export class LobbyScene {
       .then(() => {
         if (this.lobbyId === lobbyId) {
           this.render();
+          this.renderChat();
         }
         return true;
       })
@@ -283,6 +320,189 @@ export class LobbyScene {
     this.buildPopup();
     this.buildBanner();
     this.buildIdleCards();
+    this.buildChatPanel();
+  }
+
+  private buildChatPanel(): void {
+    const box = CHAT_PANEL.panel;
+    const backdrop = new ex.Actor({
+      pos: ex.vec(box.x, box.y),
+      anchor: ex.vec(0, 0),
+      width: box.w,
+      height: box.h,
+      z: 15,
+    });
+    backdrop.graphics.use(panelRect(box.w, box.h, PANEL, STROKE));
+    this.scene.add(backdrop);
+    this.addLabel(CHAT_PANEL.list.x, box.y + 8, 'Chat', 8, DIM);
+
+    const field = CHAT_PANEL.field;
+    this.chatInputBox = new ex.Actor({
+      pos: ex.vec(field.x, field.y),
+      anchor: ex.vec(0, 0),
+      width: field.w,
+      height: field.h,
+      z: 20,
+    });
+    this.chatInputBox.graphics.use(panelRect(field.w, field.h, FIELD, STROKE));
+    this.scene.add(this.chatInputBox);
+    this.chatInputText = this.addLabel(field.x + 6, field.y + 8, '_', 8, GOLD);
+    this.chatInputBox.on('pointerup', () => {
+      this.chatFocused = true;
+      this.paintChatField();
+    });
+
+    this.button(CHAT_PANEL.send, 'Send', () => {
+      void this.sendChat();
+    });
+
+    this.chatErrorText = this.addLabel(
+      CHAT_PANEL.list.x,
+      field.y + field.h + 4,
+      '',
+      8,
+      DANGER,
+    );
+    this.paintChatField();
+  }
+
+  private bindChatKeyboard(): void {
+    if (this.chatKeyboardBound) {
+      return;
+    }
+    this.chatKeyboardBound = true;
+    this.scene.engine.input.keyboard.on('press', (evt) => {
+      if (!this.chatFocused || this.scene.engine.currentScene !== this.scene) {
+        return;
+      }
+      if (evt.originalEvent?.ctrlKey || evt.originalEvent?.metaKey) {
+        return;
+      }
+      if (this.chatBusy) {
+        return;
+      }
+      if (evt.key === ex.Keys.Backspace) {
+        this.chatBody = applyChatKey(this.chatBody, 'Backspace');
+        this.paintChatField();
+        return;
+      }
+      if (evt.key === ex.Keys.Enter) {
+        void this.sendChat();
+        return;
+      }
+      const typed = evt.value ?? '';
+      if (typed.length !== 1) {
+        return;
+      }
+      this.chatBody = applyChatKey(this.chatBody, typed);
+      this.paintChatField();
+    });
+  }
+
+  private paintChatField(): void {
+    if (!this.chatInputBox || !this.chatInputText) {
+      return;
+    }
+    const field = CHAT_PANEL.field;
+    this.chatInputBox.graphics.use(
+      panelRect(
+        field.w,
+        field.h,
+        FIELD,
+        this.chatFocused ? STROKE_HOT : STROKE,
+      ),
+    );
+    this.chatInputText.text =
+      this.chatBody.length > 0
+        ? this.chatBody.slice(-58)
+        : this.chatFocused
+          ? '_'
+          : 'Say something...';
+    this.chatInputText.color = this.chatBody.length > 0 ? GOLD : DIM;
+  }
+
+  private async sendChat(): Promise<void> {
+    if (this.chatBusy || this.lobbyId.length === 0) {
+      return;
+    }
+    const body = normalizeChatBody(this.chatBody);
+    if (body.length === 0) {
+      return;
+    }
+    this.chatBusy = true;
+    this.setChatError('');
+    try {
+      await this.connection.reducers.sendLobbyChatMessage({
+        lobbyId: this.lobbyId,
+        clientId: this.clientId,
+        body: body.slice(0, CHAT_BODY_MAX),
+      });
+      this.chatBody = '';
+      this.paintChatField();
+    } catch (error: unknown) {
+      this.setChatError(errorMessage(error));
+    } finally {
+      this.chatBusy = false;
+    }
+  }
+
+  private setChatError(message: string): void {
+    if (this.chatErrorText) {
+      this.chatErrorText.text = message;
+    }
+  }
+
+  private renderChat(): void {
+    if (!this.panelReady || this.lobbyId.length === 0) {
+      return;
+    }
+    for (const actor of this.chatMessageActors) {
+      actor.kill();
+    }
+    this.chatMessageActors.length = 0;
+    const lines = chatLines(
+      this.readChatMessages(),
+      this.readMembers(),
+      this.lobbyId,
+      this.clientId,
+    );
+    const { list } = CHAT_PANEL;
+    const capacity = Math.floor((list.bottom - list.y) / list.lineH);
+    const visible = lines.slice(Math.max(0, lines.length - capacity));
+    for (let index = 0; index < visible.length; index += 1) {
+      const line = visible[index];
+      if (!line) {
+        continue;
+      }
+      this.chatMessageActors.push(this.chatLineActor(line, index));
+    }
+  }
+
+  private chatLineActor(line: ChatLine, index: number): ex.Actor {
+    const { list } = CHAT_PANEL;
+    const y = list.y + index * list.lineH;
+    const actor = new ex.Actor({
+      pos: ex.vec(list.x, y),
+      anchor: ex.vec(0, 0),
+      z: 16,
+    });
+    const text = `${line.name}: ${line.body}`.slice(0, 76);
+    actor.graphics.use(canvasText(text, 8, line.self ? STROKE_HOT : GOLD));
+    this.scene.add(actor);
+    return actor;
+  }
+
+  private readChatMessages(): ChatMessageRow[] {
+    const rows: ChatMessageRow[] = [];
+    for (const message of this.connection.db.lobbyChatMessage.iter()) {
+      rows.push({
+        id: message.id,
+        lobbyId: message.lobbyId,
+        lobbyMemberId: message.lobbyMemberId,
+        body: message.body,
+      });
+    }
+    return rows;
   }
 
   private buildBanner(): void {
