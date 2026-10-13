@@ -17,6 +17,7 @@ import JoinLobbyWithDiscordReducer from "../join_lobby_with_discord_reducer";
 import JoinTableReducer from "../join_table_reducer";
 import LeaveTableReducer from "../leave_table_reducer";
 import RemoveGameTableReducer from "../remove_game_table_reducer";
+import SendLobbyChatMessageReducer from "../send_lobby_chat_message_reducer";
 import SetEmptyTableIdleTimeoutReducer from "../set_empty_table_idle_timeout_reducer";
 import SetLobbyDiscordChannelReducer from "../set_lobby_discord_channel_reducer";
 import SetLobbyDiscordVoiceReducer from "../set_lobby_discord_voice_reducer";
@@ -38,6 +39,7 @@ export type JoinLobbyWithDiscordParams = __Infer<typeof JoinLobbyWithDiscordRedu
 export type JoinTableParams = __Infer<typeof JoinTableReducer>;
 export type LeaveTableParams = __Infer<typeof LeaveTableReducer>;
 export type RemoveGameTableParams = __Infer<typeof RemoveGameTableReducer>;
+export type SendLobbyChatMessageParams = __Infer<typeof SendLobbyChatMessageReducer>;
 export type SetEmptyTableIdleTimeoutParams = __Infer<typeof SetEmptyTableIdleTimeoutReducer>;
 export type SetLobbyDiscordChannelParams = __Infer<typeof SetLobbyDiscordChannelReducer>;
 export type SetLobbyDiscordVoiceParams = __Infer<typeof SetLobbyDiscordVoiceReducer>;
