@@ -5,3 +5,4 @@ dist/
 .pnpm-store/
 coverage/
 *.log
+.playwright-mcp/

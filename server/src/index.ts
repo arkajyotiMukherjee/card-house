@@ -92,6 +92,7 @@ import {
   idleTimeoutAllowed,
   shouldRemoveEmptyTable,
 } from './table-cleanup';
+import { chatBodyRejection, chatMessageId } from './lobby-chat';
 import { spectateBlock, spectatorRowId } from './spectator';
 import {
   tableChatBodyError,
@@ -291,6 +292,27 @@ const GameEvent = table(
   },
 );
 
+const LobbyChatMessage = table(
+  {
+    name: 'LobbyChatMessage',
+    public: true,
+    indexes: [
+      {
+        accessor: 'byLobby',
+        algorithm: 'btree',
+        columns: ['lobbyId'],
+      },
+    ],
+  },
+  {
+    id: t.string().primaryKey(),
+    lobbyId: t.string(),
+    lobbyMemberId: t.string(),
+    body: t.string(),
+    createdAt: t.timestamp(),
+  },
+);
+
 const TableChatMessage = table(
   {
     name: 'TableChatMessage',
@@ -401,6 +423,7 @@ const spacetimedb = schema(
     GameSeat,
     Spectator,
     GameEvent,
+    LobbyChatMessage,
     TableChatMessage,
     VoicePresence,
     SpeakingState,
@@ -1134,6 +1157,55 @@ export const join_lobby_with_discord = spacetimedb.reducer(
     });
     rememberLobby(ctx.db, ctx.sender.toHexString(), lobby.id);
     noteLobbyActivity(ctx, lobby.id);
+  },
+);
+
+export const send_lobby_chat_message = spacetimedb.reducer(
+  { name: 'send_lobby_chat_message' },
+  {
+    lobbyId: t.string(),
+    clientId: t.string(),
+    body: t.string(),
+  },
+  (ctx, { lobbyId: rawLobbyId, clientId: rawClientId, body: rawBody }) => {
+    const lobbyId = rawLobbyId.trim();
+    const clientId = rawClientId.trim();
+    const body = rawBody.trim();
+    if (lobbyId.length === 0) {
+      throw new SenderError('Lobby id is required');
+    }
+    if (clientId.length === 0) {
+      throw new SenderError('Client id is required');
+    }
+    reject(chatBodyRejection(body));
+
+    const lobby = ctx.db.Lobby.id.find(lobbyId);
+    if (!lobby) {
+      throw new SenderError('Room not found');
+    }
+    if (lobby.status.tag !== 'open') {
+      throw new SenderError('Room closed');
+    }
+
+    const member = firstRow(
+      ctx.db.LobbyMember.byLobbyAndClient.filter([lobbyId, clientId]),
+    );
+    if (!member) {
+      throw new SenderError('Member not found');
+    }
+
+    let order = 0;
+    for (const _message of ctx.db.LobbyChatMessage.byLobby.filter(lobbyId)) {
+      order += 1;
+    }
+    ctx.db.LobbyChatMessage.insert({
+      id: chatMessageId(lobbyId, order),
+      lobbyId,
+      lobbyMemberId: member.id,
+      body,
+      createdAt: ctx.timestamp,
+    });
+    noteLobbyActivity(ctx, lobbyId);
   },
 );
 
