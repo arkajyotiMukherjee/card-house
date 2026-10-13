@@ -92,7 +92,14 @@ import {
   idleTimeoutAllowed,
   shouldRemoveEmptyTable,
 } from './table-cleanup';
+import { chatBodyRejection, chatMessageId } from './lobby-chat';
+import { addSeatCredit, seatStatCredits } from './player-stats';
 import { spectateBlock, spectatorRowId } from './spectator';
+import {
+  tableChatBodyError,
+  tableChatRowId,
+  tableChatSenderBlock,
+} from './table-chat';
 import { voiceScopeForChannel } from './voice-presence';
 import {
   DEV_LOBBY_IDLE_TIMEOUT_MICROS,
@@ -286,6 +293,48 @@ const GameEvent = table(
   },
 );
 
+const LobbyChatMessage = table(
+  {
+    name: 'LobbyChatMessage',
+    public: true,
+    indexes: [
+      {
+        accessor: 'byLobby',
+        algorithm: 'btree',
+        columns: ['lobbyId'],
+      },
+    ],
+  },
+  {
+    id: t.string().primaryKey(),
+    lobbyId: t.string(),
+    lobbyMemberId: t.string(),
+    body: t.string(),
+    createdAt: t.timestamp(),
+  },
+);
+
+const TableChatMessage = table(
+  {
+    name: 'TableChatMessage',
+    public: true,
+    indexes: [
+      {
+        accessor: 'byTable',
+        algorithm: 'btree',
+        columns: ['tableId'],
+      },
+    ],
+  },
+  {
+    id: t.string().primaryKey(),
+    tableId: t.string(),
+    lobbyMemberId: t.string(),
+    body: t.string(),
+    createdAt: t.timestamp(),
+  },
+);
+
 const VoicePresence = table(
   { name: 'VoicePresence', public: true },
   {
@@ -367,6 +416,15 @@ const LobbyIdleSweep = table(
   },
 );
 
+const ClientStats = table(
+  { name: 'ClientStats', public: true },
+  {
+    clientId: t.string().primaryKey(),
+    handsPlayed: t.u32(),
+    gamesWon: t.u32(),
+  },
+);
+
 const spacetimedb = schema(
   {
     Lobby,
@@ -375,6 +433,8 @@ const spacetimedb = schema(
     GameSeat,
     Spectator,
     GameEvent,
+    LobbyChatMessage,
+    TableChatMessage,
     VoicePresence,
     SpeakingState,
     OperatorSession,
@@ -383,6 +443,7 @@ const spacetimedb = schema(
     TableCleanupSchedule,
     LobbyIdleConfig,
     LobbyIdleSweep,
+    ClientStats,
   },
   { CASE_CONVERSION_POLICY: CaseConversionPolicy.None },
 );
@@ -390,6 +451,47 @@ const spacetimedb = schema(
 export default spacetimedb;
 
 type ModuleCtx = ReducerCtx<InferSchema<typeof spacetimedb>>;
+
+function recordClientStats(
+  ctx: ModuleCtx,
+  tableId: string,
+  gameType: string,
+  before: unknown,
+  after: unknown,
+): void {
+  const credits = seatStatCredits(gameType, before, after);
+  if (credits.length === 0) {
+    return;
+  }
+  const clientBySeat = new Map<number, string>();
+  for (const seat of ctx.db.GameSeat.byTable.filter(tableId)) {
+    const seated = ctx.db.LobbyMember.id.find(seat.lobbyMemberId);
+    if (seated) {
+      clientBySeat.set(seat.seatIndex, seated.clientId);
+    }
+  }
+  for (const credit of credits) {
+    const clientId = clientBySeat.get(credit.seatIndex);
+    if (clientId === undefined) {
+      continue;
+    }
+    const existing = ctx.db.ClientStats.clientId.find(clientId);
+    const next = addSeatCredit(existing ?? undefined, credit);
+    if (existing) {
+      ctx.db.ClientStats.clientId.update({
+        ...existing,
+        handsPlayed: next.handsPlayed,
+        gamesWon: next.gamesWon,
+      });
+    } else {
+      ctx.db.ClientStats.insert({
+        clientId,
+        handsPlayed: next.handsPlayed,
+        gamesWon: next.gamesWon,
+      });
+    }
+  }
+}
 
 function ensureLobbyIdleJob(ctx: ModuleCtx): void {
   if (ctx.db.LobbyIdleConfig.id.find(LOBBY_IDLE_CONFIG_ID) === null) {
@@ -690,6 +792,10 @@ interface TableRows {
     byTable: { filter(tableId: string): Iterable<{ id: string }> };
     id: { delete(id: string): unknown };
   };
+  TableChatMessage: {
+    byTable: { filter(tableId: string): Iterable<{ id: string }> };
+    id: { delete(id: string): unknown };
+  };
   GameTable: {
     id: { delete(id: string): unknown };
   };
@@ -727,6 +833,13 @@ function deleteGameTable(
   }
   for (const eventId of eventIds) {
     db.GameEvent.id.delete(eventId);
+  }
+  const chatIds: string[] = [];
+  for (const message of db.TableChatMessage.byTable.filter(gameTable.id)) {
+    chatIds.push(message.id);
+  }
+  for (const chatId of chatIds) {
+    db.TableChatMessage.id.delete(chatId);
   }
   clearPresence(db, gameTable.lobbyId, gameTable.id);
   clearSpeaking(db, gameTable.lobbyId, gameTable.id);
@@ -1096,6 +1209,55 @@ export const join_lobby_with_discord = spacetimedb.reducer(
     });
     rememberLobby(ctx.db, ctx.sender.toHexString(), lobby.id);
     noteLobbyActivity(ctx, lobby.id);
+  },
+);
+
+export const send_lobby_chat_message = spacetimedb.reducer(
+  { name: 'send_lobby_chat_message' },
+  {
+    lobbyId: t.string(),
+    clientId: t.string(),
+    body: t.string(),
+  },
+  (ctx, { lobbyId: rawLobbyId, clientId: rawClientId, body: rawBody }) => {
+    const lobbyId = rawLobbyId.trim();
+    const clientId = rawClientId.trim();
+    const body = rawBody.trim();
+    if (lobbyId.length === 0) {
+      throw new SenderError('Lobby id is required');
+    }
+    if (clientId.length === 0) {
+      throw new SenderError('Client id is required');
+    }
+    reject(chatBodyRejection(body));
+
+    const lobby = ctx.db.Lobby.id.find(lobbyId);
+    if (!lobby) {
+      throw new SenderError('Room not found');
+    }
+    if (lobby.status.tag !== 'open') {
+      throw new SenderError('Room closed');
+    }
+
+    const member = firstRow(
+      ctx.db.LobbyMember.byLobbyAndClient.filter([lobbyId, clientId]),
+    );
+    if (!member) {
+      throw new SenderError('Member not found');
+    }
+
+    let order = 0;
+    for (const _message of ctx.db.LobbyChatMessage.byLobby.filter(lobbyId)) {
+      order += 1;
+    }
+    ctx.db.LobbyChatMessage.insert({
+      id: chatMessageId(lobbyId, order),
+      lobbyId,
+      lobbyMemberId: member.id,
+      body,
+      createdAt: ctx.timestamp,
+    });
+    noteLobbyActivity(ctx, lobbyId);
   },
 );
 
@@ -1806,6 +1968,80 @@ export const leave_table = spacetimedb.reducer(
   },
 );
 
+export const send_table_chat = spacetimedb.reducer(
+  { name: 'send_table_chat' },
+  {
+    tableId: t.string(),
+    clientId: t.string(),
+    body: t.string(),
+  },
+  (ctx, { tableId: rawTableId, clientId: rawClientId, body: rawBody }) => {
+    const tableId = rawTableId.trim();
+    const clientId = rawClientId.trim();
+    const body = rawBody.trim();
+    if (tableId.length === 0) {
+      throw new SenderError('Table id is required');
+    }
+    if (clientId.length === 0) {
+      throw new SenderError('Client id is required');
+    }
+    reject(tableChatBodyError(body));
+
+    const gameTable = ctx.db.GameTable.id.find(tableId);
+    if (!gameTable) {
+      throw new SenderError('Table not found');
+    }
+
+    const lobby = ctx.db.Lobby.id.find(gameTable.lobbyId);
+    if (!lobby) {
+      throw new SenderError('Room not found');
+    }
+    if (lobby.status.tag !== 'open') {
+      throw new SenderError('Room closed');
+    }
+
+    const members = [];
+    for (const row of ctx.db.LobbyMember.byLobbyAndClient.filter([
+      gameTable.lobbyId,
+      clientId,
+    ])) {
+      members.push(row);
+    }
+    const member = members[0];
+    if (!member) {
+      throw new SenderError('Member not found');
+    }
+
+    let seated = false;
+    for (const seat of ctx.db.GameSeat.byTable.filter(gameTable.id)) {
+      if (seat.lobbyMemberId === member.id) {
+        seated = true;
+        break;
+      }
+    }
+    let watching = false;
+    if (!seated) {
+      for (const row of ctx.db.Spectator.byTable.filter(gameTable.id)) {
+        if (row.lobbyMemberId === member.id) {
+          watching = true;
+          break;
+        }
+      }
+    }
+    reject(tableChatSenderBlock({ seated, watching }));
+
+    const micros = ctx.timestamp.microsSinceUnixEpoch;
+    ctx.db.TableChatMessage.insert({
+      id: tableChatRowId(gameTable.id, member.id, micros),
+      tableId: gameTable.id,
+      lobbyMemberId: member.id,
+      body,
+      createdAt: ctx.timestamp,
+    });
+    noteLobbyActivity(ctx, lobby.id);
+  },
+);
+
 function rulesTable(row: {
   id: string;
   lobbyId: string;
@@ -2053,6 +2289,7 @@ export const handle_game_intent = spacetimedb.reducer(
       payloadJson: appliedIntentPayload(order, intent, note),
       createdAt: ctx.timestamp,
     });
+    recordClientStats(ctx, gameTable.id, gameTable.gameType, prev, next);
     noteLobbyActivity(ctx, lobby.id);
   },
 );

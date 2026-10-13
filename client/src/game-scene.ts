@@ -10,8 +10,32 @@ export const LEAVE_TABLE_BUTTON = { x: 16, y: 16, w: 168, h: 28 } as const;
 /** The `?` control, top right. Opens the per-game How to Play overlay. */
 export const HOW_TO_PLAY_BUTTON = { x: 916, y: 16, w: 28, h: 28 } as const;
 
+/** The `Chat` control, top center. Opens the per-table chat overlay. */
+export const TABLE_CHAT_BUTTON = { x: 200, y: 16, w: 64, h: 28 } as const;
+
 /** How to Play window, centered on the 960×540 canvas. */
 export const HOW_TO_PLAY_PANEL = { x: 120, y: 50, w: 720, h: 440 } as const;
+
+/** Table chat window. Same box as How to Play; only one overlay is open at a time. */
+export const TABLE_CHAT_PANEL = { x: 120, y: 50, w: 720, h: 440 } as const;
+
+/** Message history grid inside the chat window. */
+export const TABLE_CHAT_TEXT = {
+  padding: 24,
+  top: 64,
+  lineHeight: 16,
+  rows: 15,
+  columns: 84,
+} as const;
+
+/** Text field and Send button along the bottom of the chat window. */
+export const TABLE_CHAT_INPUT = { x: 144, y: 442, w: 544, h: 24 } as const;
+export const TABLE_CHAT_SEND_BUTTON = {
+  x: 700,
+  y: 442,
+  w: 80,
+  h: 24,
+} as const;
 
 /**
  * Text grid inside the window. Press Start 2P at 8px is 8px per column,
@@ -208,12 +232,13 @@ export function spectatingLine(
 
 export function tableSubscriptionQueries(
   tableId: string,
-): readonly [string, string, string, string] {
+): readonly [string, string, string, string, string] {
   const id = quoteSqlString(tableId);
   return [
     `SELECT * FROM GameTable WHERE id = ${id}`,
     `SELECT * FROM GameSeat WHERE tableId = ${id}`,
     `SELECT * FROM GameEvent WHERE tableId = ${id}`,
     `SELECT * FROM Spectator WHERE tableId = ${id}`,
+    `SELECT * FROM TableChatMessage WHERE tableId = ${id}`,
   ];
 }

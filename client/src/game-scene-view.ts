@@ -44,7 +44,9 @@ import {
   type PresenceRef,
 } from './voice-presence';
 import { PokerDriver } from './poker-driver';
-import { cardAtlas, greenTable, personalCardAtlas } from './boot-scene';
+import { cardAtlas, personalCardAtlas, tableSprites } from './boot-scene';
+import { statsCaption } from './client-stats';
+import { type TableStyle } from './table-atlas';
 import {
   BUTTON,
   BUTTON_DOWN,
@@ -76,6 +78,7 @@ import {
 } from './game-scene';
 import type { GameDriver, RenderContext } from './game-driver';
 import { HowToPlayOverlay } from './how-to-play-overlay';
+import { TableChatOverlay } from './table-chat-overlay';
 import type { DbConnection, SubscriptionHandle } from './module_bindings';
 import { SpeakingFader, tableSpeakers, type SpeakingRow } from './speaking';
 import { seatGlow, speechBubble } from './speaking-view';
@@ -138,17 +141,35 @@ export class GameScene extends ex.Scene {
   private countValue!: ex.Actor;
   private counterPlate!: ex.Actor;
   private howToPlay!: HowToPlayOverlay;
+  private tableChat!: TableChatOverlay;
   private hudPlate!: ex.Actor;
   private hudTurn!: ex.Text;
   private hudPhase!: ex.Text;
   private hudRound!: ex.Text;
+  private statsText!: ex.Text;
+  private statsLine = statsCaption({ handsPlayed: 0, gamesWon: 0 });
+  private tableActor: ex.Actor | undefined;
 
   constructor(
     private readonly connection: DbConnection,
     private readonly clientId: string,
     private readonly onLeft: () => void,
+    private style: TableStyle = 'green',
   ) {
     super();
+  }
+
+  setStats(line: string): void {
+    this.statsLine = line;
+    if (this.statsText) {
+      this.statsText.text = line;
+    }
+  }
+
+  /** Repaints the felt for a theme switch without waiting for a reload. */
+  setTableStyle(style: TableStyle): void {
+    this.style = style;
+    this.tableActor?.graphics.use(tableSprites[style].clone());
   }
 
   open(tableId: string, lobbyMemberId: string): void {
@@ -162,6 +183,7 @@ export class GameScene extends ex.Scene {
       this.errorText.text = '';
       this.howToPlay.close();
       this.howToPlay.setGameType('');
+      this.tableChat.setTable(tableId, lobbyMemberId);
       this.bluffDriver.destroy(this.driverContext());
       this.presidentDriver.destroy(this.driverContext());
       this.goFishDriver.destroy(this.driverContext());
@@ -178,7 +200,7 @@ export class GameScene extends ex.Scene {
   onInitialize(): void {
     this.backgroundColor = FELT;
 
-    const sprite = greenTable.clone();
+    const sprite = tableSprites[this.style].clone();
     sprite.scale = ex.vec(TABLE_SCALE, TABLE_SCALE);
     const table = new ex.Actor({
       pos: ex.vec(LOGICAL_WIDTH / 2, LOGICAL_HEIGHT / 2 + 8),
@@ -188,6 +210,7 @@ export class GameScene extends ex.Scene {
       z: 0,
     });
     table.graphics.use(sprite);
+    this.tableActor = table;
     this.add(table);
 
     this.waitingText = canvasText('', 8, DIM);
@@ -217,9 +240,26 @@ export class GameScene extends ex.Scene {
     error.graphics.use(this.errorText);
     this.add(error);
 
+    this.statsText = canvasText(this.statsLine, 8, GOLD);
+    const stats = new ex.Actor({
+      pos: ex.vec(280, 22),
+      anchor: ex.vec(0, 0),
+      z: 21,
+    });
+    stats.graphics.use(this.statsText);
+    this.add(stats);
+
     this.addLeaveButton();
     this.addCounterButton();
-    this.howToPlay = new HowToPlayOverlay(this);
+    this.howToPlay = new HowToPlayOverlay(this, () => this.tableChat.close());
+    this.tableChat = new TableChatOverlay(
+      this,
+      this.connection,
+      this.clientId,
+      () => readMembers(this.connection),
+      () => this.howToPlay.close(),
+    );
+    this.tableChat.setTable(this.tableId, this.lobbyMemberId);
     this.addStatusHud();
     this.watchRows();
     this.ready = true;
@@ -235,10 +275,14 @@ export class GameScene extends ex.Scene {
     this.input.keyboard.off('press', this.onKeyPress);
     this.input.pointers.off('wheel', this.onWheel);
     this.howToPlay.close();
+    this.tableChat.close();
     this.endSubscription();
   }
 
   private readonly onKeyPress = (event: ex.KeyEvent): void => {
+    if (this.tableChat.handleKey(event)) {
+      return;
+    }
     if (event.key === ex.Keys.Escape) {
       this.howToPlay.close();
     }
@@ -291,6 +335,9 @@ export class GameScene extends ex.Scene {
     this.connection.db.gameEvent.onInsert((_ctx, row) => {
       this.announce(row);
     });
+    this.connection.db.tableChatMessage.onInsert(() => {
+      this.tableChat.refresh();
+    });
     this.connection.db.gameTable.onInsert((_ctx, row) => {
       this.applySubscribedState(row);
     });
@@ -307,6 +354,7 @@ export class GameScene extends ex.Scene {
     if (this.subscription && this.subscribedTableId === tableId) {
       this.paintSeats();
       this.readSubscribedState();
+      this.tableChat.refresh();
       return;
     }
     this.endSubscription();
@@ -320,6 +368,7 @@ export class GameScene extends ex.Scene {
           this.eventsLive = true;
           this.paintSeats();
           this.readSubscribedState();
+          this.tableChat.refresh();
         }
       })
       .onError((ctx) => {
@@ -494,6 +543,7 @@ export class GameScene extends ex.Scene {
   private sendPayload(intentPayload: string, intent: unknown): void {
     if (
       this.howToPlay.isOpen ||
+      this.tableChat.isOpen ||
       this.tableId.length === 0 ||
       this.watchingWithoutSeat()
     ) {
@@ -1029,7 +1079,7 @@ export class GameScene extends ex.Scene {
       sendIntent: (intent) => {
         this.sendPayload(JSON.stringify(intent), intent);
       },
-      inputBlocked: () => this.howToPlay.isOpen,
+      inputBlocked: () => this.howToPlay.isOpen || this.tableChat.isOpen,
     };
   }
 
@@ -1122,7 +1172,12 @@ export class GameScene extends ex.Scene {
   }
 
   private leave(): void {
-    if (this.leaving || this.howToPlay.isOpen || this.tableId.length === 0) {
+    if (
+      this.leaving ||
+      this.howToPlay.isOpen ||
+      this.tableChat.isOpen ||
+      this.tableId.length === 0
+    ) {
       return;
     }
     this.leaving = true;

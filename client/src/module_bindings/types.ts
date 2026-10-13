@@ -10,6 +10,13 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const ClientStats = __t.object("ClientStats", {
+  clientId: __t.string(),
+  handsPlayed: __t.u32(),
+  gamesWon: __t.u32(),
+});
+export type ClientStats = __Infer<typeof ClientStats>;
+
 export const ConnectionRate = __t.object("ConnectionRate", {
   id: __t.string(),
   windowStartMicros: __t.u64(),
@@ -70,6 +77,15 @@ export const Lobby = __t.object("Lobby", {
   lastActivityAt: __t.option(__t.timestamp()),
 });
 export type Lobby = __Infer<typeof Lobby>;
+
+export const LobbyChatMessage = __t.object("LobbyChatMessage", {
+  id: __t.string(),
+  lobbyId: __t.string(),
+  lobbyMemberId: __t.string(),
+  body: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type LobbyChatMessage = __Infer<typeof LobbyChatMessage>;
 
 export const LobbyIdleConfig = __t.object("LobbyIdleConfig", {
   id: __t.string(),
@@ -147,6 +163,15 @@ export const Spectator = __t.object("Spectator", {
   joinedAt: __t.timestamp(),
 });
 export type Spectator = __Infer<typeof Spectator>;
+
+export const TableChatMessage = __t.object("TableChatMessage", {
+  id: __t.string(),
+  tableId: __t.string(),
+  lobbyMemberId: __t.string(),
+  body: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type TableChatMessage = __Infer<typeof TableChatMessage>;
 
 export const TableCleanupSchedule = __t.object("TableCleanupSchedule", {
   scheduledId: __t.u64(),

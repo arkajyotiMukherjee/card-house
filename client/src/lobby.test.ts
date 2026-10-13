@@ -370,11 +370,12 @@ describe('lobby tables', () => {
     ).toBe('member_lobby_1_self');
   });
 
-  it('subscribes to tables, seats, and spectators for one lobby', () => {
+  it('subscribes to tables, seats, spectators, and chat for one lobby', () => {
     expect(lobbyTableQueries("lobby_a'b")).toEqual([
       `SELECT * FROM "GameTable" WHERE "lobbyId" = 'lobby_a''b'`,
       `SELECT "GameSeat".* FROM "GameTable" JOIN "GameSeat" ON "GameSeat"."tableId" = "GameTable"."id" WHERE "GameTable"."lobbyId" = 'lobby_a''b'`,
       `SELECT "Spectator".* FROM "GameTable" JOIN "Spectator" ON "Spectator"."tableId" = "GameTable"."id" WHERE "GameTable"."lobbyId" = 'lobby_a''b'`,
+      `SELECT * FROM "LobbyChatMessage" WHERE "lobbyId" = 'lobby_a''b'`,
     ]);
     expect(tableSettingsJson(2, 6, 'Bluff #1')).toBe(
       '{"name":"Bluff #1","minPlayers":2,"maxPlayers":6}',

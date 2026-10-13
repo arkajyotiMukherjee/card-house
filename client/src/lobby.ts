@@ -150,6 +150,79 @@ export function watchHit(localX: number, localY: number): boolean {
   );
 }
 
+export const CHAT_PANEL = {
+  panel: { x: 170, y: 68, w: 620, h: 380 },
+  list: { x: 178, y: 76, bottom: 436, lineH: 12 },
+  field: { x: 178, y: 440, w: 500, h: 24 },
+  send: { x: 686, y: 440, w: 96, h: 24 },
+} as const;
+
+export const CHAT_BODY_MAX = 240;
+
+export interface ChatMessageRow {
+  id: string;
+  lobbyId: string;
+  lobbyMemberId: string;
+  body: string;
+}
+
+export interface ChatLine {
+  id: string;
+  name: string;
+  body: string;
+  self: boolean;
+}
+
+export function normalizeChatBody(raw: string): string {
+  return raw.trim();
+}
+
+const CHAT_KEY = /^[\x20-\x7e]$/;
+
+export function applyChatKey(value: string, key: string): string {
+  if (key === 'Backspace') {
+    return value.slice(0, -1);
+  }
+  if (key.length !== 1 || !CHAT_KEY.test(key)) {
+    return value;
+  }
+  if (value.length >= CHAT_BODY_MAX) {
+    return value;
+  }
+  return value + key;
+}
+
+/** Messages for one lobby, oldest first (ids sort in send order), newest `limit` kept. */
+export function chatLines(
+  messages: Iterable<ChatMessageRow>,
+  members: Iterable<MemberRecord>,
+  lobbyId: string,
+  selfClientId: string,
+  limit = 200,
+): ChatLine[] {
+  const names = new Map<string, { name: string; clientId: string }>();
+  for (const member of members) {
+    names.set(member.id, { name: member.name, clientId: member.clientId });
+  }
+  const rows: ChatMessageRow[] = [];
+  for (const message of messages) {
+    if (message.lobbyId === lobbyId) {
+      rows.push(message);
+    }
+  }
+  rows.sort((a, b) => a.id.localeCompare(b.id));
+  const kept = rows.slice(Math.max(0, rows.length - limit));
+  return kept.map((message) => {
+    const member = names.get(message.lobbyMemberId);
+    return {
+      id: message.id,
+      name: member?.name ?? 'Unknown',
+      body: message.body,
+      self: member?.clientId === selfClientId,
+    };
+  });
+}
+
 export const ROOM_BANNER = {
   panel: { x: 380, y: 6, w: 200, h: 54 },
   title: { size: 8, y: 12 },
@@ -537,11 +610,14 @@ export function listLayout(groups: readonly TableGroup[]): ListLayout {
   return { slots, hidden };
 }
 
-export function lobbyTableQueries(lobbyId: string): [string, string, string] {
+export function lobbyTableQueries(
+  lobbyId: string,
+): [string, string, string, string] {
   const id = `'${lobbyId.replaceAll("'", "''")}'`;
   return [
     `SELECT * FROM "GameTable" WHERE "lobbyId" = ${id}`,
     `SELECT "GameSeat".* FROM "GameTable" JOIN "GameSeat" ON "GameSeat"."tableId" = "GameTable"."id" WHERE "GameTable"."lobbyId" = ${id}`,
     `SELECT "Spectator".* FROM "GameTable" JOIN "Spectator" ON "Spectator"."tableId" = "GameTable"."id" WHERE "GameTable"."lobbyId" = ${id}`,
+    `SELECT * FROM "LobbyChatMessage" WHERE "lobbyId" = ${id}`,
   ];
 }

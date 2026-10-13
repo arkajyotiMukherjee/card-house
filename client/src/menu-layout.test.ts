@@ -3,6 +3,7 @@ import { bluffGameDefinition } from '../../src/shared/games/bluff';
 import {
   FLOATER_MARGIN,
   MENU_BUTTONS,
+  MENU_THEME_BUTTON,
   floaterPose,
   makeFloaters,
   nextFieldAfterEnter,
@@ -10,6 +11,7 @@ import {
   promptFields,
   splitHowToPlay,
   stepIndex,
+  themeButtonLabel,
   wrapText,
 } from './menu-layout';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from './sheets';
@@ -31,6 +33,21 @@ describe('menu buttons', () => {
       const below = MENU_BUTTONS[index];
       expect(below?.y).toBeGreaterThan((above?.y ?? 0) + (above?.h ?? 0));
     }
+  });
+});
+
+describe('theme button', () => {
+  it('sits clear of the main menu panel', () => {
+    expect(MENU_THEME_BUTTON.x + MENU_THEME_BUTTON.w).toBeLessThanOrEqual(
+      LOGICAL_WIDTH,
+    );
+    expect(MENU_THEME_BUTTON.y + MENU_THEME_BUTTON.h).toBeLessThanOrEqual(72);
+  });
+
+  it('names the current table style', () => {
+    expect(themeButtonLabel('green')).toBe('Theme: Green');
+    expect(themeButtonLabel('purple')).toBe('Theme: Purple');
+    expect(themeButtonLabel('red')).toBe('Theme: Red');
   });
 });
 

@@ -42,7 +42,10 @@ export class HowToPlayOverlay {
   private lineTexts: ex.Text[] = [];
   private hintText: ex.Text | undefined;
 
-  constructor(private readonly scene: ex.Scene) {
+  constructor(
+    private readonly scene: ex.Scene,
+    private readonly onBeforeOpen: () => void = () => {},
+  ) {
     this.button = this.buildButton();
   }
 
@@ -76,6 +79,7 @@ export class HowToPlayOverlay {
     if (!definition || this.opened) {
       return;
     }
+    this.onBeforeOpen();
     const layout = layoutHowToPlay(definition, HOW_TO_PLAY_TEXT.columns);
     this.lines = layout.lines;
     this.scroll = 0;

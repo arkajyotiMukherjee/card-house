@@ -2,9 +2,9 @@ import * as ex from 'excalibur';
 import {
   cardAtlas,
   chipsImage,
-  greenTable,
   personalCardAtlas,
   pixelFont,
+  tableSprites,
 } from './boot-scene';
 import { ChipAtlas, type ChipColor } from './chip-atlas';
 import type { Rank, Suit } from './card-atlas';
@@ -24,6 +24,7 @@ import {
   MENU_BACKDROP,
   MENU_BUTTONS,
   MENU_TAGLINE,
+  MENU_THEME_BUTTON,
   MENU_TITLE,
   MENU_VERSION,
   PROMPT,
@@ -36,12 +37,19 @@ import {
   promptTitle,
   splitHowToPlay,
   stepIndex,
+  themeButtonLabel,
   wrapText,
   type FloaterSpec,
   type MenuAction,
   type PromptKind,
 } from './menu-layout';
+import { statsCaption } from './client-stats';
+import {
+  preferredNameForPrompt,
+  rememberPreferredName,
+} from './preferred-name';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from './sheets';
+import { TABLE_STYLES, type TableStyle } from './table-atlas';
 
 const FELT = ex.Color.fromHex('#145c38');
 const GOLD = ex.Color.fromHex('#f4e4b3');
@@ -59,6 +67,8 @@ const TITLE_SHADOW = ex.Color.fromHex('#07140d');
 
 const FLOATER_COUNT = 14;
 const TITLE_DROP = 4;
+/** Below the Card Style button (y 424, h 44) and above the status line. */
+const STATS_Y = 492;
 
 export interface MenuEntry {
   kind: PromptKind;
@@ -116,11 +126,21 @@ interface Drifter {
 }
 
 export class MenuScene extends ex.Scene {
+  constructor(private readonly clientId = '') {
+    super();
+  }
+
   private mode: Mode = 'main';
   private enter: MenuEnter = () =>
     Promise.resolve('Still connecting to the server');
   private onEntered: () => void = () => {};
   private statusText = canvasText('SpacetimeDB: starting', 8, DIM);
+  private statsText = canvasText(
+    statsCaption({ handsPlayed: 0, gamesWon: 0 }),
+    8,
+    DIM,
+  );
+  private statsActor: ex.Actor | undefined;
   private readonly drifters: Drifter[] = [];
   private readonly overlay: ex.Actor[] = [];
   private elapsed = 0;
@@ -144,8 +164,34 @@ export class MenuScene extends ex.Scene {
   private previewFront: ex.Actor | undefined;
   private previewBack: ex.Actor | undefined;
 
+  private style: TableStyle = 'green';
+  private onThemeChange: (style: TableStyle) => void = () => {};
+  private tableActor: ex.Actor | undefined;
+  private themeCaption: ex.Text | undefined;
+
   setStatus(line: string): void {
     this.statusText.text = line;
+  }
+
+  setStats(line: string): void {
+    this.statsText.text = line;
+    if (this.statsActor) {
+      const width = line.length * 8;
+      this.statsActor.pos = ex.vec(
+        Math.floor((LOGICAL_WIDTH - width) / 2),
+        STATS_Y,
+      );
+    }
+  }
+
+  /**
+   * Sets the starting theme and the handler the Theme button calls on each
+   * switch. Repaints immediately if the menu table already exists.
+   */
+  connectTheme(style: TableStyle, onChange: (style: TableStyle) => void): void {
+    this.style = style;
+    this.onThemeChange = onChange;
+    this.repaintTheme();
   }
 
   /** Called once the lobby panel can accept a name and code. */
@@ -157,6 +203,7 @@ export class MenuScene extends ex.Scene {
   /**
    * Opens Join Room with the code from a `/cardroom create` join URL.
    * A default Discord name joins without asking the player to type one.
+   * A saved preferred name only fills the field. It does not submit.
    */
   openJoin(code: string, defaultName = ''): void {
     if (this.mode !== 'main') {
@@ -176,6 +223,7 @@ export class MenuScene extends ex.Scene {
     this.buildBackdrop();
     this.buildTitle();
     this.buildButtons();
+    this.buildThemeButton();
     this.buildFooter();
     engine.input.keyboard.on('press', (evt) => {
       if (engine.currentScene !== this) {
@@ -207,8 +255,58 @@ export class MenuScene extends ex.Scene {
       anchor: ex.vec(0.5, 0.5),
       z: 0,
     });
-    table.graphics.use(scaled(greenTable.clone(), 8));
+    table.graphics.use(scaled(tableSprites[this.style].clone(), 8));
+    this.tableActor = table;
     this.add(table);
+  }
+
+  private buildThemeButton(): void {
+    const box = MENU_THEME_BUTTON;
+    const face = rect(box.w, box.h, BUTTON, STROKE);
+    const actor = new ex.Actor({
+      pos: ex.vec(box.x, box.y),
+      anchor: ex.vec(0, 0),
+      width: box.w,
+      height: box.h,
+      z: 10,
+    });
+    actor.graphics.use(face);
+    const caption = canvasText(themeButtonLabel(this.style), 8, GOLD);
+    const captionActor = new ex.Actor({
+      pos: ex.vec(8, (box.h - 8) / 2),
+      anchor: ex.vec(0, 0),
+    });
+    captionActor.graphics.use(caption);
+    actor.addChild(captionActor);
+    actor.on('pointerenter', () => {
+      face.strokeColor = STROKE_HOT;
+    });
+    actor.on('pointerleave', () => {
+      face.strokeColor = STROKE;
+    });
+    actor.on('pointerup', () => {
+      this.cycleTheme();
+    });
+    this.add(actor);
+    this.themeCaption = caption;
+  }
+
+  private cycleTheme(): void {
+    if (this.mode !== 'main') {
+      return;
+    }
+    const index = TABLE_STYLES.indexOf(this.style);
+    const next = TABLE_STYLES[(index + 1) % TABLE_STYLES.length] ?? 'green';
+    this.style = next;
+    this.repaintTheme();
+    this.onThemeChange(next);
+  }
+
+  private repaintTheme(): void {
+    this.tableActor?.graphics.use(scaled(tableSprites[this.style].clone(), 8));
+    if (this.themeCaption) {
+      this.themeCaption.text = themeButtonLabel(this.style);
+    }
   }
 
   private buildDrifters(): void {
@@ -296,6 +394,15 @@ export class MenuScene extends ex.Scene {
     });
     status.graphics.use(this.statusText);
     this.add(status);
+    const statsLine = this.statsText.text;
+    const statsWidth = statsLine.length * 8;
+    this.statsActor = new ex.Actor({
+      pos: ex.vec(Math.floor((LOGICAL_WIDTH - statsWidth) / 2), STATS_Y),
+      anchor: ex.vec(0, 0),
+      z: 10,
+    });
+    this.statsActor.graphics.use(this.statsText);
+    this.add(this.statsActor);
     const width = MENU_VERSION.length * 8;
     this.addText(
       LOGICAL_WIDTH - width - 12,
@@ -357,7 +464,7 @@ export class MenuScene extends ex.Scene {
 
   private openPrompt(kind: PromptKind, code = '', name = ''): void {
     this.mode = kind;
-    this.name = name.slice(0, NAME_MAX);
+    this.name = preferredNameForPrompt(this.clientId, name);
     this.code = code;
     this.focused = 'name';
     this.shade();
@@ -484,6 +591,7 @@ export class MenuScene extends ex.Scene {
       this.setError(problem);
       return;
     }
+    rememberPreferredName(this.clientId, this.name);
     this.busy = true;
     this.setError('Working...', DIM);
     let failure: string | undefined;
@@ -835,6 +943,7 @@ export class MenuScene extends ex.Scene {
     this.setError('');
     if (this.focused === 'name') {
       this.name = applyFieldKey(this.name, key, NAME_MAX);
+      rememberPreferredName(this.clientId, this.name);
     } else {
       this.code = applyCodeKey(this.code, key);
     }

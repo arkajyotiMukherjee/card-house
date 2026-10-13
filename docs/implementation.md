@@ -302,13 +302,13 @@ These aren’t needed for v1, but the architecture supports them cleanly:
 
 - **Spectator mode** (non-seated viewers per table). `spectate_table` stores a `Spectator` row, separate from `GameSeat`. The viewer does not count toward `maxPlayers` and is not dealt a hand. A full table can still be watched.
 - **Chat**:
-  - lobby-wide,
-  - per-table.
+  - lobby-wide (done: `send_lobby_chat_message` stores a `LobbyChatMessage` row every member of that lobby subscribes to),
+  - per-table (done: `send_table_chat` stores a `TableChatMessage` row for a sender who is seated or watching that table; a lobby member elsewhere does not see it).
 - **Persistent soft profiles**:
-  - saved preferred name,
-  - color theme,
-  - card customizations: done. `client/src/card-appearance.ts` stores a front style and a back style from the Pixel Poker Pack's standard deck variants in `localStorage`, keyed the same way as `clientId`. Only the local player's own hand reads it (`RenderContext.myCards`); the table, piles, melds, and every other seat stay on the default `CardAtlas`. Not sent to SpacetimeDB.
-  - simple stats (hands played, games won).
+  - saved preferred name (done: `preferredNames` in localStorage, keyed by `clientId`; Create Room and Join Room start with the name this client used last),
+  - color theme (done: `theme` in localStorage, keyed by `clientId`; the menu Theme button cycles green, purple, and red felt),
+  - card customizations (done: `cardAppearance` in localStorage stores a front style and a back style from the Pixel Poker Pack. Only the local player's own hand reads it (`RenderContext.myCards`); the table, piles, melds, and every other seat stay on the default `CardAtlas`. Not sent to SpacetimeDB),
+  - simple stats (hands played, games won). `ClientStats` stores both for a `clientId`. A finished hand adds one hand for each seated player, and a game win adds one win for each winner.
 - **Tournaments**:
   - structures composed of multiple tables and rounds.
 

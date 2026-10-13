@@ -14,7 +14,7 @@ import {
   TABLE_SCALE,
   TABLE_WIDTH,
 } from './sheets';
-import { TableAtlas } from './table-atlas';
+import { TABLE_STYLES, TableAtlas, type TableStyle } from './table-atlas';
 
 const FELT = ex.Color.fromHex('#145c38');
 const STATUS = ex.Color.fromHex('#f4e4b3');
@@ -136,6 +136,17 @@ export function personalCardAtlas(): CardAtlas {
 
 export const greenTable = tables.sprite('green');
 greenTable.scale = ex.vec(TABLE_SCALE, TABLE_SCALE);
+export const purpleTable = tables.sprite('purple');
+purpleTable.scale = ex.vec(TABLE_SCALE, TABLE_SCALE);
+export const redTable = tables.sprite('red');
+redTable.scale = ex.vec(TABLE_SCALE, TABLE_SCALE);
+
+/** Felt sprite for each color theme, scaled for table rendering. */
+export const tableSprites: Record<TableStyle, ex.Sprite> = {
+  green: greenTable,
+  purple: purpleTable,
+  red: redTable,
+};
 
 export const pixelFont = new ex.FontSource(
   '/assets/press-start-2p.ttf',
@@ -154,7 +165,7 @@ export const demoImages = [
   clubsDarkImage,
   spadesDarkImage,
   chipsImage,
-  greenTable.image,
+  ...TABLE_STYLES.map((style) => tableSprites[style].image),
   pixelFont,
 ];
 
@@ -181,6 +192,11 @@ export class BootScene extends ex.Scene {
       filtering: ex.ImageFiltering.Pixel,
     }),
   });
+  private tableActor: ex.Actor | undefined;
+
+  constructor(private style: TableStyle = 'green') {
+    super();
+  }
 
   onInitialize(engine: ex.Engine): void {
     engine.backgroundColor = FELT;
@@ -192,7 +208,8 @@ export class BootScene extends ex.Scene {
       height: TABLE_HEIGHT * TABLE_SCALE,
       z: 0,
     });
-    table.graphics.use(greenTable);
+    table.graphics.use(tableSprites[this.style]);
+    this.tableActor = table;
     this.add(table);
 
     const cardY = LOGICAL_HEIGHT / 2 + 8;
@@ -221,6 +238,12 @@ export class BootScene extends ex.Scene {
 
   setStatus(text: string): void {
     this.status.text = text;
+  }
+
+  /** Repaints the felt for a theme switch without waiting for a reload. */
+  setTableStyle(style: TableStyle): void {
+    this.style = style;
+    this.tableActor?.graphics.use(tableSprites[style]);
   }
 
   private addChipStack(x: number, top: number): void {
