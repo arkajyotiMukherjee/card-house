@@ -94,6 +94,8 @@ interface CardRecord {
   restX: number;
   restY: number;
   faceUp: boolean;
+  /** True for a card still in the local player's own hand. */
+  personal: boolean;
   moving: boolean;
   placed: boolean;
 }
@@ -408,7 +410,14 @@ export class PresidentDriver implements GameDriver<PresidentState> {
   private syncCards(state: PresidentState, ctx: RenderContext): void {
     const desired = new Map<
       string,
-      { x: number; y: number; faceUp: boolean; delay: number; z: number }
+      {
+        x: number;
+        y: number;
+        faceUp: boolean;
+        delay: number;
+        z: number;
+        personal: boolean;
+      }
     >();
     const hand =
       ctx.meSeatIndex === null
@@ -427,6 +436,7 @@ export class PresidentDriver implements GameDriver<PresidentState> {
         faceUp: true,
         delay: index * 16,
         z: 12 + index,
+        personal: true,
       });
     }
     const pileSlots = pilePositions(state.playPile.length);
@@ -442,6 +452,7 @@ export class PresidentDriver implements GameDriver<PresidentState> {
         y: slot.y,
         faceUp: true,
         delay: 0,
+        personal: false,
         z: 5 + index,
       });
     }
@@ -464,9 +475,17 @@ export class PresidentDriver implements GameDriver<PresidentState> {
 
   private placeCard(
     cardId: string,
-    place: { x: number; y: number; faceUp: boolean; delay: number; z: number },
+    place: {
+      x: number;
+      y: number;
+      faceUp: boolean;
+      delay: number;
+      z: number;
+      personal: boolean;
+    },
     ctx: RenderContext,
   ): void {
+    const atlas = place.personal ? ctx.myCards : ctx.cards;
     let record = this.cards.get(cardId);
     if (!record) {
       const actor = new ex.Actor({
@@ -476,7 +495,7 @@ export class PresidentDriver implements GameDriver<PresidentState> {
         height: CARD_DRAW,
         z: place.z,
       });
-      actor.graphics.use(cardSprite(ctx.cards, cardId, place.faceUp));
+      actor.graphics.use(cardSprite(atlas, cardId, place.faceUp));
       actor.on('pointerenter', () => {
         this.onCard('pointerenter', cardId);
       });
@@ -492,15 +511,17 @@ export class PresidentDriver implements GameDriver<PresidentState> {
         restX: place.x,
         restY: place.y,
         faceUp: place.faceUp,
+        personal: place.personal,
         moving: false,
         placed: false,
       };
       this.cards.set(cardId, record);
     }
     record.actor.z = this.lifted(cardId) ? 30 : place.z;
-    if (record.faceUp !== place.faceUp) {
+    if (record.faceUp !== place.faceUp || record.personal !== place.personal) {
       record.faceUp = place.faceUp;
-      record.actor.graphics.use(cardSprite(ctx.cards, cardId, place.faceUp));
+      record.personal = place.personal;
+      record.actor.graphics.use(cardSprite(atlas, cardId, place.faceUp));
     }
     const moved = record.restX !== place.x || record.restY !== place.y;
     record.restX = place.x;

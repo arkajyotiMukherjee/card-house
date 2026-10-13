@@ -10,6 +10,13 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const ClientStats = __t.object("ClientStats", {
+  clientId: __t.string(),
+  handsPlayed: __t.u32(),
+  gamesWon: __t.u32(),
+});
+export type ClientStats = __Infer<typeof ClientStats>;
+
 export const ConnectionRate = __t.object("ConnectionRate", {
   id: __t.string(),
   windowStartMicros: __t.u64(),

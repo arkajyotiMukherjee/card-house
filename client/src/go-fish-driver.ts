@@ -373,6 +373,7 @@ export class GoFishDriver implements GameDriver<GoFishState> {
     }
   }
 
+  /** `syncCards` only ever places the local player's own hand here. */
   private placeCard(
     cardId: string,
     place: { x: number; y: number; faceUp: boolean; delay: number; z: number },
@@ -388,7 +389,7 @@ export class GoFishDriver implements GameDriver<GoFishState> {
         height: CARD_DRAW,
         z: place.z,
       });
-      actor.graphics.use(cardSprite(ctx.cards, cardId, place.faceUp));
+      actor.graphics.use(cardSprite(ctx.myCards, cardId, place.faceUp));
       actor.on('pointerenter', () => {
         this.onCard('pointerenter', cardId);
       });
@@ -412,7 +413,7 @@ export class GoFishDriver implements GameDriver<GoFishState> {
     record.actor.z = this.lifted(cardId) ? 30 : place.z;
     if (record.faceUp !== place.faceUp) {
       record.faceUp = place.faceUp;
-      record.actor.graphics.use(cardSprite(ctx.cards, cardId, place.faceUp));
+      record.actor.graphics.use(cardSprite(ctx.myCards, cardId, place.faceUp));
     }
     const moved = record.restX !== place.x || record.restY !== place.y;
     record.restX = place.x;

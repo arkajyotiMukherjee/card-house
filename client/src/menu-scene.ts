@@ -1,9 +1,25 @@
 import * as ex from 'excalibur';
-import { cardAtlas, chipsImage, pixelFont, tableSprites } from './boot-scene';
+import {
+  cardAtlas,
+  chipsImage,
+  personalCardAtlas,
+  pixelFont,
+  tableSprites,
+} from './boot-scene';
 import { ChipAtlas, type ChipColor } from './chip-atlas';
 import type { Rank, Suit } from './card-atlas';
+import {
+  CARD_BACK_LABELS,
+  CARD_FRONT_LABELS,
+  getCardAppearance,
+  nextCardBackStyle,
+  nextCardFrontStyle,
+  setCardBackStyle,
+  setCardFrontStyle,
+} from './card-appearance';
 import { GAME_CATALOG, applyCodeKey, applyFieldKey, NAME_MAX } from './lobby';
 import {
+  CARD_STYLE,
   HOW_TO_PLAY,
   MENU_BACKDROP,
   MENU_BUTTONS,
@@ -27,6 +43,7 @@ import {
   type MenuAction,
   type PromptKind,
 } from './menu-layout';
+import { statsCaption } from './client-stats';
 import {
   preferredNameForPrompt,
   rememberPreferredName,
@@ -50,6 +67,8 @@ const TITLE_SHADOW = ex.Color.fromHex('#07140d');
 
 const FLOATER_COUNT = 14;
 const TITLE_DROP = 4;
+/** Below the Card Style button (y 424, h 44) and above the status line. */
+const STATS_Y = 492;
 
 export interface MenuEntry {
   kind: PromptKind;
@@ -60,7 +79,7 @@ export interface MenuEntry {
 /** Resolves to an error message, or undefined once the lobby was entered. */
 export type MenuEnter = (entry: MenuEntry) => Promise<string | undefined>;
 
-type Mode = 'main' | PromptKind | 'howto';
+type Mode = 'main' | PromptKind | 'howto' | 'cards';
 
 function canvasText(text: string, size: number, color: ex.Color): ex.Text {
   const graphic = new ex.Text({
@@ -116,6 +135,12 @@ export class MenuScene extends ex.Scene {
     Promise.resolve('Still connecting to the server');
   private onEntered: () => void = () => {};
   private statusText = canvasText('SpacetimeDB: starting', 8, DIM);
+  private statsText = canvasText(
+    statsCaption({ handsPlayed: 0, gamesWon: 0 }),
+    8,
+    DIM,
+  );
+  private statsActor: ex.Actor | undefined;
   private readonly drifters: Drifter[] = [];
   private readonly overlay: ex.Actor[] = [];
   private elapsed = 0;
@@ -134,6 +159,11 @@ export class MenuScene extends ex.Scene {
   private listRows: Array<{ face: ex.Rectangle; label: ex.Text }> = [];
   private bodyActors: ex.Actor[] = [];
 
+  private frontValueText: ex.Text | undefined;
+  private backValueText: ex.Text | undefined;
+  private previewFront: ex.Actor | undefined;
+  private previewBack: ex.Actor | undefined;
+
   private style: TableStyle = 'green';
   private onThemeChange: (style: TableStyle) => void = () => {};
   private tableActor: ex.Actor | undefined;
@@ -141,6 +171,17 @@ export class MenuScene extends ex.Scene {
 
   setStatus(line: string): void {
     this.statusText.text = line;
+  }
+
+  setStats(line: string): void {
+    this.statsText.text = line;
+    if (this.statsActor) {
+      const width = line.length * 8;
+      this.statsActor.pos = ex.vec(
+        Math.floor((LOGICAL_WIDTH - width) / 2),
+        STATS_Y,
+      );
+    }
   }
 
   /**
@@ -353,6 +394,15 @@ export class MenuScene extends ex.Scene {
     });
     status.graphics.use(this.statusText);
     this.add(status);
+    const statsLine = this.statsText.text;
+    const statsWidth = statsLine.length * 8;
+    this.statsActor = new ex.Actor({
+      pos: ex.vec(Math.floor((LOGICAL_WIDTH - statsWidth) / 2), STATS_Y),
+      anchor: ex.vec(0, 0),
+      z: 10,
+    });
+    this.statsActor.graphics.use(this.statsText);
+    this.add(this.statsActor);
     const width = MENU_VERSION.length * 8;
     this.addText(
       LOGICAL_WIDTH - width - 12,
@@ -372,6 +422,10 @@ export class MenuScene extends ex.Scene {
       this.openHowToPlay();
       return;
     }
+    if (action === 'cards') {
+      this.openCardStyle();
+      return;
+    }
     this.openPrompt(action);
   }
 
@@ -387,6 +441,10 @@ export class MenuScene extends ex.Scene {
     this.nameBox = undefined;
     this.codeBox = undefined;
     this.errorText = undefined;
+    this.frontValueText = undefined;
+    this.backValueText = undefined;
+    this.previewFront = undefined;
+    this.previewBack = undefined;
     this.mode = 'main';
     this.busy = false;
   }
@@ -686,6 +744,148 @@ export class MenuScene extends ex.Scene {
     }
   }
 
+  private openCardStyle(): void {
+    this.mode = 'cards';
+    this.shade();
+
+    const box = CARD_STYLE.panel;
+    const panel = new ex.Actor({
+      pos: ex.vec(box.x, box.y),
+      anchor: ex.vec(0, 0),
+      z: 31,
+    });
+    panel.graphics.use(rect(box.w, box.h, PANEL, STROKE));
+    this.add(panel);
+    this.overlay.push(panel);
+    this.overlayText(box.x + 24, box.y + 16, 16, GOLD, () => 'Card Style');
+    this.overlayText(
+      box.x + 24,
+      box.y + 44,
+      8,
+      DIM,
+      () => 'Only your own cards use this. Saved on this browser.',
+    );
+
+    this.overlayText(
+      CARD_STYLE.frontRow.x,
+      CARD_STYLE.frontRow.labelY,
+      8,
+      DIM,
+      () => 'Card Front',
+    );
+    this.frontValueText = this.styleArrowRow(
+      CARD_STYLE.frontRow.x,
+      CARD_STYLE.frontRow.y,
+      () => {
+        const next = nextCardFrontStyle(getCardAppearance().front);
+        setCardFrontStyle(next);
+        this.refreshCardStyle();
+      },
+    );
+
+    this.overlayText(
+      CARD_STYLE.backRow.x,
+      CARD_STYLE.backRow.labelY,
+      8,
+      DIM,
+      () => 'Card Back',
+    );
+    this.backValueText = this.styleArrowRow(
+      CARD_STYLE.backRow.x,
+      CARD_STYLE.backRow.y,
+      () => {
+        const next = nextCardBackStyle(getCardAppearance().back);
+        setCardBackStyle(next);
+        this.refreshCardStyle();
+      },
+    );
+
+    const preview = CARD_STYLE.preview;
+    const previewFront = new ex.Actor({
+      pos: ex.vec(preview.frontX, preview.y),
+      anchor: ex.vec(0, 0),
+      z: 33,
+    });
+    this.add(previewFront);
+    this.overlay.push(previewFront);
+    this.previewFront = previewFront;
+
+    const previewBack = new ex.Actor({
+      pos: ex.vec(preview.backX, preview.y),
+      anchor: ex.vec(0, 0),
+      z: 33,
+    });
+    this.add(previewBack);
+    this.overlay.push(previewBack);
+    this.previewBack = previewBack;
+
+    const close = CARD_STYLE.close;
+    this.overlay.push(
+      this.button(
+        close.x,
+        close.y,
+        close.w,
+        close.h,
+        'Close',
+        16,
+        () => {
+          this.closeOverlay();
+        },
+        32,
+      ),
+    );
+
+    this.refreshCardStyle();
+  }
+
+  /**
+   * One row with a left arrow, the current style name, and a right arrow.
+   * Returns the text actor so `refreshCardStyle` can update it.
+   */
+  private styleArrowRow(x: number, y: number, onCycle: () => void): ex.Text {
+    const arrow = CARD_STYLE.arrow;
+    this.overlay.push(
+      this.button(x, y, arrow.w, arrow.h, '<', 16, onCycle, 32),
+    );
+    this.overlay.push(
+      this.button(
+        x + CARD_STYLE.arrowGap,
+        y,
+        arrow.w,
+        arrow.h,
+        '>',
+        16,
+        onCycle,
+        32,
+      ),
+    );
+    const text = canvasText('', 16, GOLD);
+    const textActor = new ex.Actor({
+      pos: ex.vec(x + arrow.w + 12, y + 4),
+      anchor: ex.vec(0, 0),
+      z: 33,
+    });
+    textActor.graphics.use(text);
+    this.add(textActor);
+    this.overlay.push(textActor);
+    return text;
+  }
+
+  private refreshCardStyle(): void {
+    const appearance = getCardAppearance();
+    if (this.frontValueText) {
+      this.frontValueText.text = CARD_FRONT_LABELS[appearance.front];
+    }
+    if (this.backValueText) {
+      this.backValueText.text = CARD_BACK_LABELS[appearance.back];
+    }
+    const mine = personalCardAtlas();
+    this.previewFront?.graphics.use(
+      scaled(mine.sprite({ rank: 'A', suit: 'spades' }), 1),
+    );
+    this.previewBack?.graphics.use(scaled(mine.back(), 1));
+  }
+
   private onKey(key: ex.Keys, value: string): void {
     if (this.mode === 'main') {
       return;
@@ -700,6 +900,9 @@ export class MenuScene extends ex.Scene {
       } else if (key === ex.Keys.ArrowDown) {
         this.selectGame(stepIndex(this.gameIndex, 1, GAME_CATALOG.length));
       }
+      return;
+    }
+    if (this.mode === 'cards') {
       return;
     }
     if (this.busy) {

@@ -118,6 +118,8 @@ class FlashActor extends ex.Actor {
 interface CardRecord {
   actor: ex.Actor;
   faceUp: boolean;
+  /** True for a card in the local player's own hole cards. */
+  personal: boolean;
   home: { x: number; y: number };
 }
 
@@ -447,7 +449,14 @@ export class PokerDriver implements GameDriver<PokerState> {
   private syncCards(state: PokerState, ctx: RenderContext): void {
     const desired = new Map<
       string,
-      { x: number; y: number; faceUp: boolean; z: number; opacity: number }
+      {
+        x: number;
+        y: number;
+        faceUp: boolean;
+        z: number;
+        opacity: number;
+        personal: boolean;
+      }
     >();
     const board = boardPositions(state.board.length);
     for (let index = 0; index < state.board.length; index += 1) {
@@ -462,6 +471,7 @@ export class PokerDriver implements GameDriver<PokerState> {
         faceUp: true,
         z: 8 + index,
         opacity: 1,
+        personal: false,
       });
     }
     const reveal = state.phase === 'finished' && state.end === 'showdown';
@@ -497,6 +507,7 @@ export class PokerDriver implements GameDriver<PokerState> {
           faceUp: seat.self || reveal,
           z: (seat.self ? 14 : 6) + index,
           opacity: row.folded ? FOLDED_CARD : 1,
+          personal: seat.self,
         });
       }
     }
@@ -588,9 +599,11 @@ export class PokerDriver implements GameDriver<PokerState> {
       faceUp: boolean;
       z: number;
       opacity: number;
+      personal: boolean;
     },
     ctx: RenderContext,
   ): void {
+    const atlas = place.personal ? ctx.myCards : ctx.cards;
     let record = this.cards.get(cardId);
     if (!record) {
       const actor = new ex.Actor({
@@ -600,7 +613,7 @@ export class PokerDriver implements GameDriver<PokerState> {
         height: CARD_DRAW,
         z: place.z,
       });
-      actor.graphics.use(cardSprite(ctx.cards, cardId, place.faceUp));
+      actor.graphics.use(cardSprite(atlas, cardId, place.faceUp));
       actor.on('pointerenter', () => {
         if (!this.droppable.has(cardId)) {
           return;
@@ -628,7 +641,12 @@ export class PokerDriver implements GameDriver<PokerState> {
         );
       });
       ctx.scene.add(actor);
-      record = { actor, faceUp: place.faceUp, home: place };
+      record = {
+        actor,
+        faceUp: place.faceUp,
+        personal: place.personal,
+        home: place,
+      };
       this.cards.set(cardId, record);
     }
     record.home = { x: place.x, y: place.y };
@@ -636,9 +654,10 @@ export class PokerDriver implements GameDriver<PokerState> {
     record.actor.graphics.opacity = place.opacity;
     record.actor.scale = ex.vec(1, 1);
     record.actor.pos = ex.vec(place.x, this.liftedY(cardId, place.y));
-    if (record.faceUp !== place.faceUp) {
+    if (record.faceUp !== place.faceUp || record.personal !== place.personal) {
       record.faceUp = place.faceUp;
-      record.actor.graphics.use(cardSprite(ctx.cards, cardId, place.faceUp));
+      record.personal = place.personal;
+      record.actor.graphics.use(cardSprite(atlas, cardId, place.faceUp));
     }
   }
 

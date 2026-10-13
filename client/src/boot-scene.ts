@@ -1,4 +1,9 @@
 import * as ex from 'excalibur';
+import {
+  getCardAppearance,
+  type CardBackStyle,
+  type CardFrontStyle,
+} from './card-appearance';
 import { CardAtlas, type CardFace } from './card-atlas';
 import { ChipAtlas } from './chip-atlas';
 import {
@@ -44,6 +49,26 @@ export const cardBackImage = new ex.ImageSource(
   '/assets/card-back-01.png',
   nearest,
 );
+export const cardBackBoldImage = new ex.ImageSource(
+  '/assets/card-back-02.png',
+  nearest,
+);
+export const heartsDarkImage = new ex.ImageSource(
+  '/assets/cards-hearts-dark.png',
+  nearest,
+);
+export const diamondsDarkImage = new ex.ImageSource(
+  '/assets/cards-diamonds-dark.png',
+  nearest,
+);
+export const clubsDarkImage = new ex.ImageSource(
+  '/assets/cards-clubs-dark.png',
+  nearest,
+);
+export const spadesDarkImage = new ex.ImageSource(
+  '/assets/cards-spades-dark.png',
+  nearest,
+);
 export const chipsImage = new ex.ImageSource(
   '/assets/chips-no-outline.png',
   nearest,
@@ -56,6 +81,58 @@ export const cardAtlas = new CardAtlas(heartsImage, cardBackImage, {
   spades: spadesImage,
 });
 export const chipAtlas = new ChipAtlas(chipsImage);
+
+const FRONT_IMAGES: Record<
+  CardFrontStyle,
+  {
+    hearts: ex.ImageSource;
+    diamonds: ex.ImageSource;
+    clubs: ex.ImageSource;
+    spades: ex.ImageSource;
+  }
+> = {
+  light: {
+    hearts: heartsImage,
+    diamonds: diamondsImage,
+    clubs: clubsImage,
+    spades: spadesImage,
+  },
+  dark: {
+    hearts: heartsDarkImage,
+    diamonds: diamondsDarkImage,
+    clubs: clubsDarkImage,
+    spades: spadesDarkImage,
+  },
+};
+
+const BACK_IMAGES: Record<CardBackStyle, ex.ImageSource> = {
+  classic: cardBackImage,
+  bold: cardBackBoldImage,
+};
+
+const personalCardAtlases: Partial<Record<string, CardAtlas>> = {};
+
+/**
+ * The local player's own card atlas: the front and back styles stored in
+ * `card-appearance.ts`. Built once per style pair and cached, since the
+ * underlying `ImageSource`s are already loaded by `demoImages`.
+ */
+export function personalCardAtlas(): CardAtlas {
+  const appearance = getCardAppearance();
+  const key = `${appearance.front}:${appearance.back}`;
+  const cached = personalCardAtlases[key];
+  if (cached) {
+    return cached;
+  }
+  const fronts = FRONT_IMAGES[appearance.front];
+  const atlas = new CardAtlas(fronts.hearts, BACK_IMAGES[appearance.back], {
+    diamonds: fronts.diamonds,
+    clubs: fronts.clubs,
+    spades: fronts.spades,
+  });
+  personalCardAtlases[key] = atlas;
+  return atlas;
+}
 
 export const greenTable = tables.sprite('green');
 greenTable.scale = ex.vec(TABLE_SCALE, TABLE_SCALE);
@@ -82,6 +159,11 @@ export const demoImages = [
   clubsImage,
   spadesImage,
   cardBackImage,
+  cardBackBoldImage,
+  heartsDarkImage,
+  diamondsDarkImage,
+  clubsDarkImage,
+  spadesDarkImage,
   chipsImage,
   ...TABLE_STYLES.map((style) => tableSprites[style].image),
   pixelFont,
