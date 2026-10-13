@@ -374,6 +374,7 @@ To keep things simple and anonymous but still reconnectable:
 
 - On first visit:
   - generate a `clientId` (UUID) and store it in `localStorage`.
+  - the name this client last used is `preferredNames` in `localStorage`, keyed by that `clientId`. Create Room and Join Room start with it. Another browser profile has its own `clientId` and does not see that name.
 - On lobby join:
   - client sends `clientId` + user-chosen `name`.
   - a join URL with a Discord user id (`discordUserId` or `discord_user_id`) plus a username also sends `discordUsername`, `discordGlobalName`, and `discordDiscriminator` when Discord included one. That calls `join_lobby_with_discord`. The display name is the mapped default (global name, otherwise username) and the join submits without typing.

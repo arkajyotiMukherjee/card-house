@@ -1,5 +1,5 @@
 import * as ex from 'excalibur';
-import { cardAtlas, chipsImage, greenTable, pixelFont } from './boot-scene';
+import { cardAtlas, chipsImage, pixelFont, tableSprites } from './boot-scene';
 import { ChipAtlas, type ChipColor } from './chip-atlas';
 import type { Rank, Suit } from './card-atlas';
 import { GAME_CATALOG, applyCodeKey, applyFieldKey, NAME_MAX } from './lobby';
@@ -8,6 +8,7 @@ import {
   MENU_BACKDROP,
   MENU_BUTTONS,
   MENU_TAGLINE,
+  MENU_THEME_BUTTON,
   MENU_TITLE,
   MENU_VERSION,
   PROMPT,
@@ -20,13 +21,19 @@ import {
   promptTitle,
   splitHowToPlay,
   stepIndex,
+  themeButtonLabel,
   wrapText,
   type FloaterSpec,
   type MenuAction,
   type PromptKind,
 } from './menu-layout';
 import { statsCaption } from './client-stats';
+import {
+  preferredNameForPrompt,
+  rememberPreferredName,
+} from './preferred-name';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from './sheets';
+import { TABLE_STYLES, type TableStyle } from './table-atlas';
 
 const FELT = ex.Color.fromHex('#145c38');
 const GOLD = ex.Color.fromHex('#f4e4b3');
@@ -101,6 +108,10 @@ interface Drifter {
 }
 
 export class MenuScene extends ex.Scene {
+  constructor(private readonly clientId = '') {
+    super();
+  }
+
   private mode: Mode = 'main';
   private enter: MenuEnter = () =>
     Promise.resolve('Still connecting to the server');
@@ -130,6 +141,11 @@ export class MenuScene extends ex.Scene {
   private listRows: Array<{ face: ex.Rectangle; label: ex.Text }> = [];
   private bodyActors: ex.Actor[] = [];
 
+  private style: TableStyle = 'green';
+  private onThemeChange: (style: TableStyle) => void = () => {};
+  private tableActor: ex.Actor | undefined;
+  private themeCaption: ex.Text | undefined;
+
   setStatus(line: string): void {
     this.statusText.text = line;
   }
@@ -145,6 +161,16 @@ export class MenuScene extends ex.Scene {
     }
   }
 
+  /**
+   * Sets the starting theme and the handler the Theme button calls on each
+   * switch. Repaints immediately if the menu table already exists.
+   */
+  connectTheme(style: TableStyle, onChange: (style: TableStyle) => void): void {
+    this.style = style;
+    this.onThemeChange = onChange;
+    this.repaintTheme();
+  }
+
   /** Called once the lobby panel can accept a name and code. */
   connect(enter: MenuEnter, onEntered: () => void): void {
     this.enter = enter;
@@ -154,6 +180,7 @@ export class MenuScene extends ex.Scene {
   /**
    * Opens Join Room with the code from a `/cardroom create` join URL.
    * A default Discord name joins without asking the player to type one.
+   * A saved preferred name only fills the field. It does not submit.
    */
   openJoin(code: string, defaultName = ''): void {
     if (this.mode !== 'main') {
@@ -173,6 +200,7 @@ export class MenuScene extends ex.Scene {
     this.buildBackdrop();
     this.buildTitle();
     this.buildButtons();
+    this.buildThemeButton();
     this.buildFooter();
     engine.input.keyboard.on('press', (evt) => {
       if (engine.currentScene !== this) {
@@ -204,8 +232,58 @@ export class MenuScene extends ex.Scene {
       anchor: ex.vec(0.5, 0.5),
       z: 0,
     });
-    table.graphics.use(scaled(greenTable.clone(), 8));
+    table.graphics.use(scaled(tableSprites[this.style].clone(), 8));
+    this.tableActor = table;
     this.add(table);
+  }
+
+  private buildThemeButton(): void {
+    const box = MENU_THEME_BUTTON;
+    const face = rect(box.w, box.h, BUTTON, STROKE);
+    const actor = new ex.Actor({
+      pos: ex.vec(box.x, box.y),
+      anchor: ex.vec(0, 0),
+      width: box.w,
+      height: box.h,
+      z: 10,
+    });
+    actor.graphics.use(face);
+    const caption = canvasText(themeButtonLabel(this.style), 8, GOLD);
+    const captionActor = new ex.Actor({
+      pos: ex.vec(8, (box.h - 8) / 2),
+      anchor: ex.vec(0, 0),
+    });
+    captionActor.graphics.use(caption);
+    actor.addChild(captionActor);
+    actor.on('pointerenter', () => {
+      face.strokeColor = STROKE_HOT;
+    });
+    actor.on('pointerleave', () => {
+      face.strokeColor = STROKE;
+    });
+    actor.on('pointerup', () => {
+      this.cycleTheme();
+    });
+    this.add(actor);
+    this.themeCaption = caption;
+  }
+
+  private cycleTheme(): void {
+    if (this.mode !== 'main') {
+      return;
+    }
+    const index = TABLE_STYLES.indexOf(this.style);
+    const next = TABLE_STYLES[(index + 1) % TABLE_STYLES.length] ?? 'green';
+    this.style = next;
+    this.repaintTheme();
+    this.onThemeChange(next);
+  }
+
+  private repaintTheme(): void {
+    this.tableActor?.graphics.use(scaled(tableSprites[this.style].clone(), 8));
+    if (this.themeCaption) {
+      this.themeCaption.text = themeButtonLabel(this.style);
+    }
   }
 
   private buildDrifters(): void {
@@ -355,7 +433,7 @@ export class MenuScene extends ex.Scene {
 
   private openPrompt(kind: PromptKind, code = '', name = ''): void {
     this.mode = kind;
-    this.name = name.slice(0, NAME_MAX);
+    this.name = preferredNameForPrompt(this.clientId, name);
     this.code = code;
     this.focused = 'name';
     this.shade();
@@ -482,6 +560,7 @@ export class MenuScene extends ex.Scene {
       this.setError(problem);
       return;
     }
+    rememberPreferredName(this.clientId, this.name);
     this.busy = true;
     this.setError('Working...', DIM);
     let failure: string | undefined;
@@ -688,6 +767,7 @@ export class MenuScene extends ex.Scene {
     this.setError('');
     if (this.focused === 'name') {
       this.name = applyFieldKey(this.name, key, NAME_MAX);
+      rememberPreferredName(this.clientId, this.name);
     } else {
       this.code = applyCodeKey(this.code, key);
     }
