@@ -309,7 +309,6 @@ These aren’t needed for v1, but the architecture supports them cleanly:
   - color theme (done: `theme` in localStorage, keyed by `clientId`; the menu Theme button cycles green, purple, and red felt),
   - card customizations (done: `cardAppearance` in localStorage stores a front style and a back style from the Pixel Poker Pack. Only the local player's own hand reads it (`RenderContext.myCards`); the table, piles, melds, and every other seat stay on the default `CardAtlas`. Not sent to SpacetimeDB),
   - simple stats (hands played, games won). `ClientStats` stores both for a `clientId`. A finished hand adds one hand for each seated player, and a game win adds one win for each winner.
-- **Tournaments**:
-  - structures composed of multiple tables and rounds.
+- **Tournaments** (done): one event groups several tables of one `gameType` into numbered rounds. A `Tournament` row holds `lobbyId`, `gameType`, `currentRound`, and `roundStatus` (`in_progress` or `complete`). `create_tournament(lobbyId, gameType, tableCount, settings?)` opens round 1 and creates `tableCount` `GameTable` rows tagged with that `tournamentId` and `round`. `handle_game_intent` recomputes `roundStatus` after a tournament table's status changes, so it reports `complete` once every table in the current round is `finished`. `create_tournament_round(tournamentId, tableCount, settings?)` rejects the next round (`Round is not complete`) until that happens, then creates the next round's tables and advances `currentRound`.
 
-You can schedule these after the core loop (lobby → tables → play → back to lobby) is rock solid.
+You can schedule other optional milestones after the core loop (lobby → tables → play → back to lobby) is rock solid.

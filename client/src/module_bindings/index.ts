@@ -39,6 +39,8 @@ import ClearTableDiscordVoiceReducer from "./clear_table_discord_voice_reducer";
 import CloseLobbyReducer from "./close_lobby_reducer";
 import CreateGameTableReducer from "./create_game_table_reducer";
 import CreateLobbyReducer from "./create_lobby_reducer";
+import CreateTournamentReducer from "./create_tournament_reducer";
+import CreateTournamentRoundReducer from "./create_tournament_round_reducer";
 import HandleGameIntentReducer from "./handle_game_intent_reducer";
 import JoinLobbyReducer from "./join_lobby_reducer";
 import JoinLobbyWithDiscordReducer from "./join_lobby_with_discord_reducer";
@@ -73,6 +75,7 @@ import SpeakingStateRow from "./speaking_state_table";
 import SpectatorRow from "./spectator_table";
 import TableChatMessageRow from "./table_chat_message_table";
 import TableCleanupScheduleRow from "./table_cleanup_schedule_table";
+import TournamentRow from "./tournament_table";
 import VoicePresenceRow from "./voice_presence_table";
 
 /** Type-only namespace exports for generated type groups. */
@@ -126,6 +129,9 @@ const tablesSchema = __schema({
       ] },
       { accessor: 'byLobby', name: 'GameTable_lobby_id_idx_btree', algorithm: 'btree', columns: [
         'lobbyId',
+      ] },
+      { accessor: 'byTournament', name: 'GameTable_tournament_id_idx_btree', algorithm: 'btree', columns: [
+        'tournamentId',
       ] },
     ],
     constraints: [
@@ -265,6 +271,20 @@ const tablesSchema = __schema({
       { name: 'TableCleanupSchedule_scheduled_id_key', constraint: 'unique', columns: ['scheduledId'] },
     ],
   }, TableCleanupScheduleRow),
+  tournament: __table({
+    name: 'Tournament',
+    indexes: [
+      { accessor: 'id', name: 'Tournament_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'byLobby', name: 'Tournament_lobby_id_idx_btree', algorithm: 'btree', columns: [
+        'lobbyId',
+      ] },
+    ],
+    constraints: [
+      { name: 'Tournament_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, TournamentRow),
   voicePresence: __table({
     name: 'VoicePresence',
     indexes: [
@@ -291,6 +311,8 @@ const reducersSchema = __reducers(
   __reducerSchema("close_lobby", CloseLobbyReducer),
   __reducerSchema("create_game_table", CreateGameTableReducer),
   __reducerSchema("create_lobby", CreateLobbyReducer),
+  __reducerSchema("create_tournament", CreateTournamentReducer),
+  __reducerSchema("create_tournament_round", CreateTournamentRoundReducer),
   __reducerSchema("handle_game_intent", HandleGameIntentReducer),
   __reducerSchema("join_lobby", JoinLobbyReducer),
   __reducerSchema("join_lobby_with_discord", JoinLobbyWithDiscordReducer),
@@ -342,6 +364,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "TableChatMessage": Omit<typeof tablesSchema.schemaType.tables["tableChatMessage"], "accessorName"> & { readonly accessorName: "TableChatMessage" };
     /** @deprecated Use `tableCleanupSchedule` instead. This alias will be removed in the next major version. */
     readonly "TableCleanupSchedule": Omit<typeof tablesSchema.schemaType.tables["tableCleanupSchedule"], "accessorName"> & { readonly accessorName: "TableCleanupSchedule" };
+    /** @deprecated Use `tournament` instead. This alias will be removed in the next major version. */
+    readonly "Tournament": Omit<typeof tablesSchema.schemaType.tables["tournament"], "accessorName"> & { readonly accessorName: "Tournament" };
     /** @deprecated Use `voicePresence` instead. This alias will be removed in the next major version. */
     readonly "VoicePresence": Omit<typeof tablesSchema.schemaType.tables["voicePresence"], "accessorName"> & { readonly accessorName: "VoicePresence" };
   };
@@ -375,6 +399,7 @@ const tableAccessorAliases = {
   "Spectator": "spectator",
   "TableChatMessage": "tableChatMessage",
   "TableCleanupSchedule": "tableCleanupSchedule",
+  "Tournament": "tournament",
   "VoicePresence": "voicePresence",
 } as const;
 
@@ -422,6 +447,8 @@ export type DbView = __DbViewBase & {
   readonly "TableChatMessage": __DbViewBase["tableChatMessage"];
   /** @deprecated Use `tableCleanupSchedule` instead. This alias will be removed in the next major version. */
   readonly "TableCleanupSchedule": __DbViewBase["tableCleanupSchedule"];
+  /** @deprecated Use `tournament` instead. This alias will be removed in the next major version. */
+  readonly "Tournament": __DbViewBase["tournament"];
   /** @deprecated Use `voicePresence` instead. This alias will be removed in the next major version. */
   readonly "VoicePresence": __DbViewBase["voicePresence"];
 };
@@ -454,6 +481,8 @@ export type Tables = __TablesBase & {
   readonly "TableChatMessage": __TablesBase["tableChatMessage"];
   /** @deprecated Use `tableCleanupSchedule` instead. This alias will be removed in the next major version. */
   readonly "TableCleanupSchedule": __TablesBase["tableCleanupSchedule"];
+  /** @deprecated Use `tournament` instead. This alias will be removed in the next major version. */
+  readonly "Tournament": __TablesBase["tournament"];
   /** @deprecated Use `voicePresence` instead. This alias will be removed in the next major version. */
   readonly "VoicePresence": __TablesBase["voicePresence"];
 };

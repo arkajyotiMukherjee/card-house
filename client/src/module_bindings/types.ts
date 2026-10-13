@@ -61,6 +61,8 @@ export const GameTable = __t.object("GameTable", {
   createdAt: __t.timestamp(),
   discordVoiceChannelId: __t.string(),
   lastActivityAt: __t.option(__t.timestamp()),
+  tournamentId: __t.string(),
+  round: __t.u32(),
 });
 export type GameTable = __Infer<typeof GameTable>;
 
@@ -187,6 +189,27 @@ export const TableStatus = __t.enum("TableStatus", {
   Finished: __t.unit(),
 });
 export type TableStatus = __Infer<typeof TableStatus>;
+
+export const Tournament = __t.object("Tournament", {
+  id: __t.string(),
+  lobbyId: __t.string(),
+  gameType: __t.string(),
+  name: __t.string(),
+  currentRound: __t.u32(),
+  get roundStatus() {
+    return TournamentRoundStatus;
+  },
+  createdAt: __t.timestamp(),
+  lastActivityAt: __t.option(__t.timestamp()),
+});
+export type Tournament = __Infer<typeof Tournament>;
+
+// The tagged union or sum type for the algebraic type `TournamentRoundStatus`.
+export const TournamentRoundStatus = __t.enum("TournamentRoundStatus", {
+  InProgress: __t.unit(),
+  Complete: __t.unit(),
+});
+export type TournamentRoundStatus = __Infer<typeof TournamentRoundStatus>;
 
 export const VoicePresence = __t.object("VoicePresence", {
   id: __t.string(),

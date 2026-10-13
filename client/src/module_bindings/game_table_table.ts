@@ -28,4 +28,6 @@ export default __t.row({
   createdAt: __t.timestamp().name("created_at"),
   discordVoiceChannelId: __t.string().name("discord_voice_channel_id"),
   lastActivityAt: __t.option(__t.timestamp()).name("last_activity_at"),
+  tournamentId: __t.string().name("tournament_id"),
+  round: __t.u32(),
 });

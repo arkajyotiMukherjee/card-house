@@ -53,6 +53,13 @@ export function tableCreatedLine(tableId: string, lobbyId: string): string {
   return `table created tableId=${tableId} lobbyId=${lobbyId}`;
 }
 
+export function tournamentCreatedLine(
+  tournamentId: string,
+  lobbyId: string,
+): string {
+  return `tournament created tournamentId=${tournamentId} lobbyId=${lobbyId}`;
+}
+
 export function rulesReason(message: string): string {
   const trimmed = message.trim().replace(/\s+/g, ' ');
   if (
