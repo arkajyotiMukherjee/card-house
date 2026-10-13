@@ -17,6 +17,7 @@ import {
 import { joinFailureMessage } from './join-errors';
 import type { DiscordJoinIdentity } from './join-path';
 import { rememberLobby } from './last-room';
+import { readPreferredName, rememberPreferredName } from './preferred-name';
 import { wrapText } from './menu-layout';
 import type { DbConnection } from './module_bindings';
 import { lobbySpeakers, SpeakingFader, type SpeakingRow } from './speaking';
@@ -146,7 +147,7 @@ export function mountLobbyPanel(
   renameBox.graphics.opacity = 0;
   saveButton.graphics.opacity = 0;
 
-  let name = '';
+  let name = readPreferredName(clientId);
   let code = '';
   let renameName = '';
   let focused: FieldId = 'name';
@@ -330,6 +331,7 @@ export function mountLobbyPanel(
         renameName = playerName;
         renameFocused = false;
         rememberLobby(room, playerName);
+        rememberPreferredName(clientId, playerName);
         syncJoinedLobby();
         if (
           joinedCode.length > 0 &&
@@ -371,6 +373,7 @@ export function mountLobbyPanel(
       .then(() => {
         renameName = playerName;
         rememberLobby(joinedCode, playerName);
+        rememberPreferredName(clientId, playerName);
         paintRename();
         syncJoinedLobby();
       })
