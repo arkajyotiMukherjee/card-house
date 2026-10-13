@@ -44,7 +44,8 @@ import {
   type PresenceRef,
 } from './voice-presence';
 import { PokerDriver } from './poker-driver';
-import { cardAtlas, greenTable } from './boot-scene';
+import { cardAtlas, tableSprites } from './boot-scene';
+import { type TableStyle } from './table-atlas';
 import {
   BUTTON,
   BUTTON_DOWN,
@@ -142,13 +143,21 @@ export class GameScene extends ex.Scene {
   private hudTurn!: ex.Text;
   private hudPhase!: ex.Text;
   private hudRound!: ex.Text;
+  private tableActor: ex.Actor | undefined;
 
   constructor(
     private readonly connection: DbConnection,
     private readonly clientId: string,
     private readonly onLeft: () => void,
+    private style: TableStyle = 'green',
   ) {
     super();
+  }
+
+  /** Repaints the felt for a theme switch without waiting for a reload. */
+  setTableStyle(style: TableStyle): void {
+    this.style = style;
+    this.tableActor?.graphics.use(tableSprites[style].clone());
   }
 
   open(tableId: string, lobbyMemberId: string): void {
@@ -178,7 +187,7 @@ export class GameScene extends ex.Scene {
   onInitialize(): void {
     this.backgroundColor = FELT;
 
-    const sprite = greenTable.clone();
+    const sprite = tableSprites[this.style].clone();
     sprite.scale = ex.vec(TABLE_SCALE, TABLE_SCALE);
     const table = new ex.Actor({
       pos: ex.vec(LOGICAL_WIDTH / 2, LOGICAL_HEIGHT / 2 + 8),
@@ -188,6 +197,7 @@ export class GameScene extends ex.Scene {
       z: 0,
     });
     table.graphics.use(sprite);
+    this.tableActor = table;
     this.add(table);
 
     this.waitingText = canvasText('', 8, DIM);
