@@ -23,8 +23,10 @@ import { mountLobbyPanel } from './lobby-panel';
 import { MenuScene } from './menu-scene';
 import type { DbConnection } from './module_bindings';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH, integerScale } from './sheets';
+import { getTheme, saveTheme } from './theme';
 
 const clientId = getOrCreateClientId();
+const theme = getTheme(clientId);
 const joinCode = roomCodeFromPath(window.location.pathname);
 const parsedIdentity = discordIdentityFromSearch(window.location.search);
 const discordIdentity =
@@ -58,7 +60,7 @@ function applyIntegerScale(): void {
   canvas.style.imageRendering = 'pixelated';
 }
 
-const scene = new BootScene();
+const scene = new BootScene(theme);
 engine.add('boot', scene);
 const menu = new MenuScene(clientId);
 engine.add('menu', menu);
@@ -76,10 +78,15 @@ void engine.start(loader).then(() => {
       menu.setStatus(line);
     },
     onSubscribed: (connection) => {
-      const game = new GameScene(connection, clientId, () => {
-        forgetTable();
-        engine.goToScene('boot');
-      });
+      const game = new GameScene(
+        connection,
+        clientId,
+        () => {
+          forgetTable();
+          engine.goToScene('boot');
+        },
+        theme,
+      );
       engine.add('game', game);
       const lobbyScene = new LobbyScene(
         engine,
@@ -111,6 +118,11 @@ void engine.start(loader).then(() => {
           engine.goToScene('boot');
         },
       );
+      menu.connectTheme(theme, (style) => {
+        saveTheme(clientId, style);
+        scene.setTableStyle(style);
+        game.setTableStyle(style);
+      });
       const savedRoom = joinCode ? undefined : readLastRoom();
       if (joinCode) {
         const joinName = joinNameFromSearch(window.location.search);
