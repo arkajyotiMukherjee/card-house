@@ -39,7 +39,7 @@ When the app loads (after assets), show the **Main Menu**:
   - stylized top-down table edge with scattered cards/chips.
   - occasional slow, looping animation (a card sliding a few pixels, chip glint).
 - Center:
-  - Game logo/title in big pixel font.
+  - Game logo/title “Card House” in big pixel font.
 - Below title:
   - Vertical stack of large buttons:
     - “Create Room”
@@ -91,7 +91,7 @@ This is the “card room” with people and tables.
   - a large central table silhouette or multiple faint table shapes as ambience.
 - **Top bar:**
   - Left: Room code, e.g. “Room: AB3D”.
-  - Center: Title, e.g. “Online Card Room”.
+  - Center: Title, e.g. “Card House”.
   - Right:
     - player count: “Players: 8 / 50”,
     - “Leave Room” button.
