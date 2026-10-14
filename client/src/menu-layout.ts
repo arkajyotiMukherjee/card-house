@@ -46,7 +46,7 @@ export function themeButtonLabel(style: TableStyle): string {
   return `Theme: ${style.charAt(0).toUpperCase()}${style.slice(1)}`;
 }
 
-export const MENU_TITLE = { text: 'CARD ROOM', size: 48, y: 96 } as const;
+export const MENU_TITLE = { text: 'Card House', size: 48, y: 96 } as const;
 export const MENU_TAGLINE = {
   text: 'Online card games with friends',
   size: 8,

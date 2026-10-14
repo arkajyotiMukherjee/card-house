@@ -4,6 +4,7 @@ import {
   FLOATER_MARGIN,
   MENU_BUTTONS,
   MENU_THEME_BUTTON,
+  MENU_TITLE,
   floaterPose,
   makeFloaters,
   nextFieldAfterEnter,
@@ -15,6 +16,12 @@ import {
   wrapText,
 } from './menu-layout';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from './sheets';
+
+describe('menu title', () => {
+  it('names the game Card House', () => {
+    expect(MENU_TITLE.text).toBe('Card House');
+  });
+});
 
 describe('menu buttons', () => {
   it('lists Create Room, Join Room, How to Play, and Card Style in a centered stack', () => {
