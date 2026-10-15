@@ -152,12 +152,22 @@ export function watchHit(localX: number, localY: number): boolean {
 
 export const CHAT_PANEL = {
   panel: { x: 170, y: 68, w: 620, h: 380 },
-  list: { x: 178, y: 76, bottom: 436, lineH: 12 },
+  /** Sits above the first message so the heading glyphs do not cover it. */
+  title: { x: 178, y: 76, size: 8 },
+  list: { x: 178, y: 88, bottom: 436, lineH: 12 },
   field: { x: 178, y: 440, w: 500, h: 24 },
   send: { x: 686, y: 440, w: 96, h: 24 },
 } as const;
 
 export const CHAT_BODY_MAX = 240;
+
+export const LEAVE_ROOM = { x: 800, y: 8, w: 152, h: 28 } as const;
+
+export const LEAVE_CONFIRM = {
+  panel: { x: 230, y: 170, w: 500, h: 150 },
+  leave: { x: 246, y: 268, w: 220, h: 32 },
+  cancel: { x: 486, y: 268, w: 220, h: 32 },
+} as const;
 
 export interface ChatMessageRow {
   id: string;

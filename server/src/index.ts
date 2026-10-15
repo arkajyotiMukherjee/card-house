@@ -51,6 +51,7 @@ import {
 import { stubGameDefinition } from '../../src/shared/games/stub';
 import {
   disconnectActivity,
+  forgetLobby,
   forgetTable,
   forgetTableForEveryone,
   lobbyCreatedLine,
@@ -61,6 +62,7 @@ import {
   tableCreatedLine,
   tournamentCreatedLine,
 } from './activity-log';
+import { idsForMember, markDisconnected } from './lobby-presence';
 import { discordProfile } from './discord-member';
 import { speakingRowId, voicePlace } from './speaking-state';
 import { stateIfLobbyReady } from './lobby-deal';
@@ -401,6 +403,7 @@ const OperatorSession = table(
     lobbyId: t.string(),
     tableId: t.string(),
     connected: t.bool(),
+    clientId: t.string().default(''),
   },
 );
 
@@ -700,14 +703,32 @@ export const on_connect = spacetimedb.clientConnected(
 export const client_disconnected = spacetimedb.clientDisconnected(
   { name: 'client_disconnected' },
   (ctx) => {
+    const identity = ctx.sender.toHexString();
+    const session = ctx.db.OperatorSession.identity.find(identity);
+    const lobbyId = session?.lobbyId ?? '';
+    const clientId = session?.clientId ?? '';
     const line = disconnectActivity(
       ctx.db,
-      ctx.sender.toHexString(),
+      identity,
       ctx.timestamp.microsSinceUnixEpoch,
     );
     if (line !== undefined) {
       console.log(line);
     }
+    if (lobbyId.length === 0 || clientId.length === 0) {
+      return;
+    }
+    const member = firstRow(
+      ctx.db.LobbyMember.byLobbyAndClient.filter([lobbyId, clientId]),
+    );
+    if (!member) {
+      return;
+    }
+    const away = markDisconnected(member);
+    ctx.db.LobbyMember.id.update({
+      ...away,
+      lastSeenAt: ctx.timestamp,
+    });
   },
 );
 
@@ -1151,7 +1172,12 @@ export const join_lobby = spacetimedb.reducer(
         connected: true,
         lastSeenAt: ctx.timestamp,
       });
-      rememberLobby(ctx.db, ctx.sender.toHexString(), lobby.id);
+      rememberLobby(
+        ctx.db,
+        ctx.sender.toHexString(),
+        lobby.id,
+        request.clientId,
+      );
       noteLobbyActivity(ctx, lobby.id);
       return;
     }
@@ -1168,7 +1194,7 @@ export const join_lobby = spacetimedb.reducer(
       discordGlobalName: '',
       discordDiscriminator: undefined,
     });
-    rememberLobby(ctx.db, ctx.sender.toHexString(), lobby.id);
+    rememberLobby(ctx.db, ctx.sender.toHexString(), lobby.id, request.clientId);
     noteLobbyActivity(ctx, lobby.id);
   },
 );
@@ -1238,7 +1264,12 @@ export const join_lobby_with_discord = spacetimedb.reducer(
         discordGlobalName: discord.discordGlobalName,
         discordDiscriminator: discord.discordDiscriminator,
       });
-      rememberLobby(ctx.db, ctx.sender.toHexString(), lobby.id);
+      rememberLobby(
+        ctx.db,
+        ctx.sender.toHexString(),
+        lobby.id,
+        request.clientId,
+      );
       noteLobbyActivity(ctx, lobby.id);
       return;
     }
@@ -1255,7 +1286,7 @@ export const join_lobby_with_discord = spacetimedb.reducer(
       discordGlobalName: discord.discordGlobalName,
       discordDiscriminator: discord.discordDiscriminator,
     });
-    rememberLobby(ctx.db, ctx.sender.toHexString(), lobby.id);
+    rememberLobby(ctx.db, ctx.sender.toHexString(), lobby.id, request.clientId);
     noteLobbyActivity(ctx, lobby.id);
   },
 );
@@ -2186,6 +2217,58 @@ export const spectate_table = spacetimedb.reducer(
     });
     rememberTable(ctx.db, ctx.sender.toHexString(), lobby.id, gameTable.id);
     noteLobbyActivity(ctx, lobby.id);
+  },
+);
+
+export const leave_lobby = spacetimedb.reducer(
+  { name: 'leave_lobby' },
+  {
+    lobbyId: t.string(),
+    clientId: t.string(),
+  },
+  (ctx, { lobbyId: rawLobbyId, clientId: rawClientId }) => {
+    const lobbyId = rawLobbyId.trim();
+    const clientId = rawClientId.trim();
+    if (lobbyId.length === 0) {
+      throw new SenderError('Lobby id is required');
+    }
+    if (clientId.length === 0) {
+      throw new SenderError('Client id is required');
+    }
+    const lobby = ctx.db.Lobby.id.find(lobbyId);
+    if (!lobby) {
+      throw new SenderError('Room not found');
+    }
+    const member = firstRow(
+      ctx.db.LobbyMember.byLobbyAndClient.filter([lobbyId, clientId]),
+    );
+    if (!member) {
+      throw new SenderError('Member not found');
+    }
+
+    const seats = [];
+    for (const seat of ctx.db.GameSeat.iter()) {
+      seats.push({ id: seat.id, lobbyMemberId: seat.lobbyMemberId });
+    }
+    const spectators = [];
+    for (const row of ctx.db.Spectator.iter()) {
+      spectators.push({ id: row.id, lobbyMemberId: row.lobbyMemberId });
+    }
+    const presence = [];
+    for (const row of ctx.db.VoicePresence.iter()) {
+      presence.push({ id: row.id, lobbyMemberId: row.lobbyMemberId });
+    }
+    for (const id of idsForMember(member.id, seats)) {
+      ctx.db.GameSeat.id.delete(id);
+    }
+    for (const id of idsForMember(member.id, spectators)) {
+      ctx.db.Spectator.id.delete(id);
+    }
+    for (const id of idsForMember(member.id, presence)) {
+      ctx.db.VoicePresence.id.delete(id);
+    }
+    ctx.db.LobbyMember.id.delete(member.id);
+    forgetLobby(ctx.db, ctx.sender.toHexString());
   },
 );
 
