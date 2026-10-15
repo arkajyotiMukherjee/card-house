@@ -1,3 +1,4 @@
+import { BUTTON_HEIGHT } from './button-style';
 import {
   CARD_DRAW,
   CHALLENGE_BUTTON,
@@ -38,7 +39,7 @@ export const DRAW_BUTTON = CHALLENGE_BUTTON;
 
 export const SUIT_BUTTON_Y = 412;
 export const SUIT_BUTTON_W = 64;
-export const SUIT_BUTTON_H = 28;
+export const SUIT_BUTTON_H = BUTTON_HEIGHT;
 
 export const SUIT_BUTTONS = [
   { suit: 'S', label: 'Spade', x: 688 },

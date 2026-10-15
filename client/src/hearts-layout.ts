@@ -1,3 +1,4 @@
+import { BUTTON_HEIGHT } from './button-style';
 import {
   canPassCard,
   canPlayCard,
@@ -28,8 +29,8 @@ export {
   opponentBackPositions,
 };
 
-export const PASS_BUTTON = { x: 748, y: 448, w: 96, h: 28 } as const;
-export const PLAY_BUTTON = { x: 852, y: 448, w: 96, h: 28 } as const;
+export const PASS_BUTTON = { x: 748, y: 448, w: 96, h: BUTTON_HEIGHT } as const;
+export const PLAY_BUTTON = { x: 852, y: 448, w: 96, h: BUTTON_HEIGHT } as const;
 
 const PENALTY_STEP = 18;
 const PENALTY_LANE = 66;

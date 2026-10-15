@@ -28,6 +28,11 @@ import {
   stockPositions,
   suitBadge,
 } from './crazy-eights-layout';
+import {
+  BUTTON_FONT_SIZE,
+  BUTTON_PRESS_SHIFT,
+  buttonCaptionPos,
+} from './button-style';
 import { canvasText, panelRect } from './canvas-ui';
 import type { CardAtlas } from './card-atlas';
 import type { GameDriver, InputEvent, RenderContext } from './game-driver';
@@ -821,11 +826,12 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
         this.suitActors.set(suit, actor);
       }
     }
+    const rest = buttonCaptionPos(label, box.w, box.h);
     const caption = new ex.Actor({
-      pos: ex.vec(8, 10),
+      pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
-    const text = canvasText(label, 8, GOLD);
+    const text = canvasText(label, BUTTON_FONT_SIZE, GOLD);
     caption.graphics.use(text);
     actor.addChild(caption);
     actor.on('pointerenter', () => {
@@ -837,16 +843,17 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
         face.strokeColor = STROKE;
         face.color = BUTTON;
       }
+      caption.pos = ex.vec(rest.x, rest.y);
     });
     actor.on('pointerdown', () => {
       face.color = BUTTON_DOWN;
-      caption.pos = ex.vec(8, 11);
+      caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
     });
     actor.on('pointerup', () => {
       if (!target.startsWith('suit:')) {
         face.color = BUTTON;
       }
-      caption.pos = ex.vec(8, 10);
+      caption.pos = ex.vec(rest.x, rest.y);
       const state = this.state;
       const current = this.ctx;
       if (!state || !current) {

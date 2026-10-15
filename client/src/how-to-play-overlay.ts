@@ -1,5 +1,11 @@
 import * as ex from 'excalibur';
 import {
+  BUTTON_FONT_SIZE,
+  BUTTON_HEIGHT,
+  BUTTON_PRESS_SHIFT,
+  buttonCaptionPos,
+} from './button-style';
+import {
   BUTTON,
   BUTTON_DOWN,
   canvasText,
@@ -145,11 +151,12 @@ export class HowToPlayOverlay {
     });
     const face = panelRect(box.w, box.h, PLATE, STROKE);
     actor.graphics.use(face);
+    const rest = buttonCaptionPos('?', box.w, box.h);
     const caption = new ex.Actor({
-      pos: ex.vec(10, 10),
+      pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText('?', 8, GOLD));
+    caption.graphics.use(canvasText('?', BUTTON_FONT_SIZE, GOLD));
     actor.addChild(caption);
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;
@@ -160,9 +167,11 @@ export class HowToPlayOverlay {
     });
     actor.on('pointerdown', () => {
       face.color = BUTTON_DOWN;
+      caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
     });
     actor.on('pointerup', () => {
       face.color = PLATE;
+      caption.pos = ex.vec(rest.x, rest.y);
       this.toggle();
     });
     this.scene.add(actor);
@@ -238,7 +247,7 @@ export class HowToPlayOverlay {
   private buildCloseButton(): ex.Actor {
     const panel = HOW_TO_PLAY_PANEL;
     const w = 120;
-    const h = 28;
+    const h = BUTTON_HEIGHT;
     const actor = new ex.Actor({
       pos: ex.vec(
         panel.x + panel.w - w - HOW_TO_PLAY_TEXT.padding,
@@ -251,11 +260,12 @@ export class HowToPlayOverlay {
     });
     const face = panelRect(w, h, BUTTON, STROKE);
     actor.graphics.use(face);
+    const rest = buttonCaptionPos('Close', w, h);
     const caption = new ex.Actor({
-      pos: ex.vec(36, 10),
+      pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText('Close', 8, GOLD));
+    caption.graphics.use(canvasText('Close', BUTTON_FONT_SIZE, GOLD));
     actor.addChild(caption);
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;
@@ -266,9 +276,11 @@ export class HowToPlayOverlay {
     });
     actor.on('pointerdown', () => {
       face.color = BUTTON_DOWN;
+      caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
     });
     actor.on('pointerup', () => {
       face.color = BUTTON;
+      caption.pos = ex.vec(rest.x, rest.y);
       this.close();
     });
     return actor;

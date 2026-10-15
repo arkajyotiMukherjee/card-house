@@ -13,6 +13,11 @@ import {
   handPositions,
   opponentBackPositions,
 } from './bluff-layout';
+import {
+  BUTTON_FONT_SIZE,
+  BUTTON_PRESS_SHIFT,
+  buttonCaptionPos,
+} from './button-style';
 import { chipAtlas, pixelFont } from './boot-scene';
 import type { CardAtlas } from './card-atlas';
 import type { GameDriver, InputEvent, RenderContext } from './game-driver';
@@ -845,13 +850,14 @@ export class SpadesDriver implements GameDriver<SpadesState> {
     });
     const face = panelRect(box.w, box.h, BUTTON, STROKE);
     actor.graphics.use(face);
+    const rest = buttonCaptionPos('Play', box.w, box.h);
     const caption = new ex.Actor({
-      pos: ex.vec(8, 10),
+      pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText('Play', 8, GOLD));
+    caption.graphics.use(canvasText('Play', BUTTON_FONT_SIZE, GOLD));
     actor.addChild(caption);
-    this.bindButton(actor, face, caption, 'play');
+    this.bindButton(actor, face, caption, rest, 'play');
     ctx.scene.add(actor);
     this.playButton = actor;
   }
@@ -868,13 +874,14 @@ export class SpadesDriver implements GameDriver<SpadesState> {
     const face = panelRect(box.w, box.h, BUTTON, STROKE);
     actor.graphics.use(face);
     const label = bidButtonLabel(tricks);
+    const rest = buttonCaptionPos(label, box.w, box.h);
     const caption = new ex.Actor({
-      pos: ex.vec(Math.max(4, Math.floor((box.w - label.length * 8) / 2)), 10),
+      pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText(label, 8, GOLD));
+    caption.graphics.use(canvasText(label, BUTTON_FONT_SIZE, GOLD));
     actor.addChild(caption);
-    this.bindButton(actor, face, caption, `bid:${tricks}`);
+    this.bindButton(actor, face, caption, rest, `bid:${tricks}`);
     ctx.scene.add(actor);
     this.bidButtons.push({ tricks, actor });
   }
@@ -883,6 +890,7 @@ export class SpadesDriver implements GameDriver<SpadesState> {
     actor: ex.Actor,
     face: ex.Rectangle,
     caption: ex.Actor,
+    rest: { x: number; y: number },
     target: string,
   ): void {
     actor.on('pointerenter', () => {
@@ -891,14 +899,15 @@ export class SpadesDriver implements GameDriver<SpadesState> {
     actor.on('pointerleave', () => {
       face.strokeColor = STROKE;
       face.color = BUTTON;
+      caption.pos = ex.vec(rest.x, rest.y);
     });
     actor.on('pointerdown', () => {
       face.color = BUTTON_DOWN;
-      caption.pos = ex.vec(caption.pos.x, 11);
+      caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
     });
     actor.on('pointerup', () => {
       face.color = BUTTON;
-      caption.pos = ex.vec(caption.pos.x, 10);
+      caption.pos = ex.vec(rest.x, rest.y);
       const state = this.state;
       const current = this.ctx;
       if (!state || !current) {

@@ -11,6 +11,11 @@ import {
   pokerRaiseTo,
   type PokerState,
 } from '../../src/shared/games/poker';
+import {
+  BUTTON_FONT_SIZE,
+  BUTTON_PRESS_SHIFT,
+  buttonCaptionPos,
+} from './button-style';
 import { chipsImage } from './boot-scene';
 import {
   DIM,
@@ -342,11 +347,12 @@ export class PokerDriver implements GameDriver<PokerState> {
         z: 20,
       });
       actor.graphics.use(face);
+      const rest = buttonCaptionPos(spec.label, spec.box.w, spec.box.h);
       const caption = new ex.Actor({
-        pos: ex.vec(8, 10),
+        pos: ex.vec(rest.x, rest.y),
         anchor: ex.vec(0, 0),
       });
-      caption.graphics.use(canvasText(spec.label, 8, GOLD));
+      caption.graphics.use(canvasText(spec.label, BUTTON_FONT_SIZE, GOLD));
       actor.addChild(caption);
       const target = spec.target;
       actor.on('pointerenter', () => {
@@ -355,14 +361,15 @@ export class PokerDriver implements GameDriver<PokerState> {
       actor.on('pointerleave', () => {
         face.strokeColor = STROKE;
         face.color = BUTTON;
+        caption.pos = ex.vec(rest.x, rest.y);
       });
       actor.on('pointerdown', () => {
         face.color = BUTTON_DOWN;
-        caption.pos = ex.vec(8, 11);
+        caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
       });
       actor.on('pointerup', () => {
         face.color = BUTTON;
-        caption.pos = ex.vec(8, 10);
+        caption.pos = ex.vec(rest.x, rest.y);
         const current = this.state;
         const context = this.ctx;
         if (!current || !context) {

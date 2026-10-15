@@ -1,4 +1,9 @@
 import * as ex from 'excalibur';
+import {
+  BUTTON_FONT_SIZE,
+  BUTTON_PRESS_SHIFT,
+  buttonCaptionPos,
+} from './button-style';
 import { cardAtlas, pixelFont } from './boot-scene';
 import { statsCaption } from './client-stats';
 import { subscribeLobbyTables } from './connect';
@@ -383,7 +388,13 @@ export class LobbyScene {
     });
     this.chatInputBox.graphics.use(panelRect(field.w, field.h, FIELD, STROKE));
     this.scene.add(this.chatInputBox);
-    this.chatInputText = this.addLabel(field.x + 6, field.y + 8, '_', 8, GOLD);
+    this.chatInputText = this.addLabel(
+      field.x + 6,
+      field.y + Math.round((field.h - BUTTON_FONT_SIZE) / 2),
+      '_',
+      BUTTON_FONT_SIZE,
+      GOLD,
+    );
     this.chatInputBox.on('pointerup', () => {
       roomComposer.focus('chat');
     });
@@ -1193,7 +1204,11 @@ export class LobbyScene {
     });
     caption.pointer.useGraphicsBounds = false;
     caption.pointer.useColliderShape = false;
-    caption.graphics.use(canvasText('Watch', 8, watching ? INK : GOLD));
+    const watchLabel = buttonCaptionPos('Watch', box.w, box.h);
+    caption.pos = ex.vec(watchLabel.x, watchLabel.y);
+    caption.graphics.use(
+      canvasText('Watch', BUTTON_FONT_SIZE, watching ? INK : GOLD),
+    );
     button.addChild(caption);
   }
 
@@ -1323,9 +1338,10 @@ export class LobbyScene {
     });
     const face = panelRect(box.w, box.h, BUTTON, STROKE);
     actor.graphics.use(face);
-    const captionText = canvasText(caption, 8, GOLD);
+    const captionText = canvasText(caption, BUTTON_FONT_SIZE, GOLD);
+    const rest = buttonCaptionPos(caption, box.w, box.h);
     const captionActor = new ex.Actor({
-      pos: ex.vec(8, 9),
+      pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
     captionActor.graphics.use(captionText);
@@ -1336,14 +1352,15 @@ export class LobbyScene {
     actor.on('pointerleave', () => {
       face.strokeColor = STROKE;
       face.color = BUTTON;
+      captionActor.pos = ex.vec(rest.x, rest.y);
     });
     actor.on('pointerdown', () => {
       face.color = BUTTON_DOWN;
-      captionActor.pos = ex.vec(8, 10);
+      captionActor.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
     });
     actor.on('pointerup', () => {
       face.color = BUTTON;
-      captionActor.pos = ex.vec(8, 9);
+      captionActor.pos = ex.vec(rest.x, rest.y);
       onPress();
     });
     if (parent) {

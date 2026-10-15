@@ -1,5 +1,6 @@
 import type { CardFace } from './card-atlas';
 import { rankOfCard, type BluffState } from '../../src/shared/games/bluff';
+import { BUTTON_HEIGHT } from './button-style';
 
 export const HAND_LEFT = 16;
 export const HAND_RIGHT = 736;
@@ -10,8 +11,13 @@ export const PILE_X = 480;
 export const PILE_Y = 268;
 export const TABLE_CENTER = { x: 480, y: 270 } as const;
 
-export const PLAY_BUTTON = { x: 748, y: 448, w: 96, h: 28 } as const;
-export const CHALLENGE_BUTTON = { x: 852, y: 448, w: 96, h: 28 } as const;
+export const PLAY_BUTTON = { x: 748, y: 448, w: 96, h: BUTTON_HEIGHT } as const;
+export const CHALLENGE_BUTTON = {
+  x: 852,
+  y: 448,
+  w: 96,
+  h: BUTTON_HEIGHT,
+} as const;
 
 const PILE_SHOWN = 8;
 const PILE_STEP = 20;

@@ -4,6 +4,11 @@ import {
   type HeartsState,
 } from '../../src/shared/games/hearts';
 import { PILE_X, PILE_Y } from './bluff-layout';
+import {
+  BUTTON_FONT_SIZE,
+  BUTTON_PRESS_SHIFT,
+  buttonCaptionPos,
+} from './button-style';
 import { pixelFont } from './boot-scene';
 import type { CardAtlas } from './card-atlas';
 import type { GameDriver, InputEvent, RenderContext } from './game-driver';
@@ -715,11 +720,12 @@ export class HeartsDriver implements GameDriver<HeartsState> {
     });
     const face = panelRect(box.w, box.h, BUTTON, STROKE);
     actor.graphics.use(face);
+    const rest = buttonCaptionPos(label, box.w, box.h);
     const caption = new ex.Actor({
-      pos: ex.vec(8, 10),
+      pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText(label, 8, GOLD));
+    caption.graphics.use(canvasText(label, BUTTON_FONT_SIZE, GOLD));
     actor.addChild(caption);
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;
@@ -727,14 +733,15 @@ export class HeartsDriver implements GameDriver<HeartsState> {
     actor.on('pointerleave', () => {
       face.strokeColor = STROKE;
       face.color = BUTTON;
+      caption.pos = ex.vec(rest.x, rest.y);
     });
     actor.on('pointerdown', () => {
       face.color = BUTTON_DOWN;
-      caption.pos = ex.vec(8, 11);
+      caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
     });
     actor.on('pointerup', () => {
       face.color = BUTTON;
-      caption.pos = ex.vec(8, 10);
+      caption.pos = ex.vec(rest.x, rest.y);
       const state = this.state;
       const current = this.ctx;
       if (!state || !current) {
