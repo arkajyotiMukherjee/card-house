@@ -74,7 +74,7 @@ const TITLE_SHADOW = ex.Color.fromHex('#07140d');
 
 const FLOATER_COUNT = 14;
 const TITLE_DROP = 4;
-/** Below the Card Style button (y 424, h 44) and above the status line. */
+/** Below the Card Style button (y 424, h 44) and above the version marker. */
 const STATS_Y = 492;
 
 export interface MenuEntry {
@@ -144,7 +144,6 @@ export class MenuScene extends ex.Scene {
   private enter: MenuEnter = () =>
     Promise.resolve(roomEntryError('connecting'));
   private onEntered: () => void = () => {};
-  private statusText = canvasText('SpacetimeDB: starting', 8, DIM);
   private statsText = canvasText(
     statsCaption({ handsPlayed: 0, gamesWon: 0 }),
     8,
@@ -178,10 +177,6 @@ export class MenuScene extends ex.Scene {
   private onThemeChange: (style: TableStyle) => void = () => {};
   private tableActor: ex.Actor | undefined;
   private themeCaption: ex.Text | undefined;
-
-  setStatus(line: string): void {
-    this.statusText.text = line;
-  }
 
   /**
    * Create and Join read this before they call a reducer. A drop while the
@@ -411,13 +406,6 @@ export class MenuScene extends ex.Scene {
   }
 
   private buildFooter(): void {
-    const status = new ex.Actor({
-      pos: ex.vec(12, LOGICAL_HEIGHT - 20),
-      anchor: ex.vec(0, 0),
-      z: 10,
-    });
-    status.graphics.use(this.statusText);
-    this.add(status);
     const statsLine = this.statsText.text;
     const statsWidth = statsLine.length * 8;
     this.statsActor = new ex.Actor({

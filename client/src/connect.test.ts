@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  SERVER_UNREACHABLE,
-  connectionLine,
-  roomEntryError,
-  sdkHost,
-} from './connect';
+import { SERVER_UNREACHABLE, roomEntryError, sdkHost } from './connect';
 
 describe('sdk host', () => {
   it('turns a websocket URI into the http URI the SDK opens itself', () => {
@@ -22,26 +17,6 @@ describe('sdk host', () => {
       'https://maincloud.spacetimedb.com',
     );
     expect(sdkHost('http://127.0.0.1:3000')).toBe('http://127.0.0.1:3000');
-  });
-});
-
-describe('connection status', () => {
-  it('names a disconnected host without calling it an error', () => {
-    expect(
-      connectionLine(
-        'disconnected',
-        'https://maincloud.spacetimedb.com',
-        'cardhouse',
-      ),
-    ).toBe(
-      'SpacetimeDB: disconnected https://maincloud.spacetimedb.com / cardhouse',
-    );
-  });
-
-  it('keeps an error detail on the status line', () => {
-    expect(
-      connectionLine('error', 'http://127.0.0.1:3000', 'cardroom', 'closed'),
-    ).toBe('SpacetimeDB: error closed (http://127.0.0.1:3000 / cardroom)');
   });
 });
 

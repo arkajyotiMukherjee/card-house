@@ -17,7 +17,6 @@ import {
 import { TABLE_STYLES, TableAtlas, type TableStyle } from './table-atlas';
 
 const FELT = ex.Color.fromHex('#145c38');
-const STATUS = ex.Color.fromHex('#f4e4b3');
 
 const nearest = { filtering: ex.ImageFiltering.Pixel };
 
@@ -180,18 +179,6 @@ function scaled(sprite: ex.Sprite, scale: number): ex.Sprite {
 }
 
 export class BootScene extends ex.Scene {
-  private status = new ex.Text({
-    text: 'SpacetimeDB: starting',
-    font: pixelFont.toFont({
-      // Excalibur joins the family into a canvas font shorthand. An unquoted
-      // name with spaces is rejected, and the context keeps 10px sans-serif.
-      family: '"Press Start 2P"',
-      size: 16,
-      color: STATUS,
-      quality: 1,
-      filtering: ex.ImageFiltering.Pixel,
-    }),
-  });
   private tableActor: ex.Actor | undefined;
 
   constructor(private style: TableStyle = 'green') {
@@ -226,18 +213,6 @@ export class BootScene extends ex.Scene {
     }
 
     this.addChipStack(680, 188);
-
-    const label = new ex.Actor({
-      pos: ex.vec(16, 512),
-      anchor: ex.vec(0, 0),
-      z: 10,
-    });
-    label.graphics.use(this.status);
-    this.add(label);
-  }
-
-  setStatus(text: string): void {
-    this.status.text = text;
   }
 
   /** Repaints the felt for a theme switch without waiting for a reload. */

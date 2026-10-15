@@ -77,10 +77,6 @@ void engine.start(loader).then(() => {
   applyCoverScale();
   connectCardroom(
     {
-      onStatus: (line) => {
-        scene.setStatus(line);
-        menu.setStatus(line);
-      },
       onPhase: (phase) => {
         menu.setConnectionPhase(phase);
       },
