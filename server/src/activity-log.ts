@@ -19,6 +19,8 @@ export interface OperatorSessionRow {
   lobbyId: string;
   tableId: string;
   connected: boolean;
+  /** Browser `clientId` for the member this connection joined as. Empty until a join. */
+  clientId: string;
 }
 
 export interface ConnectionRateRow {
@@ -123,14 +125,18 @@ export function rememberLobby(
   db: ActivityDb,
   identity: string,
   lobbyId: string,
+  clientId = '',
 ): void {
   const session = db.OperatorSession.identity.find(identity);
+  const storedClient =
+    clientId.length > 0 ? clientId : (session?.clientId ?? '');
   if (session == null) {
     db.OperatorSession.insert({
       identity,
       lobbyId,
       tableId: '',
       connected: true,
+      clientId: storedClient,
     });
     return;
   }
@@ -139,6 +145,7 @@ export function rememberLobby(
     lobbyId,
     tableId: session.lobbyId === lobbyId ? session.tableId : '',
     connected: true,
+    clientId: storedClient,
   });
 }
 
@@ -155,6 +162,7 @@ export function rememberTable(
       lobbyId,
       tableId,
       connected: true,
+      clientId: '',
     });
     return;
   }
@@ -163,6 +171,7 @@ export function rememberTable(
     lobbyId,
     tableId,
     connected: true,
+    clientId: session.clientId,
   });
 }
 
@@ -176,6 +185,21 @@ export function forgetTable(
     return;
   }
   db.OperatorSession.identity.update({ ...session, tableId: '' });
+}
+
+/** Drops the lobby from this connection after Leave Room. The member row is removed separately. */
+export function forgetLobby(db: ActivityDb, identity: string): void {
+  const session = db.OperatorSession.identity.find(identity);
+  if (session == null) {
+    return;
+  }
+  db.OperatorSession.identity.update({
+    ...session,
+    lobbyId: '',
+    tableId: '',
+    clientId: '',
+    connected: false,
+  });
 }
 
 export function forgetTableForEveryone(db: ActivityDb, tableId: string): void {

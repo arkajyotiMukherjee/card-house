@@ -1,4 +1,4 @@
-import { createServer } from 'node:http';
+import { createServer, type Server } from 'node:http';
 import { pathToFileURL } from 'node:url';
 import { registerSlashCommands } from './commands.ts';
 import { discordRestApi } from './discord-http.ts';
@@ -20,7 +20,11 @@ import {
   type VoiceChannelClient,
 } from './voice-channels.ts';
 
-export async function main(): Promise<void> {
+function redact(message: string, token: string): string {
+  return token.length > 0 ? message.split(token).join('[redacted]') : message;
+}
+
+export async function main(attached?: Server): Promise<void> {
   const publicKey = process.env.DISCORD_PUBLIC_KEY?.trim() ?? '';
   if (publicKey.length === 0) {
     throw new Error('DISCORD_PUBLIC_KEY is required');
@@ -35,69 +39,110 @@ export async function main(): Promise<void> {
     token.length > 0
       ? voiceChannelClient(discordRestApi({ token }))
       : undefined;
-  if (token.length > 0 && applicationId.length > 0) {
-    await registerSlashCommands({
-      token,
-      applicationId,
-      guildId: process.env.DISCORD_GUILD_ID,
+  let connection: Awaited<ReturnType<typeof connectLobby>> | undefined;
+  const app = createApp({
+    publicKey,
+    createLobby: (discordChannelId, guildId) => {
+      if (!connection) {
+        return Promise.reject(new Error('Still connecting to SpacetimeDB'));
+      }
+      return createDiscordLobbyWithVoice(
+        connection,
+        voice,
+        discordChannelId,
+        guildId,
+        publicUrl,
+      );
+    },
+    lookupPlayerName: (discordUserId) =>
+      lookupDefaultPlayerName(discordUserId, token),
+    lobbyStatus: (roomCode) => {
+      if (!connection) {
+        return Promise.reject(new Error('Still connecting to SpacetimeDB'));
+      }
+      return readLobbyStatus(connection, roomCode);
+    },
+  });
+  if (attached) {
+    attached.removeAllListeners('request');
+    attached.on('request', app);
+  } else {
+    const server = createServer(app);
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(port, '0.0.0.0', () => {
+        resolve();
+      });
     });
-    console.log('Registered /cardroom create and /cardroom status');
+  }
+  console.log(`Discord interactions listening on ${port}`);
+
+  if (token.length > 0 && applicationId.length > 0) {
+    try {
+      await registerSlashCommands({
+        token,
+        applicationId,
+        guildId: process.env.DISCORD_GUILD_ID,
+      });
+      console.log('Registered /cardroom create and /cardroom status');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Bot failed';
+      console.error(redact(message, token));
+    }
   } else {
     console.log(
       'DISCORD_BOT_TOKEN or DISCORD_APPLICATION_ID is unset; slash command registration skipped',
     );
   }
 
-  const connection = await connectLobby(host, database);
+  if (typeof globalThis.WebSocket !== 'function') {
+    const undici = await import('undici');
+    globalThis.WebSocket =
+      undici.WebSocket as unknown as typeof globalThis.WebSocket;
+  }
+  try {
+    connection = await connectLobby(host, database);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Bot failed';
+    console.error(redact(message, token));
+    return;
+  }
+  const lobby = connection;
   if (voice) {
-    attachVoiceWatch(connection, voice);
-    let queue: Promise<void> = Promise.resolve();
-    const enqueue = (task: () => Promise<void>): void => {
-      queue = queue.then(task, task);
-    };
-    connectVoiceGateway({
-      token,
-      handlers: {
-        onGuildVoice: (guildId, states) => {
-          enqueue(() => syncGuildVoice(connection, guildId, states));
+    try {
+      attachVoiceWatch(lobby, voice);
+      let queue: Promise<void> = Promise.resolve();
+      const enqueue = (task: () => Promise<void>): void => {
+        queue = queue.then(task, task);
+      };
+      connectVoiceGateway({
+        token,
+        handlers: {
+          onGuildVoice: (guildId, states) => {
+            enqueue(() => syncGuildVoice(lobby, guildId, states));
+          },
+          onVoiceState: (_guildId, state) => {
+            enqueue(() => recordVoiceState(lobby, state));
+          },
         },
-        onVoiceState: (_guildId, state) => {
-          enqueue(() => recordVoiceState(connection, state));
-        },
-      },
-    });
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Bot failed';
+      console.error(redact(message, token));
+    }
   }
   if (token.length > 0) {
-    const speakingProbe = await probeSpeakingGateway(token);
-    if (speakingProbe.status === 401) {
-      console.log('Discord speaking gateway unauthorized (401)');
+    try {
+      const speakingProbe = await probeSpeakingGateway(token);
+      if (speakingProbe.status === 401) {
+        console.log('Discord speaking gateway unauthorized (401)');
+      }
+      attachSpeakingWatch(lobby, createSpeakingGateway(token, speakingProbe));
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Bot failed';
+      console.error(redact(message, token));
     }
-    attachSpeakingWatch(
-      connection,
-      createSpeakingGateway(token, speakingProbe),
-    );
   }
-  const app = createApp({
-    publicKey,
-    createLobby: (discordChannelId, guildId) =>
-      createDiscordLobbyWithVoice(
-        connection,
-        voice,
-        discordChannelId,
-        guildId,
-        publicUrl,
-      ),
-    lookupPlayerName: (discordUserId) =>
-      lookupDefaultPlayerName(discordUserId, token),
-    lobbyStatus: (roomCode) => readLobbyStatus(connection, roomCode),
-  });
-  const server = createServer(app);
-  await new Promise<void>((resolve) => {
-    server.listen(port, '0.0.0.0', () => {
-      resolve();
-    });
-  });
-  console.log(`Discord interactions listening on ${port}`);
 }
 
 const invoked = process.argv[1];

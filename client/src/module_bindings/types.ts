@@ -129,6 +129,7 @@ export const OperatorSession = __t.object("OperatorSession", {
   lobbyId: __t.string(),
   tableId: __t.string(),
   connected: __t.bool(),
+  clientId: __t.string(),
 });
 export type OperatorSession = __Infer<typeof OperatorSession>;
 

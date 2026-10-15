@@ -4,6 +4,7 @@ import { statsCaption } from './client-stats';
 import { subscribeLobbyTables } from './connect';
 import { joinFailureMessage, wrapTableError } from './join-errors';
 import { tableToReopen } from './last-room';
+import { roomComposer } from './room-composer';
 import {
   IDLE_CARDS,
   IDLE_OPACITY,
@@ -14,6 +15,8 @@ import {
   applyChatKey,
   CHAT_BODY_MAX,
   CHAT_PANEL,
+  LEAVE_CONFIRM,
+  LEAVE_ROOM,
   chatLines,
   clampPlayerCount,
   CREATE_TABLE,
@@ -150,6 +153,8 @@ export class LobbyScene {
   private chatInputBox: ex.Actor | undefined;
   private chatInputText: ex.Text | undefined;
   private chatErrorText: ex.Text | undefined;
+  private leaveConfirm: ex.Actor | undefined;
+  private leavingRoom = false;
 
   constructor(
     private readonly engine: ex.Engine,
@@ -160,6 +165,7 @@ export class LobbyScene {
       tableId: string,
       lobbyMemberId: string,
     ) => void = () => {},
+    private readonly onLeftRoom: () => void = () => {},
   ) {}
 
   setStats(line: string): void {
@@ -223,16 +229,22 @@ export class LobbyScene {
       this.renderChat();
     });
     this.bindChatKeyboard();
+    roomComposer.watch(() => {
+      this.chatFocused = roomComposer.active() === 'chat';
+      this.paintChatField();
+    });
   }
 
   openLobby(lobbyId: string, code = ''): Promise<boolean> {
     this.lobbyId = lobbyId;
     this.lobbyCode = code;
+    this.closeLeaveConfirm();
     this.ensurePanel();
     this.paintCode();
     this.paintDiscordBadge();
     this.chatBody = '';
     this.chatFocused = false;
+    roomComposer.blur('chat');
     this.paintChatField();
     this.setChatError('');
     if (this.subscribedLobbyId === lobbyId) {
@@ -332,6 +344,7 @@ export class LobbyScene {
     this.buildBanner();
     this.buildIdleCards();
     this.buildChatPanel();
+    this.buildLeaveRoom();
     const stats = new ex.Actor({
       pos: ex.vec(170, 500),
       anchor: ex.vec(0, 0),
@@ -352,7 +365,13 @@ export class LobbyScene {
     });
     backdrop.graphics.use(panelRect(box.w, box.h, PANEL, STROKE));
     this.scene.add(backdrop);
-    this.addLabel(CHAT_PANEL.list.x, box.y + 8, 'Chat', 8, DIM);
+    this.addLabel(
+      CHAT_PANEL.title.x,
+      CHAT_PANEL.title.y,
+      'Chat',
+      CHAT_PANEL.title.size,
+      DIM,
+    );
 
     const field = CHAT_PANEL.field;
     this.chatInputBox = new ex.Actor({
@@ -366,8 +385,7 @@ export class LobbyScene {
     this.scene.add(this.chatInputBox);
     this.chatInputText = this.addLabel(field.x + 6, field.y + 8, '_', 8, GOLD);
     this.chatInputBox.on('pointerup', () => {
-      this.chatFocused = true;
-      this.paintChatField();
+      roomComposer.focus('chat');
     });
 
     this.button(CHAT_PANEL.send, 'Send', () => {
@@ -384,13 +402,93 @@ export class LobbyScene {
     this.paintChatField();
   }
 
+  private buildLeaveRoom(): void {
+    this.button(LEAVE_ROOM, 'Leave Room', () => {
+      this.openLeaveConfirm();
+    });
+  }
+
+  private openLeaveConfirm(): void {
+    if (this.leaveConfirm || this.lobbyId.length === 0 || this.leavingRoom) {
+      return;
+    }
+    roomComposer.clear();
+    const box = LEAVE_CONFIRM.panel;
+    const panel = new ex.Actor({
+      pos: ex.vec(box.x, box.y),
+      anchor: ex.vec(0, 0),
+      width: box.w,
+      height: box.h,
+      z: 40,
+    });
+    panel.graphics.use(panelRect(box.w, box.h, PANEL, STROKE_HOT));
+    this.scene.add(panel);
+    this.childLabel(panel, 16, 20, 'Leave the room?', GOLD);
+    this.childLabel(
+      panel,
+      16,
+      40,
+      "You'll lose your seats at all tables.",
+      DIM,
+    );
+    this.button(
+      LEAVE_CONFIRM.leave,
+      'Leave',
+      () => {
+        void this.confirmLeave();
+      },
+      panel,
+    );
+    this.button(
+      LEAVE_CONFIRM.cancel,
+      'Cancel',
+      () => {
+        this.closeLeaveConfirm();
+      },
+      panel,
+    );
+    this.leaveConfirm = panel;
+  }
+
+  private closeLeaveConfirm(): void {
+    this.leaveConfirm?.kill();
+    this.leaveConfirm = undefined;
+  }
+
+  private async confirmLeave(): Promise<void> {
+    if (this.leavingRoom || this.lobbyId.length === 0) {
+      return;
+    }
+    this.leavingRoom = true;
+    this.setError('');
+    const lobbyId = this.lobbyId;
+    try {
+      await this.connection.reducers.leaveLobby({
+        lobbyId,
+        clientId: this.clientId,
+      });
+      this.closeLeaveConfirm();
+      this.lobbyId = '';
+      this.lobbyCode = '';
+      this.leavingRoom = false;
+      this.onLeftRoom();
+    } catch (error: unknown) {
+      this.leavingRoom = false;
+      this.setError(errorMessage(error));
+    }
+  }
+
   private bindChatKeyboard(): void {
     if (this.chatKeyboardBound) {
       return;
     }
     this.chatKeyboardBound = true;
     this.engine.input.keyboard.on('press', (evt) => {
-      if (!this.chatFocused || this.engine.currentScene !== this.scene) {
+      if (
+        roomComposer.active() !== 'chat' ||
+        this.engine.currentScene !== this.scene ||
+        this.leaveConfirm
+      ) {
         return;
       }
       if (evt.originalEvent?.ctrlKey || evt.originalEvent?.metaKey) {

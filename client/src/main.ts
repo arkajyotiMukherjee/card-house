@@ -20,7 +20,7 @@ import {
 } from './discord-join';
 import { discordIdentityFromSearch, roomCodeFromPath } from './join-path';
 import { LobbyScene } from './lobby-scene';
-import { mountLobbyPanel } from './lobby-panel';
+import { mountLobbyPanel, type LobbyPanel } from './lobby-panel';
 import { MenuScene } from './menu-scene';
 import type { DbConnection } from './module_bindings';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH, integerScale } from './sheets';
@@ -70,8 +70,14 @@ window.addEventListener('resize', applyIntegerScale);
 applyIntegerScale();
 
 const loader = new ex.Loader(demoImages);
+const savedRoomAtStart = joinCode ? undefined : readLastRoom();
 void engine.start(loader).then(() => {
-  engine.goToScene('menu');
+  if (savedRoomAtStart) {
+    scene.setStatus('Rejoining room');
+    engine.goToScene('boot');
+  } else {
+    engine.goToScene('menu');
+  }
   applyIntegerScale();
   connectCardroom(
     {
@@ -90,6 +96,7 @@ void engine.start(loader).then(() => {
           theme,
         );
         engine.add('game', game);
+        const joined: { panel?: LobbyPanel } = {};
         const lobbyScene = new LobbyScene(
           engine,
           scene,
@@ -100,6 +107,11 @@ void engine.start(loader).then(() => {
             game.open(tableId, lobbyMemberId);
             engine.goToScene('game');
           },
+          () => {
+            clearLastRoom();
+            joined.panel?.resetAfterLeave();
+            engine.goToScene('menu');
+          },
         );
         lobbyScene.mount();
         const panel = mountLobbyPanel(
@@ -109,11 +121,13 @@ void engine.start(loader).then(() => {
           clientId,
           discordIdentity,
           {
+            returning: savedRoomAtStart !== undefined,
             onJoined: (lobby) => {
               void lobbyScene.openLobby(lobby.id, lobby.code);
             },
           },
         );
+        joined.panel = panel;
         menu.connect(
           (entry) => panel.enter(entry.kind, entry.name, entry.code),
           () => {
@@ -150,6 +164,10 @@ void engine.start(loader).then(() => {
           if (error) {
             if (roomGoneMessage(error)) {
               clearLastRoom();
+              panel.resetAfterLeave();
+              engine.goToScene('menu');
+            } else {
+              scene.setStatus(error);
             }
             return;
           }

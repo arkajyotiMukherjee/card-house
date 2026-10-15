@@ -17,6 +17,7 @@ import {
 import { joinFailureMessage } from './join-errors';
 import type { DiscordJoinIdentity } from './join-path';
 import { rememberLobby } from './last-room';
+import { roomComposer } from './room-composer';
 import { readPreferredName, rememberPreferredName } from './preferred-name';
 import { wrapText } from './menu-layout';
 import type { DbConnection } from './module_bindings';
@@ -50,6 +51,8 @@ export interface LobbyPanel {
     playerName: string,
     roomCode: string,
   ) => Promise<string | undefined>;
+  /** Clears a joined room after Leave Room so the next create or join can run. */
+  resetAfterLeave: () => void;
 }
 
 function canvasText(text: string, size: number, color: ex.Color): ex.Text {
@@ -111,7 +114,10 @@ export function mountLobbyPanel(
   connection: DbConnection,
   clientId: string,
   discordIdentity: DiscordJoinIdentity | undefined,
-  handlers: { onJoined?: (lobby: LobbyRow) => void } = {},
+  handlers: {
+    onJoined?: (lobby: LobbyRow) => void;
+    returning?: boolean;
+  } = {},
 ): LobbyPanel {
   const backdrop = new ex.Actor({
     pos: ex.vec(8, 44),
@@ -362,7 +368,7 @@ export function mountLobbyPanel(
     }
     errorText.text = '';
     busy = true;
-    renameFocused = false;
+    roomComposer.blur('name');
     return joinMember(
       connection,
       clientId,
@@ -378,7 +384,7 @@ export function mountLobbyPanel(
         syncJoinedLobby();
       })
       .catch((error: unknown) => {
-        renameFocused = true;
+        roomComposer.focus('name');
         const message =
           error instanceof Error ? error.message : 'Could not rename';
         fail(message);
@@ -412,8 +418,7 @@ export function mountLobbyPanel(
     if (joinedCode.length === 0 || busy) {
       return;
     }
-    renameFocused = true;
-    paintRename();
+    roomComposer.focus('name');
   });
   saveButton.on('pointerup', () => {
     void saveName();
@@ -427,7 +432,7 @@ export function mountLobbyPanel(
       return;
     }
     if (joinedCode.length > 0) {
-      if (!renameFocused || busy) {
+      if (roomComposer.active() !== 'name' || busy) {
         return;
       }
       if (evt.key === ex.Keys.Backspace) {
@@ -496,6 +501,17 @@ export function mountLobbyPanel(
   connection.db.speakingState.onDelete(refreshSpeaking);
 
   paintFields();
+  if (handlers.returning) {
+    setFormVisible(false);
+  }
+  roomComposer.watch(() => {
+    const next = roomComposer.active() === 'name';
+    if (renameFocused === next) {
+      return;
+    }
+    renameFocused = next;
+    paintRename();
+  });
 
   return {
     enter: (kind, playerName, roomCode) => {
@@ -503,6 +519,23 @@ export function mountLobbyPanel(
       code = roomCode;
       paintFields();
       return submit(kind);
+    },
+    resetAfterLeave: () => {
+      joinedCode = '';
+      joinedLobbyId = '';
+      speaking = new Set();
+      roomComposer.clear();
+      for (const actor of nameActors) {
+        actor.kill();
+      }
+      nameActors.length = 0;
+      roomLabel.text = '';
+      roomCode.text = '';
+      playersLabel.text = '';
+      errorText.text = '';
+      renameName = '';
+      setFormVisible(true);
+      paintFields();
     },
   };
 

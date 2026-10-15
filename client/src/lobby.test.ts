@@ -19,6 +19,7 @@ import {
   listLayout,
   lobbyByCode,
   lobbyLaunchedFromDiscord,
+  CHAT_PANEL,
   ROOM_BANNER,
   lobbyTableQueries,
   memberByClient,
@@ -34,6 +35,15 @@ import {
   WATCH_BUTTON,
   watchHit,
 } from './lobby';
+
+describe('lobby chat layout', () => {
+  it('draws the first message below the Chat heading', () => {
+    const titleBottom = CHAT_PANEL.title.y + CHAT_PANEL.title.size;
+    expect(CHAT_PANEL.list.y).toBeGreaterThanOrEqual(titleBottom);
+    expect(CHAT_PANEL.list.x).toBe(CHAT_PANEL.title.x);
+    expect(CHAT_PANEL.list.bottom).toBeLessThanOrEqual(CHAT_PANEL.field.y);
+  });
+});
 
 describe('lobby fields', () => {
   it('keeps letters, digits, and spaces inside the name limit', () => {
