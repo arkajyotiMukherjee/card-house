@@ -81,6 +81,20 @@ export const CARD_STYLE = {
 
 export type PromptKind = 'create' | 'join';
 
+export type MenuMode = 'main' | PromptKind | 'howto' | 'cards';
+
+/**
+ * A menu button runs only on the main menu, and only when the open dialog
+ * did not already take this click. Card Style's Close sits on How to Play.
+ * Closing the dialog must not count as pressing the button underneath.
+ */
+export function menuAcceptsAction(
+  mode: MenuMode,
+  overlayClaimedClick: boolean,
+): boolean {
+  return mode === 'main' && !overlayClaimedClick;
+}
+
 export interface PromptField {
   id: 'name' | 'code';
   label: string;

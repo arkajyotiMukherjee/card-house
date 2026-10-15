@@ -2,7 +2,7 @@
 
 ## Visual Style
 
-The whole experience lives inside a single Excalibur.js canvas with a fixed virtual resolution (for example 960×540) and integer scaling, so pixels stay crisp.
+The whole experience lives inside a single Excalibur.js canvas with a fixed virtual resolution (960×540). The canvas scales to cover the browser window, and `image-rendering: pixelated` keeps the pixels crisp.
 
 - Art style is consistent with the Pixel Tabletop Kit:
   - green felt tables,

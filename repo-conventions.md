@@ -82,7 +82,7 @@ Excalibur `0.32.0`. Logical resolution is `960×540` (`LOGICAL_WIDTH` and `LOGIC
 
 `client/src/main.ts` builds the engine with `DisplayMode.Fixed`, `antialiasing: false`, `snapToPixel: true`, `suppressHiDPIScaling: true`, `pixelRatio: 1`, and `suppressPlayButton: true`. Felt color is `#145c38`. Sprites use `{ filtering: ex.ImageFiltering.Pixel }`.
 
-`integerScale` is the largest integer that fits the window, and at least `1`. The canvas style is `image-rendering: pixelated`. `client/index.html` sets the same on `canvas`, and paints the page around it `#07140d`.
+`coverViewport` in `client/src/sheets.ts` is the CSS size `main.ts` applies. It scales the 960×540 canvas uniformly until both window edges are covered, then centers the extra. The canvas style is `image-rendering: pixelated`. `client/index.html` sets the same on `canvas`, hides overflow, and paints the page `#07140d`. `integerScale` is still the largest integer that fits, and at least `1`.
 
 `docs/ui-ux.md` draws menus and buttons in the canvas. `index.html` is the host, not a UI kit.
 

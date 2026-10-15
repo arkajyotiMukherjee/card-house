@@ -23,7 +23,7 @@ import { LobbyScene } from './lobby-scene';
 import { mountLobbyPanel, type LobbyPanel } from './lobby-panel';
 import { MenuScene } from './menu-scene';
 import type { DbConnection } from './module_bindings';
-import { LOGICAL_HEIGHT, LOGICAL_WIDTH, integerScale } from './sheets';
+import { LOGICAL_HEIGHT, LOGICAL_WIDTH, coverViewport } from './sheets';
 import { getTheme, saveTheme } from './theme';
 
 const clientId = getOrCreateClientId();
@@ -51,14 +51,16 @@ const engine = new ex.Engine({
   pixelRatio: 1,
 });
 
-function applyIntegerScale(): void {
-  const scale = integerScale(window.innerWidth, window.innerHeight);
-  engine.screen.viewport = {
-    width: LOGICAL_WIDTH * scale,
-    height: LOGICAL_HEIGHT * scale,
-  };
+function applyCoverScale(): void {
+  const covered = coverViewport(window.innerWidth, window.innerHeight);
+  engine.screen.viewport = covered;
   engine.screen.applyResolutionAndViewport();
   canvas.style.imageRendering = 'pixelated';
+  canvas.style.position = 'absolute';
+  const extraX = covered.width - window.innerWidth;
+  const extraY = covered.height - window.innerHeight;
+  canvas.style.left = extraX > 0 ? `${-extraX / 2}px` : '0px';
+  canvas.style.top = extraY > 0 ? `${-extraY / 2}px` : '0px';
 }
 
 const scene = new BootScene(theme);
@@ -66,8 +68,8 @@ engine.add('boot', scene);
 const menu = new MenuScene(clientId);
 engine.add('menu', menu);
 
-window.addEventListener('resize', applyIntegerScale);
-applyIntegerScale();
+window.addEventListener('resize', applyCoverScale);
+applyCoverScale();
 
 const loader = new ex.Loader(demoImages);
 const savedRoomAtStart = joinCode ? undefined : readLastRoom();
@@ -78,12 +80,11 @@ void engine.start(loader).then(() => {
   } else {
     engine.goToScene('menu');
   }
-  applyIntegerScale();
+  applyCoverScale();
   connectCardroom(
     {
-      onStatus: (line) => {
-        scene.setStatus(line);
-        menu.setStatus(line);
+      onPhase: (phase) => {
+        menu.setConnectionPhase(phase);
       },
       onSubscribed: (connection) => {
         const game = new GameScene(
@@ -123,6 +124,7 @@ void engine.start(loader).then(() => {
           {
             returning: savedRoomAtStart !== undefined,
             onJoined: (lobby) => {
+              scene.setStatus('');
               void lobbyScene.openLobby(lobby.id, lobby.code);
             },
           },

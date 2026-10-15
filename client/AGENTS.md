@@ -10,7 +10,7 @@ Style and asset rules: [../repo-conventions.md](../repo-conventions.md). Source 
 - `tsconfig.json` — strict TypeScript, `include` is `src` only.
 - `vite.config.ts` — `0.0.0.0:5173`, `envDir` the repo root, `__SPACETIMEDB_HOST__`, `__SPACETIMEDB_DB__`, and `__CARDROOM_BOT_URL__`.
 - `vitest.config.ts` — Node environment, `src/**/*.test.ts`, setup `src/test-setup.ts`.
-- `index.html` — `#app` and one canvas. Page background `#07140d`. `image-rendering: pixelated` on `canvas`.
+- `index.html` — `#app` and one canvas. Page background `#07140d`. The canvas covers the window. `image-rendering: pixelated` on `canvas`.
 - `public/assets/` — the sheets, tables, and Press Start 2P font the client loads. Paths are `/assets/...`.
 
 ## Changes

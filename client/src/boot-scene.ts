@@ -181,12 +181,10 @@ function scaled(sprite: ex.Sprite, scale: number): ex.Sprite {
 
 export class BootScene extends ex.Scene {
   private status = new ex.Text({
-    text: 'SpacetimeDB: starting',
+    text: '',
     font: pixelFont.toFont({
-      // Excalibur joins the family into a canvas font shorthand. An unquoted
-      // name with spaces is rejected, and the context keeps 10px sans-serif.
       family: '"Press Start 2P"',
-      size: 16,
+      size: 8,
       color: STATUS,
       quality: 1,
       filtering: ex.ImageFiltering.Pixel,
@@ -236,6 +234,7 @@ export class BootScene extends ex.Scene {
     this.add(label);
   }
 
+  /** A short rejoin or error line. Empty by default, so the host is not shown. */
   setStatus(text: string): void {
     this.status.text = text;
   }
