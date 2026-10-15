@@ -74,3 +74,32 @@ export function integerScale(
   const scaleY = Math.floor(viewportHeight / logicalHeight);
   return Math.max(1, Math.min(scaleX, scaleY));
 }
+
+/**
+ * CSS size of the 960×540 canvas so it covers the window. One axis matches
+ * the viewport and the other is larger, so the page has no empty bars.
+ * `Math.ceil` avoids a fractional undershoot that would show a hairline.
+ */
+export function coverViewport(
+  viewportWidth: number,
+  viewportHeight: number,
+  logicalWidth = LOGICAL_WIDTH,
+  logicalHeight = LOGICAL_HEIGHT,
+): { width: number; height: number } {
+  if (
+    viewportWidth <= 0 ||
+    viewportHeight <= 0 ||
+    logicalWidth <= 0 ||
+    logicalHeight <= 0
+  ) {
+    return { width: logicalWidth, height: logicalHeight };
+  }
+  const scale = Math.max(
+    viewportWidth / logicalWidth,
+    viewportHeight / logicalHeight,
+  );
+  return {
+    width: Math.ceil(logicalWidth * scale),
+    height: Math.ceil(logicalHeight * scale),
+  };
+}

@@ -19,6 +19,11 @@ import {
 } from './card-appearance';
 import { GAME_CATALOG, applyCodeKey, applyFieldKey, NAME_MAX } from './lobby';
 import {
+  roomEntryError,
+  SERVER_UNREACHABLE,
+  type ConnectionPhase,
+} from './connect';
+import {
   CARD_STYLE,
   HOW_TO_PLAY,
   MENU_BACKDROP,
@@ -30,6 +35,7 @@ import {
   PROMPT,
   floaterPose,
   makeFloaters,
+  menuAcceptsAction,
   nextFieldAfterEnter,
   promptError,
   promptFields,
@@ -41,6 +47,7 @@ import {
   wrapText,
   type FloaterSpec,
   type MenuAction,
+  type MenuMode,
   type PromptKind,
 } from './menu-layout';
 import { statsCaption } from './client-stats';
@@ -79,7 +86,7 @@ export interface MenuEntry {
 /** Resolves to an error message, or undefined once the lobby was entered. */
 export type MenuEnter = (entry: MenuEntry) => Promise<string | undefined>;
 
-type Mode = 'main' | PromptKind | 'howto' | 'cards';
+type Mode = MenuMode;
 
 function canvasText(text: string, size: number, color: ex.Color): ex.Text {
   const graphic = new ex.Text({
@@ -131,8 +138,11 @@ export class MenuScene extends ex.Scene {
   }
 
   private mode: Mode = 'main';
+  private phase: ConnectionPhase = 'connecting';
+  private submitAttempt = 0;
+  private clickClaimedByOverlay = false;
   private enter: MenuEnter = () =>
-    Promise.resolve('Still connecting to the server');
+    Promise.resolve(roomEntryError('connecting'));
   private onEntered: () => void = () => {};
   private statusText = canvasText('SpacetimeDB: starting', 8, DIM);
   private statsText = canvasText(
@@ -171,6 +181,20 @@ export class MenuScene extends ex.Scene {
 
   setStatus(line: string): void {
     this.statusText.text = line;
+  }
+
+  /**
+   * Create and Join read this before they call a reducer. A drop while the
+   * dialog says Working clears that line so the player can try again.
+   */
+  setConnectionPhase(phase: ConnectionPhase): void {
+    this.phase = phase;
+    if (!this.busy || phase === 'connected' || phase === 'connecting') {
+      return;
+    }
+    this.submitAttempt += 1;
+    this.busy = false;
+    this.setError(SERVER_UNREACHABLE);
   }
 
   setStats(line: string): void {
@@ -292,7 +316,7 @@ export class MenuScene extends ex.Scene {
   }
 
   private cycleTheme(): void {
-    if (this.mode !== 'main') {
+    if (!menuAcceptsAction(this.mode, this.clickClaimedByOverlay)) {
       return;
     }
     const index = TABLE_STYLES.indexOf(this.style);
@@ -415,7 +439,7 @@ export class MenuScene extends ex.Scene {
   }
 
   private onAction(action: MenuAction): void {
-    if (this.mode !== 'main') {
+    if (!menuAcceptsAction(this.mode, this.clickClaimedByOverlay)) {
       return;
     }
     if (action === 'howto') {
@@ -458,8 +482,26 @@ export class MenuScene extends ex.Scene {
       z: 30,
     });
     shade.graphics.use(rect(LOGICAL_WIDTH, LOGICAL_HEIGHT, SHADE, SHADE));
+    this.claimOverlayPointer(shade);
     this.add(shade);
     this.overlay.push(shade);
+  }
+
+  /** Stops this click from reaching the menu buttons under the dialog. */
+  private claimOverlayClick(event: { cancel: () => void }): void {
+    event.cancel();
+    this.clickClaimedByOverlay = true;
+    queueMicrotask(() => {
+      this.clickClaimedByOverlay = false;
+    });
+  }
+
+  private claimOverlayPointer(actor: ex.Actor): void {
+    const claim = (event: { cancel: () => void }): void => {
+      this.claimOverlayClick(event);
+    };
+    actor.on('pointerdown', claim);
+    actor.on('pointerup', claim);
   }
 
   private openPrompt(kind: PromptKind, code = '', name = ''): void {
@@ -473,9 +515,12 @@ export class MenuScene extends ex.Scene {
     const panel = new ex.Actor({
       pos: ex.vec(box.x, box.y),
       anchor: ex.vec(0, 0),
+      width: box.w,
+      height: box.h,
       z: 31,
     });
     panel.graphics.use(rect(box.w, box.h, PANEL, STROKE));
+    this.claimOverlayPointer(panel);
     this.add(panel);
     this.overlay.push(panel);
 
@@ -495,7 +540,11 @@ export class MenuScene extends ex.Scene {
         z: 32,
       });
       actor.graphics.use(face);
-      actor.on('pointerup', () => {
+      actor.on('pointerdown', (event) => {
+        this.claimOverlayClick(event);
+      });
+      actor.on('pointerup', (event) => {
+        this.claimOverlayClick(event);
         this.focused = field.id;
         this.paintPrompt();
       });
@@ -544,6 +593,7 @@ export class MenuScene extends ex.Scene {
         void this.submitPrompt();
       },
       32,
+      true,
     );
     const cancel = this.button(
       PROMPT.cancel.x,
@@ -556,6 +606,7 @@ export class MenuScene extends ex.Scene {
         this.closeOverlay();
       },
       32,
+      true,
     );
     this.overlay.push(submit, cancel);
     this.paintPrompt();
@@ -592,7 +643,14 @@ export class MenuScene extends ex.Scene {
       return;
     }
     rememberPreferredName(this.clientId, this.name);
+    const blocked = roomEntryError(this.phase);
+    if (blocked) {
+      this.setError(blocked);
+      return;
+    }
     this.busy = true;
+    this.submitAttempt += 1;
+    const attempt = this.submitAttempt;
     this.setError('Working...', DIM);
     let failure: string | undefined;
     try {
@@ -604,7 +662,7 @@ export class MenuScene extends ex.Scene {
     } catch (error: unknown) {
       failure = error instanceof Error ? error.message : 'Could not join';
     }
-    if (this.mode !== kind) {
+    if (attempt !== this.submitAttempt || this.mode !== kind) {
       return;
     }
     this.busy = false;
@@ -632,9 +690,12 @@ export class MenuScene extends ex.Scene {
     const panel = new ex.Actor({
       pos: ex.vec(box.x, box.y),
       anchor: ex.vec(0, 0),
+      width: box.w,
+      height: box.h,
       z: 31,
     });
     panel.graphics.use(rect(box.w, box.h, PANEL, STROKE));
+    this.claimOverlayPointer(panel);
     this.add(panel);
     this.overlay.push(panel);
     this.overlayText(box.x + 16, box.y + 16, 16, GOLD, () => 'How to Play');
@@ -655,7 +716,11 @@ export class MenuScene extends ex.Scene {
         z: 32,
       });
       row.graphics.use(face);
-      row.on('pointerup', () => {
+      row.on('pointerdown', (event) => {
+        this.claimOverlayClick(event);
+      });
+      row.on('pointerup', (event) => {
+        this.claimOverlayClick(event);
         this.selectGame(index);
       });
       this.add(row);
@@ -685,6 +750,7 @@ export class MenuScene extends ex.Scene {
           this.closeOverlay();
         },
         32,
+        true,
       ),
     );
     this.renderGame();
@@ -752,9 +818,12 @@ export class MenuScene extends ex.Scene {
     const panel = new ex.Actor({
       pos: ex.vec(box.x, box.y),
       anchor: ex.vec(0, 0),
+      width: box.w,
+      height: box.h,
       z: 31,
     });
     panel.graphics.use(rect(box.w, box.h, PANEL, STROKE));
+    this.claimOverlayPointer(panel);
     this.add(panel);
     this.overlay.push(panel);
     this.overlayText(box.x + 24, box.y + 16, 16, GOLD, () => 'Card Style');
@@ -832,6 +901,7 @@ export class MenuScene extends ex.Scene {
           this.closeOverlay();
         },
         32,
+        true,
       ),
     );
 
@@ -845,7 +915,7 @@ export class MenuScene extends ex.Scene {
   private styleArrowRow(x: number, y: number, onCycle: () => void): ex.Text {
     const arrow = CARD_STYLE.arrow;
     this.overlay.push(
-      this.button(x, y, arrow.w, arrow.h, '<', 16, onCycle, 32),
+      this.button(x, y, arrow.w, arrow.h, '<', 16, onCycle, 32, true),
     );
     this.overlay.push(
       this.button(
@@ -857,6 +927,7 @@ export class MenuScene extends ex.Scene {
         16,
         onCycle,
         32,
+        true,
       ),
     );
     const text = canvasText('', 16, GOLD);
@@ -987,6 +1058,7 @@ export class MenuScene extends ex.Scene {
     size: number,
     onPress: () => void,
     z: number,
+    claim = false,
   ): ex.Actor {
     const actor = new ex.Actor({
       pos: ex.vec(x, y),
@@ -1013,11 +1085,17 @@ export class MenuScene extends ex.Scene {
       face.color = BUTTON;
       captionActor.pos = ex.vec(captionX, captionY);
     });
-    actor.on('pointerdown', () => {
+    actor.on('pointerdown', (event) => {
+      if (claim) {
+        this.claimOverlayClick(event);
+      }
       face.color = BUTTON_DOWN;
       captionActor.pos = ex.vec(captionX, captionY + 1);
     });
-    actor.on('pointerup', () => {
+    actor.on('pointerup', (event) => {
+      if (claim) {
+        this.claimOverlayClick(event);
+      }
       face.color = BUTTON;
       captionActor.pos = ex.vec(captionX, captionY);
       onPress();

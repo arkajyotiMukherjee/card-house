@@ -8,8 +8,11 @@ import {
   CARD_SIZE,
   HEARTS_COLUMNS,
   HEARTS_ROWS,
+  LOGICAL_HEIGHT,
+  LOGICAL_WIDTH,
   NUMBER_HEART,
   cellRect,
+  coverViewport,
   sameCell,
 } from './sheets';
 
@@ -25,6 +28,28 @@ function cellBytes(png: PNG, col: number, row: number): Buffer {
   }
   return out;
 }
+
+describe('cover viewport', () => {
+  it('covers a wide window on both edges', () => {
+    const covered = coverViewport(1600, 700);
+    expect(covered.width).toBeGreaterThanOrEqual(1600);
+    expect(covered.height).toBeGreaterThanOrEqual(700);
+    expect(covered.width / LOGICAL_WIDTH).toBeCloseTo(
+      covered.height / LOGICAL_HEIGHT,
+      5,
+    );
+  });
+
+  it('covers a tall window without side bars', () => {
+    const covered = coverViewport(800, 900);
+    expect(covered.width).toBeGreaterThanOrEqual(800);
+    expect(covered.height).toBeGreaterThanOrEqual(900);
+  });
+
+  it('matches a 16:9 window', () => {
+    expect(coverViewport(1920, 1080)).toEqual({ width: 1920, height: 1080 });
+  });
+});
 
 describe('hearts sheet', () => {
   const png = PNG.sync.read(readFileSync(sheetPath));

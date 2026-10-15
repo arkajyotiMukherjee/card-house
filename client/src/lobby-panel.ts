@@ -14,6 +14,7 @@ import {
   type MemberLine,
   type MemberRecord,
 } from './lobby';
+import { SERVER_UNREACHABLE } from './connect';
 import { joinFailureMessage } from './join-errors';
 import type { DiscordJoinIdentity } from './join-path';
 import { rememberLobby } from './last-room';
@@ -318,6 +319,10 @@ export function mountLobbyPanel(
     if (playerName.length === 0) {
       fail('Name is required');
       return Promise.resolve('Name is required');
+    }
+    if (!connection.isActive) {
+      fail(SERVER_UNREACHABLE);
+      return Promise.resolve(SERVER_UNREACHABLE);
     }
     errorText.text = '';
     busy = true;

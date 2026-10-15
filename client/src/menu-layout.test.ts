@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { bluffGameDefinition } from '../../src/shared/games/bluff';
 import {
+  CARD_STYLE,
   FLOATER_MARGIN,
   MENU_BUTTONS,
   MENU_THEME_BUTTON,
   MENU_TITLE,
   floaterPose,
   makeFloaters,
+  menuAcceptsAction,
   nextFieldAfterEnter,
   promptError,
   promptFields,
@@ -40,6 +42,30 @@ describe('menu buttons', () => {
       const below = MENU_BUTTONS[index];
       expect(below?.y).toBeGreaterThan((above?.y ?? 0) + (above?.h ?? 0));
     }
+  });
+});
+
+describe('overlay clicks', () => {
+  it('draws Card Style Close over How to Play', () => {
+    const howto = MENU_BUTTONS.find((button) => button.action === 'howto');
+    const close = CARD_STYLE.close;
+    expect(howto).toBeDefined();
+    if (!howto) {
+      return;
+    }
+    const overlaps =
+      close.x < howto.x + howto.w &&
+      close.x + close.w > howto.x &&
+      close.y < howto.y + howto.h &&
+      close.y + close.h > howto.y;
+    expect(overlaps).toBe(true);
+  });
+
+  it('ignores a menu action when the dialog already took the click', () => {
+    expect(menuAcceptsAction('cards', true)).toBe(false);
+    expect(menuAcceptsAction('main', true)).toBe(false);
+    expect(menuAcceptsAction('howto', false)).toBe(false);
+    expect(menuAcceptsAction('main', false)).toBe(true);
   });
 });
 
