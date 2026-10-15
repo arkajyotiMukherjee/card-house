@@ -1,4 +1,9 @@
 import * as ex from 'excalibur';
+import {
+  BUTTON_FONT_SIZE,
+  BUTTON_PRESS_SHIFT,
+  buttonCaptionPos,
+} from './button-style';
 import { pixelFont } from './boot-scene';
 import {
   applyCodeKey,
@@ -584,9 +589,10 @@ function buttonActor(
   });
   const face = panelRect(box.w, box.h, BUTTON, STROKE);
   actor.graphics.use(face);
-  const captionText = canvasText(caption, 8, GOLD);
+  const captionText = canvasText(caption, BUTTON_FONT_SIZE, GOLD);
+  const rest = buttonCaptionPos(caption, box.w, box.h);
   const captionActor = new ex.Actor({
-    pos: ex.vec(8, 9),
+    pos: ex.vec(rest.x, rest.y),
     anchor: ex.vec(0, 0),
   });
   captionActor.graphics.use(captionText);
@@ -597,14 +603,15 @@ function buttonActor(
   actor.on('pointerleave', () => {
     face.strokeColor = STROKE;
     face.color = BUTTON;
+    captionActor.pos = ex.vec(rest.x, rest.y);
   });
   actor.on('pointerdown', () => {
     face.color = BUTTON_DOWN;
-    captionActor.pos = ex.vec(8, 10);
+    captionActor.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
   });
   actor.on('pointerup', () => {
     face.color = BUTTON;
-    captionActor.pos = ex.vec(8, 9);
+    captionActor.pos = ex.vec(rest.x, rest.y);
   });
   scene.add(actor);
   return actor;

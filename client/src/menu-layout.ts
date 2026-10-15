@@ -1,3 +1,4 @@
+import { BUTTON_HEIGHT } from './button-style';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from './sheets';
 import type { TableStyle } from './table-atlas';
 
@@ -39,7 +40,12 @@ export const MENU_BUTTONS: readonly MenuButtonSpec[] = MENU_ENTRIES.map(
 
 export const MENU_BACKDROP = { x: 200, y: 72, w: 560, h: 412 } as const;
 
-export const MENU_THEME_BUTTON = { x: 816, y: 16, w: 128, h: 24 } as const;
+export const MENU_THEME_BUTTON = {
+  x: 816,
+  y: 16,
+  w: 128,
+  h: BUTTON_HEIGHT,
+} as const;
 
 /** Caption for the theme toggle button, e.g. `Theme: Green`. */
 export function themeButtonLabel(style: TableStyle): string {
@@ -57,8 +63,8 @@ export const PROMPT = {
   panel: { x: 220, y: 150, w: 520, h: 240 },
   nameField: { x: 244, y: 214, w: 472, h: 28 },
   codeField: { x: 244, y: 270, w: 472, h: 28 },
-  submit: { x: 244, y: 336, w: 224, h: 32 },
-  cancel: { x: 492, y: 336, w: 224, h: 32 },
+  submit: { x: 244, y: 336, w: 224, h: BUTTON_HEIGHT },
+  cancel: { x: 492, y: 336, w: 224, h: BUTTON_HEIGHT },
   error: { x: 244, y: 310 },
 } as const;
 
@@ -66,7 +72,7 @@ export const HOW_TO_PLAY = {
   panel: { x: 40, y: 40, w: 880, h: 460 },
   list: { x: 56, y: 96, w: 240, rowH: 28 },
   body: { x: 320, y: 96, w: 584, lineH: 16, maxLines: 22 },
-  back: { x: 56, y: 450, w: 120, h: 32 },
+  back: { x: 56, y: 450, w: 120, h: BUTTON_HEIGHT },
 } as const;
 
 export const CARD_STYLE = {
@@ -76,7 +82,7 @@ export const CARD_STYLE = {
   arrow: { w: 24, h: 24 },
   arrowGap: 180,
   preview: { frontX: 560, backX: 632, y: 170 },
-  close: { x: 264, y: 360, w: 160, h: 32 },
+  close: { x: 264, y: 360, w: 160, h: BUTTON_HEIGHT },
 } as const;
 
 export type PromptKind = 'create' | 'join';

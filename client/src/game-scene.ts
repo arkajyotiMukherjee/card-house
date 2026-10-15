@@ -4,14 +4,30 @@ import {
   type DummyIntent,
   type DummyState,
 } from '../../src/shared/games/dummy-counter';
+import { BUTTON_HEIGHT } from './button-style';
 
-export const LEAVE_TABLE_BUTTON = { x: 16, y: 16, w: 168, h: 28 } as const;
+export const LEAVE_TABLE_BUTTON = {
+  x: 16,
+  y: 16,
+  w: 168,
+  h: BUTTON_HEIGHT,
+} as const;
 
 /** The `?` control, top right. Opens the per-game How to Play overlay. */
-export const HOW_TO_PLAY_BUTTON = { x: 916, y: 16, w: 28, h: 28 } as const;
+export const HOW_TO_PLAY_BUTTON = {
+  x: 916,
+  y: 16,
+  w: BUTTON_HEIGHT,
+  h: BUTTON_HEIGHT,
+} as const;
 
 /** The `Chat` control, top center. Opens the per-table chat overlay. */
-export const TABLE_CHAT_BUTTON = { x: 200, y: 16, w: 64, h: 28 } as const;
+export const TABLE_CHAT_BUTTON = {
+  x: 200,
+  y: 16,
+  w: 64,
+  h: BUTTON_HEIGHT,
+} as const;
 
 /** How to Play window, centered on the 960×540 canvas. */
 export const HOW_TO_PLAY_PANEL = { x: 120, y: 50, w: 720, h: 440 } as const;
@@ -29,12 +45,17 @@ export const TABLE_CHAT_TEXT = {
 } as const;
 
 /** Text field and Send button along the bottom of the chat window. */
-export const TABLE_CHAT_INPUT = { x: 144, y: 442, w: 544, h: 24 } as const;
+export const TABLE_CHAT_INPUT = {
+  x: 144,
+  y: 442,
+  w: 544,
+  h: BUTTON_HEIGHT,
+} as const;
 export const TABLE_CHAT_SEND_BUTTON = {
   x: 700,
   y: 442,
   w: 80,
-  h: 24,
+  h: BUTTON_HEIGHT,
 } as const;
 
 /**

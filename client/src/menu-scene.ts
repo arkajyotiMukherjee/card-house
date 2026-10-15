@@ -55,6 +55,11 @@ import {
   preferredNameForPrompt,
   rememberPreferredName,
 } from './preferred-name';
+import {
+  BUTTON_FONT_SIZE,
+  BUTTON_PRESS_SHIFT,
+  buttonCaptionPos,
+} from './button-style';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from './sheets';
 import { TABLE_STYLES, type TableStyle } from './table-atlas';
 
@@ -177,6 +182,7 @@ export class MenuScene extends ex.Scene {
   private onThemeChange: (style: TableStyle) => void = () => {};
   private tableActor: ex.Actor | undefined;
   private themeCaption: ex.Text | undefined;
+  private themeCaptionActor: ex.Actor | undefined;
 
   /**
    * Create and Join read this before they call a reducer. A drop while the
@@ -290,12 +296,18 @@ export class MenuScene extends ex.Scene {
       z: 10,
     });
     actor.graphics.use(face);
-    const caption = canvasText(themeButtonLabel(this.style), 8, GOLD);
+    const caption = canvasText(
+      themeButtonLabel(this.style),
+      BUTTON_FONT_SIZE,
+      GOLD,
+    );
     const captionActor = new ex.Actor({
-      pos: ex.vec(8, (box.h - 8) / 2),
+      pos: ex.vec(0, 0),
       anchor: ex.vec(0, 0),
     });
     captionActor.graphics.use(caption);
+    this.themeCaptionActor = captionActor;
+    this.placeThemeCaption();
     actor.addChild(captionActor);
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;
@@ -323,8 +335,18 @@ export class MenuScene extends ex.Scene {
 
   private repaintTheme(): void {
     this.tableActor?.graphics.use(scaled(tableSprites[this.style].clone(), 8));
+    this.placeThemeCaption();
+  }
+
+  private placeThemeCaption(): void {
+    const box = MENU_THEME_BUTTON;
+    const label = themeButtonLabel(this.style);
     if (this.themeCaption) {
-      this.themeCaption.text = themeButtonLabel(this.style);
+      this.themeCaption.text = label;
+    }
+    const pos = buttonCaptionPos(label, box.w, box.h, BUTTON_FONT_SIZE);
+    if (this.themeCaptionActor) {
+      this.themeCaptionActor.pos = ex.vec(pos.x, pos.y);
     }
   }
 
@@ -576,7 +598,7 @@ export class MenuScene extends ex.Scene {
       PROMPT.submit.w,
       PROMPT.submit.h,
       promptSubmitLabel(kind),
-      16,
+      BUTTON_FONT_SIZE,
       () => {
         void this.submitPrompt();
       },
@@ -589,7 +611,7 @@ export class MenuScene extends ex.Scene {
       PROMPT.cancel.w,
       PROMPT.cancel.h,
       'Cancel',
-      16,
+      BUTTON_FONT_SIZE,
       () => {
         this.closeOverlay();
       },
@@ -733,7 +755,7 @@ export class MenuScene extends ex.Scene {
         back.w,
         back.h,
         'Back',
-        16,
+        BUTTON_FONT_SIZE,
         () => {
           this.closeOverlay();
         },
@@ -884,7 +906,7 @@ export class MenuScene extends ex.Scene {
         close.w,
         close.h,
         'Close',
-        16,
+        BUTTON_FONT_SIZE,
         () => {
           this.closeOverlay();
         },
@@ -1057,10 +1079,9 @@ export class MenuScene extends ex.Scene {
     });
     const face = rect(w, h, BUTTON, STROKE);
     actor.graphics.use(face);
-    const captionX = (w - caption.length * size) / 2;
-    const captionY = (h - size) / 2;
+    const rest = buttonCaptionPos(caption, w, h, size);
     const captionActor = new ex.Actor({
-      pos: ex.vec(captionX, captionY),
+      pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
     captionActor.graphics.use(canvasText(caption, size, GOLD));
@@ -1071,21 +1092,21 @@ export class MenuScene extends ex.Scene {
     actor.on('pointerleave', () => {
       face.strokeColor = STROKE;
       face.color = BUTTON;
-      captionActor.pos = ex.vec(captionX, captionY);
+      captionActor.pos = ex.vec(rest.x, rest.y);
     });
     actor.on('pointerdown', (event) => {
       if (claim) {
         this.claimOverlayClick(event);
       }
       face.color = BUTTON_DOWN;
-      captionActor.pos = ex.vec(captionX, captionY + 1);
+      captionActor.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
     });
     actor.on('pointerup', (event) => {
       if (claim) {
         this.claimOverlayClick(event);
       }
       face.color = BUTTON;
-      captionActor.pos = ex.vec(captionX, captionY);
+      captionActor.pos = ex.vec(rest.x, rest.y);
       onPress();
     });
     this.add(actor);

@@ -15,6 +15,7 @@ import {
 } from '../../src/shared/games/poker';
 import type { GameDefinition } from '../../src/shared/games/game-definition';
 import { PLAYER_NAME_MAX } from '../../src/shared/discord-player-name';
+import { BUTTON_HEIGHT } from './button-style';
 
 export const NAME_MAX = PLAYER_NAME_MAX;
 export const CODE_MAX = 6;
@@ -22,10 +23,10 @@ export const CODE_MAX = 6;
 export const LOBBY_PANEL = {
   nameField: { x: 16, y: 68, w: 128, h: 24 },
   codeField: { x: 16, y: 116, w: 128, h: 24 },
-  createButton: { x: 16, y: 152, w: 128, h: 26 },
-  joinButton: { x: 16, y: 186, w: 128, h: 26 },
+  createButton: { x: 16, y: 152, w: 128, h: BUTTON_HEIGHT },
+  joinButton: { x: 16, y: 186, w: 128, h: BUTTON_HEIGHT },
   renameField: { x: 16, y: 428, w: 128, h: 24 },
-  saveButton: { x: 16, y: 458, w: 128, h: 26 },
+  saveButton: { x: 16, y: 458, w: 128, h: BUTTON_HEIGHT },
 } as const;
 
 export interface LobbyRow {
@@ -130,7 +131,7 @@ export interface ListLayout {
 
 export const TABLE_LIST = {
   panel: { x: 800, y: 44, w: 152, h: 460 },
-  create: { x: 808, y: 70, w: 136, h: 26 },
+  create: { x: 808, y: 70, w: 136, h: BUTTON_HEIGHT },
   list: { x: 808, y: 108, bottom: 468 },
   header: { h: 14, gap: 4 },
   row: { w: 136, h: 44, gap: 4 },
@@ -155,18 +156,18 @@ export const CHAT_PANEL = {
   /** Sits above the first message so the heading glyphs do not cover it. */
   title: { x: 178, y: 76, size: 8 },
   list: { x: 178, y: 88, bottom: 436, lineH: 12 },
-  field: { x: 178, y: 440, w: 500, h: 24 },
-  send: { x: 686, y: 440, w: 96, h: 24 },
+  field: { x: 178, y: 440, w: 500, h: BUTTON_HEIGHT },
+  send: { x: 686, y: 440, w: 96, h: BUTTON_HEIGHT },
 } as const;
 
 export const CHAT_BODY_MAX = 240;
 
-export const LEAVE_ROOM = { x: 800, y: 8, w: 152, h: 28 } as const;
+export const LEAVE_ROOM = { x: 800, y: 8, w: 152, h: BUTTON_HEIGHT } as const;
 
 export const LEAVE_CONFIRM = {
   panel: { x: 230, y: 170, w: 500, h: 150 },
-  leave: { x: 246, y: 268, w: 220, h: 32 },
-  cancel: { x: 486, y: 268, w: 220, h: 32 },
+  leave: { x: 246, y: 268, w: 220, h: BUTTON_HEIGHT },
+  cancel: { x: 486, y: 268, w: 220, h: BUTTON_HEIGHT },
 } as const;
 
 export interface ChatMessageRow {
@@ -284,14 +285,14 @@ export function discordBadgeBox(): {
 
 export const CREATE_TABLE = {
   panel: { x: 188, y: 140, w: 440, h: 250 },
-  prev: { x: 204, y: 220, w: 72, h: 26 },
-  next: { x: 284, y: 220, w: 72, h: 26 },
-  minus: { x: 420, y: 220, w: 40, h: 26 },
-  plus: { x: 468, y: 220, w: 40, h: 26 },
-  varPrev: { x: 204, y: 268, w: 72, h: 26 },
-  varNext: { x: 284, y: 268, w: 72, h: 26 },
-  create: { x: 204, y: 328, w: 160, h: 28 },
-  cancel: { x: 376, y: 328, w: 160, h: 28 },
+  prev: { x: 204, y: 220, w: 72, h: BUTTON_HEIGHT },
+  next: { x: 284, y: 220, w: 72, h: BUTTON_HEIGHT },
+  minus: { x: 420, y: 220, w: 40, h: BUTTON_HEIGHT },
+  plus: { x: 468, y: 220, w: 40, h: BUTTON_HEIGHT },
+  varPrev: { x: 204, y: 268, w: 72, h: BUTTON_HEIGHT },
+  varNext: { x: 284, y: 268, w: 72, h: BUTTON_HEIGHT },
+  create: { x: 204, y: 328, w: 160, h: BUTTON_HEIGHT },
+  cancel: { x: 376, y: 328, w: 160, h: BUTTON_HEIGHT },
 } as const;
 
 export function normalizePlayerName(raw: string): string {

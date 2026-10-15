@@ -29,6 +29,11 @@ import {
 } from './blackjack-layout';
 import { chipsImage } from './boot-scene';
 import {
+  BUTTON_FONT_SIZE,
+  BUTTON_PRESS_SHIFT,
+  buttonCaptionPos,
+} from './button-style';
+import {
   DIM,
   GOLD,
   STROKE,
@@ -617,11 +622,12 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
     });
     const face = panelRect(box.w, box.h, BUTTON, STROKE);
     actor.graphics.use(face);
+    const rest = buttonCaptionPos(label, box.w, box.h);
     const caption = new ex.Actor({
-      pos: ex.vec(8, 10),
+      pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText(label, 8, GOLD));
+    caption.graphics.use(canvasText(label, BUTTON_FONT_SIZE, GOLD));
     actor.addChild(caption);
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;
@@ -629,14 +635,15 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
     actor.on('pointerleave', () => {
       face.strokeColor = STROKE;
       face.color = BUTTON;
+      caption.pos = ex.vec(rest.x, rest.y);
     });
     actor.on('pointerdown', () => {
       face.color = BUTTON_DOWN;
-      caption.pos = ex.vec(8, 11);
+      caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
     });
     actor.on('pointerup', () => {
       face.color = BUTTON;
-      caption.pos = ex.vec(8, 10);
+      caption.pos = ex.vec(rest.x, rest.y);
       const state = this.state;
       const current = this.ctx;
       if (!state || !current) {

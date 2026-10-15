@@ -1,3 +1,4 @@
+import { BUTTON_HEIGHT } from './button-style';
 import type { CardFace } from './card-atlas';
 import {
   rankOfBlackjackCard,
@@ -21,14 +22,44 @@ const SPLIT_SELF_STEP = 36;
 const PLATE_MIN_WIDTH = 48;
 const CHIP_GAP = 22;
 
-export const HIT_BUTTON = { x: 700, y: 448, w: 56, h: 28 } as const;
-export const STAND_BUTTON = { x: 762, y: 448, w: 64, h: 28 } as const;
-export const DOUBLE_BUTTON = { x: 832, y: 448, w: 64, h: 28 } as const;
-export const SPLIT_BUTTON = { x: 902, y: 448, w: 52, h: 28 } as const;
+export const HIT_BUTTON = { x: 700, y: 448, w: 56, h: BUTTON_HEIGHT } as const;
+export const STAND_BUTTON = {
+  x: 762,
+  y: 448,
+  w: 64,
+  h: BUTTON_HEIGHT,
+} as const;
+export const DOUBLE_BUTTON = {
+  x: 832,
+  y: 448,
+  w: 64,
+  h: BUTTON_HEIGHT,
+} as const;
+export const SPLIT_BUTTON = {
+  x: 902,
+  y: 448,
+  w: 52,
+  h: BUTTON_HEIGHT,
+} as const;
 
-export const BET_10_BUTTON = { x: 748, y: 448, w: 64, h: 28 } as const;
-export const BET_25_BUTTON = { x: 818, y: 448, w: 64, h: 28 } as const;
-export const BET_50_BUTTON = { x: 888, y: 448, w: 64, h: 28 } as const;
+export const BET_10_BUTTON = {
+  x: 748,
+  y: 448,
+  w: 64,
+  h: BUTTON_HEIGHT,
+} as const;
+export const BET_25_BUTTON = {
+  x: 818,
+  y: 448,
+  w: 64,
+  h: BUTTON_HEIGHT,
+} as const;
+export const BET_50_BUTTON = {
+  x: 888,
+  y: 448,
+  w: 64,
+  h: BUTTON_HEIGHT,
+} as const;
 
 function row(
   centerX: number,

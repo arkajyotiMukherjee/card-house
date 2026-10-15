@@ -1,3 +1,4 @@
+import { BUTTON_HEIGHT } from './button-style';
 import type { CardFace } from './card-atlas';
 import { rankOfPokerCard, type PokerState } from '../../src/shared/games/poker';
 import { handPositions, opponentBackPositions } from './bluff-layout';
@@ -14,11 +15,21 @@ const DROPPED_X = [800, 852] as const;
 export const DISCARD_PROMPT = { x: 16, y: 452 } as const;
 export const BANNER_Y = 312;
 
-export const FOLD_BUTTON = { x: 612, y: 448, w: 64, h: 28 } as const;
-export const CHECK_BUTTON = { x: 682, y: 448, w: 72, h: 28 } as const;
-export const CALL_BUTTON = { x: 760, y: 448, w: 64, h: 28 } as const;
-export const BET_BUTTON = { x: 830, y: 448, w: 56, h: 28 } as const;
-export const RAISE_BUTTON = { x: 892, y: 448, w: 60, h: 28 } as const;
+export const FOLD_BUTTON = { x: 612, y: 448, w: 64, h: BUTTON_HEIGHT } as const;
+export const CHECK_BUTTON = {
+  x: 682,
+  y: 448,
+  w: 72,
+  h: BUTTON_HEIGHT,
+} as const;
+export const CALL_BUTTON = { x: 760, y: 448, w: 64, h: BUTTON_HEIGHT } as const;
+export const BET_BUTTON = { x: 830, y: 448, w: 56, h: BUTTON_HEIGHT } as const;
+export const RAISE_BUTTON = {
+  x: 892,
+  y: 448,
+  w: 60,
+  h: BUTTON_HEIGHT,
+} as const;
 
 /** Community cards in a row across the middle of the shared table. */
 export function boardPositions(count: number): { x: number; y: number }[] {

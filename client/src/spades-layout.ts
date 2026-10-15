@@ -1,5 +1,6 @@
 import type { SpadesState, SpadesTeam } from '../../src/shared/games/spades';
 import { TABLE_CENTER } from './bluff-layout';
+import { BUTTON_HEIGHT } from './button-style';
 import { LOGICAL_WIDTH } from './sheets';
 
 /**
@@ -17,7 +18,7 @@ export const PARTNERSHIP_BOARD = {
 export const BID_PROMPT = { x: 228, y: 396 } as const;
 
 const BID_W = 32;
-const BID_H = 28;
+const BID_H = BUTTON_HEIGHT;
 const BID_GAP = 36;
 const BID_Y = 416;
 const TRICK_PULL = 0.32;

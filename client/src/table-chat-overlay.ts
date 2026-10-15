@@ -1,5 +1,11 @@
 import * as ex from 'excalibur';
 import {
+  BUTTON_FONT_SIZE,
+  BUTTON_HEIGHT,
+  BUTTON_PRESS_SHIFT,
+  buttonCaptionPos,
+} from './button-style';
+import {
   BUTTON,
   BUTTON_DOWN,
   canvasText,
@@ -221,11 +227,12 @@ export class TableChatOverlay {
     });
     const face = panelRect(box.w, box.h, PLATE, STROKE);
     actor.graphics.use(face);
+    const rest = buttonCaptionPos('Chat', box.w, box.h);
     const caption = new ex.Actor({
-      pos: ex.vec(10, 10),
+      pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText('Chat', 8, GOLD));
+    caption.graphics.use(canvasText('Chat', BUTTON_FONT_SIZE, GOLD));
     actor.addChild(caption);
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;
@@ -236,9 +243,11 @@ export class TableChatOverlay {
     });
     actor.on('pointerdown', () => {
       face.color = BUTTON_DOWN;
+      caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
     });
     actor.on('pointerup', () => {
       face.color = PLATE;
+      caption.pos = ex.vec(rest.x, rest.y);
       this.toggle();
     });
     this.scene.add(actor);
@@ -316,9 +325,12 @@ export class TableChatOverlay {
     inputBox.graphics.use(inputRect);
     this.track(inputBox);
 
-    this.inputField = canvasText('_', 8, GOLD);
+    this.inputField = canvasText('_', BUTTON_FONT_SIZE, GOLD);
     const inputFieldActor = new ex.Actor({
-      pos: ex.vec(inputBoxSpec.x + 6, inputBoxSpec.y + 8),
+      pos: ex.vec(
+        inputBoxSpec.x + 6,
+        inputBoxSpec.y + Math.round((inputBoxSpec.h - BUTTON_FONT_SIZE) / 2),
+      ),
       anchor: ex.vec(0, 0),
       z: Z_TEXT,
     });
@@ -351,11 +363,12 @@ export class TableChatOverlay {
     });
     const face = panelRect(box.w, box.h, BUTTON, STROKE);
     actor.graphics.use(face);
+    const rest = buttonCaptionPos('Send', box.w, box.h);
     const caption = new ex.Actor({
-      pos: ex.vec(16, 8),
+      pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText('Send', 8, GOLD));
+    caption.graphics.use(canvasText('Send', BUTTON_FONT_SIZE, GOLD));
     actor.addChild(caption);
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;
@@ -366,9 +379,11 @@ export class TableChatOverlay {
     });
     actor.on('pointerdown', () => {
       face.color = BUTTON_DOWN;
+      caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
     });
     actor.on('pointerup', () => {
       face.color = BUTTON;
+      caption.pos = ex.vec(rest.x, rest.y);
       this.send();
     });
     return actor;
@@ -377,7 +392,7 @@ export class TableChatOverlay {
   private buildCloseButton(): ex.Actor {
     const panel = TABLE_CHAT_PANEL;
     const w = 120;
-    const h = 28;
+    const h = BUTTON_HEIGHT;
     const actor = new ex.Actor({
       pos: ex.vec(
         panel.x + panel.w - w - TABLE_CHAT_TEXT.padding,
@@ -390,11 +405,12 @@ export class TableChatOverlay {
     });
     const face = panelRect(w, h, BUTTON, STROKE);
     actor.graphics.use(face);
+    const rest = buttonCaptionPos('Close', w, h);
     const caption = new ex.Actor({
-      pos: ex.vec(36, 10),
+      pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText('Close', 8, GOLD));
+    caption.graphics.use(canvasText('Close', BUTTON_FONT_SIZE, GOLD));
     actor.addChild(caption);
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;
@@ -405,9 +421,11 @@ export class TableChatOverlay {
     });
     actor.on('pointerdown', () => {
       face.color = BUTTON_DOWN;
+      caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
     });
     actor.on('pointerup', () => {
       face.color = BUTTON;
+      caption.pos = ex.vec(rest.x, rest.y);
       this.close();
     });
     return actor;

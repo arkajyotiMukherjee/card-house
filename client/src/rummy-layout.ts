@@ -1,4 +1,5 @@
 import type { RummyState } from '../../src/shared/games/rummy';
+import { BUTTON_HEIGHT } from './button-style';
 import { CARD_DRAW, TABLE_CENTER } from './bluff-layout';
 
 export const DISCARD_X = 400;
@@ -6,10 +7,25 @@ export const DISCARD_Y = 248;
 export const STOCK_X = 580;
 export const STOCK_Y = 248;
 
-export const DRAW_STOCK_BUTTON = { x: 748, y: 400, w: 96, h: 28 } as const;
-export const DRAW_DISCARD_BUTTON = { x: 852, y: 400, w: 96, h: 28 } as const;
-export const MELD_BUTTON = { x: 748, y: 436, w: 96, h: 28 } as const;
-export const DISCARD_BUTTON = { x: 852, y: 436, w: 96, h: 28 } as const;
+export const DRAW_STOCK_BUTTON = {
+  x: 748,
+  y: 400,
+  w: 96,
+  h: BUTTON_HEIGHT,
+} as const;
+export const DRAW_DISCARD_BUTTON = {
+  x: 852,
+  y: 400,
+  w: 96,
+  h: BUTTON_HEIGHT,
+} as const;
+export const MELD_BUTTON = { x: 748, y: 436, w: 96, h: BUTTON_HEIGHT } as const;
+export const DISCARD_BUTTON = {
+  x: 852,
+  y: 436,
+  w: 96,
+  h: BUTTON_HEIGHT,
+} as const;
 
 /** Turn hint and deadwood points sit above the action buttons. */
 export const HINT_X = 748;
