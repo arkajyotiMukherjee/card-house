@@ -84,7 +84,7 @@ export async function main(attached?: Server): Promise<void> {
         applicationId,
         guildId: process.env.DISCORD_GUILD_ID,
       });
-      console.log('Registered /cardroom create and /cardroom status');
+      console.log('Registered /cardhouse create and /cardhouse status');
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Bot failed';
       console.error(redact(message, token));

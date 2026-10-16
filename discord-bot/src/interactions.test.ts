@@ -43,7 +43,7 @@ test('a create interaction replies with the code and join URL', async () => {
     {
       type: InteractionType.APPLICATION_COMMAND,
       channel_id: CHANNEL,
-      data: { name: 'cardroom', options: [{ name: 'create', type: 1 }] },
+      data: { name: 'cardhouse', options: [{ name: 'create', type: 1 }] },
     },
     deps({
       createLobby: (channelId) => {
@@ -85,7 +85,7 @@ test('the interactions endpoint checks the Discord signature', async () => {
   const body = JSON.stringify({
     type: InteractionType.APPLICATION_COMMAND,
     channel_id: CHANNEL,
-    data: { name: 'cardroom', options: [{ name: 'create', type: 1 }] },
+    data: { name: 'cardhouse', options: [{ name: 'create', type: 1 }] },
   });
   const timestamp = String(Math.floor(Date.now() / 1000));
   const signature = Buffer.from(
@@ -127,7 +127,7 @@ test('status names a live lobby from the room code', async () => {
       type: InteractionType.APPLICATION_COMMAND,
       channel_id: CHANNEL,
       data: {
-        name: 'cardroom',
+        name: 'cardhouse',
         options: [
           {
             name: 'status',
@@ -159,7 +159,7 @@ test('status says the room was not found for a missing code', async () => {
     {
       type: InteractionType.APPLICATION_COMMAND,
       data: {
-        name: 'cardroom',
+        name: 'cardhouse',
         options: [
           {
             name: 'status',
@@ -187,7 +187,7 @@ test('status asks for a room code when the option is empty', async () => {
     {
       type: InteractionType.APPLICATION_COMMAND,
       data: {
-        name: 'cardroom',
+        name: 'cardhouse',
         options: [{ name: 'status', type: 1, options: [] }],
       },
     },

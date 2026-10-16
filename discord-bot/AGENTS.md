@@ -6,11 +6,11 @@ Conventions: [../repo-conventions.md](../repo-conventions.md). The plan is [../d
 
 ## Files
 
-- `src/index.ts` — starts the interactions server. Registers `/cardroom create` and `/cardroom status` when `DISCORD_BOT_TOKEN` and `DISCORD_APPLICATION_ID` are set. `GET /default-player-name` uses that token to map a Discord user id. When the token is set, watches lobbies and tables and creates or deletes voice channels, and listens for speaking on those channels.
+- `src/index.ts` — starts the interactions server. Registers `/cardhouse create` and `/cardhouse status` when `DISCORD_BOT_TOKEN` and `DISCORD_APPLICATION_ID` are set. `GET /default-player-name` uses that token to map a Discord user id. When the token is set, watches lobbies and tables and creates or deletes voice channels, and listens for speaking on those channels.
 - `src/speaking.ts` — debounces speaking updates and calls `updateSpeakingState` with the user id, the channel, and the boolean.
 - `src/speaking-gateway.ts` — Discord gateway probe and deafened voice control frames. UDP datagrams after discovery are dropped. A 401 does not open a socket.
 - `src/commands.ts` — the slash command list. Later commands are added to `SLASH_COMMANDS`.
-- `src/interactions.ts` — routes a Discord interaction to a subcommand. `/cardroom create` passes `guild_id` through.
+- `src/interactions.ts` — routes a Discord interaction to a subcommand. `/cardhouse create` passes `guild_id` through.
 - `src/lobby-client.ts` — calls `createLobby({})` on the generated client, then `setLobbyDiscordChannel`. The subscription also includes `LobbyMember` and `GameTable` so status can count them.
 - `src/lobby-status.ts` — reads one lobby by room code and builds the status reply.
 - `src/discord-http.ts` — Discord REST calls with rate-limit waits. A limit longer than the budget fails the voice call and leaves play running.
@@ -27,13 +27,13 @@ The generated client is `client/src/module_bindings/`. Do not hand-edit it.
 
 ## Changes
 
-`/cardroom create` reads `channel_id` and `guild_id` from the interaction. `create_lobby` mints the code. `set_lobby_discord_channel` stores that text channel on `Lobby.discordChannelId`. The bot then creates `#room-{code}-voice` and calls `set_lobby_discord_voice`. The reply is still the code and the join URL. A Discord error or rate limit skips the voice channel and still returns the lobby.
+`/cardhouse create` reads `channel_id` and `guild_id` from the interaction. `create_lobby` mints the code. `set_lobby_discord_channel` stores that text channel on `Lobby.discordChannelId`. The bot then creates `#room-{code}-voice` and calls `set_lobby_discord_voice`. The reply is still the code and the join URL. A Discord error or rate limit skips the voice channel and still returns the lobby.
 
 A new `GameTable` in a lobby that has `discordGuildId` gets a channel such as `#ab3d-bluff-1`, stored with `set_table_discord_voice`. A finished or removed table loses that channel. `close_lobby` makes the bot delete the lobby channel and any table channels still open.
 
 When `DISCORD_BOT_TOKEN` is set, `src/index.ts` also opens the voice gateway and records who is in the lobby or a table voice channel through `update_voice_presence`. The token is sent only in Identify and is never logged.
 
-`/cardroom status` reads `roomcode`. It looks up that `Lobby` and counts `GameTable` and `LobbyMember` rows for the lobby. An open lobby is live. The reply names the code, says live or closed, and gives those counts. A code with no row says the room was not found. Status does not call a reducer.
+`/cardhouse status` reads `roomcode`. It looks up that `Lobby` and counts `GameTable` and `LobbyMember` rows for the lobby. An open lobby is live. The reply names the code, says live or closed, and gives those counts. A code with no row says the room was not found. Status does not call a reducer.
 
 `GET /default-player-name?discord_user_id=` calls Discord for that user and returns the default lobby name. A 401 responds with `name: null`. Do not fill in a user when Discord rejects the token.
 

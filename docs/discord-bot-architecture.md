@@ -6,7 +6,7 @@ Milestone 9 has two slices. The slash-command slice is already described in [imp
 
 The SpacetimeDB module stays TypeScript. The Discord bot is a separate TypeScript service.
 
-The module remains the source of truth for `Lobby`, `LobbyMember`, `GameTable`, `GameSeat`, and `GameEvent`. Existing reducers stay `create_lobby`, `join_lobby`, `create_game_table`, `join_table`, `leave_table`, and `handle_game_intent`. `set_lobby_discord_channel` records the Discord channel for `/cardroom create`. The bot calls reducers. It does not own game state and it does not run game rules.
+The module remains the source of truth for `Lobby`, `LobbyMember`, `GameTable`, `GameSeat`, and `GameEvent`. Existing reducers stay `create_lobby`, `join_lobby`, `create_game_table`, `join_table`, `leave_table`, and `handle_game_intent`. `set_lobby_discord_channel` records the Discord channel for `/cardhouse create`. The bot calls reducers. It does not own game state and it does not run game rules.
 
 The client shows who is speaking from SpacetimeDB only. It never receives, stores, or processes audio. No transcripts, no volume meters, no waveforms. The client does not call the Discord API.
 
@@ -14,8 +14,8 @@ The client shows who is speaking from SpacetimeDB only. It never receives, store
 
 Slash-command slice, already in milestone 9:
 
-- [#41 Add Discord /cardroom create](https://github.com/arkajyotiMukherjee/discordcardgames/issues/41)
-- [#42 Add Discord /cardroom status](https://github.com/arkajyotiMukherjee/discordcardgames/issues/42)
+- [#41 Add Discord /cardhouse create](https://github.com/arkajyotiMukherjee/discordcardgames/issues/41)
+- [#42 Add Discord /cardhouse status](https://github.com/arkajyotiMukherjee/discordcardgames/issues/42)
 - [#43 Map Discord user id to a default player name](https://github.com/arkajyotiMukherjee/discordcardgames/issues/43)
 - [#44 Show a Launched from Discord badge](https://github.com/arkajyotiMukherjee/discordcardgames/issues/44)
 
@@ -29,11 +29,11 @@ Voice slice:
 
 ## Slash command
 
-`discord-bot/` is the slash-command service. It registers `/cardroom create` and `/cardroom status`, and leaves room for later commands on the same process.
+`discord-bot/` is the slash-command service. It registers `/cardhouse create` and `/cardhouse status`, and leaves room for later commands on the same process.
 
-`/cardroom create` calls `create_lobby` with no arguments. That is the client's `createLobby({})`, and it is the call that mints the lobby code. The bot then calls `set_lobby_discord_channel` with that code and the Discord channel id from the interaction. `Lobby.discordChannelId` stores the channel. A lobby created from the web leaves the column empty. The reply is the code and a join URL `{CARDROOM_PUBLIC_URL}/{code}`. Opening that path in the client opens Join Room with the code filled in.
+`/cardhouse create` calls `create_lobby` with no arguments. That is the client's `createLobby({})`, and it is the call that mints the lobby code. The bot then calls `set_lobby_discord_channel` with that code and the Discord channel id from the interaction. `Lobby.discordChannelId` stores the channel. A lobby created from the web leaves the column empty. The reply is the code and a join URL `{CARDROOM_PUBLIC_URL}/{code}`. Opening that path in the client opens Join Room with the code filled in.
 
-`/cardroom status` takes a room code. It reads the subscribed `Lobby` row for that code. A matching open lobby is live. The reply names that code and the number of `GameTable` rows and `LobbyMember` rows in the lobby. A code with no row replies that the room was not found. Status does not call a reducer.
+`/cardhouse status` takes a room code. It reads the subscribed `Lobby` row for that code. A matching open lobby is live. The reply names that code and the number of `GameTable` rows and `LobbyMember` rows in the lobby. A code with no row replies that the room was not found. Status does not call a reducer.
 
 `discordChannelId` is the channel where the command ran. It is not the lobby voice channel. The bot stores voice channel ids with `set_lobby_discord_voice` and `set_table_discord_voice`. Discord identity is stored on `LobbyMember` by `join_lobby_with_discord`. Speaking updates call `update_speaking_state`. Who is in a voice channel is stored by `update_voice_presence`.
 
@@ -51,7 +51,7 @@ Three flows share one `Lobby` and the same `GameTable` rows.
 
 **Discord joiners.** The primary id is the Discord user id. The display name is editable. The browser still keeps a `clientId` so the member fits the existing `(lobbyId, clientId)` row. `join_lobby_with_discord` attaches `discordUserId`, `discordUsername`, and `discordGlobalName` to that `LobbyMember`. The join URL can carry that identity as `discordUserId` or `discord_user_id`, plus the username and global name in either style, and `discordDiscriminator` only when Discord sends one. Changing `name` later does not change `discordUserId`.
 
-The default `name` is the Discord global name when it still has letters or digits, otherwise the username. It is cut to the lobby name length (12) and keeps letters, digits, and spaces. The `/cardroom create` reply stays `{CARDROOM_PUBLIC_URL}/{code}`. Opening that path with a Discord user id and a username stores that id and joins with the mapped name, without asking the player to type one. A user id alone is resolved by the bot with Discord `GET /users/{id}` at `GET /default-player-name`. A 401 returns no name and does not invent a user.
+The default `name` is the Discord global name when it still has letters or digits, otherwise the username. It is cut to the lobby name length (12) and keeps letters, digits, and spaces. The `/cardhouse create` reply stays `{CARDROOM_PUBLIC_URL}/{code}`. Opening that path with a Discord user id and a username stores that id and joins with the mapped name, without asking the player to type one. A user id alone is resolved by the bot with Discord `GET /users/{id}` at `GET /default-player-name`. A 401 returns no name and does not invent a user.
 
 **Web-only joiners.** The browser generates a random `clientId` and calls `join_lobby`. Discord fields stay empty. There is no Discord user id. A URL with no `discordUserId` and no `discord_user_id` is this path.
 
@@ -69,7 +69,7 @@ The default `name` is the Discord global name when it still has letters or digit
 
 The bot creates and deletes the channels. [#100](https://github.com/arkajyotiMukherjee/discordcardgames/issues/100). `close_lobby`, `close_idle_lobbies`, `remove_game_table`, and `clean_empty_tables` are the module transitions it watches. `close_idle_lobbies` sets that same closed status, so the bot deletes those voice channels too. `clean_empty_tables` deletes the `GameTable` row, so the same delete handler drops that table's voice channel. A finished table uses the existing `status`.
 
-- One lobby voice channel, created with `/cardroom create`. Example name: `#room-ab3d-voice`.
+- One lobby voice channel, created with `/cardhouse create`. Example name: `#room-ab3d-voice`.
 - One voice channel per table, created when a table is created in a Discord-linked lobby. Example name: `#ab3d-bluff-1`.
 - When a table is finished or removed, the bot deletes that table channel and clears the id.
 - When a lobby is closed, the bot deletes the lobby voice channel and any remaining table voice channels.

@@ -1,5 +1,5 @@
 import { InteractionResponseType, InteractionType } from 'discord-interactions';
-import { ROOM_CODE_OPTION } from './commands.ts';
+import { ROOM_CODE_OPTION, SLASH_COMMAND_NAME } from './commands.ts';
 import { createReplyContent } from './join-url.ts';
 import type { CreatedLobby } from './lobby-client.ts';
 import {
@@ -66,7 +66,7 @@ export async function handleInteraction(
   if (interaction.type !== InteractionType.APPLICATION_COMMAND) {
     return ephemeral('Unsupported interaction');
   }
-  if (interaction.data?.name !== 'cardroom') {
+  if (interaction.data?.name !== SLASH_COMMAND_NAME) {
     return ephemeral('Unknown command');
   }
   const name = interaction.data.options?.[0]?.name ?? '';

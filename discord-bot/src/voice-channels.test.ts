@@ -38,7 +38,7 @@ test('a create interaction forwards the guild id', async () => {
       type: InteractionType.APPLICATION_COMMAND,
       channel_id: TEXT,
       guild_id: GUILD,
-      data: { name: 'cardroom', options: [{ name: 'create', type: 1 }] },
+      data: { name: 'cardhouse', options: [{ name: 'create', type: 1 }] },
     },
     {
       createLobby: (channelId, guildId) => {

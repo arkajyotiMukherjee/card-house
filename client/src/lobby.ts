@@ -253,7 +253,7 @@ export interface LobbyDiscordRow {
   discordChannelId: string;
 }
 
-/** True when `/cardroom create` stored a Discord channel on this lobby. */
+/** True when `/cardhouse create` stored a Discord channel on this lobby. */
 export function lobbyLaunchedFromDiscord(
   lobbies: Iterable<LobbyDiscordRow>,
   lobbyId: string,

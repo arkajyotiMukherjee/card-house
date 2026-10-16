@@ -17,7 +17,7 @@ const TEXT = '323456789012345678';
 const live = process.env.CARDROOM_LIVE === '1';
 
 test(
-  'cardroom create stores a lobby voice channel, and closing a table or lobby deletes it',
+  'cardhouse create stores a lobby voice channel, and closing a table or lobby deletes it',
   { skip: live ? false : 'set CARDROOM_LIVE=1 to call the published module' },
   async () => {
     const token = process.env.DISCORD_BOT_TOKEN ?? '';
@@ -68,7 +68,7 @@ test(
           type: InteractionType.APPLICATION_COMMAND,
           channel_id: TEXT,
           guild_id: guildId,
-          data: { name: 'cardroom', options: [{ name: 'create', type: 1 }] },
+          data: { name: 'cardhouse', options: [{ name: 'create', type: 1 }] },
         },
       );
       const payload = (await response.json()) as {

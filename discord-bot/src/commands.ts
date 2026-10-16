@@ -3,9 +3,12 @@ const STRING_OPTION = 3;
 
 export const ROOM_CODE_OPTION = 'roomcode';
 
-export const CARDROOM_COMMAND = {
-  name: 'cardroom',
-  description: 'Card room lobbies',
+/** Discord application command name. Subcommands are `create` and `status`. */
+export const SLASH_COMMAND_NAME = 'cardhouse';
+
+export const CARDHOUSE_COMMAND = {
+  name: SLASH_COMMAND_NAME,
+  description: 'Card House lobbies',
   options: [
     {
       type: SUB_COMMAND,
@@ -29,7 +32,7 @@ export const CARDROOM_COMMAND = {
 } as const;
 
 /** Full command set. Later slash commands are added here. */
-export const SLASH_COMMANDS = [CARDROOM_COMMAND] as const;
+export const SLASH_COMMANDS = [CARDHOUSE_COMMAND] as const;
 
 export interface RegisterCommandsConfig {
   token: string;
