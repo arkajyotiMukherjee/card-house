@@ -6,13 +6,14 @@ Conventions: [../repo-conventions.md](../repo-conventions.md). The plan is [../d
 
 ## Files
 
-- `src/index.ts` — starts the interactions server. Registers `/cardhouse create` and `/cardhouse status` when `DISCORD_BOT_TOKEN` and `DISCORD_APPLICATION_ID` are set. `GET /default-player-name` uses that token to map a Discord user id. When the token is set, watches lobbies and tables and creates or deletes voice channels, and listens for speaking on those channels.
+- `src/index.ts` — starts the interactions server. Registers `/cardhouse create`, `/cardhouse status`, and `/cardhouse close` when `DISCORD_BOT_TOKEN` and `DISCORD_APPLICATION_ID` are set. `GET /default-player-name` uses that token to map a Discord user id. When the token is set, watches lobbies and tables and creates or deletes voice channels, and listens for speaking on those channels.
 - `src/speaking.ts` — debounces speaking updates and calls `updateSpeakingState` with the user id, the channel, and the boolean.
 - `src/speaking-gateway.ts` — Discord gateway probe and deafened voice control frames. UDP datagrams after discovery are dropped. A 401 does not open a socket.
 - `src/commands.ts` — the slash command list. Later commands are added to `SLASH_COMMANDS`.
 - `src/interactions.ts` — routes a Discord interaction to a subcommand. `/cardhouse create` passes `guild_id` through.
-- `src/lobby-client.ts` — calls `createLobby({})` on the generated client, then `setLobbyDiscordChannel`. The subscription also includes `LobbyMember` and `GameTable` so status can count them.
+- `src/lobby-client.ts` — calls `createLobby({})` on the generated client, then `setLobbyDiscordChannel`. The subscription also includes `LobbyMember`, `GameTable`, and `GameSeat` so status and close can count them.
 - `src/lobby-status.ts` — reads one lobby by room code and builds the status reply.
+- `src/lobby-close.ts` — `/cardhouse close` calls `close_lobby` only when that lobby has no members and none of its tables have a seat.
 - `src/discord-http.ts` — Discord REST calls with rate-limit waits. A limit longer than the budget fails the voice call and leaves play running.
 - `src/recorded-discord.ts` — in-memory Discord API that records create and delete. Tests use it when the live token is unauthorized.
 - `src/voice-channels.ts` — lobby and table voice channel names, create, delete, and the subscription watch.
@@ -34,6 +35,8 @@ A new `GameTable` in a lobby that has `discordGuildId` gets a channel such as `#
 When `DISCORD_BOT_TOKEN` is set, `src/index.ts` also opens the voice gateway and records who is in the lobby or a table voice channel through `update_voice_presence`. The token is sent only in Identify and is never logged.
 
 `/cardhouse status` reads `roomcode`. It looks up that `Lobby` and counts `GameTable` and `LobbyMember` rows for the lobby. An open lobby is live. The reply names the code, says live or closed, and gives those counts. A code with no row says the room was not found. Status does not call a reducer.
+
+`/cardhouse close` reads `roomcode`. It closes the room only when that lobby has no members and no seats at its tables. A player in the lobby, or a seat at one of its tables, leaves the room open. `close_lobby` marks an empty room closed, and the voice watch then deletes that lobby's voice channel and any table voice channels still open.
 
 `GET /default-player-name?discord_user_id=` calls Discord for that user and returns the default lobby name. A 401 responds with `name: null`. Do not fill in a user when Discord rejects the token.
 

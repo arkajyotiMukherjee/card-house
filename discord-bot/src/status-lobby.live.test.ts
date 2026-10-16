@@ -41,6 +41,7 @@ test(
             },
           }),
         lobbyStatus: (roomCode) => readLobbyStatus(connection, roomCode),
+        closeRoom: () => Promise.reject(new Error('unused')),
       });
       server = createServer(app);
       await new Promise<void>((resolve) => {

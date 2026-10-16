@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import nacl from 'tweetnacl';
 import { InteractionResponseType, InteractionType } from 'discord-interactions';
 import { handleInteraction, type InteractionDeps } from './interactions.ts';
+import type { CloseRoomReport } from './lobby-close.ts';
 import type { CreatedLobby } from './lobby-client.ts';
 import type { LobbyStatusReport } from './lobby-status.ts';
 import { createApp } from './server.ts';
@@ -33,7 +34,19 @@ function deps(partial: Partial<InteractionDeps> = {}): InteractionDeps {
       tables: 0,
       players: 0,
     }),
+    closeRoom: () => unusedClose(),
     ...partial,
+  };
+}
+
+function unusedClose(): CloseRoomReport {
+  return {
+    code: 'NONE',
+    found: false,
+    alreadyClosed: false,
+    lobbyPlayers: 0,
+    tablePlayers: 0,
+    closed: false,
   };
 }
 
@@ -70,6 +83,7 @@ test('the interactions endpoint checks the Discord signature', async () => {
     publicKey,
     createLobby: () => Promise.resolve(createdLobby()),
     lobbyStatus: () => liveReport('H7KP'),
+    closeRoom: () => unusedClose(),
   });
   const server = createServer(app);
   await new Promise<void>((resolve) => {
@@ -195,4 +209,67 @@ test('status asks for a room code when the option is empty', async () => {
   );
   assert.equal(reply.data?.content, 'Room code is required');
   assert.equal(reply.data?.flags, 1 << 6);
+});
+
+test('close refuses a room that still has a player', async () => {
+  let calls = 0;
+  const reply = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      data: {
+        name: 'cardhouse',
+        options: [
+          {
+            name: 'close',
+            type: 1,
+            options: [{ name: 'roomcode', type: 3, value: 'H7KP' }],
+          },
+        ],
+      },
+    },
+    deps({
+      closeRoom: () => {
+        calls += 1;
+        return {
+          code: 'H7KP',
+          found: true,
+          alreadyClosed: false,
+          lobbyPlayers: 2,
+          tablePlayers: 1,
+          closed: false,
+        };
+      },
+    }),
+  );
+  assert.equal(calls, 1);
+  assert.equal(reply.data?.content, 'Lobby H7KP still has 2 players');
+});
+
+test('close reports an empty room as closed', async () => {
+  const reply = await handleInteraction(
+    {
+      type: InteractionType.APPLICATION_COMMAND,
+      data: {
+        name: 'cardhouse',
+        options: [
+          {
+            name: 'close',
+            type: 1,
+            options: [{ name: 'roomcode', type: 3, value: 'h7kp' }],
+          },
+        ],
+      },
+    },
+    deps({
+      closeRoom: (roomCode) => ({
+        code: roomCode.toUpperCase(),
+        found: true,
+        alreadyClosed: false,
+        lobbyPlayers: 0,
+        tablePlayers: 0,
+        closed: true,
+      }),
+    }),
+  );
+  assert.equal(reply.data?.content, 'Lobby H7KP is closed');
 });

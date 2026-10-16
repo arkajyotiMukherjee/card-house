@@ -4,6 +4,7 @@ import { registerSlashCommands } from './commands.ts';
 import { discordRestApi } from './discord-http.ts';
 import { lookupDefaultPlayerName } from './discord-user.ts';
 import { connectLobby } from './lobby-client.ts';
+import { closeEmptyRoom } from './lobby-close.ts';
 import { readLobbyStatus } from './lobby-status.ts';
 import { createApp } from './server.ts';
 import { attachSpeakingWatch } from './speaking.ts';
@@ -62,6 +63,12 @@ export async function main(attached?: Server): Promise<void> {
       }
       return readLobbyStatus(connection, roomCode);
     },
+    closeRoom: (roomCode) => {
+      if (!connection) {
+        return Promise.reject(new Error('Still connecting to SpacetimeDB'));
+      }
+      return closeEmptyRoom(connection, roomCode);
+    },
   });
   if (attached) {
     attached.removeAllListeners('request');
@@ -84,7 +91,9 @@ export async function main(attached?: Server): Promise<void> {
         applicationId,
         guildId: process.env.DISCORD_GUILD_ID,
       });
-      console.log('Registered /cardhouse create and /cardhouse status');
+      console.log(
+        'Registered /cardhouse create, /cardhouse status, and /cardhouse close',
+      );
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Bot failed';
       console.error(redact(message, token));

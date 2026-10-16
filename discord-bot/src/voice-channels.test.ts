@@ -57,6 +57,7 @@ test('a create interaction forwards the guild id', async () => {
         tables: 0,
         players: 0,
       }),
+      closeRoom: () => Promise.reject(new Error('unused')),
     },
   );
   assert.deepEqual(seen, [`${TEXT}:${GUILD}`]);
