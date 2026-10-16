@@ -245,11 +245,12 @@ For each game (e.g., Crazy Eights, Blackjack, Hearts, Spades, Rummy, Go Fish, Pr
 
 Backend service (can be a small Node/Express or serverless function):
 
-`discord-bot/` registers `/cardhouse create` and `/cardhouse status`. Create calls `create_lobby`, then `set_lobby_discord_channel` so `Lobby.discordChannelId` is the Discord channel, then creates the lobby voice channel and, when a table appears in that lobby, the table voice channel. Status reads that lobby and replies whether it is live, with the table count and the player count. A missing code replies that the room was not found. The lobby scene shows a Launched from Discord badge when that column is not empty. A join URL with a Discord user id stores that id and uses the mapped default name (global name, otherwise username) without typing.
+`discord-bot/` registers `/cardhouse create`, `/cardhouse status`, and `/cardhouse close`. Create calls `create_lobby`, then `set_lobby_discord_channel` so `Lobby.discordChannelId` is the Discord channel, then creates the lobby voice channel and, when a table appears in that lobby, the table voice channel. Status reads that lobby and replies whether it is live, with the table count and the player count. A missing code replies that the room was not found. The lobby scene shows a Launched from Discord badge when that column is not empty. A join URL with a Discord user id stores that id and uses the mapped default name (global name, otherwise username) without typing.
 
 - Register slash commands:
   - `/cardhouse create`
   - `/cardhouse status ROOMCODE`
+  - `/cardhouse close ROOMCODE` closes the room only when it has no lobby members and no seated players, then the bot deletes that room's open voice channels
 - For `/cardhouse create`:
   - Call the same `createLobby()` used by web.
   - Respond with:

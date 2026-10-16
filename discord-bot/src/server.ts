@@ -6,6 +6,7 @@ import {
 import express, { type Express } from 'express';
 import type { PlayerNameLookup } from './discord-user.ts';
 import { handleInteraction, type DiscordInteraction } from './interactions.ts';
+import type { CloseRoomReport } from './lobby-close.ts';
 import type { CreatedLobby } from './lobby-client.ts';
 import type { LobbyStatusReport } from './lobby-status.ts';
 
@@ -19,6 +20,7 @@ export interface AppOptions {
   lobbyStatus: (
     roomCode: string,
   ) => Promise<LobbyStatusReport> | LobbyStatusReport;
+  closeRoom: (roomCode: string) => Promise<CloseRoomReport> | CloseRoomReport;
 }
 
 export function createApp(options: AppOptions): Express {
@@ -70,6 +72,7 @@ export function createApp(options: AppOptions): Express {
       void handleInteraction(interaction, {
         createLobby: options.createLobby,
         lobbyStatus: options.lobbyStatus,
+        closeRoom: options.closeRoom,
       })
         .then((body) => {
           res.json(body);

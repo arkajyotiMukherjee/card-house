@@ -72,6 +72,7 @@ export function connectLobby(
             query.lobby,
             query.lobbyMember,
             query.gameTable,
+            query.gameSeat,
             query.voicePresence,
           ]);
       })

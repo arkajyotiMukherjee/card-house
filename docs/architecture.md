@@ -79,6 +79,7 @@ A small bot / HTTP service:
   - stores the Discord channel on that lobby with `set_lobby_discord_channel`,
   - returns a link (`https://yourgame.com/ROOMCODE`) into that lobby.
 - `/cardhouse status ROOMCODE` reads that lobby and replies whether it is live, with the number of tables and players. A missing code says the room was not found.
+- `/cardhouse close ROOMCODE` closes that room only when nobody is in the lobby and nobody is seated at its tables, then the bot deletes the room's open voice channels.
 
 Discord is just an entry point; it never owns or mutates game state directly.
 

@@ -3,7 +3,7 @@ const STRING_OPTION = 3;
 
 export const ROOM_CODE_OPTION = 'roomcode';
 
-/** Discord application command name. Subcommands are `create` and `status`. */
+/** Discord application command name. Subcommands are `create`, `status`, and `close`. */
 export const SLASH_COMMAND_NAME = 'cardhouse';
 
 export const CARDHOUSE_COMMAND = {
@@ -19,6 +19,19 @@ export const CARDHOUSE_COMMAND = {
       type: SUB_COMMAND,
       name: 'status',
       description: 'Check whether a room code is still live',
+      options: [
+        {
+          type: STRING_OPTION,
+          name: ROOM_CODE_OPTION,
+          description: 'Lobby room code',
+          required: true,
+        },
+      ],
+    },
+    {
+      type: SUB_COMMAND,
+      name: 'close',
+      description: 'Close an empty room and its voice channels',
       options: [
         {
           type: STRING_OPTION,

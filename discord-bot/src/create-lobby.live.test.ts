@@ -38,6 +38,7 @@ test(
               );
             },
           }),
+        closeRoom: () => Promise.reject(new Error('unused')),
         lobbyStatus: () => ({
           code: '',
           found: false,

@@ -106,6 +106,7 @@ test('the name route reports a 401 without a player name', async () => {
       tables: 0,
       players: 0,
     }),
+    closeRoom: () => Promise.reject(new Error('unused')),
   });
   const server = createServer(app);
   await new Promise<void>((resolve) => {

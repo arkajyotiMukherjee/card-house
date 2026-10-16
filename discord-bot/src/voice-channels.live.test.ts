@@ -54,6 +54,7 @@ test(
           tables: 0,
           players: 0,
         }),
+        closeRoom: () => Promise.reject(new Error('unused')),
       });
       server = createServer(app);
       await listen(server);

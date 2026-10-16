@@ -1,6 +1,7 @@
 import { InteractionResponseType, InteractionType } from 'discord-interactions';
 import { ROOM_CODE_OPTION, SLASH_COMMAND_NAME } from './commands.ts';
 import { createReplyContent } from './join-url.ts';
+import { closeReplyContent, type CloseRoomReport } from './lobby-close.ts';
 import type { CreatedLobby } from './lobby-client.ts';
 import {
   normalizeRoomCode,
@@ -44,6 +45,7 @@ export interface InteractionDeps {
   lobbyStatus: (
     roomCode: string,
   ) => Promise<LobbyStatusReport> | LobbyStatusReport;
+  closeRoom: (roomCode: string) => Promise<CloseRoomReport> | CloseRoomReport;
 }
 
 type Subcommand = (
@@ -54,6 +56,7 @@ type Subcommand = (
 const subcommands: Record<string, Subcommand> = {
   create: handleCreate,
   status: handleStatus,
+  close: handleClose,
 };
 
 export async function handleInteraction(
@@ -114,6 +117,23 @@ async function handleStatus(
     type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
     data: {
       content: statusReplyContent(report),
+    },
+  };
+}
+
+async function handleClose(
+  interaction: DiscordInteraction,
+  deps: InteractionDeps,
+): Promise<DiscordReply> {
+  const raw = optionValue(interaction, ROOM_CODE_OPTION);
+  if (normalizeRoomCode(raw).length === 0) {
+    return ephemeral('Room code is required');
+  }
+  const report = await deps.closeRoom(raw);
+  return {
+    type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+    data: {
+      content: closeReplyContent(report),
     },
   };
 }
