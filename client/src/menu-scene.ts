@@ -226,7 +226,7 @@ export class MenuScene extends ex.Scene {
   }
 
   /**
-   * Opens Join Room with the code from a `/cardroom create` join URL.
+   * Opens Join Room with the code from a `/cardhouse create` join URL.
    * A default Discord name joins without asking the player to type one.
    * A saved preferred name only fills the field. It does not submit.
    */

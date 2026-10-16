@@ -73,12 +73,12 @@ SpacetimeDB is the **single source of truth** for game state and lobby structure
 
 A small bot / HTTP service:
 
-- Handles slash commands like `/cardroom create` from the `discord-bot/` service.
+- Handles slash commands like `/cardhouse create` from the `discord-bot/` service.
 - On “create”:
   - calls `create_lobby`, the same reducer the web app uses,
   - stores the Discord channel on that lobby with `set_lobby_discord_channel`,
   - returns a link (`https://yourgame.com/ROOMCODE`) into that lobby.
-- `/cardroom status ROOMCODE` reads that lobby and replies whether it is live, with the number of tables and players. A missing code says the room was not found.
+- `/cardhouse status ROOMCODE` reads that lobby and replies whether it is live, with the number of tables and players. A missing code says the room was not found.
 
 Discord is just an entry point; it never owns or mutates game state directly.
 
@@ -95,7 +95,7 @@ Represents a single card room.
 - `status: "open" | "closed"`.
 - `createdAt: number` – timestamp.
 - `lastActivityAt: number | null` – last join, table change, intent, speaking update, or voice presence. Null on a row from before the column existed; the next idle sweep stamps it and waits out a full timeout.
-- `discordChannelId: string` – Discord channel that ran `/cardroom create`, or empty for a web lobby.
+- `discordChannelId: string` – Discord channel that ran `/cardhouse create`, or empty for a web lobby.
 - `discordGuildId: string` – guild that owns the lobby voice channel, or empty.
 - `discordLobbyVoiceChannelId: string` – lobby voice channel, or empty.
 

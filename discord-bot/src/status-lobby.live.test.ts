@@ -57,7 +57,7 @@ test(
       const created = await postInteraction(url, keyPair.secretKey, {
         type: InteractionType.APPLICATION_COMMAND,
         channel_id: CHANNEL,
-        data: { name: 'cardroom', options: [{ name: 'create', type: 1 }] },
+        data: { name: 'cardhouse', options: [{ name: 'create', type: 1 }] },
       });
       const createdContent = created.payload.data?.content ?? '';
       const parsed = /^Lobby ([A-Z0-9]+)\n(\S+)$/.exec(createdContent);
@@ -67,7 +67,7 @@ test(
         type: InteractionType.APPLICATION_COMMAND,
         channel_id: CHANNEL,
         data: {
-          name: 'cardroom',
+          name: 'cardhouse',
           options: [
             {
               name: 'status',
@@ -81,7 +81,7 @@ test(
         type: InteractionType.APPLICATION_COMMAND,
         channel_id: CHANNEL,
         data: {
-          name: 'cardroom',
+          name: 'cardhouse',
           options: [
             {
               name: 'status',

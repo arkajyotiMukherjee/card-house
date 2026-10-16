@@ -59,7 +59,7 @@ test(
       const body = JSON.stringify({
         type: InteractionType.APPLICATION_COMMAND,
         channel_id: CHANNEL,
-        data: { name: 'cardroom', options: [{ name: 'create', type: 1 }] },
+        data: { name: 'cardhouse', options: [{ name: 'create', type: 1 }] },
       });
       const timestamp = String(Math.floor(Date.now() / 1000));
       const signature = Buffer.from(
