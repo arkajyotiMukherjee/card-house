@@ -7,7 +7,10 @@ import {
 import { pixelFont } from './boot-scene';
 import {
   applyCodeKey,
+  applyCodeText,
   applyFieldKey,
+  applyFieldText,
+  CODE_MAX,
   findCreatedLobby,
   LOBBY_PANEL,
   lobbyByCode,
@@ -19,6 +22,13 @@ import {
   type MemberLine,
   type MemberRecord,
 } from './lobby';
+import {
+  bindCanvasTextField,
+  eventTargetsHtmlField,
+  refreshCanvasTextFields,
+  type CanvasTextFieldHandle,
+  type FieldMoveKey,
+} from './html-field';
 import { SERVER_UNREACHABLE } from './connect';
 import { joinFailureMessage } from './join-errors';
 import type { DiscordJoinIdentity } from './join-path';
@@ -166,6 +176,7 @@ export function mountLobbyPanel(
   let renameFocused = false;
   let busy = false;
   let joinedCode = '';
+  let formVisible = handlers.returning !== true;
   const nameActors: ex.Actor[] = [];
   const fader = new SpeakingFader();
   let joinedLobbyId = '';
@@ -210,6 +221,7 @@ export function mountLobbyPanel(
   };
 
   const setFormVisible = (visible: boolean): void => {
+    formVisible = visible;
     const opacity = visible ? 1 : 0;
     nameLabel.opacity = opacity;
     codeLabel.opacity = opacity;
@@ -224,6 +236,7 @@ export function mountLobbyPanel(
     renameText.opacity = renameOpacity;
     renameBox.graphics.opacity = renameOpacity;
     saveButton.graphics.opacity = renameOpacity;
+    refreshCanvasTextFields();
   };
 
   const paintRename = (): void => {
@@ -434,8 +447,142 @@ export function mountLobbyPanel(
     void saveName();
   });
 
+  const sceneActive = (): boolean => engine.currentScene === scene;
+  const formInputs: {
+    name?: CanvasTextFieldHandle;
+    code?: CanvasTextFieldHandle;
+    rename?: CanvasTextFieldHandle;
+  } = {};
+  const focusLobbyForm = (): void => {
+    if (!sceneActive() || joinedCode.length > 0) {
+      return;
+    }
+    if (focused === 'code') {
+      formInputs.code?.focus();
+      return;
+    }
+    formInputs.name?.focus();
+  };
+  const moveLobbyForm = (key: FieldMoveKey): boolean => {
+    if (key !== 'Tab' || joinedCode.length > 0) {
+      return false;
+    }
+    focused = focused === 'name' ? 'code' : 'name';
+    paintFields();
+    focusLobbyForm();
+    return true;
+  };
+  formInputs.name = bindCanvasTextField({
+    id: 'lobby-name',
+    label: 'Your Name',
+    box: LOBBY_PANEL.nameField,
+    maxLength: NAME_MAX,
+    active: () => sceneActive() && formVisible && joinedCode.length === 0,
+    read: () => name,
+    sanitize: (value) => applyFieldText(value, NAME_MAX),
+    write: (value) => {
+      if (busy || joinedCode.length > 0) {
+        formInputs.name?.sync();
+        return;
+      }
+      name = value;
+      paintFields();
+    },
+    submit: () => {
+      if (busy || joinedCode.length > 0) {
+        return;
+      }
+      void submit(code.trim().length > 0 ? 'join' : 'create');
+    },
+    move: (key) => moveLobbyForm(key),
+    onFocus: () => {
+      if (joinedCode.length > 0) {
+        return;
+      }
+      focused = 'name';
+      paintFields();
+    },
+    enterKeyHint: 'go',
+    autoCapitalize: 'words',
+  });
+  formInputs.code = bindCanvasTextField({
+    id: 'lobby-code',
+    label: 'Room Code',
+    box: LOBBY_PANEL.codeField,
+    maxLength: CODE_MAX,
+    active: () => sceneActive() && formVisible && joinedCode.length === 0,
+    read: () => code,
+    sanitize: (value) => applyCodeText(value),
+    write: (value) => {
+      if (busy || joinedCode.length > 0) {
+        formInputs.code?.sync();
+        return;
+      }
+      code = value;
+      paintFields();
+    },
+    submit: () => {
+      if (busy || joinedCode.length > 0) {
+        return;
+      }
+      void submit(code.trim().length > 0 ? 'join' : 'create');
+    },
+    move: (key) => moveLobbyForm(key),
+    onFocus: () => {
+      if (joinedCode.length > 0) {
+        return;
+      }
+      focused = 'code';
+      paintFields();
+    },
+    enterKeyHint: 'go',
+    autoCapitalize: 'characters',
+  });
+  formInputs.rename = bindCanvasTextField({
+    id: 'lobby-rename',
+    label: 'Your Name',
+    box: LOBBY_PANEL.renameField,
+    maxLength: NAME_MAX,
+    active: () => sceneActive() && !formVisible && joinedCode.length > 0,
+    read: () => renameName,
+    sanitize: (value) => applyFieldText(value, NAME_MAX),
+    write: (value) => {
+      if (busy || joinedCode.length === 0) {
+        formInputs.rename?.sync();
+        return;
+      }
+      renameName = value;
+      paintRename();
+    },
+    submit: () => {
+      void saveName();
+    },
+    onFocus: () => {
+      if (joinedCode.length === 0 || busy) {
+        return;
+      }
+      roomComposer.focus('name');
+    },
+    enterKeyHint: 'done',
+    autoCapitalize: 'words',
+  });
+  const onLobbyScene = (): void => {
+    refreshCanvasTextFields();
+    focusLobbyForm();
+  };
+  scene.on('activate', onLobbyScene);
+  scene.on('deactivate', () => {
+    refreshCanvasTextFields();
+  });
+  if (engine.currentScene === scene) {
+    onLobbyScene();
+  }
+
   engine.input.keyboard.on('press', (evt) => {
     if (engine.currentScene !== scene) {
+      return;
+    }
+    if (eventTargetsHtmlField(evt.originalEvent)) {
       return;
     }
     if (evt.originalEvent?.ctrlKey || evt.originalEvent?.metaKey) {
@@ -476,6 +623,7 @@ export function mountLobbyPanel(
     if (evt.key === ex.Keys.Tab) {
       focused = focused === 'name' ? 'code' : 'name';
       paintFields();
+      focusLobbyForm();
       return;
     }
     const typed = evt.value ?? '';

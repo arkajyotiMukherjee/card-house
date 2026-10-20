@@ -25,11 +25,17 @@ import {
   TABLE_CHAT_TEXT,
   type MemberRef,
 } from './game-scene';
+import {
+  bindCanvasTextField,
+  eventTargetsHtmlField,
+  type CanvasTextFieldHandle,
+} from './html-field';
 import { wrapText } from './menu-layout';
 import type { DbConnection } from './module_bindings';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from './sheets';
 import {
   applyChatKey,
+  applyChatText,
   tableChatLine,
   tableChatMessagesForTable,
   TABLE_CHAT_BODY_MAX,
@@ -59,6 +65,7 @@ export class TableChatOverlay {
   private lineTexts: ex.Text[] = [];
   private inputField: ex.Text | undefined;
   private errorText: ex.Text | undefined;
+  private readonly composer: CanvasTextFieldHandle;
 
   constructor(
     private readonly scene: ex.Scene,
@@ -67,6 +74,31 @@ export class TableChatOverlay {
     private readonly readMembers: () => Iterable<MemberRef>,
     private readonly onBeforeOpen: () => void,
   ) {
+    this.composer = bindCanvasTextField({
+      id: 'table-chat',
+      label: 'Chat',
+      box: TABLE_CHAT_INPUT,
+      maxLength: TABLE_CHAT_BODY_MAX,
+      active: () => this.opened,
+      read: () => this.draft,
+      sanitize: (value) => applyChatText(value, TABLE_CHAT_BODY_MAX),
+      write: (value) => {
+        if (this.sending) {
+          this.composer.sync();
+          return;
+        }
+        this.draft = value;
+        this.paintInput();
+      },
+      submit: () => {
+        this.send();
+      },
+      cancel: () => {
+        this.close();
+      },
+      enterKeyHint: 'send',
+      autoCapitalize: 'off',
+    });
     this.buildButton();
   }
 
@@ -103,6 +135,8 @@ export class TableChatOverlay {
     this.opened = true;
     this.buildOverlay();
     this.refresh();
+    this.composer.refresh();
+    this.composer.focus();
   }
 
   close(): void {
@@ -117,6 +151,7 @@ export class TableChatOverlay {
     this.lineTexts = [];
     this.inputField = undefined;
     this.errorText = undefined;
+    this.composer.refresh();
   }
 
   /** Repaints the history from the subscribed `TableChatMessage` rows. */
@@ -148,6 +183,9 @@ export class TableChatOverlay {
   handleKey(evt: ex.KeyEvent): boolean {
     if (!this.opened) {
       return false;
+    }
+    if (eventTargetsHtmlField(evt.originalEvent)) {
+      return true;
     }
     if (evt.key === ex.Keys.Escape) {
       this.close();
@@ -187,6 +225,7 @@ export class TableChatOverlay {
       .then(() => {
         this.draft = '';
         this.paintInput();
+        this.composer.sync();
       })
       .catch((error: unknown) => {
         this.showError(

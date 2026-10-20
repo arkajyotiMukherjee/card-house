@@ -23,6 +23,7 @@ import { LobbyScene } from './lobby-scene';
 import { mountLobbyPanel, type LobbyPanel } from './lobby-panel';
 import { MenuScene } from './menu-scene';
 import type { DbConnection } from './module_bindings';
+import { refreshCanvasTextFields } from './html-field';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH, coverViewport } from './sheets';
 import { getTheme, saveTheme } from './theme';
 
@@ -61,6 +62,7 @@ function applyCoverScale(): void {
   const extraY = covered.height - window.innerHeight;
   canvas.style.left = extraX > 0 ? `${-extraX / 2}px` : '0px';
   canvas.style.top = extraY > 0 ? `${-extraY / 2}px` : '0px';
+  refreshCanvasTextFields();
 }
 
 const scene = new BootScene(theme);
