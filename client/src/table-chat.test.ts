@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyChatKey,
+  applyChatText,
   tableChatLine,
   tableChatMessagesForTable,
   type TableChatRow,
@@ -26,6 +27,11 @@ describe('applyChatKey', () => {
 
   it('stops at the max length', () => {
     expect(applyChatKey('ab', 'c', 2)).toBe('ab');
+  });
+
+  it('filters a whole pasted string the same way', () => {
+    expect(applyChatText('wow!\n', 20)).toBe('wow!');
+    expect(applyChatText('abcdef', 3)).toBe('abc');
   });
 });
 

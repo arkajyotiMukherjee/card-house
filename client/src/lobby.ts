@@ -320,11 +320,38 @@ export function applyFieldKey(
   return value + key;
 }
 
+/** Whole-string form of `applyFieldKey`, for a paste or a mobile input event. */
+export function applyFieldText(value: string, maxLength: number): string {
+  let next = '';
+  for (const char of value) {
+    next = applyFieldKey(next, char, maxLength);
+  }
+  return next;
+}
+
 export function applyCodeKey(value: string, key: string): string {
   if (key === ' ') {
     return value;
   }
   return applyFieldKey(value, key, CODE_MAX).toUpperCase();
+}
+
+/** Whole-string form of `applyCodeKey`. */
+export function applyCodeText(value: string): string {
+  let next = '';
+  for (const char of value) {
+    next = applyCodeKey(next, char);
+  }
+  return next;
+}
+
+/** Whole-string form of lobby `applyChatKey`. */
+export function applyChatText(value: string): string {
+  let next = '';
+  for (const char of value) {
+    next = applyChatKey(next, char);
+  }
+  return next;
 }
 
 export function lobbyByCode<T extends LobbyRow>(

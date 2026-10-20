@@ -23,6 +23,6 @@ Add a runtime image by copying it into `public/assets/` from `card-assest -pack`
 
 Do not import files from `card-assest -pack` in the client. That folder is source art.
 
-Do not add menus or buttons as HTML. `docs/ui-ux.md` keeps UI on the canvas. `index.html` only hosts it.
+Do not add menus or buttons as HTML. `docs/ui-ux.md` keeps UI on the canvas. `index.html` only hosts it. A text field is the exception: while it can be typed in, `src/html-field.ts` places a real HTML input on that box so a phone or tablet keyboard can type. The canvas label shows the same value. Antialiasing stays off.
 
 Do not put game rules in this package. Legality belongs in the SpacetimeDB module.

@@ -29,6 +29,18 @@ export function applyChatKey(
   return value + key;
 }
 
+/** Whole-string form of `applyChatKey`, for a paste or a mobile input event. */
+export function applyChatText(
+  value: string,
+  maxLength = TABLE_CHAT_BODY_MAX,
+): string {
+  let next = '';
+  for (const char of value) {
+    next = applyChatKey(next, char, maxLength);
+  }
+  return next;
+}
+
 /** Only this table's rows, oldest first. */
 export function tableChatMessagesForTable(
   rows: Iterable<TableChatRow>,

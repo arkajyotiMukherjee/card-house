@@ -17,7 +17,22 @@ import {
   setCardBackStyle,
   setCardFrontStyle,
 } from './card-appearance';
-import { GAME_CATALOG, applyCodeKey, applyFieldKey, NAME_MAX } from './lobby';
+import {
+  GAME_CATALOG,
+  applyCodeKey,
+  applyCodeText,
+  applyFieldKey,
+  applyFieldText,
+  CODE_MAX,
+  NAME_MAX,
+} from './lobby';
+import {
+  bindCanvasTextField,
+  eventTargetsHtmlField,
+  refreshCanvasTextFields,
+  type CanvasTextFieldHandle,
+  type FieldMoveKey,
+} from './html-field';
 import {
   roomEntryError,
   SERVER_UNREACHABLE,
@@ -163,6 +178,9 @@ export class MenuScene extends ex.Scene {
   private name = '';
   private code = '';
   private focused: 'name' | 'code' = 'name';
+  private nameField: CanvasTextFieldHandle | undefined;
+  private codeField: CanvasTextFieldHandle | undefined;
+  private menuFieldsReady = false;
   private nameText: ex.Text | undefined;
   private codeText: ex.Text | undefined;
   private nameBox: ex.Rectangle | undefined;
@@ -250,8 +268,12 @@ export class MenuScene extends ex.Scene {
     this.buildButtons();
     this.buildThemeButton();
     this.buildFooter();
+    this.bindMenuFields();
     engine.input.keyboard.on('press', (evt) => {
       if (engine.currentScene !== this) {
+        return;
+      }
+      if (eventTargetsHtmlField(evt.originalEvent)) {
         return;
       }
       if (evt.originalEvent?.ctrlKey || evt.originalEvent?.metaKey) {
@@ -262,6 +284,10 @@ export class MenuScene extends ex.Scene {
   }
 
   onActivate(): void {
+    this.closeOverlay();
+  }
+
+  onDeactivate(): void {
     this.closeOverlay();
   }
 
@@ -481,6 +507,7 @@ export class MenuScene extends ex.Scene {
     this.previewBack = undefined;
     this.mode = 'main';
     this.busy = false;
+    refreshCanvasTextFields();
   }
 
   private shade(): void {
@@ -620,6 +647,8 @@ export class MenuScene extends ex.Scene {
     );
     this.overlay.push(submit, cancel);
     this.paintPrompt();
+    refreshCanvasTextFields();
+    this.focusMenuField();
   }
 
   private paintPrompt(): void {
@@ -991,25 +1020,19 @@ export class MenuScene extends ex.Scene {
     }
     const kind = this.mode;
     if (key === ex.Keys.Enter) {
-      const next = nextFieldAfterEnter(kind, this.focused, this.name);
-      if (next === 'submit') {
-        void this.submitPrompt();
-      } else {
-        this.focused = next;
-        this.paintPrompt();
-      }
+      this.advancePrompt();
       return;
     }
-    if (kind === 'join') {
-      if (
-        key === ex.Keys.Tab ||
+    if (
+      kind === 'join' &&
+      (key === ex.Keys.Tab ||
         key === ex.Keys.ArrowUp ||
-        key === ex.Keys.ArrowDown
-      ) {
-        this.focused = this.focused === 'name' ? 'code' : 'name';
-        this.paintPrompt();
-        return;
-      }
+        key === ex.Keys.ArrowDown)
+    ) {
+      this.focused = this.focused === 'name' ? 'code' : 'name';
+      this.paintPrompt();
+      this.focusMenuField();
+      return;
     }
     if (key === ex.Keys.Backspace) {
       this.writeField('Backspace');
@@ -1020,15 +1043,143 @@ export class MenuScene extends ex.Scene {
     }
   }
 
-  private writeField(key: string): void {
-    this.setError('');
-    if (this.focused === 'name') {
-      this.name = applyFieldKey(this.name, key, NAME_MAX);
-      rememberPreferredName(this.clientId, this.name);
-    } else {
-      this.code = applyCodeKey(this.code, key);
+  private bindMenuFields(): void {
+    if (this.menuFieldsReady) {
+      return;
     }
+    this.menuFieldsReady = true;
+    const prompting = (): boolean =>
+      this.mode === 'create' || this.mode === 'join';
+    this.nameField = bindCanvasTextField({
+      id: 'menu-name',
+      label: 'Your Name',
+      box: PROMPT.nameField,
+      maxLength: NAME_MAX,
+      active: prompting,
+      read: () => this.name,
+      sanitize: (value) => applyFieldText(value, NAME_MAX),
+      write: (value) => {
+        this.storeName(value);
+      },
+      submit: () => {
+        this.advancePrompt();
+      },
+      cancel: () => {
+        this.closeOverlay();
+      },
+      move: (key) => this.movePromptField(key),
+      onFocus: () => {
+        this.focusPromptBox('name');
+      },
+      enterKeyHint: () => (this.mode === 'join' ? 'next' : 'go'),
+      autoCapitalize: 'words',
+    });
+    this.codeField = bindCanvasTextField({
+      id: 'menu-code',
+      label: 'Room Code',
+      box: PROMPT.codeField,
+      maxLength: CODE_MAX,
+      active: () => this.mode === 'join',
+      read: () => this.code,
+      sanitize: (value) => applyCodeText(value),
+      write: (value) => {
+        this.storeCode(value);
+      },
+      submit: () => {
+        this.advancePrompt();
+      },
+      cancel: () => {
+        this.closeOverlay();
+      },
+      move: (key) => this.movePromptField(key),
+      onFocus: () => {
+        this.focusPromptBox('code');
+      },
+      enterKeyHint: 'go',
+      autoCapitalize: 'characters',
+    });
+  }
+
+  private focusPromptBox(id: 'name' | 'code'): void {
+    if (this.mode !== 'create' && this.mode !== 'join') {
+      return;
+    }
+    if (id === 'code' && this.mode !== 'join') {
+      return;
+    }
+    if (this.focused === id) {
+      return;
+    }
+    this.focused = id;
     this.paintPrompt();
+  }
+
+  private focusMenuField(): void {
+    if (this.focused === 'code') {
+      this.codeField?.focus();
+      return;
+    }
+    this.nameField?.focus();
+  }
+
+  private movePromptField(key: FieldMoveKey): boolean {
+    if (this.mode !== 'join') {
+      return false;
+    }
+    if (key !== 'Tab' && key !== 'ArrowUp' && key !== 'ArrowDown') {
+      return false;
+    }
+    this.focused = this.focused === 'name' ? 'code' : 'name';
+    this.paintPrompt();
+    this.focusMenuField();
+    return true;
+  }
+
+  private advancePrompt(): void {
+    if (this.busy) {
+      return;
+    }
+    const kind = this.mode;
+    if (kind !== 'create' && kind !== 'join') {
+      return;
+    }
+    const next = nextFieldAfterEnter(kind, this.focused, this.name);
+    if (next === 'submit') {
+      void this.submitPrompt();
+      return;
+    }
+    this.focused = next;
+    this.paintPrompt();
+    this.focusMenuField();
+  }
+
+  private storeName(value: string): void {
+    if (this.busy) {
+      this.nameField?.sync();
+      return;
+    }
+    this.setError('');
+    this.name = value;
+    rememberPreferredName(this.clientId, this.name);
+    this.paintPrompt();
+  }
+
+  private storeCode(value: string): void {
+    if (this.busy) {
+      this.codeField?.sync();
+      return;
+    }
+    this.setError('');
+    this.code = value;
+    this.paintPrompt();
+  }
+
+  private writeField(key: string): void {
+    if (this.focused === 'name') {
+      this.storeName(applyFieldKey(this.name, key, NAME_MAX));
+    } else {
+      this.storeCode(applyCodeKey(this.code, key));
+    }
   }
 
   private overlayText(

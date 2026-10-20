@@ -1,4 +1,5 @@
 import * as ex from 'excalibur';
+import { refreshCanvasTextFields } from './html-field';
 import { readBluffState, type BluffState } from '../../src/shared/games/bluff';
 import {
   readCrazyEightsState,
@@ -274,6 +275,7 @@ export class GameScene extends ex.Scene {
     this.input.keyboard.on('press', this.onKeyPress);
     this.input.pointers.on('wheel', this.onWheel);
     this.bindTable();
+    refreshCanvasTextFields();
   }
 
   onDeactivate(): void {
@@ -281,6 +283,7 @@ export class GameScene extends ex.Scene {
     this.input.pointers.off('wheel', this.onWheel);
     this.howToPlay.close();
     this.tableChat.close();
+    refreshCanvasTextFields();
     this.endSubscription();
   }
 

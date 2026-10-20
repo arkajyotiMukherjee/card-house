@@ -17,7 +17,14 @@ import {
   type IdleCard,
 } from './lobby-ambience';
 import {
+  bindCanvasTextField,
+  eventTargetsHtmlField,
+  refreshCanvasTextFields,
+  type CanvasTextFieldHandle,
+} from './html-field';
+import {
   applyChatKey,
+  applyChatText,
   CHAT_BODY_MAX,
   CHAT_PANEL,
   LEAVE_CONFIRM,
@@ -152,6 +159,7 @@ export class LobbyScene {
   );
   private chatBody = '';
   private chatFocused = false;
+  private chatField: CanvasTextFieldHandle | undefined;
   private chatBusy = false;
   private chatKeyboardBound = false;
   private readonly chatMessageActors: ex.Actor[] = [];
@@ -251,6 +259,8 @@ export class LobbyScene {
     this.chatFocused = false;
     roomComposer.blur('chat');
     this.paintChatField();
+    this.chatField?.sync();
+    refreshCanvasTextFields();
     this.setChatError('');
     if (this.subscribedLobbyId === lobbyId) {
       this.render();
@@ -398,6 +408,34 @@ export class LobbyScene {
     this.chatInputBox.on('pointerup', () => {
       roomComposer.focus('chat');
     });
+    this.chatField = bindCanvasTextField({
+      id: 'lobby-chat',
+      label: 'Chat',
+      box: CHAT_PANEL.field,
+      maxLength: CHAT_BODY_MAX,
+      active: () =>
+        this.engine.currentScene === this.scene &&
+        this.lobbyId.length > 0 &&
+        !this.leaveConfirm,
+      read: () => this.chatBody,
+      sanitize: (value) => applyChatText(value),
+      write: (value) => {
+        if (this.chatBusy) {
+          this.chatField?.sync();
+          return;
+        }
+        this.chatBody = value;
+        this.paintChatField();
+      },
+      submit: () => {
+        void this.sendChat();
+      },
+      onFocus: () => {
+        roomComposer.focus('chat');
+      },
+      enterKeyHint: 'send',
+      autoCapitalize: 'off',
+    });
 
     this.button(CHAT_PANEL.send, 'Send', () => {
       void this.sendChat();
@@ -459,11 +497,13 @@ export class LobbyScene {
       panel,
     );
     this.leaveConfirm = panel;
+    refreshCanvasTextFields();
   }
 
   private closeLeaveConfirm(): void {
     this.leaveConfirm?.kill();
     this.leaveConfirm = undefined;
+    refreshCanvasTextFields();
   }
 
   private async confirmLeave(): Promise<void> {
@@ -500,6 +540,9 @@ export class LobbyScene {
         this.engine.currentScene !== this.scene ||
         this.leaveConfirm
       ) {
+        return;
+      }
+      if (eventTargetsHtmlField(evt.originalEvent)) {
         return;
       }
       if (evt.originalEvent?.ctrlKey || evt.originalEvent?.metaKey) {
@@ -566,6 +609,7 @@ export class LobbyScene {
       });
       this.chatBody = '';
       this.paintChatField();
+      this.chatField?.sync();
     } catch (error: unknown) {
       this.setChatError(errorMessage(error));
     } finally {

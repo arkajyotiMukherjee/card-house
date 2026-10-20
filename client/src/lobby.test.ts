@@ -9,8 +9,11 @@ import { spadesGameDefinition } from '../../src/shared/games/spades';
 import { heartsGameDefinition } from '../../src/shared/games/hearts';
 import { pokerGameDefinition } from '../../src/shared/games/poker';
 import {
+  applyChatText,
   applyCodeKey,
+  applyCodeText,
   applyFieldKey,
+  applyFieldText,
   clampPlayerCount,
   discordBadgeBox,
   findCreatedLobby,
@@ -52,6 +55,15 @@ describe('lobby fields', () => {
     expect(applyFieldKey('Ada', 'Backspace', 12)).toBe('Ad');
     expect(applyFieldKey('abcdefghijkl', 'm', 12)).toBe('abcdefghijkl');
     expect(applyFieldKey('Ada', '!', 12)).toBe('Ada');
+  });
+
+  it('keeps the same characters when a whole string arrives at once', () => {
+    expect(applyFieldText('Ada!', 12)).toBe('Ada');
+    expect(applyFieldText('hello world!!', 12)).toBe('hello world');
+    expect(applyFieldText('abcdefghijklm', 12)).toBe('abcdefghijkl');
+    expect(applyCodeText('ab c!')).toBe('ABC');
+    expect(applyChatText('gg?')).toBe('gg?');
+    expect(applyChatText('hi\nthere')).toBe('hithere');
   });
 
   it('uppercases a room code and ignores spaces', () => {
