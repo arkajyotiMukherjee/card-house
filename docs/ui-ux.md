@@ -8,7 +8,7 @@ The whole experience lives inside a single Excalibur.js canvas with a fixed virt
   - green felt tables,
   - pixel playing cards and chips,
   - simple, readable pixel font.
-- No HTML overlays; all UI (menus, buttons, labels, overlays) is drawn in-canvas.
+- No HTML overlays; all UI (menus, buttons, labels, overlays) is drawn in-canvas. The exceptions are the text-field inputs that sit on a focused canvas box, and the phone shell (rotate panel and fullscreen button, see Phone & Tablet Shell).
 - Color palette: warm, slightly retro casino:
   - greens for felt,
   - golds/whites for key text,
@@ -394,6 +394,20 @@ If a player disconnects suddenly:
 - On resize:
   - calculate integer scale factor to fit screen while preserving aspect ratio.
   - center the scaled canvas, with letterboxing where needed.
+  - on a phone or tablet, fit the whole frame in the visible area instead (see Phone & Tablet Shell).
 - Hitboxes and text layout all use logical coordinates; Excalibur’s camera scaling handles physical pixels.
 
 This keeps interactions predictable and the pixel art crisp regardless of display size.
+
+## Phone & Tablet Shell
+
+A phone or tablet is any device matching `(pointer: coarse) and (hover: none)`. A narrow desktop window does not match and keeps the desktop layout.
+
+- **Fit, not cover.** On such a device the whole 960×540 frame is scaled to fit inside the visible area (`visualViewport`), minus the safe-area insets for the notch and home indicator. Nothing is cropped; the leftover edge is the page background. Desktop keeps the cover scale.
+- **Rotate panel.** In portrait the game is covered by a green and gold panel that reads “Rotate the phone to landscape” and has a fullscreen button.
+- **Fullscreen button.** In landscape the game shows, with a small fullscreen button in the top-left corner (clear of the notch) until the browser is actually fullscreen.
+  - Where `document.documentElement.requestFullscreen()` works, the button enters fullscreen and then calls `screen.orientation.lock('landscape')`. A refusal leaves the layout as it is.
+  - iPhone Safari cannot fullscreen a page or a canvas. There the button does not fullscreen. If the phone is still upright the rotate panel stays, and a note explains: tap Share, then Add to Home Screen.
+  - When the page runs as an installed app (`display-mode: standalone`), the button is hidden.
+- **Touch targets.** Pixel buttons are about 28px tall. On a coarse pointer the hit area grows to at least 44px around the same face; the pixel font and art do not change. Where two targets are close, the extra area is split between them so they never overlap. A card tap selects and Play fires on `pointerup`, so neither needs a hover. The hover lift is cosmetic.
+- **Keyboard.** Tapping a text field puts the finger on a real HTML input already placed over the canvas box, so iOS opens its keyboard. The input uses a gold caret and 16px text (no iOS zoom); the canvas label stays the text the player reads. When the keyboard is up the page lifts, using `visualViewport`, so the focused box stays above it.

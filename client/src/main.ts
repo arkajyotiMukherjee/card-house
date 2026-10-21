@@ -23,8 +23,21 @@ import { LobbyScene } from './lobby-scene';
 import { mountLobbyPanel, type LobbyPanel } from './lobby-panel';
 import { MenuScene } from './menu-scene';
 import type { DbConnection } from './module_bindings';
-import { refreshCanvasTextFields } from './html-field';
-import { LOGICAL_HEIGHT, LOGICAL_WIDTH, coverViewport } from './sheets';
+import { isCanvasFieldFocused, refreshCanvasTextFields } from './html-field';
+import {
+  isMobileDevice,
+  isPortrait,
+  mountMobileShell,
+  readSafeInsets,
+  visibleSize,
+} from './mobile-shell';
+import {
+  LOGICAL_HEIGHT,
+  LOGICAL_WIDTH,
+  coverViewport,
+  fitViewport,
+} from './sheets';
+import { installTouchTargets } from './touch-targets';
 import { getTheme, saveTheme } from './theme';
 
 const clientId = getOrCreateClientId();
@@ -52,7 +65,18 @@ const engine = new ex.Engine({
   pixelRatio: 1,
 });
 
+let settledSize = visibleSize();
+
 function applyCoverScale(): void {
+  if (isMobileDevice()) {
+    applyFitScale();
+  } else {
+    applyDesktopScale();
+  }
+  refreshCanvasTextFields();
+}
+
+function applyDesktopScale(): void {
   const covered = coverViewport(window.innerWidth, window.innerHeight);
   engine.screen.viewport = covered;
   engine.screen.applyResolutionAndViewport();
@@ -62,7 +86,33 @@ function applyCoverScale(): void {
   const extraY = covered.height - window.innerHeight;
   canvas.style.left = extraX > 0 ? `${-extraX / 2}px` : '0px';
   canvas.style.top = extraY > 0 ? `${-extraY / 2}px` : '0px';
-  refreshCanvasTextFields();
+}
+
+/**
+ * A phone or tablet fits the whole frame inside the visible area and the
+ * safe-area insets. The size comes from the visual viewport. While a field is
+ * focused the keyboard shrinks that viewport, so the last size is kept and
+ * `html-field.ts` lifts the focused box instead of shrinking the table.
+ */
+function applyFitScale(): void {
+  const size = visibleSize();
+  const sameOrientation =
+    isPortrait(size.width, size.height) ===
+    isPortrait(settledSize.width, settledSize.height);
+  if (!isCanvasFieldFocused() || !sameOrientation) {
+    settledSize = size;
+  }
+  const fitted = fitViewport(
+    settledSize.width,
+    settledSize.height,
+    readSafeInsets(),
+  );
+  engine.screen.viewport = { width: fitted.width, height: fitted.height };
+  engine.screen.applyResolutionAndViewport();
+  canvas.style.imageRendering = 'pixelated';
+  canvas.style.position = 'absolute';
+  canvas.style.left = `${fitted.left}px`;
+  canvas.style.top = `${fitted.top}px`;
 }
 
 const scene = new BootScene(theme);
@@ -71,7 +121,11 @@ const menu = new MenuScene(clientId);
 engine.add('menu', menu);
 
 window.addEventListener('resize', applyCoverScale);
+window.addEventListener('orientationchange', applyCoverScale);
+window.visualViewport?.addEventListener('resize', applyCoverScale);
 applyCoverScale();
+mountMobileShell({ onChange: applyCoverScale });
+installTouchTargets(engine);
 
 const loader = new ex.Loader(demoImages);
 const savedRoomAtStart = joinCode ? undefined : readLastRoom();

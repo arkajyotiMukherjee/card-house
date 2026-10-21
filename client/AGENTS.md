@@ -10,7 +10,7 @@ Style and asset rules: [../repo-conventions.md](../repo-conventions.md). Source 
 - `tsconfig.json` — strict TypeScript, `include` is `src` only.
 - `vite.config.ts` — `0.0.0.0:5173`, `envDir` the repo root, `__SPACETIMEDB_HOST__`, `__SPACETIMEDB_DB__`, and `__CARDROOM_BOT_URL__`.
 - `vitest.config.ts` — Node environment, `src/**/*.test.ts`, setup `src/test-setup.ts`.
-- `index.html` — `#app` and one canvas. Page background `#07140d`. The canvas covers the window. `image-rendering: pixelated` on `canvas`.
+- `index.html` — `#app` and one canvas. Page background `#07140d`. The viewport meta has `viewport-fit=cover`, and `html, body` set `touch-action: manipulation` and `overscroll-behavior: none`. On a desktop the canvas covers the window; on a phone or tablet `main.ts` fits the whole frame inside the visible area and safe insets. `image-rendering: pixelated` on `canvas`.
 - `public/assets/` — the sheets, tables, and Press Start 2P font the client loads. Paths are `/assets/...`.
 
 ## Changes
@@ -23,6 +23,6 @@ Add a runtime image by copying it into `public/assets/` from `card-assest -pack`
 
 Do not import files from `card-assest -pack` in the client. That folder is source art.
 
-Do not add menus or buttons as HTML. `docs/ui-ux.md` keeps UI on the canvas. `index.html` only hosts it. A text field is the exception: while it can be typed in, `src/html-field.ts` places a real HTML input on that box so a phone or tablet keyboard can type. The canvas label shows the same value. Antialiasing stays off.
+Do not add menus or buttons as HTML. `docs/ui-ux.md` keeps UI on the canvas. `index.html` only hosts it. A text field is the exception: while it can be typed in, `src/html-field.ts` places a real HTML input on that box so a phone or tablet keyboard can type. The canvas label shows the same value. Antialiasing stays off. The phone shell (`src/mobile-shell.ts`: rotate panel and fullscreen button) is the other HTML exception. It is a plain-DOM layer next to the canvas and only shows on a coarse pointer without hover.
 
 Do not put game rules in this package. Legality belongs in the SpacetimeDB module.

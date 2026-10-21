@@ -82,9 +82,9 @@ Excalibur `0.32.0`. Logical resolution is `960×540` (`LOGICAL_WIDTH` and `LOGIC
 
 `client/src/main.ts` builds the engine with `DisplayMode.Fixed`, `antialiasing: false`, `snapToPixel: true`, `suppressHiDPIScaling: true`, `pixelRatio: 1`, and `suppressPlayButton: true`. Felt color is `#145c38`. Sprites use `{ filtering: ex.ImageFiltering.Pixel }`.
 
-`coverViewport` in `client/src/sheets.ts` is the CSS size `main.ts` applies. It scales the 960×540 canvas uniformly until both window edges are covered, then centers the extra. The canvas style is `image-rendering: pixelated`. `client/index.html` sets the same on `canvas`, hides overflow, and paints the page `#07140d`. `integerScale` is still the largest integer that fits, and at least `1`.
+`coverViewport` in `client/src/sheets.ts` is the CSS size `main.ts` applies. It scales the 960×540 canvas uniformly until both window edges are covered, then centers the extra. The canvas style is `image-rendering: pixelated`. `client/index.html` sets the same on `canvas`, hides overflow, and paints the page `#07140d`. `integerScale` is still the largest integer that fits, and at least `1`. On a phone or tablet (`(pointer: coarse) and (hover: none)`) `main.ts` uses `fitViewport` instead, so the whole frame fits inside `visualViewport` and the safe-area insets, and `client/src/mobile-shell.ts` adds the rotate panel and fullscreen button.
 
-`docs/ui-ux.md` draws menus and buttons in the canvas. `index.html` is the host, not a UI kit. Text fields are the exception: `client/src/html-field.ts` puts a real HTML input on the focused box so a touch keyboard can type, and the canvas label shows that same value.
+`docs/ui-ux.md` draws menus and buttons in the canvas. `index.html` is the host, not a UI kit. Text fields are the exception: `client/src/html-field.ts` puts a real HTML input on the focused box so a touch keyboard can type, and the canvas label shows that same value. The phone shell in `mobile-shell.ts` is the other HTML exception.
 
 Vite `8` (`client/vite.config.ts`): `host` `0.0.0.0`, port `5173`, `strictPort: true`, `envDir` the repo root. `__SPACETIMEDB_HOST__` and `__SPACETIMEDB_DB__` are compile-time defines. Defaults are `ws://127.0.0.1:3000` and `cardroom`. Declarations live in `client/src/vite-env.d.ts`.
 

@@ -2,9 +2,13 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { applyCodeText, applyFieldText } from './lobby';
 import { applyChatText } from './table-chat';
+import { PROMPT } from './menu-layout';
 import {
+  CARET_GOLD,
+  KEYBOARD_MARGIN,
   bindCanvasTextField,
   eventTargetsHtmlField,
+  keyboardLift,
   logicalBoxToScreen,
   refreshCanvasTextFields,
   screenToLogical,
@@ -12,6 +16,23 @@ import {
 } from './html-field';
 
 const handles: CanvasTextFieldHandle[] = [];
+
+function stubMobile(mobile: boolean): () => void {
+  const original = Object.getOwnPropertyDescriptor(window, 'matchMedia');
+  Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    value: (query: string) => ({
+      matches: mobile && query === '(pointer: coarse) and (hover: none)',
+    }),
+  });
+  return () => {
+    if (original) {
+      Object.defineProperty(window, 'matchMedia', original);
+    } else {
+      Reflect.deleteProperty(window, 'matchMedia');
+    }
+  };
+}
 
 afterEach(() => {
   for (const handle of handles) {
@@ -231,30 +252,59 @@ describe('canvas text field', () => {
     expect(submitted).toBe(1);
     expect(cancelled).toBe(1);
     expect(reachedWindow).toBe(0);
-    expect(
-      eventTargetsHtmlField({ target: input } as unknown as Event),
-    ).toBe(true);
+    expect(eventTargetsHtmlField({ target: input } as unknown as Event)).toBe(
+      true,
+    );
   });
 
-  it('focuses the field under a tap so a touch keyboard can open', () => {
+  it('has the input under the finger before the tap, and a tap on it focuses it', () => {
     mountCanvas();
     let focused = '';
+    let open = false;
     handles.push(
       bindCanvasTextField({
-        id: 'asleep',
-        label: 'Asleep',
-        box: { x: 0, y: 0, w: 40, h: 20 },
-        maxLength: 8,
-        active: () => false,
-        read: () => '',
+        id: 'menu-name',
+        label: 'Your Name',
+        box: PROMPT.nameField,
+        maxLength: 12,
+        active: () => open,
+        read: () => 'Bea',
         sanitize: (next) => next,
         write: () => {},
         submit: () => {},
         onFocus: () => {
-          focused = 'asleep';
+          focused = 'name';
         },
       }),
     );
+    const input = document.querySelector(
+      'input[data-cardhouse-field="menu-name"]',
+    );
+    if (!(input instanceof HTMLInputElement)) {
+      throw new Error('missing input');
+    }
+    expect(input.style.pointerEvents).toBe('none');
+
+    open = true;
+    refreshCanvasTextFields();
+    expect(input.style.pointerEvents).toBe('auto');
+    expect(input.style.left).toBe(`${PROMPT.nameField.x}px`);
+    expect(input.style.top).toBe(`${PROMPT.nameField.y}px`);
+    expect(input.style.width).toBe(`${PROMPT.nameField.w}px`);
+    expect(input.style.height).toBe(`${PROMPT.nameField.h}px`);
+    expect(document.activeElement).not.toBe(input);
+
+    input.dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }),
+    );
+    input.dispatchEvent(new Event('touchend', { bubbles: true }));
+    expect(document.activeElement).toBe(input);
+    expect(focused).toBe('name');
+    expect(input.getAttribute('aria-hidden')).toBeNull();
+  });
+
+  it('does not focus a field later from a canvas pointerup', () => {
+    mountCanvas();
     handles.push(
       bindCanvasTextField({
         id: 'name',
@@ -266,13 +316,9 @@ describe('canvas text field', () => {
         sanitize: (next) => next,
         write: () => {},
         submit: () => {},
-        onFocus: () => {
-          focused = 'name';
-        },
       }),
     );
     const canvas = document.querySelector('canvas');
-    expect(canvas).toBeInstanceOf(HTMLCanvasElement);
     canvas?.dispatchEvent(
       new PointerEvent('pointerup', {
         bubbles: true,
@@ -282,21 +328,76 @@ describe('canvas text field', () => {
         pointerType: 'touch',
       }),
     );
-    const input = document.querySelector('input[data-cardhouse-field="name"]');
-    expect(document.activeElement).toBe(input);
-    expect(focused).toBe('name');
-    expect(
-      (input as HTMLInputElement | null)?.getAttribute('aria-hidden'),
-    ).toBeNull();
-    refreshCanvasTextFields();
-    const asleep = document.querySelector(
-      'input[data-cardhouse-field="asleep"]',
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it('hides an input whose box closed so it cannot swallow canvas taps', async () => {
+    mountCanvas();
+    let open = true;
+    handles.push(
+      bindCanvasTextField({
+        id: 'name',
+        label: 'Your Name',
+        box: { x: 100, y: 80, w: 120, h: 28 },
+        maxLength: 12,
+        active: () => open,
+        read: () => '',
+        sanitize: (next) => next,
+        write: () => {},
+        submit: () => {},
+      }),
     );
-    expect(asleep).toBeInstanceOf(HTMLInputElement);
-    if (asleep instanceof HTMLInputElement) {
-      expect(asleep.getAttribute('aria-hidden')).toBe('true');
-      expect(asleep.style.pointerEvents).toBe('none');
+    const input = document.querySelector('input');
+    expect(input?.style.pointerEvents).toBe('auto');
+    open = false;
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(input?.style.pointerEvents).toBe('none');
+    expect(input?.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('only places the input on a phone, and leaves focus to the tap', () => {
+    mountCanvas();
+    const restore = stubMobile(true);
+    try {
+      handles.push(
+        bindCanvasTextField({
+          id: 'name',
+          label: 'Your Name',
+          box: { x: 100, y: 80, w: 120, h: 28 },
+          maxLength: 12,
+          active: () => true,
+          read: () => '',
+          sanitize: (next) => next,
+          write: () => {},
+          submit: () => {},
+        }),
+      );
+      handles[0]?.focus();
+      const input = document.querySelector('input');
+      expect(document.activeElement).not.toBe(input);
+      expect(input?.style.pointerEvents).toBe('auto');
+    } finally {
+      restore();
     }
+  });
+
+  it('keeps programmatic focus on a desktop', () => {
+    mountCanvas();
+    handles.push(
+      bindCanvasTextField({
+        id: 'name',
+        label: 'Your Name',
+        box: { x: 100, y: 80, w: 120, h: 28 },
+        maxLength: 12,
+        active: () => true,
+        read: () => '',
+        sanitize: (next) => next,
+        write: () => {},
+        submit: () => {},
+      }),
+    );
+    handles[0]?.focus();
+    expect(document.activeElement).toBe(document.querySelector('input'));
   });
 
   it('sanitizes when a composition ends', () => {
@@ -330,5 +431,95 @@ describe('canvas text field', () => {
     input.dispatchEvent(new CompositionEvent('compositionend'));
     expect(value).toBe('A');
     expect(input.value).toBe('A');
+  });
+
+  it('draws a gold caret and keeps 16px text', () => {
+    mountCanvas();
+    handles.push(
+      bindCanvasTextField({
+        id: 'name',
+        label: 'Your Name',
+        box: { x: 0, y: 0, w: 80, h: 28 },
+        maxLength: 12,
+        active: () => true,
+        read: () => '',
+        sanitize: (next) => next,
+        write: () => {},
+        submit: () => {},
+      }),
+    );
+    const input = document.querySelector('input');
+    if (!input) {
+      throw new Error('missing input');
+    }
+    const style = getComputedStyle(input);
+    expect(style.caretColor).toBe(CARET_GOLD);
+    expect(style.fontSize).toBe('16px');
+    expect(style.color).toBe('transparent');
+  });
+});
+
+describe('keyboard lift', () => {
+  const viewport = { offsetTop: 0, height: 300 };
+
+  it('leaves a box that is already above the keyboard', () => {
+    expect(keyboardLift({ top: 100, bottom: 128 }, viewport)).toBe(0);
+  });
+
+  it('lifts a low box until it clears the keyboard by the margin', () => {
+    expect(keyboardLift({ top: 400, bottom: 428 }, viewport)).toBe(
+      428 - (300 - KEYBOARD_MARGIN),
+    );
+  });
+
+  it('never pushes the box above the visible top', () => {
+    expect(keyboardLift({ top: 20, bottom: 500 }, viewport)).toBe(20);
+  });
+
+  it('reads the visible area from the visual viewport offset', () => {
+    expect(
+      keyboardLift({ top: 400, bottom: 428 }, { offsetTop: 200, height: 300 }),
+    ).toBe(0);
+  });
+
+  it('lifts the canvas host while an input is focused and the keyboard is up', () => {
+    const canvas = mountCanvas();
+    const host = document.createElement('div');
+    document.body.append(host);
+    host.append(canvas);
+    const viewport = {
+      width: 800,
+      height: 200,
+      offsetTop: 0,
+      offsetLeft: 0,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    };
+    Object.defineProperty(window, 'visualViewport', {
+      configurable: true,
+      value: viewport,
+    });
+    try {
+      handles.push(
+        bindCanvasTextField({
+          id: 'chat',
+          label: 'Chat',
+          box: { x: 0, y: 440, w: 300, h: 28 },
+          maxLength: 20,
+          active: () => true,
+          read: () => '',
+          sanitize: (next) => next,
+          write: () => {},
+          submit: () => {},
+        }),
+      );
+      const input = document.querySelector('input');
+      input?.focus();
+      expect(host.style.transform).toContain('translate3d(0, -');
+      input?.blur();
+    } finally {
+      Reflect.deleteProperty(window, 'visualViewport');
+      host.remove();
+    }
   });
 });
