@@ -1,4 +1,10 @@
+import { isMobileDevice } from './mobile-shell';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from './sheets';
+
+export const CARET_GOLD = '#f2c14e';
+
+/** Room kept between the focused box and the top of the keyboard. */
+export const KEYBOARD_MARGIN = 12;
 
 /**
  * A phone or tablet only shows its on-screen keyboard for a real HTML input
@@ -14,8 +20,19 @@ import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from './sheets';
  *
  * The input stays `opacity: 1` with a real size. iOS Safari will not open the
  * keyboard for `display: none`, `visibility: hidden`, or `opacity: 0`.
- * `font-size: 16px` keeps iOS from zooming the page. This does not touch the
- * canvas, its pixel filtering, or antialiasing.
+ * `font-size: 16px` keeps iOS from zooming the page. The caret is gold so the
+ * player can see where typing lands; the pixel label stays the text they read.
+ * This does not touch the canvas, its pixel filtering, or antialiasing.
+ *
+ * iOS opens the keyboard only when the finger lands on the input itself, in
+ * the same gesture. So the input is already on the box (pointer events on)
+ * before the tap, and nothing focuses it later from a canvas `pointerup`.
+ * On a phone or tablet the scenes' `focus()` only places the input; a desktop
+ * keeps the programmatic focus so physical keys type at once.
+ *
+ * Focus is plain `focus()`, not `preventScroll`. Once the keyboard is up the
+ * visual viewport shrinks, and `keyboardLift` slides the canvas and the inputs
+ * up so the focused box stays above it.
  */
 
 export interface LogicalBox {
@@ -82,12 +99,15 @@ interface FieldEntry {
   field: CanvasTextField;
   input: HTMLInputElement;
   composing: boolean;
+  placedKey: string;
   close: () => void;
 }
 
 const fields: FieldEntry[] = [];
 let installed = false;
 let styleInstalled = false;
+let lift = 0;
+let loopHandle = 0;
 
 export function logicalBoxToScreen(
   canvasRect: ElementRect,
@@ -181,6 +201,7 @@ export function bindCanvasTextField(
     field,
     input,
     composing: false,
+    placedKey: '',
     close() {},
   };
 
@@ -217,6 +238,8 @@ export function bindCanvasTextField(
     }
     assignValue(input, field.sanitize(field.read()), 'end');
     field.onFocus?.();
+    updateLift();
+    window.setTimeout(updateLift, 350);
   });
   input.addEventListener('blur', () => {
     queueMicrotask(() => {
@@ -224,13 +247,17 @@ export function bindCanvasTextField(
         return;
       }
       field.onBlur?.();
+      if (!canvasFieldFocused()) {
+        setLift(0);
+      }
     });
   });
-  // A touch that ends on the input must keep the keyboard. preventDefault
-  // stops the delayed mouse click from blurring it on iOS and Android.
-  input.addEventListener('touchend', (event) => {
-    event.preventDefault();
-    input.focus({ preventScroll: true });
+  // The finger is already on the input, so the browser focuses it natively.
+  // This is a same-gesture fallback and does not cancel the tap.
+  input.addEventListener('touchend', () => {
+    if (field.active() && document.activeElement !== input) {
+      input.focus();
+    }
   });
 
   entry.close = () => {
@@ -245,6 +272,7 @@ export function bindCanvasTextField(
   };
   fields.push(entry);
   placeField(entry);
+  startLoop();
 
   return {
     sync() {
@@ -255,7 +283,10 @@ export function bindCanvasTextField(
       if (!field.active()) {
         return;
       }
-      input.focus({ preventScroll: true });
+      if (isMobileDevice()) {
+        return;
+      }
+      input.focus();
     },
     refresh() {
       placeField(entry);
@@ -309,19 +340,23 @@ function onFieldKey(entry: FieldEntry, event: KeyboardEvent): void {
 function placeField(entry: FieldEntry): void {
   const { field, input } = entry;
   if (!field.active()) {
+    entry.placedKey = 'off';
     hideField(input);
     return;
   }
   const canvas = gameCanvas();
   if (!canvas) {
+    entry.placedKey = 'off';
     hideField(input);
     return;
   }
   const screen = logicalBoxToScreen(canvas.getBoundingClientRect(), field.box);
   if (screen.width <= 0 || screen.height <= 0) {
+    entry.placedKey = 'off';
     hideField(input);
     return;
   }
+  entry.placedKey = placementKey(entry, screen);
   input.style.pointerEvents = 'auto';
   input.style.left = `${screen.left}px`;
   input.style.top = `${screen.top}px`;
@@ -384,20 +419,61 @@ function assignValue(
   }
 }
 
+function placementKey(entry: FieldEntry, screen: ScreenBox): string {
+  return [
+    screen.left,
+    screen.top,
+    screen.width,
+    screen.height,
+    enterHint(entry.field),
+    entry.field.autoCapitalize ?? 'off',
+  ].join('|');
+}
+
+/**
+ * Keeps every input on its box. A scene turns a field on or off with no call
+ * into this module, and an input left on a closed box would swallow taps meant
+ * for the canvas. Runs a frame at a time and only touches the DOM on change.
+ */
+function syncFields(): void {
+  loopHandle = 0;
+  if (fields.length === 0) {
+    return;
+  }
+  const canvas = gameCanvas();
+  const rect = canvas?.getBoundingClientRect();
+  for (const entry of fields) {
+    const { field } = entry;
+    if (!field.active() || !rect) {
+      if (entry.placedKey !== 'off') {
+        placeField(entry);
+      }
+      continue;
+    }
+    const screen = logicalBoxToScreen(rect, field.box);
+    if (entry.placedKey !== placementKey(entry, screen)) {
+      placeField(entry);
+    }
+  }
+  loopHandle = requestAnimationFrame(syncFields);
+}
+
+function startLoop(): void {
+  if (loopHandle !== 0 || typeof requestAnimationFrame !== 'function') {
+    return;
+  }
+  loopHandle = requestAnimationFrame(syncFields);
+}
+
 function install(): void {
   if (installed || !domReady()) {
     return;
   }
   installed = true;
   installStyle();
-  const onGesture = (event: Event): void => {
-    focusFieldFromGesture(event);
-  };
-  window.addEventListener('pointerdown', onGesture, true);
-  window.addEventListener('pointerup', onGesture, true);
-  window.addEventListener('touchend', onGesture, true);
   window.addEventListener('resize', () => {
     requestAnimationFrame(() => {
+      updateLift();
       refreshCanvasTextFields();
     });
   });
@@ -405,12 +481,87 @@ function install(): void {
   if (viewport) {
     const onViewport = (): void => {
       requestAnimationFrame(() => {
+        updateLift();
         refreshCanvasTextFields();
       });
     };
     viewport.addEventListener('resize', onViewport);
     viewport.addEventListener('scroll', onViewport);
   }
+}
+
+export interface KeyboardViewport {
+  offsetTop: number;
+  height: number;
+}
+
+/**
+ * How far to slide the page up so a focused box sits above the keyboard.
+ * `box` is where the field sits with no lift. The result is never negative
+ * and never pushes the top of the box above the visible area.
+ */
+export function keyboardLift(
+  box: { top: number; bottom: number },
+  viewport: KeyboardViewport,
+  margin = KEYBOARD_MARGIN,
+): number {
+  const visibleBottom = viewport.offsetTop + viewport.height - margin;
+  const needed = box.bottom - visibleBottom;
+  if (needed <= 0) {
+    return 0;
+  }
+  const room = box.top - viewport.offsetTop;
+  return Math.max(0, Math.min(needed, room));
+}
+
+function canvasFieldFocused(): boolean {
+  return fields.some((entry) => document.activeElement === entry.input);
+}
+
+export function isCanvasFieldFocused(): boolean {
+  return domReady() && canvasFieldFocused();
+}
+
+function setLift(next: number): void {
+  const rounded = Math.round(next);
+  if (rounded === lift) {
+    return;
+  }
+  lift = rounded;
+  const host = gameCanvas()?.parentElement;
+  if (host) {
+    host.style.transform = lift > 0 ? `translate3d(0, ${-lift}px, 0)` : '';
+  }
+  refreshCanvasTextFields();
+}
+
+function updateLift(): void {
+  if (!domReady()) {
+    return;
+  }
+  const focused = fields.find(
+    (entry) => document.activeElement === entry.input,
+  );
+  const viewport = window.visualViewport;
+  if (!focused || !viewport) {
+    setLift(0);
+    return;
+  }
+  const canvas = gameCanvas();
+  if (!canvas) {
+    setLift(0);
+    return;
+  }
+  const screen = logicalBoxToScreen(
+    canvas.getBoundingClientRect(),
+    focused.field.box,
+  );
+  setLift(
+    keyboardLift(
+      { top: screen.top + lift, bottom: screen.top + screen.height + lift },
+      { offsetTop: viewport.offsetTop, height: viewport.height },
+    ),
+  );
 }
 
 function installStyle(): void {
@@ -430,7 +581,8 @@ function installStyle(): void {
     '  outline: none;',
     '  background: transparent;',
     '  color: transparent;',
-    '  caret-color: transparent;',
+    `  caret-color: ${CARET_GOLD};`,
+    "  font-family: 'Press Start 2P', monospace;",
     '  font-size: 16px;',
     '  line-height: normal;',
     '  opacity: 1;',
@@ -443,79 +595,6 @@ function installStyle(): void {
     '}',
   ].join('\n');
   document.head.append(style);
-}
-
-function focusFieldFromGesture(event: Event): void {
-  const target = event.target;
-  if (isFieldElement(target)) {
-    if (event.type !== 'pointerdown') {
-      target.focus({ preventScroll: true });
-    }
-    return;
-  }
-  const point = eventPoint(event);
-  if (!point) {
-    return;
-  }
-  refreshCanvasTextFields();
-  const hit = hitTest(point.x, point.y);
-  if (!hit) {
-    return;
-  }
-  hit.input.focus({ preventScroll: true });
-}
-
-function hitTest(clientX: number, clientY: number): FieldEntry | undefined {
-  const canvas = gameCanvas();
-  if (!canvas) {
-    return undefined;
-  }
-  const logical = screenToLogical(
-    canvas.getBoundingClientRect(),
-    clientX,
-    clientY,
-  );
-  for (let index = fields.length - 1; index >= 0; index -= 1) {
-    const entry = fields[index];
-    if (!entry || !entry.field.active()) {
-      continue;
-    }
-    const box = entry.field.box;
-    if (
-      logical.x >= box.x &&
-      logical.y >= box.y &&
-      logical.x < box.x + box.w &&
-      logical.y < box.y + box.h
-    ) {
-      return entry;
-    }
-  }
-  return undefined;
-}
-
-function isFieldElement(
-  target: EventTarget | null,
-): target is HTMLInputElement {
-  return (
-    target instanceof HTMLInputElement &&
-    typeof target.dataset.cardhouseField === 'string' &&
-    target.dataset.cardhouseField.length > 0
-  );
-}
-
-function eventPoint(event: Event): { x: number; y: number } | undefined {
-  if ('changedTouches' in event) {
-    const touch = (event as TouchEvent).changedTouches.item(0);
-    if (!touch) {
-      return undefined;
-    }
-    return { x: touch.clientX, y: touch.clientY };
-  }
-  if ('clientX' in event && 'clientY' in event) {
-    const mouse = event as MouseEvent;
-    return { x: mouse.clientX, y: mouse.clientY };
-  }
-  return undefined;
 }
 
 function gameCanvas(): HTMLCanvasElement | undefined {

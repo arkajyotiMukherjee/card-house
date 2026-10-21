@@ -103,3 +103,55 @@ export function coverViewport(
     height: Math.ceil(logicalHeight * scale),
   };
 }
+
+export interface SafeInsets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+export interface FittedViewport {
+  width: number;
+  height: number;
+  /** Offset of the canvas from the top-left of the visible area. */
+  left: number;
+  top: number;
+}
+
+/**
+ * CSS size and position of the 960×540 canvas so the whole frame is visible
+ * inside the area left after the safe-area insets. Used on a coarse pointer,
+ * where `coverViewport` would crop a wide frame on a short phone. Empty bars
+ * land on the shorter axis. `Math.floor` keeps the frame inside the area.
+ */
+export function fitViewport(
+  viewportWidth: number,
+  viewportHeight: number,
+  insets: SafeInsets = { top: 0, right: 0, bottom: 0, left: 0 },
+  logicalWidth = LOGICAL_WIDTH,
+  logicalHeight = LOGICAL_HEIGHT,
+): FittedViewport {
+  const availableWidth = viewportWidth - insets.left - insets.right;
+  const availableHeight = viewportHeight - insets.top - insets.bottom;
+  if (
+    availableWidth <= 0 ||
+    availableHeight <= 0 ||
+    logicalWidth <= 0 ||
+    logicalHeight <= 0
+  ) {
+    return { width: logicalWidth, height: logicalHeight, left: 0, top: 0 };
+  }
+  const scale = Math.min(
+    availableWidth / logicalWidth,
+    availableHeight / logicalHeight,
+  );
+  const width = Math.max(1, Math.floor(logicalWidth * scale));
+  const height = Math.max(1, Math.floor(logicalHeight * scale));
+  return {
+    width,
+    height,
+    left: insets.left + Math.floor((availableWidth - width) / 2),
+    top: insets.top + Math.floor((availableHeight - height) / 2),
+  };
+}
