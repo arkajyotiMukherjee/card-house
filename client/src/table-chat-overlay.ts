@@ -11,9 +11,11 @@ import {
   canvasText,
   DANGER,
   GOLD,
+  makeFieldCaret,
   panelRect,
   PLATE,
   SELF,
+  showFieldCaret,
   STROKE,
   STROKE_HOT,
 } from './canvas-ui';
@@ -28,7 +30,10 @@ import {
 import {
   bindCanvasTextField,
   eventTargetsHtmlField,
+  fieldLabelColumns,
+  layoutFieldCaret,
   type CanvasTextFieldHandle,
+  type FieldLabel,
 } from './html-field';
 import { wrapText } from './menu-layout';
 import type { DbConnection } from './module_bindings';
@@ -48,6 +53,17 @@ const Z_BUTTON = 103;
 const Z_PANEL = 101;
 const Z_TEXT = 102;
 const FIELD = ex.Color.fromHex('#0b2418');
+const CHAT_TEXT_PAD = 6;
+
+function tableChatLabel(): FieldLabel {
+  const box = TABLE_CHAT_INPUT;
+  return {
+    size: BUTTON_FONT_SIZE,
+    x: box.x + CHAT_TEXT_PAD,
+    y: box.y + Math.round((box.h - BUTTON_FONT_SIZE) / 2),
+    columns: fieldLabelColumns(box.w, CHAT_TEXT_PAD, BUTTON_FONT_SIZE),
+  };
+}
 
 /**
  * Per-table chat drawn on top of the table. Scoped to one `GameTable`:
@@ -64,6 +80,7 @@ export class TableChatOverlay {
   private overlayActors: ex.Actor[] = [];
   private lineTexts: ex.Text[] = [];
   private inputField: ex.Text | undefined;
+  private inputCaret: ex.Actor | undefined;
   private errorText: ex.Text | undefined;
   private readonly composer: CanvasTextFieldHandle;
 
@@ -98,6 +115,10 @@ export class TableChatOverlay {
       },
       enterKeyHint: 'send',
       autoCapitalize: 'off',
+      metrics: tableChatLabel(),
+      onCaret: () => {
+        this.paintInput();
+      },
     });
     this.buildButton();
   }
@@ -150,6 +171,7 @@ export class TableChatOverlay {
     this.overlayActors = [];
     this.lineTexts = [];
     this.inputField = undefined;
+    this.inputCaret = undefined;
     this.errorText = undefined;
     this.composer.refresh();
   }
@@ -238,9 +260,20 @@ export class TableChatOverlay {
   }
 
   private paintInput(): void {
-    if (this.inputField) {
-      this.inputField.text = this.draft.length > 0 ? this.draft : '_';
+    if (!this.inputField || !this.inputCaret) {
+      return;
     }
+    const metrics = tableChatLabel();
+    const layout = layoutFieldCaret({
+      value: this.draft,
+      index: this.composer.selectionIndex(),
+      size: metrics.size,
+      originX: metrics.x,
+      originY: metrics.y,
+      columns: metrics.columns,
+    });
+    this.inputField.text = layout.text;
+    showFieldCaret(this.inputCaret, true, layout.x, layout.y);
   }
 
   private showError(message: string): void {
@@ -364,17 +397,16 @@ export class TableChatOverlay {
     inputBox.graphics.use(inputRect);
     this.track(inputBox);
 
-    this.inputField = canvasText('_', BUTTON_FONT_SIZE, GOLD);
+    const metrics = tableChatLabel();
+    this.inputField = canvasText('', metrics.size, GOLD);
     const inputFieldActor = new ex.Actor({
-      pos: ex.vec(
-        inputBoxSpec.x + 6,
-        inputBoxSpec.y + Math.round((inputBoxSpec.h - BUTTON_FONT_SIZE) / 2),
-      ),
+      pos: ex.vec(metrics.x, metrics.y),
       anchor: ex.vec(0, 0),
       z: Z_TEXT,
     });
     inputFieldActor.graphics.use(this.inputField);
     this.track(inputFieldActor);
+    this.inputCaret = this.track(makeFieldCaret(metrics.size, Z_TEXT + 1));
     this.paintInput();
 
     this.track(this.buildSendButton());

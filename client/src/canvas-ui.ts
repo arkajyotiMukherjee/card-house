@@ -1,5 +1,6 @@
 import * as ex from 'excalibur';
 import { pixelFont } from './boot-scene';
+import { CARET_GOLD, FIELD_CARET_WIDTH } from './html-field';
 
 export const FELT = ex.Color.fromHex('#145c38');
 export const GOLD = ex.Color.fromHex('#f4e4b3');
@@ -30,6 +31,35 @@ export function canvasText(
   });
   graphic.origin = ex.vec(0, 0);
   return graphic;
+}
+
+/** Gold block caret. Smoothing stays off so the pixels stay square. */
+export function makeFieldCaret(height: number, z: number): ex.Actor {
+  const block = new ex.Rectangle({
+    width: FIELD_CARET_WIDTH,
+    height,
+    color: ex.Color.fromHex(CARET_GOLD),
+    lineWidth: 0,
+    smoothing: false,
+  });
+  block.origin = ex.vec(0, 0);
+  const actor = new ex.Actor({
+    anchor: ex.vec(0, 0),
+    z,
+  });
+  actor.graphics.use(block);
+  actor.graphics.opacity = 0;
+  return actor;
+}
+
+export function showFieldCaret(
+  actor: ex.Actor,
+  show: boolean,
+  x: number,
+  y: number,
+): void {
+  actor.pos = ex.vec(x, y);
+  actor.graphics.opacity = show ? 1 : 0;
 }
 
 export function panelRect(

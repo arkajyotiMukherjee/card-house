@@ -1,7 +1,11 @@
+import { BUTTON_CAPTION_RASTER } from './button-style';
 import { isMobileDevice } from './mobile-shell';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from './sheets';
 
 export const CARET_GOLD = '#f2c14e';
+
+/** Block caret width. The pixel font's advance places it; this is the ink. */
+export const FIELD_CARET_WIDTH = 2;
 
 /** Room kept between the focused box and the top of the keyboard. */
 export const KEYBOARD_MARGIN = 12;
@@ -20,9 +24,11 @@ export const KEYBOARD_MARGIN = 12;
  *
  * The input stays `opacity: 1` with a real size. iOS Safari will not open the
  * keyboard for `display: none`, `visibility: hidden`, or `opacity: 0`.
- * `font-size: 16px` keeps iOS from zooming the page. The caret is gold so the
- * player can see where typing lands; the pixel label stays the text they read.
- * This does not touch the canvas, its pixel filtering, or antialiasing.
+ * `font-size: 16px` keeps iOS from zooming the page. That font does not place
+ * the caret: its advance does not match the pixel label. The input caret is
+ * hidden. The canvas draws a gold block at the insertion index, one em tall
+ * and at least two pixels wide, using the pixel font's advance. Antialiasing
+ * stays off.
  *
  * iOS opens the keyboard only when the finger lands on the input itself, in
  * the same gesture. So the input is already on the box (pointer events on)
@@ -79,6 +85,113 @@ export interface CanvasTextField {
   onBlur?: () => void;
   enterKeyHint?: FieldEnterHint | (() => FieldEnterHint);
   autoCapitalize?: FieldCapitalize;
+  /**
+   * Canvas label metrics. Clicks and the drawn caret use this advance, not
+   * the 16px input font. `columns` windows a string that is longer than the box.
+   */
+  metrics?: FieldLabel;
+  /** Fires when the insertion index moves and the canvas caret should move. */
+  onCaret?: (index: number) => void;
+}
+
+/** Where the pixel label is drawn, and how many glyphs fit beside the caret. */
+export interface FieldLabel {
+  size: number;
+  x: number;
+  y: number;
+  columns?: number;
+}
+
+export interface FieldCaretLayout {
+  /** Slice of `value` that fits in the box. */
+  text: string;
+  /** Insertion index into `text`. */
+  index: number;
+  /** Index in the full value where `text` begins. */
+  start: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * Glyphs that fit in a field of `width`, inset by `padLeft`, with room for
+ * the block caret. Press Start 2P advances one em (`size`) per glyph.
+ */
+export function fieldLabelColumns(
+  width: number,
+  padLeft: number,
+  size: number,
+): number {
+  if (size <= 0) {
+    return 1;
+  }
+  return Math.max(1, Math.floor((width - padLeft - FIELD_CARET_WIDTH) / size));
+}
+
+/**
+ * Gold block on a glyph boundary. The em starts `BUTTON_CAPTION_RASTER` pixels
+ * inside the text actor, which is Excalibur's font-bitmap padding. A string
+ * longer than `columns` windows around the caret so the block stays in the box.
+ */
+export function layoutFieldCaret(options: {
+  value: string;
+  index: number;
+  size: number;
+  originX: number;
+  originY: number;
+  columns?: number;
+  raster?: number;
+}): FieldCaretLayout {
+  const size = options.size;
+  const raster = options.raster ?? BUTTON_CAPTION_RASTER;
+  const length = options.value.length;
+  const index = clampIndex(options.index, length);
+  let start = 0;
+  let text = options.value;
+  let visibleIndex = index;
+  const columns = options.columns;
+  if (columns !== undefined && columns > 0 && length > columns) {
+    const maxStart = length - columns;
+    start = Math.min(maxStart, Math.max(0, index - columns));
+    text = options.value.slice(start, start + columns);
+    visibleIndex = index - start;
+  }
+  return {
+    text,
+    index: visibleIndex,
+    start,
+    x: options.originX + raster + visibleIndex * size,
+    y: options.originY + raster,
+    w: FIELD_CARET_WIDTH,
+    h: size,
+  };
+}
+
+/**
+ * Insertion index for a click at `localX`, in the same window `layoutFieldCaret`
+ * would draw for the current `index`.
+ */
+export function fieldCaretIndexAt(options: {
+  localX: number;
+  value: string;
+  index: number;
+  size: number;
+  originX: number;
+  columns?: number;
+  raster?: number;
+}): number {
+  if (options.size <= 0) {
+    return 0;
+  }
+  const layout = layoutFieldCaret({ ...options, originY: 0 });
+  const raster = options.raster ?? BUTTON_CAPTION_RASTER;
+  const glyph = Math.round(
+    (options.localX - (options.originX + raster)) / options.size,
+  );
+  const clamped = Math.max(0, Math.min(layout.text.length, glyph));
+  return layout.start + clamped;
 }
 
 export interface CanvasTextFieldHandle {
@@ -86,6 +199,8 @@ export interface CanvasTextFieldHandle {
   focus(): void;
   refresh(): void;
   close(): void;
+  /** Insertion index. The end of the value when this input is not focused. */
+  selectionIndex(): number;
 }
 
 const NOOP_HANDLE: CanvasTextFieldHandle = {
@@ -93,6 +208,9 @@ const NOOP_HANDLE: CanvasTextFieldHandle = {
   focus() {},
   refresh() {},
   close() {},
+  selectionIndex() {
+    return 0;
+  },
 };
 
 interface FieldEntry {
@@ -100,6 +218,9 @@ interface FieldEntry {
   input: HTMLInputElement;
   composing: boolean;
   placedKey: string;
+  publishedCaret: number;
+  /** Caret index before a click, so the visible window is not the browser's. */
+  pointerAnchor: number;
   close: () => void;
 }
 
@@ -108,6 +229,7 @@ let installed = false;
 let styleInstalled = false;
 let lift = 0;
 let loopHandle = 0;
+let caretSuspend = 0;
 
 export function logicalBoxToScreen(
   canvasRect: ElementRect,
@@ -202,15 +324,33 @@ export function bindCanvasTextField(
     input,
     composing: false,
     placedKey: '',
+    publishedCaret: -1,
+    pointerAnchor: -1,
     close() {},
   };
 
   const commit = (caret: 'keep' | 'end'): void => {
     const next = field.sanitize(input.value);
-    assignValue(input, next, caret);
-    if (next !== field.read()) {
-      field.write(next);
+    caretSuspend += 1;
+    try {
+      assignValue(input, next, caret);
+      if (next !== field.read()) {
+        field.write(next);
+      }
+    } finally {
+      caretSuspend -= 1;
     }
+    entry.publishedCaret = -1;
+    publishCaret(entry);
+  };
+
+  const retargetCaret = (clientX: number): void => {
+    queueMicrotask(() => {
+      if (document.activeElement !== input || entry.composing) {
+        return;
+      }
+      placeCaretAtPoint(entry, clientX);
+    });
   };
 
   input.addEventListener('compositionstart', () => {
@@ -225,6 +365,8 @@ export function bindCanvasTextField(
       if (input.value !== field.read()) {
         field.write(input.value);
       }
+      entry.publishedCaret = -1;
+      publishCaret(entry);
       return;
     }
     commit('keep');
@@ -232,12 +374,35 @@ export function bindCanvasTextField(
   input.addEventListener('keydown', (event) => {
     onFieldKey(entry, event);
   });
+  input.addEventListener('keyup', () => {
+    publishCaret(entry);
+  });
+  input.addEventListener('pointerdown', () => {
+    const length = input.value.length;
+    entry.pointerAnchor =
+      document.activeElement === input && entry.publishedCaret >= 0
+        ? entry.publishedCaret
+        : length;
+  });
+  input.addEventListener('pointerup', (event) => {
+    retargetCaret(event.clientX);
+  });
+  input.addEventListener('click', (event) => {
+    retargetCaret(event.clientX);
+  });
   input.addEventListener('focus', () => {
     if (!field.active()) {
       return;
     }
-    assignValue(input, field.sanitize(field.read()), 'end');
+    caretSuspend += 1;
+    try {
+      assignValue(input, field.sanitize(field.read()), 'end');
+    } finally {
+      caretSuspend -= 1;
+    }
     field.onFocus?.();
+    entry.publishedCaret = -1;
+    publishCaret(entry);
     updateLift();
     window.setTimeout(updateLift, 350);
   });
@@ -293,6 +458,16 @@ export function bindCanvasTextField(
     },
     close() {
       entry.close();
+    },
+    selectionIndex() {
+      const length = field.read().length;
+      if (document.activeElement === input) {
+        return caretIndexOf(input);
+      }
+      if (entry.publishedCaret >= 0) {
+        return Math.min(entry.publishedCaret, length);
+      }
+      return length;
     },
   };
 }
@@ -391,6 +566,68 @@ function enterHint(field: CanvasTextField): FieldEnterHint {
   return hint ?? 'done';
 }
 
+function clampIndex(index: number, length: number): number {
+  if (!Number.isFinite(index)) {
+    return length;
+  }
+  return Math.max(0, Math.min(length, Math.trunc(index)));
+}
+
+function caretIndexOf(input: HTMLInputElement): number {
+  const end = input.value.length;
+  const start = clampIndex(input.selectionStart ?? end, end);
+  const finish = clampIndex(input.selectionEnd ?? end, end);
+  if (input.selectionDirection === 'backward') {
+    return start;
+  }
+  return finish;
+}
+
+function publishCaret(entry: FieldEntry): void {
+  if (caretSuspend > 0 || document.activeElement !== entry.input) {
+    return;
+  }
+  const index = caretIndexOf(entry.input);
+  if (index === entry.publishedCaret) {
+    return;
+  }
+  entry.publishedCaret = index;
+  entry.field.onCaret?.(index);
+}
+
+function placeCaretAtPoint(entry: FieldEntry, clientX: number): void {
+  const metrics = entry.field.metrics;
+  if (!metrics || entry.composing) {
+    return;
+  }
+  const canvas = gameCanvas();
+  if (!canvas) {
+    return;
+  }
+  const logical = screenToLogical(canvas.getBoundingClientRect(), clientX, 0);
+  const anchor =
+    entry.pointerAnchor >= 0 ? entry.pointerAnchor : caretIndexOf(entry.input);
+  entry.pointerAnchor = -1;
+  const index = fieldCaretIndexAt({
+    localX: logical.x,
+    value: entry.input.value,
+    index: anchor,
+    size: metrics.size,
+    originX: metrics.x,
+    columns: metrics.columns,
+  });
+  entry.publishedCaret = -1;
+  caretSuspend += 1;
+  try {
+    entry.input.setSelectionRange(index, index);
+  } catch {
+    // Some input types refuse a selection until they are focused.
+  } finally {
+    caretSuspend -= 1;
+  }
+  publishCaret(entry);
+}
+
 function assignValue(
   input: HTMLInputElement,
   next: string,
@@ -471,6 +708,13 @@ function install(): void {
   }
   installed = true;
   installStyle();
+  document.addEventListener('selectionchange', () => {
+    for (const entry of fields) {
+      if (document.activeElement === entry.input) {
+        publishCaret(entry);
+      }
+    }
+  });
   window.addEventListener('resize', () => {
     requestAnimationFrame(() => {
       updateLift();
@@ -581,7 +825,7 @@ function installStyle(): void {
     '  outline: none;',
     '  background: transparent;',
     '  color: transparent;',
-    `  caret-color: ${CARET_GOLD};`,
+    '  caret-color: transparent;',
     "  font-family: 'Press Start 2P', monospace;",
     '  font-size: 16px;',
     '  line-height: normal;',
@@ -592,6 +836,10 @@ function installStyle(): void {
     '  appearance: none;',
     '  -webkit-tap-highlight-color: transparent;',
     '  touch-action: manipulation;',
+    '}',
+    '.cardhouse-field::selection {',
+    '  background: transparent;',
+    '  color: transparent;',
     '}',
   ].join('\n');
   document.head.append(style);
