@@ -30,7 +30,7 @@ The generated client is `client/src/module_bindings/`. Do not hand-edit it.
 
 `/cardhouse create` reads `channel_id` and `guild_id` from the interaction. `create_lobby` mints the code. `set_lobby_discord_channel` stores that text channel on `Lobby.discordChannelId`. The bot then creates `#room-{code}-voice` and calls `set_lobby_discord_voice`. The reply is still the code and the join URL. A Discord error or rate limit skips the voice channel and still returns the lobby.
 
-A new `GameTable` in a lobby that has `discordGuildId` gets a channel such as `#ab3d-bluff-1`, stored with `set_table_discord_voice`. A finished or removed table loses that channel. `close_lobby` makes the bot delete the lobby channel and any table channels still open.
+A new `GameTable` in a lobby that has `discordGuildId` gets a channel such as `#ab3d-bluff-1`, stored with `set_table_discord_voice`. A finished or removed table loses that channel. `close_lobby` and an idle room marked `closed` make the bot delete the lobby channel and any table channels still open. Deleting the lobby row deletes its lobby voice channel as well, so an automatic teardown does not leave the channel behind.
 
 When `DISCORD_BOT_TOKEN` is set, `src/index.ts` also opens the voice gateway and records who is in the lobby or a table voice channel through `update_voice_presence`. The token is sent only in Identify and is never logged.
 

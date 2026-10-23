@@ -80,6 +80,7 @@ export interface VoiceSession {
     previous: VoiceLobbyRow,
     next: VoiceLobbyRow,
   ): Promise<void>;
+  onLobbyDelete(lobby: VoiceLobbyRow): Promise<void>;
   reconcile(snapshot: VoiceSnapshot): Promise<void>;
 }
 
@@ -354,6 +355,11 @@ export function createVoiceSession(discord: VoiceChannelClient): VoiceSession {
       }
       return Promise.resolve();
     },
+    onLobbyDelete(lobby: VoiceLobbyRow): Promise<void> {
+      return deleteChannel(lobby.discordLobbyVoiceChannelId).then(
+        () => undefined,
+      );
+    },
     async reconcile(snapshot: VoiceSnapshot): Promise<void> {
       if (reconciling || paused()) {
         return;
@@ -403,10 +409,14 @@ export function attachVoiceWatch(
   const onLobby = (_ctx: EventContext, previous: Lobby, row: Lobby): void => {
     void session.onLobbyUpdate(connection, previous, row);
   };
+  const onLobbyDelete = (_ctx: EventContext, row: Lobby): void => {
+    void session.onLobbyDelete(row);
+  };
   connection.db.gameTable.onInsert(onInsert);
   connection.db.gameTable.onUpdate(onUpdate);
   connection.db.gameTable.onDelete(onDelete);
   connection.db.lobby.onUpdate(onLobby);
+  connection.db.lobby.onDelete(onLobbyDelete);
   void session.reconcile(connection);
   const timer = setInterval(() => {
     void session.reconcile(connection);
@@ -417,6 +427,7 @@ export function attachVoiceWatch(
     connection.db.gameTable.removeOnUpdate(onUpdate);
     connection.db.gameTable.removeOnDelete(onDelete);
     connection.db.lobby.removeOnUpdate(onLobby);
+    connection.db.lobby.removeOnDelete(onLobbyDelete);
   };
 }
 

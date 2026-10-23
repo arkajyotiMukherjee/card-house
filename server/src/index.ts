@@ -62,7 +62,7 @@ import {
   tableCreatedLine,
   tournamentCreatedLine,
 } from './activity-log';
-import { idsForMember, markDisconnected } from './lobby-presence';
+import { markDisconnected } from './lobby-presence';
 import { discordProfile } from './discord-member';
 import { speakingRowId, voicePlace } from './speaking-state';
 import { stateIfLobbyReady } from './lobby-deal';
@@ -113,6 +113,8 @@ import {
   lobbyIdleTimeoutError,
   lobbyIdleTimeoutMicros,
   lobbyIsIdle,
+  roomActivityMicros,
+  voiceChannelsPending,
 } from './lobby-idle';
 import {
   isRoundComplete,
@@ -587,26 +589,183 @@ function markLobbyClosed(ctx: ModuleCtx, lobbyId: string): void {
   });
 }
 
+function collectIds(rows: Iterable<{ id: string }>): string[] {
+  const ids: string[] = [];
+  for (const row of rows) {
+    ids.push(row.id);
+  }
+  return ids;
+}
+
+function deleteIds(
+  ids: readonly string[],
+  remove: (id: string) => unknown,
+): void {
+  for (const id of ids) {
+    remove(id);
+  }
+}
+
+function tableIdsInLobby(ctx: ModuleCtx, lobbyId: string): string[] {
+  return collectIds(ctx.db.GameTable.byLobby.filter(lobbyId));
+}
+
+function activityMicros(
+  ctx: ModuleCtx,
+  lobbyId: string,
+  kind: 'table' | 'tournament',
+): bigint[] {
+  const stamps: bigint[] = [];
+  if (kind === 'table') {
+    for (const table of ctx.db.GameTable.byLobby.filter(lobbyId)) {
+      const stamp = table.lastActivityAt ?? table.createdAt;
+      stamps.push(stamp.microsSinceUnixEpoch);
+    }
+    return stamps;
+  }
+  for (const tournament of ctx.db.Tournament.byLobby.filter(lobbyId)) {
+    const stamp = tournament.lastActivityAt ?? tournament.createdAt;
+    stamps.push(stamp.microsSinceUnixEpoch);
+  }
+  return stamps;
+}
+
+function roomVoiceChannelIds(ctx: ModuleCtx, lobbyId: string): string[] {
+  const ids: string[] = [];
+  const lobby = ctx.db.Lobby.id.find(lobbyId);
+  if (lobby) {
+    ids.push(lobby.discordLobbyVoiceChannelId);
+  }
+  for (const table of ctx.db.GameTable.byLobby.filter(lobbyId)) {
+    ids.push(table.discordVoiceChannelId);
+  }
+  return ids;
+}
+
+/** Drops people, seats, chat, and presence. Table rows stay until voice ids are clear. */
+function clearRoomOccupants(ctx: ModuleCtx, lobbyId: string): void {
+  const tableIds = tableIdsInLobby(ctx, lobbyId);
+  const seatIds: string[] = [];
+  const spectatorIds: string[] = [];
+  const eventIds: string[] = [];
+  const tableChatIds: string[] = [];
+  for (const tableId of tableIds) {
+    seatIds.push(...collectIds(ctx.db.GameSeat.byTable.filter(tableId)));
+    spectatorIds.push(...collectIds(ctx.db.Spectator.byTable.filter(tableId)));
+    eventIds.push(...collectIds(ctx.db.GameEvent.byTable.filter(tableId)));
+    tableChatIds.push(
+      ...collectIds(ctx.db.TableChatMessage.byTable.filter(tableId)),
+    );
+  }
+  deleteIds(seatIds, (id) => ctx.db.GameSeat.id.delete(id));
+  deleteIds(spectatorIds, (id) => ctx.db.Spectator.id.delete(id));
+  deleteIds(eventIds, (id) => ctx.db.GameEvent.id.delete(id));
+  deleteIds(tableChatIds, (id) => ctx.db.TableChatMessage.id.delete(id));
+  deleteIds(collectIds(ctx.db.LobbyChatMessage.byLobby.filter(lobbyId)), (id) =>
+    ctx.db.LobbyChatMessage.id.delete(id),
+  );
+  deleteIds(collectIds(ctx.db.SpeakingState.lobbyId.filter(lobbyId)), (id) =>
+    ctx.db.SpeakingState.id.delete(id),
+  );
+  deleteIds(collectIds(ctx.db.VoicePresence.lobbyId.filter(lobbyId)), (id) =>
+    ctx.db.VoicePresence.id.delete(id),
+  );
+  deleteIds(collectIds(ctx.db.LobbyMember.lobbyId.filter(lobbyId)), (id) =>
+    ctx.db.LobbyMember.id.delete(id),
+  );
+  const identities: string[] = [];
+  for (const session of ctx.db.OperatorSession.iter()) {
+    if (session.lobbyId === lobbyId) {
+      identities.push(session.identity);
+    }
+  }
+  for (const identity of identities) {
+    const session = ctx.db.OperatorSession.identity.find(identity);
+    if (!session || session.lobbyId !== lobbyId) {
+      continue;
+    }
+    ctx.db.OperatorSession.identity.update({
+      ...session,
+      lobbyId: '',
+      tableId: '',
+      clientId: '',
+    });
+  }
+}
+
+/** Removes tables, tournaments, and the lobby once no voice channel id remains. */
+function deleteRoomShell(ctx: ModuleCtx, lobbyId: string): void {
+  if (voiceChannelsPending(roomVoiceChannelIds(ctx, lobbyId))) {
+    return;
+  }
+  clearRoomOccupants(ctx, lobbyId);
+  const tableIds = tableIdsInLobby(ctx, lobbyId);
+  for (const tableId of tableIds) {
+    const gameTable = ctx.db.GameTable.id.find(tableId);
+    if (gameTable) {
+      deleteGameTable(ctx.db, gameTable);
+    }
+  }
+  const tournamentIds = collectIds(ctx.db.Tournament.byLobby.filter(lobbyId));
+  deleteIds(tournamentIds, (id) => ctx.db.Tournament.id.delete(id));
+  const lobby = ctx.db.Lobby.id.find(lobbyId);
+  if (lobby) {
+    ctx.db.Lobby.id.delete(lobby.id);
+  }
+}
+
+/**
+ * Idle teardown. Players and chat go immediately. While a Discord voice
+ * channel id is still stored, the lobby stays `closed` so the bot can delete
+ * those channels. The next sweep removes the shell after the ids are cleared.
+ */
+function tearDownIdleRoom(ctx: ModuleCtx, lobbyId: string): void {
+  const lobby = ctx.db.Lobby.id.find(lobbyId);
+  if (!lobby || lobby.status.tag !== 'open') {
+    return;
+  }
+  clearRoomOccupants(ctx, lobbyId);
+  if (voiceChannelsPending(roomVoiceChannelIds(ctx, lobbyId))) {
+    markLobbyClosed(ctx, lobbyId);
+    return;
+  }
+  deleteRoomShell(ctx, lobbyId);
+}
+
 function closeIdleLobbies(ctx: ModuleCtx): void {
   ensureLobbyIdleJob(ctx);
   const config = ctx.db.LobbyIdleConfig.id.find(LOBBY_IDLE_CONFIG_ID);
   if (!config) {
     return;
   }
+  if (
+    !config.dev &&
+    config.idleTimeoutMicros !== PRODUCTION_LOBBY_IDLE_TIMEOUT_MICROS
+  ) {
+    ctx.db.LobbyIdleConfig.id.update({
+      ...config,
+      idleTimeoutMicros: PRODUCTION_LOBBY_IDLE_TIMEOUT_MICROS,
+    });
+  }
   const timeout = activeLobbyIdleTimeoutMicros(config);
   const now = ctx.timestamp.microsSinceUnixEpoch;
-  const openIds: string[] = [];
-  for (const lobby of ctx.db.Lobby.iter()) {
-    if (lobby.status.tag === 'open') {
-      openIds.push(lobby.id);
-    }
-  }
-  for (const lobbyId of openIds) {
+  const lobbyIds = collectIds(ctx.db.Lobby.iter());
+  for (const lobbyId of lobbyIds) {
     const lobby = ctx.db.Lobby.id.find(lobbyId);
-    if (!lobby || lobby.status.tag !== 'open') {
+    if (!lobby) {
       continue;
     }
-    const activity = lobby.lastActivityAt?.microsSinceUnixEpoch;
+    if (lobby.status.tag !== 'open') {
+      if (!voiceChannelsPending(roomVoiceChannelIds(ctx, lobby.id))) {
+        deleteRoomShell(ctx, lobby.id);
+      }
+      continue;
+    }
+    const activity = roomActivityMicros(
+      lobby.lastActivityAt?.microsSinceUnixEpoch,
+      activityMicros(ctx, lobby.id, 'table'),
+      activityMicros(ctx, lobby.id, 'tournament'),
+    );
     if (activity === undefined) {
       ctx.db.Lobby.id.update({
         ...lobby,
@@ -615,7 +774,7 @@ function closeIdleLobbies(ctx: ModuleCtx): void {
       continue;
     }
     if (lobbyIsIdle(activity, now, timeout)) {
-      markLobbyClosed(ctx, lobby.id);
+      tearDownIdleRoom(ctx, lobby.id);
     }
   }
 }
@@ -1994,6 +2153,7 @@ export const clean_empty_tables = spacetimedb.reducer(
           gameTable.status.tag,
           idleMicros,
           idleLimit,
+          gameTable.discordVoiceChannelId,
         )
       ) {
         doomed.push(gameTable.id);
@@ -2220,6 +2380,58 @@ export const spectate_table = spacetimedb.reducer(
   },
 );
 
+function memberSeatRefs(
+  ctx: ModuleCtx,
+  memberId: string,
+): { id: string; tableId: string }[] {
+  const rows: { id: string; tableId: string }[] = [];
+  for (const seat of ctx.db.GameSeat.iter()) {
+    if (seat.lobbyMemberId === memberId) {
+      rows.push({ id: seat.id, tableId: seat.tableId });
+    }
+  }
+  return rows;
+}
+
+function memberSpectatorRefs(
+  ctx: ModuleCtx,
+  memberId: string,
+): { id: string; tableId: string }[] {
+  const rows: { id: string; tableId: string }[] = [];
+  for (const row of ctx.db.Spectator.byMember.filter(memberId)) {
+    rows.push({ id: row.id, tableId: row.tableId });
+  }
+  return rows;
+}
+
+function memberPresenceIds(
+  ctx: ModuleCtx,
+  lobbyId: string,
+  memberId: string,
+): string[] {
+  const ids: string[] = [];
+  for (const row of ctx.db.VoicePresence.lobbyId.filter(lobbyId)) {
+    if (row.lobbyMemberId === memberId) {
+      ids.push(row.id);
+    }
+  }
+  return ids;
+}
+
+function memberSpeakingIds(
+  ctx: ModuleCtx,
+  lobbyId: string,
+  memberId: string,
+): string[] {
+  const ids: string[] = [];
+  for (const row of ctx.db.SpeakingState.lobbyId.filter(lobbyId)) {
+    if (row.lobbyMemberId === memberId) {
+      ids.push(row.id);
+    }
+  }
+  return ids;
+}
+
 export const leave_lobby = spacetimedb.reducer(
   { name: 'leave_lobby' },
   {
@@ -2246,29 +2458,40 @@ export const leave_lobby = spacetimedb.reducer(
       throw new SenderError('Member not found');
     }
 
-    const seats = [];
-    for (const seat of ctx.db.GameSeat.iter()) {
-      seats.push({ id: seat.id, lobbyMemberId: seat.lobbyMemberId });
+    const seats = memberSeatRefs(ctx, member.id);
+    const spectators = memberSpectatorRefs(ctx, member.id);
+    const presence = memberPresenceIds(ctx, lobby.id, member.id);
+    const speaking = memberSpeakingIds(ctx, lobby.id, member.id);
+    const touched = new Set<string>();
+    for (const seat of seats) {
+      touched.add(seat.tableId);
     }
-    const spectators = [];
-    for (const row of ctx.db.Spectator.iter()) {
-      spectators.push({ id: row.id, lobbyMemberId: row.lobbyMemberId });
+    for (const spectator of spectators) {
+      touched.add(spectator.tableId);
     }
-    const presence = [];
-    for (const row of ctx.db.VoicePresence.iter()) {
-      presence.push({ id: row.id, lobbyMemberId: row.lobbyMemberId });
-    }
-    for (const id of idsForMember(member.id, seats)) {
-      ctx.db.GameSeat.id.delete(id);
-    }
-    for (const id of idsForMember(member.id, spectators)) {
-      ctx.db.Spectator.id.delete(id);
-    }
-    for (const id of idsForMember(member.id, presence)) {
-      ctx.db.VoicePresence.id.delete(id);
-    }
+    deleteIds(
+      seats.map((seat) => seat.id),
+      (id) => ctx.db.GameSeat.id.delete(id),
+    );
+    deleteIds(
+      spectators.map((row) => row.id),
+      (id) => ctx.db.Spectator.id.delete(id),
+    );
+    deleteIds(presence, (id) => ctx.db.VoicePresence.id.delete(id));
+    deleteIds(speaking, (id) => ctx.db.SpeakingState.id.delete(id));
     ctx.db.LobbyMember.id.delete(member.id);
+    for (const tableId of touched) {
+      const gameTable = ctx.db.GameTable.id.find(tableId);
+      if (!gameTable) {
+        continue;
+      }
+      ctx.db.GameTable.id.update({
+        ...gameTable,
+        lastActivityAt: ctx.timestamp,
+      });
+    }
     forgetLobby(ctx.db, ctx.sender.toHexString());
+    noteLobbyActivity(ctx, lobby.id);
   },
 );
 

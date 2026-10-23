@@ -33,6 +33,7 @@ import {
   CHAT_PANEL,
   LEAVE_CONFIRM,
   LEAVE_ROOM,
+  leaveConfirmHit,
   chatLines,
   clampPlayerCount,
   CREATE_TABLE,
@@ -188,7 +189,9 @@ export class LobbyScene {
   private chatCaret: ex.Actor | undefined;
   private chatErrorText: ex.Text | undefined;
   private leaveConfirm: ex.Actor | undefined;
+  private readonly leaveConfirmButtons: ex.Actor[] = [];
   private leavingRoom = false;
+  private returnedToMenu = false;
 
   constructor(
     private readonly engine: ex.Engine,
@@ -244,8 +247,19 @@ export class LobbyScene {
     this.connection.db.lobby.onUpdate(() => {
       this.paintDiscordBadge();
     });
-    this.connection.db.lobby.onDelete(() => {
+    this.connection.db.lobby.onDelete((_ctx, lobby) => {
+      if (lobby.id === this.lobbyId) {
+        this.finishLeave();
+      }
       this.paintDiscordBadge();
+    });
+    this.connection.db.lobbyMember.onDelete((_ctx, member) => {
+      if (
+        member.lobbyId === this.lobbyId &&
+        member.clientId === this.clientId
+      ) {
+        this.finishLeave();
+      }
     });
     this.connection.db.lobbyChatMessage.onInsert(() => {
       this.renderChat();
@@ -270,6 +284,7 @@ export class LobbyScene {
   }
 
   openLobby(lobbyId: string, code = ''): Promise<boolean> {
+    this.returnedToMenu = false;
     this.lobbyId = lobbyId;
     this.lobbyCode = code;
     this.closeLeaveConfirm();
@@ -499,6 +514,7 @@ export class LobbyScene {
       z: 40,
     });
     panel.graphics.use(panelRect(box.w, box.h, PANEL, STROKE_HOT));
+    this.claimLeavePanel(panel);
     this.scene.add(panel);
     this.childLabel(panel, 16, 20, 'Leave the room?', GOLD);
     this.childLabel(
@@ -508,30 +524,69 @@ export class LobbyScene {
       "You'll lose your seats at all tables.",
       DIM,
     );
-    this.button(
-      LEAVE_CONFIRM.leave,
-      'Leave',
-      () => {
+    this.leaveConfirmButtons.push(
+      this.leaveButton(LEAVE_CONFIRM.leave, 'Leave', () => {
         void this.confirmLeave();
-      },
-      panel,
-    );
-    this.button(
-      LEAVE_CONFIRM.cancel,
-      'Cancel',
-      () => {
+      }),
+      this.leaveButton(LEAVE_CONFIRM.cancel, 'Cancel', () => {
         this.closeLeaveConfirm();
-      },
-      panel,
+      }),
     );
     this.leaveConfirm = panel;
     refreshCanvasTextFields();
   }
 
+  /**
+   * The panel is the top hit target in local z when buttons are parented to
+   * it, and those clicks never reached Leave. Buttons are scene actors above
+   * the panel. The panel still answers a click on those same boxes.
+   */
+  private claimLeavePanel(panel: ex.Actor): void {
+    const claim = (event: { cancel: () => void }): void => {
+      event.cancel();
+    };
+    panel.on('pointerdown', claim);
+    panel.on('pointerup', (event) => {
+      event.cancel();
+      const hit = leaveConfirmHit(event.worldPos.x, event.worldPos.y);
+      if (hit === 'leave') {
+        void this.confirmLeave();
+      } else if (hit === 'cancel') {
+        this.closeLeaveConfirm();
+      }
+    });
+  }
+
+  private leaveButton(
+    box: { x: number; y: number; w: number; h: number },
+    caption: string,
+    onPress: () => void,
+  ): ex.Actor {
+    const actor = this.button(box, caption, onPress, undefined, true);
+    actor.z = 42;
+    return actor;
+  }
+
   private closeLeaveConfirm(): void {
     this.leaveConfirm?.kill();
     this.leaveConfirm = undefined;
+    for (const actor of this.leaveConfirmButtons) {
+      actor.kill();
+    }
+    this.leaveConfirmButtons.length = 0;
     refreshCanvasTextFields();
+  }
+
+  private finishLeave(): void {
+    if (this.returnedToMenu || this.lobbyId.length === 0) {
+      return;
+    }
+    this.returnedToMenu = true;
+    this.leavingRoom = false;
+    this.closeLeaveConfirm();
+    this.lobbyId = '';
+    this.lobbyCode = '';
+    this.onLeftRoom();
   }
 
   private async confirmLeave(): Promise<void> {
@@ -546,11 +601,7 @@ export class LobbyScene {
         lobbyId,
         clientId: this.clientId,
       });
-      this.closeLeaveConfirm();
-      this.lobbyId = '';
-      this.lobbyCode = '';
-      this.leavingRoom = false;
-      this.onLeftRoom();
+      this.finishLeave();
     } catch (error: unknown) {
       this.leavingRoom = false;
       this.setError(errorMessage(error));
@@ -1408,7 +1459,13 @@ export class LobbyScene {
       anchor: ex.vec(0, 0),
     });
     actor.graphics.use(graphic);
+    this.silencePointer(actor);
     parent.addChild(actor);
+  }
+
+  private silencePointer(actor: ex.Actor): void {
+    actor.pointer.useColliderShape = false;
+    actor.pointer.useGraphicsBounds = false;
   }
 
   private button(
@@ -1416,6 +1473,7 @@ export class LobbyScene {
     caption: string,
     onPress: () => void,
     parent?: ex.Actor,
+    claim = false,
   ): ex.Actor {
     const actor = new ex.Actor({
       pos: ex.vec(box.x, box.y),
@@ -1433,7 +1491,13 @@ export class LobbyScene {
       anchor: ex.vec(0, 0),
     });
     captionActor.graphics.use(captionText);
+    this.silencePointer(captionActor);
     actor.addChild(captionActor);
+    const claimEvent = (event: { cancel: () => void }): void => {
+      if (claim) {
+        event.cancel();
+      }
+    };
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;
     });
@@ -1442,11 +1506,13 @@ export class LobbyScene {
       face.color = BUTTON;
       captionActor.pos = ex.vec(rest.x, rest.y);
     });
-    actor.on('pointerdown', () => {
+    actor.on('pointerdown', (event) => {
+      claimEvent(event);
       face.color = BUTTON_DOWN;
       captionActor.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
     });
-    actor.on('pointerup', () => {
+    actor.on('pointerup', (event) => {
+      claimEvent(event);
       face.color = BUTTON;
       captionActor.pos = ex.vec(rest.x, rest.y);
       onPress();

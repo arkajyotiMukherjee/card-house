@@ -1,7 +1,7 @@
 /**
- * Membership shape for a later inactive-lobby pass.
+ * Membership shape for disconnects.
  * Disconnect flips `connected` and leaves the row, the seats, and the lobby.
- * Leave Room is the only path that deletes a member. Nothing here is scheduled.
+ * Leave Room deletes that member. The idle sweep deletes every member with the room.
  */
 
 export function markDisconnected<T extends { id: string; connected: boolean }>(

@@ -4,10 +4,14 @@ import {
   MIN_DEV_LOBBY_IDLE_TIMEOUT_MS,
   PRODUCTION_LOBBY_IDLE_TIMEOUT_MICROS,
   PRODUCTION_LOBBY_IDLE_TIMEOUT_MS,
+  ROOM_IDLE_TIMEOUT_MICROS,
   activeLobbyIdleTimeoutMicros,
   lobbyIdleTimeoutError,
   lobbyIdleTimeoutMicros,
   lobbyIsIdle,
+  newestMicros,
+  roomActivityMicros,
+  voiceChannelsPending,
 } from './lobby-idle.ts';
 
 function assert(condition: boolean, message: string): void {
@@ -23,9 +27,24 @@ const setting = {
 };
 
 assert(
+  PRODUCTION_LOBBY_IDLE_TIMEOUT_MS === 60 * 60 * 1000,
+  'production idle is one hour',
+);
+assert(
+  PRODUCTION_LOBBY_IDLE_TIMEOUT_MICROS === ROOM_IDLE_TIMEOUT_MICROS,
+  'the production window is the one hour constant',
+);
+assert(
   activeLobbyIdleTimeoutMicros(setting) ===
     PRODUCTION_LOBBY_IDLE_TIMEOUT_MICROS,
-  'production mode uses the long timeout',
+  'production mode uses the one hour constant',
+);
+assert(
+  activeLobbyIdleTimeoutMicros({
+    ...setting,
+    idleTimeoutMicros: 24n * 60n * 60n * 1_000_000n,
+  }) === PRODUCTION_LOBBY_IDLE_TIMEOUT_MICROS,
+  'a stored 24 hour window still idles at one hour',
 );
 assert(
   activeLobbyIdleTimeoutMicros({ ...setting, dev: true }) ===
@@ -64,7 +83,7 @@ assert(
     created + PRODUCTION_LOBBY_IDLE_TIMEOUT_MICROS,
     PRODUCTION_LOBBY_IDLE_TIMEOUT_MICROS,
   ),
-  'a lobby at 24 hours is idle',
+  'a lobby at one hour is idle',
 );
 assert(
   lobbyIsIdle(
@@ -91,7 +110,7 @@ assert(
 );
 assert(
   lobbyIdleTimeoutError(false, PRODUCTION_LOBBY_IDLE_TIMEOUT_MS) === undefined,
-  '24 hours is a production timeout',
+  'one hour is a production timeout',
 );
 assert(
   lobbyIdleTimeoutError(false, 2_000) ===
@@ -106,6 +125,31 @@ assert(
 assert(
   lobbyIdleTimeoutMicros(2_000) === DEV_LOBBY_IDLE_TIMEOUT_MICROS,
   'milliseconds convert to microseconds',
+);
+assert(newestMicros([]) === undefined, 'no stamps have no newest activity');
+assert(
+  newestMicros([2n, 8n, 3n]) === 8n,
+  'the newest stamp is the room activity',
+);
+assert(
+  roomActivityMicros(undefined, [9n], [4n]) === undefined,
+  'a missing lobby stamp waits to be stamped',
+);
+assert(
+  roomActivityMicros(5n, [9n], [4n]) === 9n,
+  'a later table action keeps the room',
+);
+assert(
+  roomActivityMicros(12n, [9n], [4n]) === 12n,
+  'a later lobby action keeps the room',
+);
+assert(
+  voiceChannelsPending(['', '123']) === true,
+  'a channel id holds the room shell',
+);
+assert(
+  voiceChannelsPending(['', '']) === false,
+  'empty channel ids can be removed',
 );
 
 console.log(JSON.stringify({ ok: true }));

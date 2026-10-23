@@ -1,5 +1,7 @@
-/** Production idle window. Twenty-four hours. */
-export const PRODUCTION_LOBBY_IDLE_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+/** Production idle window. One hour with no lobby or table activity. */
+export const ROOM_IDLE_TIMEOUT_MS = 60 * 60 * 1000;
+
+export const PRODUCTION_LOBBY_IDLE_TIMEOUT_MS = ROOM_IDLE_TIMEOUT_MS;
 
 /** Initial dev window, replaced when `set_lobby_idle_timeout` stores another. */
 export const DEV_LOBBY_IDLE_TIMEOUT_MS = 2_000;
@@ -9,8 +11,9 @@ export const MAX_DEV_LOBBY_IDLE_TIMEOUT_MS = 60_000;
 export const MIN_PRODUCTION_LOBBY_IDLE_TIMEOUT_MS = 60 * 60 * 1000;
 export const MAX_LOBBY_IDLE_TIMEOUT_MS = 7 * 24 * 60 * 60 * 1000;
 
-export const PRODUCTION_LOBBY_IDLE_TIMEOUT_MICROS =
-  BigInt(PRODUCTION_LOBBY_IDLE_TIMEOUT_MS) * 1_000n;
+export const ROOM_IDLE_TIMEOUT_MICROS = BigInt(ROOM_IDLE_TIMEOUT_MS) * 1_000n;
+
+export const PRODUCTION_LOBBY_IDLE_TIMEOUT_MICROS = ROOM_IDLE_TIMEOUT_MICROS;
 export const DEV_LOBBY_IDLE_TIMEOUT_MICROS =
   BigInt(DEV_LOBBY_IDLE_TIMEOUT_MS) * 1_000n;
 
@@ -31,7 +34,47 @@ export function activeLobbyIdleTimeoutMicros(
   if (setting.dev) {
     return setting.devTimeoutMicros;
   }
-  return setting.idleTimeoutMicros;
+  return ROOM_IDLE_TIMEOUT_MICROS;
+}
+
+/** Latest stamp, or `undefined` when nothing has been recorded. */
+export function newestMicros(stamps: readonly bigint[]): bigint | undefined {
+  let latest: bigint | undefined;
+  for (const stamp of stamps) {
+    if (latest === undefined || stamp > latest) {
+      latest = stamp;
+    }
+  }
+  return latest;
+}
+
+/**
+ * Newest lobby, table, or tournament stamp.
+ * A missing lobby stamp stays missing so the sweep can stamp it and wait.
+ */
+export function roomActivityMicros(
+  lobbyActivity: bigint | undefined,
+  tableActivities: readonly bigint[],
+  tournamentActivities: readonly bigint[],
+): bigint | undefined {
+  if (lobbyActivity === undefined) {
+    return undefined;
+  }
+  return newestMicros([
+    lobbyActivity,
+    ...tableActivities,
+    ...tournamentActivities,
+  ]);
+}
+
+/** True while any Discord voice channel id is still stored. */
+export function voiceChannelsPending(ids: readonly string[]): boolean {
+  for (const id of ids) {
+    if (id.length > 0) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /** True when the lobby's last activity is at least `timeoutMicros` old. */

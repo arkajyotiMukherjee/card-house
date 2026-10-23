@@ -160,8 +160,8 @@ This is the “card room” with people and tables.
 - Click “Leave Room”.
 - Confirm dialog: “Leave the room? You’ll lose your seats at all tables.”
 - Cancel stays in the room.
-- On confirm, the module drops that player’s seats, spectator rows, and voice-presence rows, deletes their lobby membership, and leaves the room itself open. The client returns to the Main Menu. Chat history stays.
-- Reloading is not leaving. A refresh marks the member disconnected (`connected` false, `lastSeenAt` updated) and, when this browser still has the room stored, opens the lobby again instead of the Main Menu. The same membership and seats remain. Explicit Leave Room is the only exit. Nothing in this version closes a lobby because its members went idle.
+- On confirm, the module drops that player’s seats, spectator rows, speaking rows, and voice-presence rows, deletes their lobby membership, and leaves the room itself open. The client returns to the Main Menu. Chat history stays. Cancel stays in the room.
+- Reloading is not leaving. A refresh marks the member disconnected (`connected` false, `lastSeenAt` updated) and, when this browser still has the room stored, opens the lobby again instead of the Main Menu. The same membership and seats remain. A room with no lobby or table activity for one hour is removed, including players who stayed connected and did nothing. That returns this client to the Main Menu. Chat, joins, leaves, name changes, table creates, game moves, and watches reset the hour.
 
 ## Game View (Per Table)
 
