@@ -175,6 +175,25 @@ test('removing a table deletes its voice channel', async () => {
   assert.equal(api.calls.at(-1)?.method, 'DELETE');
 });
 
+test('deleting a lobby deletes its voice channel', async () => {
+  const api = recordedDiscordApi();
+  const voice = voiceChannelClient(api);
+  const lobbyChannel = await voice.createVoiceChannel(GUILD, 'room-ab3d-voice');
+  const session = createVoiceSession(voice);
+  await session.onLobbyDelete({
+    id: 'lobby-1',
+    code: 'AB3D',
+    status: { tag: 'open' },
+    discordGuildId: GUILD,
+    discordLobbyVoiceChannelId: lobbyChannel.id,
+  });
+  assert.equal(
+    api.channels().some((channel) => channel.id === lobbyChannel.id),
+    false,
+  );
+  assert.equal(api.calls.at(-1)?.method, 'DELETE');
+});
+
 test('closing a lobby deletes the lobby channel and remaining table channels', async () => {
   const api = recordedDiscordApi();
   const voice = voiceChannelClient(api);

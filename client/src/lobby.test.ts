@@ -23,7 +23,9 @@ import {
   lobbyByCode,
   lobbyLaunchedFromDiscord,
   CHAT_PANEL,
+  LEAVE_CONFIRM,
   ROOM_BANNER,
+  leaveConfirmHit,
   lobbyTableQueries,
   memberByClient,
   memberLines,
@@ -502,6 +504,37 @@ describe('grouped table list', () => {
     const shown = crowded.slots.filter((slot) => slot.kind === 'row').length;
     expect(shown + crowded.hidden).toBe(40);
     expect(crowded.hidden).toBeGreaterThan(0);
+  });
+});
+
+describe('Leave Room confirmation', () => {
+  it('sends a click on Leave or Cancel to that button', () => {
+    const leave = LEAVE_CONFIRM.leave;
+    const cancel = LEAVE_CONFIRM.cancel;
+    expect(leaveConfirmHit(leave.x + 4, leave.y + 4)).toBe('leave');
+    expect(leaveConfirmHit(cancel.x + 4, cancel.y + 4)).toBe('cancel');
+    expect(
+      leaveConfirmHit(LEAVE_CONFIRM.panel.x + 16, LEAVE_CONFIRM.panel.y + 20),
+    ).toBe('panel');
+    expect(leaveConfirmHit(0, 0)).toBeUndefined();
+  });
+
+  it('keeps both buttons inside the dialog and clear of each other', () => {
+    const panel = LEAVE_CONFIRM.panel;
+    for (const box of [LEAVE_CONFIRM.leave, LEAVE_CONFIRM.cancel]) {
+      expect(box.x).toBeGreaterThanOrEqual(panel.x);
+      expect(box.y).toBeGreaterThanOrEqual(panel.y);
+      expect(box.x + box.w).toBeLessThanOrEqual(panel.x + panel.w);
+      expect(box.y + box.h).toBeLessThanOrEqual(panel.y + panel.h);
+    }
+    const leave = LEAVE_CONFIRM.leave;
+    const cancel = LEAVE_CONFIRM.cancel;
+    const overlaps =
+      leave.x < cancel.x + cancel.w &&
+      cancel.x < leave.x + leave.w &&
+      leave.y < cancel.y + cancel.h &&
+      cancel.y < leave.y + leave.h;
+    expect(overlaps).toBe(false);
   });
 });
 

@@ -95,7 +95,7 @@ Represents a single card room.
 - `code: string` – short human code used in URLs (e.g. `AB3D`).
 - `status: "open" | "closed"`.
 - `createdAt: number` – timestamp.
-- `lastActivityAt: number | null` – last join, table change, intent, speaking update, or voice presence. Null on a row from before the column existed; the next idle sweep stamps it and waits out a full timeout.
+- `lastActivityAt: number | null` – last join, leave, chat, name change, table change, intent, watch, speaking update, or voice presence. Null on a row from before the column existed; the next idle sweep stamps it and waits out a full hour. The room’s idle clock is the newest of this stamp and each table or tournament stamp.
 - `discordChannelId: string` – Discord channel that ran `/cardhouse create`, or empty for a web lobby.
 - `discordGuildId: string` – guild that owns the lobby voice channel, or empty.
 - `discordLobbyVoiceChannelId: string` – lobby voice channel, or empty.
@@ -106,7 +106,7 @@ Lobbies share the system until `RoomCaps.maxLobbies`. Each lobby has its own mem
 
 One row (`id` `room`) holds the soft caps `maxLobbies`, `maxTablesPerLobby`, and `maxSeatsPerTable`. `init` seeds 64, 16, and 8. `set_room_caps` replaces them. A game's catalog `maxPlayers` stays the seat count when `maxSeatsPerTable` is higher. `create_game_table` rejects a seat count above the catalog or above the seat cap. `join_table` rejects a seat past the tighter of the two.
 
-`close_idle_lobbies` runs every second from the private `LobbyIdleSweep` schedule. It closes an open lobby that has been idle longer than the timeout in `LobbyIdleConfig`, using the same closed status as `close_lobby`. The production timeout is 24 hours. `set_lobby_idle_timeout` with `dev` true stores a 1 to 60 second timeout for a local check. A closed lobby rejects `join_lobby`.
+`close_idle_lobbies` runs every second from the private `LobbyIdleSweep` schedule. Production idle is one hour, from the newest lobby, table, or tournament activity. Chat, joins, leaves, name changes, table creates, game moves, and watches reset that clock. A missing lobby `lastActivityAt` is stamped and waits out a full hour. When the hour passes, the sweep deletes members, seats, spectators, events, chat, speaking, and voice presence. If a Discord voice channel id is still stored on the lobby or a table, the lobby is marked `closed` and those rows stay so the bot can delete the channels and clear the ids. The next sweep then deletes the tables, tournaments, and the lobby. A room with no voice ids is removed in the same sweep, and `join_lobby` answers `Room not found`. `set_lobby_idle_timeout` with `dev` true stores a 1 to 60 second timeout for a local check. While `dev` is false the sweep uses the one-hour constant and rewrites a longer stored window. A closed lobby with no remaining voice ids is removed the same way. `/cardhouse close` still closes a room only when it is already empty.
 
 ### LobbyMember
 

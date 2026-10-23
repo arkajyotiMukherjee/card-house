@@ -11,7 +11,7 @@ if (process.env.CARDROOM_LIVE !== '1') {
 const server = process.env.SPACETIMEDB_SERVER ?? 'local';
 const database = process.env.SPACETIMEDB_DB ?? 'cardroom';
 const devTimeoutMs = 2_000;
-const productionTimeoutMs = 24 * 60 * 60 * 1000;
+const productionTimeoutMs = 60 * 60 * 1000;
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -135,21 +135,21 @@ async function lobbyRows(): Promise<LobbyRow[]> {
   }));
 }
 
-async function waitForClosed(code: string): Promise<LobbyRow> {
+async function waitForGone(code: string): Promise<void> {
   const deadline = Date.now() + 12_000;
   let latest = '';
   while (Date.now() < deadline) {
     const rows = await lobbyRows();
     const row = rows.find((item) => item.code === code);
     latest = JSON.stringify(row ?? null);
-    if (row && row.status === 'closed') {
-      return row;
+    if (!row) {
+      return;
     }
     await new Promise((resolve) => {
       setTimeout(resolve, 400);
     });
   }
-  throw new Error(`lobby ${code} stayed open: ${latest}`);
+  throw new Error(`lobby ${code} was still present: ${latest}`);
 }
 
 async function main(): Promise<void> {
@@ -168,7 +168,7 @@ async function main(): Promise<void> {
     `new lobby ${code} should still be open before the timeout`,
   );
 
-  const closed = await waitForClosed(code);
+  await waitForGone(code);
   let joinError = '';
   try {
     await call(
@@ -181,13 +181,16 @@ async function main(): Promise<void> {
   } catch (error: unknown) {
     joinError = error instanceof Error ? error.message : String(error);
   }
-  assert(joinError.includes('Room closed'), `join should fail: ${joinError}`);
+  assert(
+    joinError.includes('Room not found'),
+    `join should fail: ${joinError}`,
+  );
 
   const evidence = {
     ok: true,
     devTimeoutMs,
     code,
-    closedStatus: closed.status,
+    removed: true,
     joinRejected: true,
     joinError,
   };

@@ -17,17 +17,27 @@ export function idleTimeoutAllowed(idleMicros: bigint): boolean {
   );
 }
 
+/** A stored Discord voice channel id keeps the table row until that id is cleared. */
+export function tableHeldForVoice(discordVoiceChannelId: string): boolean {
+  return discordVoiceChannelId.length > 0;
+}
+
 /**
  * A sweep removes a table only when every seat is empty.
  * `finished` goes on the next sweep. Any other status waits until `idleMicros`
  * reaches the timeout. A seated table stays, including one that has been quiet.
+ * A non-empty `discordVoiceChannelId` stays so the channel is not orphaned.
  */
 export function shouldRemoveEmptyTable(
   seatCount: number,
   status: string,
   idleMicros: bigint,
   idleLimitMicros: bigint,
+  discordVoiceChannelId = '',
 ): boolean {
+  if (tableHeldForVoice(discordVoiceChannelId)) {
+    return false;
+  }
   if (seatCount !== 0) {
     return false;
   }

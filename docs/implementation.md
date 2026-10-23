@@ -273,7 +273,7 @@ Voice channels and speaking indicators are now part of this milestone. The plan 
 **Goal:** Make the system durable and manageable with real users.
 
 - **Cleanup / lifecycle:**
-  - auto-close lobbies after long inactivity (`close_idle_lobbies`, 24 hours, or a 1–60 second dev timeout),
+  - tear down a lobby after one hour with no lobby or table activity (`close_idle_lobbies`, or a 1–60 second dev timeout). Members, seats, tables, chat, and the room go. A Discord voice channel id keeps the closed shell until the bot deletes the channel,
   - auto-clean tables that:
     - have zero seats,
     - and `status = "finished"` or idle for too long.

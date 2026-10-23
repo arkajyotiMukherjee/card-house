@@ -170,6 +170,36 @@ export const LEAVE_CONFIRM = {
   cancel: { x: 486, y: 268, w: 220, h: BUTTON_HEIGHT },
 } as const;
 
+export type LeaveConfirmHit = 'leave' | 'cancel' | 'panel';
+
+function boxContains(
+  box: { x: number; y: number; w: number; h: number },
+  x: number,
+  y: number,
+): boolean {
+  return x >= box.x && x < box.x + box.w && y >= box.y && y < box.y + box.h;
+}
+
+/**
+ * Which control a lobby click lands on. Buttons win over the panel so a
+ * click on Leave or Cancel is not treated as empty dialog chrome.
+ */
+export function leaveConfirmHit(
+  x: number,
+  y: number,
+): LeaveConfirmHit | undefined {
+  if (boxContains(LEAVE_CONFIRM.leave, x, y)) {
+    return 'leave';
+  }
+  if (boxContains(LEAVE_CONFIRM.cancel, x, y)) {
+    return 'cancel';
+  }
+  if (boxContains(LEAVE_CONFIRM.panel, x, y)) {
+    return 'panel';
+  }
+  return undefined;
+}
+
 export interface ChatMessageRow {
   id: string;
   lobbyId: string;

@@ -48,6 +48,15 @@ assert(
   'a seated game stays after the idle timeout',
 );
 assert(
+  shouldRemoveEmptyTable(0, 'finished', 0n, limit, '123456789012345678') ===
+    false,
+  'a voice channel keeps an empty table until the channel id is cleared',
+);
+assert(
+  shouldRemoveEmptyTable(0, 'finished', 0n, limit, '') === true,
+  'a cleared voice channel lets an empty finished table go',
+);
+assert(
   idleTimeoutAllowed(MIN_EMPTY_TABLE_IDLE_MICROS),
   'one second is allowed',
 );
