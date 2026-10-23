@@ -12,7 +12,6 @@ import {
   LOGICAL_WIDTH,
   NUMBER_HEART,
   cellRect,
-  coverViewport,
   fitViewport,
   sameCell,
 } from './sheets';
@@ -30,25 +29,38 @@ function cellBytes(png: PNG, col: number, row: number): Buffer {
   return out;
 }
 
-describe('cover viewport', () => {
-  it('covers a wide window on both edges', () => {
-    const covered = coverViewport(1600, 700);
-    expect(covered.width).toBeGreaterThanOrEqual(1600);
-    expect(covered.height).toBeGreaterThanOrEqual(700);
-    expect(covered.width / LOGICAL_WIDTH).toBeCloseTo(
-      covered.height / LOGICAL_HEIGHT,
-      5,
+describe('contain viewport', () => {
+  it('puts bars on the top and bottom of a narrower window', () => {
+    const fitted = fitViewport(1200, 900);
+    expect(fitted.width).toBe(1200);
+    expect(fitted.height).toBeLessThan(900);
+    expect(fitted.left).toBe(0);
+    expect(fitted.top).toBe(Math.floor((900 - fitted.height) / 2));
+    expect(fitted.width / fitted.height).toBeCloseTo(
+      LOGICAL_WIDTH / LOGICAL_HEIGHT,
+      2,
     );
   });
 
-  it('covers a tall window without side bars', () => {
-    const covered = coverViewport(800, 900);
-    expect(covered.width).toBeGreaterThanOrEqual(800);
-    expect(covered.height).toBeGreaterThanOrEqual(900);
+  it('puts bars on the left and right of a shorter window', () => {
+    const fitted = fitViewport(1600, 700);
+    expect(fitted.height).toBe(700);
+    expect(fitted.width).toBeLessThan(1600);
+    expect(fitted.top).toBe(0);
+    expect(fitted.left).toBe(Math.floor((1600 - fitted.width) / 2));
+    expect(fitted.width / fitted.height).toBeCloseTo(
+      LOGICAL_WIDTH / LOGICAL_HEIGHT,
+      2,
+    );
   });
 
-  it('matches a 16:9 window', () => {
-    expect(coverViewport(1920, 1080)).toEqual({ width: 1920, height: 1080 });
+  it('fills a 16:9 window with no bars', () => {
+    expect(fitViewport(1920, 1080)).toEqual({
+      width: 1920,
+      height: 1080,
+      left: 0,
+      top: 0,
+    });
   });
 });
 
@@ -78,12 +90,10 @@ describe('hearts sheet', () => {
 });
 
 describe('fit viewport', () => {
-  it('keeps the whole frame on a short phone where cover would crop it', () => {
-    const covered = coverViewport(844, 390);
-    expect(covered.height).toBeGreaterThan(390);
+  it('keeps the whole frame on a short wide screen', () => {
     const fitted = fitViewport(844, 390);
-    expect(fitted.height).toBeLessThanOrEqual(390);
-    expect(fitted.width).toBeLessThanOrEqual(844);
+    expect(fitted.height).toBe(390);
+    expect(fitted.width).toBeLessThan(844);
     expect(fitted.width / fitted.height).toBeCloseTo(
       LOGICAL_WIDTH / LOGICAL_HEIGHT,
       1,
@@ -104,6 +114,8 @@ describe('fit viewport', () => {
   it('letterboxes the long edge of a tall area', () => {
     const fitted = fitViewport(400, 900);
     expect(fitted.width).toBe(400);
+    expect(fitted.height).toBeLessThan(900);
+    expect(fitted.left).toBe(0);
     expect(fitted.top).toBeGreaterThan(0);
   });
 

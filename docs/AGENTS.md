@@ -9,7 +9,7 @@ Conventions: [../repo-conventions.md](../repo-conventions.md).
 - `architecture.md` — lobby, tables, seats, client vs SpacetimeDB, future `GameRules` and `GameDriver` shapes.
 - `implementation.md` — milestone order from the skeleton through more games and Discord.
 - `discord-bot-architecture.md` — Discord bot, voice channels, identity, and speaking indicators.
-- `ui-ux.md` — in-canvas layout, 960×540, integer scaling, pixel buttons.
+- `ui-ux.md` — in-canvas layout, 960×540, contain scaling, pixel buttons.
 
 Prettier ignores `docs/`. Match the plain markdown already in these files.
 
