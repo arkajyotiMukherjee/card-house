@@ -21,4 +21,5 @@ export default __t.row({
   discordUsername: __t.string().name("discord_username"),
   discordGlobalName: __t.string().name("discord_global_name"),
   discordDiscriminator: __t.option(__t.string()).name("discord_discriminator"),
+  isBot: __t.bool().name("is_bot"),
 });

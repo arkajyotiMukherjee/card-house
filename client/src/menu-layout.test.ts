@@ -3,9 +3,13 @@ import { bluffGameDefinition } from '../../src/shared/games/bluff';
 import {
   CARD_STYLE,
   FLOATER_MARGIN,
+  MENU_BACKDROP,
   MENU_BUTTONS,
   MENU_THEME_BUTTON,
   MENU_TITLE,
+  SOLO_PICKER,
+  soloSeatCount,
+  soloSettingsJson,
   floaterPose,
   makeFloaters,
   menuAcceptsAction,
@@ -26,16 +30,25 @@ describe('menu title', () => {
 });
 
 describe('menu buttons', () => {
-  it('lists Create Room, Join Room, How to Play, and Card Style in a centered stack', () => {
+  it('lists Create Room, Join Room, Single Player, How to Play, and Card Style in a centered stack', () => {
     expect(MENU_BUTTONS.map((button) => button.caption)).toEqual([
       'Create Room',
       'Join Room',
+      'Single Player',
       'How to Play (All Games)',
       'Card Style',
     ]);
     for (const button of MENU_BUTTONS) {
       expect(button.x + button.w / 2).toBe(LOGICAL_WIDTH / 2);
       expect(button.y + button.h).toBeLessThanOrEqual(LOGICAL_HEIGHT);
+      expect(button.x).toBeGreaterThanOrEqual(MENU_BACKDROP.x);
+      expect(button.x + button.w).toBeLessThanOrEqual(
+        MENU_BACKDROP.x + MENU_BACKDROP.w,
+      );
+      expect(button.y).toBeGreaterThanOrEqual(MENU_BACKDROP.y);
+      expect(button.y + button.h).toBeLessThanOrEqual(
+        MENU_BACKDROP.y + MENU_BACKDROP.h,
+      );
     }
     for (let index = 1; index < MENU_BUTTONS.length; index += 1) {
       const above = MENU_BUTTONS[index - 1];
@@ -81,6 +94,39 @@ describe('theme button', () => {
     expect(themeButtonLabel('green')).toBe('Theme: Green');
     expect(themeButtonLabel('purple')).toBe('Theme: Purple');
     expect(themeButtonLabel('red')).toBe('Theme: Red');
+  });
+});
+
+describe('single player picker', () => {
+  it('keeps the picker inside the frame', () => {
+    const boxes = [
+      SOLO_PICKER.panel,
+      SOLO_PICKER.nameField,
+      SOLO_PICKER.play,
+      SOLO_PICKER.cancel,
+    ];
+    for (const box of boxes) {
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.y).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.w).toBeLessThanOrEqual(LOGICAL_WIDTH);
+      expect(box.y + box.h).toBeLessThanOrEqual(LOGICAL_HEIGHT);
+    }
+  });
+
+  it('wraps the seat count inside the catalog range', () => {
+    expect(soloSeatCount(4, 4, 3)).toBe(4);
+    expect(soloSeatCount(2, 6, 0)).toBe(2);
+    expect(soloSeatCount(2, 6, 4)).toBe(6);
+    expect(soloSeatCount(2, 6, 5)).toBe(2);
+    expect(soloSeatCount(1, 7, -1)).toBe(7);
+  });
+
+  it('sends a poker variation and nothing for the other games', () => {
+    expect(soloSettingsJson('poker', 'omaha')).toBe(
+      JSON.stringify({ variation: 'omaha' }),
+    );
+    expect(soloSettingsJson('hearts', 'omaha')).toBeUndefined();
+    expect(soloSettingsJson('poker', undefined)).toBeUndefined();
   });
 });
 
