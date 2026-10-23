@@ -10,6 +10,13 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const BotTurnSchedule = __t.object("BotTurnSchedule", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  tableId: __t.string(),
+});
+export type BotTurnSchedule = __Infer<typeof BotTurnSchedule>;
+
 export const ClientStats = __t.object("ClientStats", {
   clientId: __t.string(),
   handsPlayed: __t.u32(),
@@ -77,6 +84,7 @@ export const Lobby = __t.object("Lobby", {
   discordGuildId: __t.string(),
   discordLobbyVoiceChannelId: __t.string(),
   lastActivityAt: __t.option(__t.timestamp()),
+  solo: __t.bool(),
 });
 export type Lobby = __Infer<typeof Lobby>;
 
@@ -114,6 +122,7 @@ export const LobbyMember = __t.object("LobbyMember", {
   discordUsername: __t.string(),
   discordGlobalName: __t.string(),
   discordDiscriminator: __t.option(__t.string()),
+  isBot: __t.bool(),
 });
 export type LobbyMember = __Infer<typeof LobbyMember>;
 

@@ -123,6 +123,14 @@ import {
   tournamentTableCountError,
   type TournamentTableRow,
 } from './tournament';
+import { playBotTurns } from './bot-runner';
+import {
+  botClientId,
+  botIntentRejection,
+  botName,
+  soloJoinRejection,
+  soloLeaveRemovesRoom,
+} from './solo';
 
 registerGameRules(stubGameDefinition, stubIntentRules);
 registerGameRules(dummyGameDefinition, dummyCounterRules);
@@ -169,6 +177,8 @@ const Lobby = table(
     discordGuildId: t.string().default(''),
     discordLobbyVoiceChannelId: t.string().default(''),
     lastActivityAt: t.option(t.timestamp()).default(undefined),
+    /** Private room seated with CPU bots. Other clients cannot join. */
+    solo: t.bool().default(false),
   },
 );
 
@@ -200,6 +210,8 @@ const LobbyMember = table(
     discordUsername: t.string().default(''),
     discordGlobalName: t.string().default(''),
     discordDiscriminator: t.option(t.string()).default(undefined),
+    /** CPU seat. Its client id is `bot:{tableId}:{seat}` and it stays disconnected. */
+    isBot: t.bool().default(false),
   },
 );
 
@@ -468,6 +480,17 @@ const LobbyIdleSweep = table(
   },
 );
 
+const BotTurnSchedule = table(
+  { name: 'BotTurnSchedule' },
+  {
+    scheduledId: t.u64().primaryKey().autoInc(),
+    scheduledAt: t.scheduleAt(),
+    tableId: t.string(),
+  },
+);
+
+const BOT_TURN_DELAY_MICROS = 1_000n;
+
 const ClientStats = table(
   { name: 'ClientStats', public: true },
   {
@@ -496,6 +519,7 @@ const spacetimedb = schema(
     TableCleanupSchedule,
     LobbyIdleConfig,
     LobbyIdleSweep,
+    BotTurnSchedule,
     ClientStats,
   },
   { CASE_CONVERSION_POLICY: CaseConversionPolicy.None },
@@ -519,7 +543,7 @@ function recordClientStats(
   const clientBySeat = new Map<number, string>();
   for (const seat of ctx.db.GameSeat.byTable.filter(tableId)) {
     const seated = ctx.db.LobbyMember.id.find(seat.lobbyMemberId);
-    if (seated) {
+    if (seated && !seated.isBot) {
       clientBySeat.set(seat.seatIndex, seated.clientId);
     }
   }
@@ -920,6 +944,7 @@ export const create_lobby = spacetimedb.reducer(
       discordChannelId: '',
       discordGuildId: '',
       discordLobbyVoiceChannelId: '',
+      solo: false,
     });
     console.log(lobbyCreatedLine(id));
   },
@@ -1341,6 +1366,7 @@ export const join_lobby = spacetimedb.reducer(
       return;
     }
 
+    reject(soloJoinRejection(lobby.solo, false));
     ctx.db.LobbyMember.insert({
       id: `member_${lobby.id}_${request.clientId}`,
       lobbyId: lobby.id,
@@ -1352,6 +1378,7 @@ export const join_lobby = spacetimedb.reducer(
       discordUsername: '',
       discordGlobalName: '',
       discordDiscriminator: undefined,
+      isBot: false,
     });
     rememberLobby(ctx.db, ctx.sender.toHexString(), lobby.id, request.clientId);
     noteLobbyActivity(ctx, lobby.id);
@@ -1433,6 +1460,7 @@ export const join_lobby_with_discord = spacetimedb.reducer(
       return;
     }
 
+    reject(soloJoinRejection(lobby.solo, false));
     ctx.db.LobbyMember.insert({
       id: `member_${lobby.id}_${request.clientId}`,
       lobbyId: lobby.id,
@@ -1444,6 +1472,7 @@ export const join_lobby_with_discord = spacetimedb.reducer(
       discordUsername: discord.discordUsername,
       discordGlobalName: discord.discordGlobalName,
       discordDiscriminator: discord.discordDiscriminator,
+      isBot: false,
     });
     rememberLobby(ctx.db, ctx.sender.toHexString(), lobby.id, request.clientId);
     noteLobbyActivity(ctx, lobby.id);
@@ -2457,6 +2486,11 @@ export const leave_lobby = spacetimedb.reducer(
     if (!member) {
       throw new SenderError('Member not found');
     }
+    if (soloLeaveRemovesRoom(lobby.solo, member.isBot)) {
+      deleteRoomShell(ctx, lobby.id);
+      forgetLobby(ctx.db, ctx.sender.toHexString());
+      return;
+    }
 
     const seats = memberSeatRefs(ctx, member.id);
     const spectators = memberSpectatorRefs(ctx, member.id);
@@ -2543,6 +2577,11 @@ export const leave_table = spacetimedb.reducer(
     }
     if (seatIds.length === 0 && spectatorIds.length === 0) {
       throw new SenderError('Not seated');
+    }
+    if (soloLeaveRemovesRoom(lobby.solo, member.isBot)) {
+      deleteRoomShell(ctx, lobby.id);
+      forgetLobby(ctx.db, ctx.sender.toHexString());
+      return;
     }
     for (const seatId of seatIds) {
       ctx.db.GameSeat.id.delete(seatId);
@@ -2790,6 +2829,165 @@ function eventId(tableId: string, order: number): string {
   return `event_${tableId}_${suffix}`;
 }
 
+function commitIntent(
+  ctx: ModuleCtx,
+  tableId: string,
+  memberId: string,
+  seatId: string,
+  intent: unknown,
+  prev: unknown,
+): unknown {
+  const gameTable = ctx.db.GameTable.id.find(tableId);
+  if (!gameTable) {
+    throw new SenderError('Table not found');
+  }
+  const member = ctx.db.LobbyMember.id.find(memberId);
+  if (!member) {
+    throw new SenderError('Member not found');
+  }
+  const seat = ctx.db.GameSeat.id.find(seatId);
+  if (!seat) {
+    throw new SenderError('Not seated');
+  }
+  const rules = rulesByType[gameTable.gameType];
+  if (!rules) {
+    throw new SenderError('Unknown game type');
+  }
+
+  let next: unknown;
+  try {
+    next = rules.applyIntent(prev, intent, {
+      seat: rulesSeat(seat),
+      now: Number(ctx.timestamp.toMillis()),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Intent rejected';
+    console.error(rulesErrorLine(gameTable.id, gameTable.lobbyId, message));
+    if (err instanceof SenderError) {
+      throw err;
+    }
+    throw new SenderError(message);
+  }
+
+  let note: unknown;
+  try {
+    note = rules.eventNote?.(prev, intent, next, {
+      seat: rulesSeat(seat),
+      now: Number(ctx.timestamp.toMillis()),
+    });
+  } catch {
+    note = undefined;
+  }
+
+  const stateJson = storedState(next);
+  const status = storedStatus(
+    statusTagForState(next, currentStatusTag(gameTable.status.tag)),
+  );
+  ctx.db.GameTable.id.update({
+    ...gameTable,
+    stateJson,
+    status,
+    lastActivityAt: ctx.timestamp,
+  });
+  if (gameTable.tournamentId.length > 0) {
+    refreshTournamentRoundStatus(ctx, gameTable.tournamentId, gameTable.round);
+  }
+
+  let order = 0;
+  for (const _event of ctx.db.GameEvent.byTable.filter(gameTable.id)) {
+    order += 1;
+  }
+  ctx.db.GameEvent.insert({
+    id: eventId(gameTable.id, order),
+    tableId: gameTable.id,
+    lobbyMemberId: member.id,
+    type: appliedIntentType(intent),
+    payloadJson: appliedIntentPayload(order, intent, note),
+    createdAt: ctx.timestamp,
+  });
+  recordClientStats(ctx, gameTable.id, gameTable.gameType, prev, next);
+  noteLobbyActivity(ctx, gameTable.lobbyId);
+  return next;
+}
+
+function seatAt(
+  ctx: ModuleCtx,
+  tableId: string,
+  seatIndex: number,
+): { id: string; lobbyMemberId: string } | undefined {
+  for (const seat of ctx.db.GameSeat.byTable.filter(tableId)) {
+    if (seat.seatIndex === seatIndex) {
+      return seat;
+    }
+  }
+  return undefined;
+}
+
+function scheduleBotTurns(ctx: ModuleCtx, tableId: string): void {
+  for (const row of ctx.db.BotTurnSchedule.iter()) {
+    if (row.tableId === tableId) {
+      return;
+    }
+  }
+  ctx.db.BotTurnSchedule.insert({
+    scheduledId: 0n,
+    scheduledAt: ScheduleAt.time(
+      ctx.timestamp.microsSinceUnixEpoch + BOT_TURN_DELAY_MICROS,
+    ),
+    tableId,
+  });
+}
+
+function continueBotTurns(ctx: ModuleCtx, tableId: string): void {
+  const gameTable = ctx.db.GameTable.id.find(tableId);
+  if (!gameTable) {
+    return;
+  }
+  const lobby = ctx.db.Lobby.id.find(gameTable.lobbyId);
+  if (!lobby || !lobby.solo || lobby.status.tag !== 'open') {
+    return;
+  }
+  let state: unknown;
+  try {
+    state = JSON.parse(gameTable.stateJson);
+  } catch {
+    return;
+  }
+  const actors: { seatIndex: number; isBot: boolean }[] = [];
+  for (const seat of ctx.db.GameSeat.byTable.filter(tableId)) {
+    const member = ctx.db.LobbyMember.id.find(seat.lobbyMemberId);
+    if (!member) {
+      continue;
+    }
+    actors.push({ seatIndex: seat.seatIndex, isBot: member.isBot });
+  }
+  const batch = playBotTurns(
+    gameTable.gameType,
+    state,
+    actors,
+    (current, intent, seatIndex) => {
+      const seat = seatAt(ctx, tableId, seatIndex);
+      if (!seat) {
+        throw new SenderError('Not seated');
+      }
+      return commitIntent(
+        ctx,
+        tableId,
+        seat.lobbyMemberId,
+        seat.id,
+        intent,
+        current,
+      );
+    },
+  );
+  if (batch.error) {
+    console.error(rulesErrorLine(gameTable.id, gameTable.lobbyId, batch.error));
+  }
+  if (batch.pending) {
+    scheduleBotTurns(ctx, tableId);
+  }
+}
+
 export const handle_game_intent = spacetimedb.reducer(
   { name: 'handle_game_intent' },
   {
@@ -2845,11 +3043,7 @@ export const handle_game_intent = spacetimedb.reducer(
     if (!seat) {
       throw new SenderError('Not seated');
     }
-
-    const rules = rulesByType[gameTable.gameType];
-    if (!rules) {
-      throw new SenderError('Unknown game type');
-    }
+    reject(botIntentRejection(member.isBot));
 
     let prev: unknown;
     try {
@@ -2865,62 +3059,200 @@ export const handle_game_intent = spacetimedb.reducer(
       throw new SenderError('Intent must be JSON');
     }
 
-    let next: unknown;
-    try {
-      next = rules.applyIntent(prev, intent, {
-        seat: rulesSeat(seat),
-        now: Number(ctx.timestamp.toMillis()),
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Intent rejected';
-      console.error(rulesErrorLine(gameTable.id, gameTable.lobbyId, message));
-      if (err instanceof SenderError) {
-        throw err;
+    commitIntent(ctx, gameTable.id, member.id, seat.id, intent, prev);
+    continueBotTurns(ctx, gameTable.id);
+  },
+);
+
+export const play_bot_turns = spacetimedb.reducer(
+  { name: 'play_bot_turns', onSchedule: BotTurnSchedule },
+  { row: BotTurnSchedule.rowType },
+  (ctx, { row }) => {
+    if (ctx.db.BotTurnSchedule.scheduledId.find(row.scheduledId)) {
+      ctx.db.BotTurnSchedule.scheduledId.delete(row.scheduledId);
+    }
+    continueBotTurns(ctx, row.tableId);
+  },
+);
+
+export const start_solo_game = spacetimedb.reducer(
+  { name: 'start_solo_game' },
+  {
+    clientId: t.string(),
+    name: t.string(),
+    gameType: t.string(),
+    seatCount: t.u32(),
+    settings: t.option(t.string()),
+  },
+  (
+    ctx,
+    {
+      clientId: rawClientId,
+      name: rawName,
+      gameType: rawGameType,
+      seatCount,
+      settings: rawSettings,
+    },
+  ) => {
+    const clientId = rawClientId.trim();
+    const name = rawName.trim();
+    const gameType = rawGameType.trim();
+    if (clientId.length === 0) {
+      throw new SenderError('Client id is required');
+    }
+    if (name.length === 0) {
+      throw new SenderError('Name is required');
+    }
+    if (gameType.length === 0) {
+      throw new SenderError('Game type is required');
+    }
+    const definition = definitionByType[gameType];
+    if (!definition || gameType === 'dummy' || gameType === 'stub') {
+      throw new SenderError('Unknown game type');
+    }
+    if (
+      !Number.isInteger(seatCount) ||
+      seatCount < definition.minPlayers ||
+      seatCount > definition.maxPlayers
+    ) {
+      throw new SenderError('Seat count is outside this game');
+    }
+
+    ensureLobbyIdleJob(ctx);
+    const caps = currentRoomCaps(ctx.db);
+    reject(lobbyCapRejection(rowCount(ctx.db.Lobby.iter()), caps));
+
+    const sender = ctx.sender.toHexString();
+    const micros = ctx.timestamp.microsSinceUnixEpoch;
+    let code = '';
+    for (let attempt = 0; attempt < 32; attempt += 1) {
+      const candidate = lobbyCode(micros, attempt);
+      if (ctx.db.Lobby.code.find(candidate) === null) {
+        code = candidate;
+        break;
       }
-      throw new SenderError(message);
     }
-
-    let note: unknown;
-    try {
-      note = rules.eventNote?.(prev, intent, next, {
-        seat: rulesSeat(seat),
-        now: Number(ctx.timestamp.toMillis()),
-      });
-    } catch {
-      note = undefined;
+    if (code === '') {
+      throw new SenderError('Could not allocate a lobby code');
     }
+    const lobbyId = `lobby_${sender}_${micros.toString()}_solo`;
+    ctx.db.Lobby.insert({
+      id: lobbyId,
+      code,
+      status: { tag: 'open' },
+      createdAt: ctx.timestamp,
+      lastActivityAt: ctx.timestamp,
+      discordChannelId: '',
+      discordGuildId: '',
+      discordLobbyVoiceChannelId: '',
+      solo: true,
+    });
+    console.log(lobbyCreatedLine(lobbyId));
 
-    const stateJson = storedState(next);
-    const status = storedStatus(
-      statusTagForState(next, currentStatusTag(gameTable.status.tag)),
+    const humanId = `member_${lobbyId}_${clientId}`;
+    ctx.db.LobbyMember.insert({
+      id: humanId,
+      lobbyId,
+      clientId,
+      name,
+      connected: true,
+      lastSeenAt: ctx.timestamp,
+      discordUserId: '',
+      discordUsername: '',
+      discordGlobalName: '',
+      discordDiscriminator: undefined,
+      isBot: false,
+    });
+    rememberLobby(ctx.db, sender, lobbyId, clientId);
+
+    const requested = tableSettings(rawSettings);
+    if (gameType !== POKER_GAME_TYPE) {
+      requested.variation = undefined;
+    }
+    requested.minPlayers = seatCount;
+    requested.maxPlayers = seatCount;
+    if (!requested.name) {
+      requested.name = definition.displayName;
+    }
+    const row = openTableRow(
+      ctx,
+      { id: lobbyId },
+      gameType,
+      requested,
+      caps,
+      0,
+      0,
+      'solo',
+      '',
+      0,
     );
+    ctx.db.GameTable.insert(row);
+    console.log(tableCreatedLine(row.id, lobbyId));
+
+    ctx.db.GameSeat.insert({
+      id: `seat_${row.id}_${humanId}`,
+      tableId: row.id,
+      lobbyMemberId: humanId,
+      seatIndex: 0,
+      chips: undefined,
+      joinedAt: ctx.timestamp,
+      seatState: { tag: 'active' },
+    });
+    for (let seatIndex = 1; seatIndex < seatCount; seatIndex += 1) {
+      const botId = botClientId(row.id, seatIndex);
+      const memberId = `member_${lobbyId}_${botId}`;
+      ctx.db.LobbyMember.insert({
+        id: memberId,
+        lobbyId,
+        clientId: botId,
+        name: botName(seatIndex),
+        connected: false,
+        lastSeenAt: ctx.timestamp,
+        discordUserId: '',
+        discordUsername: '',
+        discordGlobalName: '',
+        discordDiscriminator: undefined,
+        isBot: true,
+      });
+      ctx.db.GameSeat.insert({
+        id: `seat_${row.id}_${memberId}`,
+        tableId: row.id,
+        lobbyMemberId: memberId,
+        seatIndex,
+        chips: undefined,
+        joinedAt: ctx.timestamp,
+        seatState: { tag: 'active' },
+      });
+    }
+
+    const seatedNow: RulesSeat[] = [];
+    for (const seat of ctx.db.GameSeat.byTable.filter(row.id)) {
+      seatedNow.push(rulesSeat(seat));
+    }
+    const rules = rulesByType[gameType];
+    let stateJson = row.stateJson;
+    let status: ReturnType<typeof storedStatus> = row.status;
+    if (
+      rules &&
+      stateIfLobbyReady(stateJson, seatedNow.length, row.minPlayers) === 'deal'
+    ) {
+      const next = rules.initialState(
+        seatedNow,
+        rulesTable({ ...row, status }),
+      );
+      stateJson = storedState(next);
+      status = storedStatus(
+        statusTagForState(next, currentStatusTag(row.status.tag)),
+      );
+    }
     ctx.db.GameTable.id.update({
-      ...gameTable,
+      ...row,
       stateJson,
       status,
       lastActivityAt: ctx.timestamp,
     });
-    if (gameTable.tournamentId.length > 0) {
-      refreshTournamentRoundStatus(
-        ctx,
-        gameTable.tournamentId,
-        gameTable.round,
-      );
-    }
-
-    let order = 0;
-    for (const _event of ctx.db.GameEvent.byTable.filter(gameTable.id)) {
-      order += 1;
-    }
-    ctx.db.GameEvent.insert({
-      id: eventId(gameTable.id, order),
-      tableId: gameTable.id,
-      lobbyMemberId: member.id,
-      type: appliedIntentType(intent),
-      payloadJson: appliedIntentPayload(order, intent, note),
-      createdAt: ctx.timestamp,
-    });
-    recordClientStats(ctx, gameTable.id, gameTable.gameType, prev, next);
-    noteLobbyActivity(ctx, lobby.id);
+    rememberTable(ctx.db, sender, lobbyId, row.id);
+    noteLobbyActivity(ctx, lobbyId);
+    continueBotTurns(ctx, row.id);
   },
 );

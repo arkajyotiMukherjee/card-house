@@ -4,7 +4,7 @@ import type { TableStyle } from './table-atlas';
 
 export const MENU_VERSION = 'v0.1';
 
-export type MenuAction = 'create' | 'join' | 'howto' | 'cards';
+export type MenuAction = 'create' | 'join' | 'solo' | 'howto' | 'cards';
 
 export interface MenuButtonSpec {
   action: MenuAction;
@@ -18,12 +18,13 @@ export interface MenuButtonSpec {
 const BUTTON_W = 400;
 const BUTTON_H = 44;
 const BUTTON_GAP = 16;
-const BUTTON_TOP = 244;
+const BUTTON_TOP = 168;
 
 const MENU_ENTRIES: ReadonlyArray<Pick<MenuButtonSpec, 'action' | 'caption'>> =
   [
     { action: 'create', caption: 'Create Room' },
     { action: 'join', caption: 'Join Room' },
+    { action: 'solo', caption: 'Single Player' },
     { action: 'howto', caption: 'How to Play (All Games)' },
     { action: 'cards', caption: 'Card Style' },
   ];
@@ -38,7 +39,7 @@ export const MENU_BUTTONS: readonly MenuButtonSpec[] = MENU_ENTRIES.map(
   }),
 );
 
-export const MENU_BACKDROP = { x: 200, y: 72, w: 560, h: 412 } as const;
+export const MENU_BACKDROP = { x: 200, y: 48, w: 560, h: 420 } as const;
 
 export const MENU_THEME_BUTTON = {
   x: 816,
@@ -52,12 +53,53 @@ export function themeButtonLabel(style: TableStyle): string {
   return `Theme: ${style.charAt(0).toUpperCase()}${style.slice(1)}`;
 }
 
-export const MENU_TITLE = { text: 'Card House', size: 48, y: 96 } as const;
+export const MENU_TITLE = { text: 'Card House', size: 48, y: 72 } as const;
 export const MENU_TAGLINE = {
   text: 'Online card games with friends',
   size: 8,
-  y: 160,
+  y: 132,
 } as const;
+
+/** Single Player picker. Five menu buttons already fill the main panel. */
+export const SOLO_PICKER = {
+  panel: { x: 180, y: 36, w: 600, h: 468 },
+  gameRow: { x: 220, y: 110 },
+  seatRow: { x: 220, y: 180 },
+  variationRow: { x: 220, y: 250 },
+  nameField: { x: 220, y: 320, w: 520, h: 28 },
+  error: { x: 220, y: 364 },
+  play: { x: 220, y: 400, w: 240, h: BUTTON_HEIGHT },
+  cancel: { x: 500, y: 400, w: 240, h: BUTTON_HEIGHT },
+  arrowGap: 280,
+} as const;
+
+/** Seat count the picker shows. `index` wraps inside min..max. */
+export function soloSeatCount(
+  minPlayers: number,
+  maxPlayers: number,
+  index: number,
+): number {
+  const span = maxPlayers - minPlayers + 1;
+  if (span <= 1) {
+    return minPlayers;
+  }
+  return minPlayers + stepIndex(index, 0, span);
+}
+
+/** Poker stores its variation. Every other game starts with no settings. */
+export function soloSettingsJson(
+  gameType: string,
+  variation: string | undefined,
+): string | undefined {
+  if (
+    gameType !== 'poker' ||
+    variation === undefined ||
+    variation.length === 0
+  ) {
+    return undefined;
+  }
+  return JSON.stringify({ variation });
+}
 
 export const PROMPT = {
   panel: { x: 220, y: 150, w: 520, h: 240 },
@@ -87,7 +129,7 @@ export const CARD_STYLE = {
 
 export type PromptKind = 'create' | 'join';
 
-export type MenuMode = 'main' | PromptKind | 'howto' | 'cards';
+export type MenuMode = 'main' | PromptKind | 'solo' | 'howto' | 'cards';
 
 /**
  * A menu button runs only on the main menu, and only when the open dialog

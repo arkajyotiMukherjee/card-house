@@ -25,6 +25,9 @@ import {
   applyFieldText,
   CODE_MAX,
   NAME_MAX,
+  POKER_GAME_TYPE,
+  POKER_VARIATION_LABELS,
+  POKER_VARIATIONS,
 } from './lobby';
 import {
   bindCanvasTextField,
@@ -52,6 +55,7 @@ import {
   MENU_TITLE,
   MENU_VERSION,
   PROMPT,
+  SOLO_PICKER,
   floaterPose,
   makeFloaters,
   menuAcceptsAction,
@@ -60,6 +64,8 @@ import {
   promptFields,
   promptSubmitLabel,
   promptTitle,
+  soloSeatCount,
+  soloSettingsJson,
   splitHowToPlay,
   stepIndex,
   themeButtonLabel,
@@ -98,8 +104,8 @@ const TITLE_SHADOW = ex.Color.fromHex('#07140d');
 
 const FLOATER_COUNT = 14;
 const TITLE_DROP = 4;
-/** Below the Card Style button (y 424, h 44) and above the version marker. */
-const STATS_Y = 492;
+/** Below the Card Style button (y 408, h 44) and above the version marker. */
+const STATS_Y = 480;
 
 export interface MenuEntry {
   kind: PromptKind;
@@ -109,6 +115,16 @@ export interface MenuEntry {
 
 /** Resolves to an error message, or undefined once the lobby was entered. */
 export type MenuEnter = (entry: MenuEntry) => Promise<string | undefined>;
+
+export interface SoloStart {
+  name: string;
+  gameType: string;
+  seatCount: number;
+  settings?: string;
+}
+
+/** Resolves to an error message, or undefined once the solo table is open. */
+export type SoloEnter = (start: SoloStart) => Promise<string | undefined>;
 
 type Mode = MenuMode;
 
@@ -185,6 +201,14 @@ export class MenuScene extends ex.Scene {
   private enter: MenuEnter = () =>
     Promise.resolve(roomEntryError('connecting'));
   private onEntered: () => void = () => {};
+  private startSolo: SoloEnter = () =>
+    Promise.resolve(roomEntryError('connecting'));
+  private soloSeatIndex = 0;
+  private soloVariationIndex = 0;
+  private soloNameField: CanvasTextFieldHandle | undefined;
+  private soloGameText: ex.Text | undefined;
+  private soloSeatText: ex.Text | undefined;
+  private soloVariationText: ex.Text | undefined;
   private statsText = canvasText(
     statsCaption({ handsPlayed: 0, gamesWon: 0 }),
     8,
@@ -264,6 +288,11 @@ export class MenuScene extends ex.Scene {
   connect(enter: MenuEnter, onEntered: () => void): void {
     this.enter = enter;
     this.onEntered = onEntered;
+  }
+
+  /** Called once a solo game can be started from the picker. */
+  connectSolo(start: SoloEnter): void {
+    this.startSolo = start;
   }
 
   /**
@@ -509,6 +538,10 @@ export class MenuScene extends ex.Scene {
       this.openCardStyle();
       return;
     }
+    if (action === 'solo') {
+      this.openSolo();
+      return;
+    }
     this.openPrompt(action);
   }
 
@@ -521,6 +554,9 @@ export class MenuScene extends ex.Scene {
     this.bodyActors = [];
     this.nameText = undefined;
     this.codeText = undefined;
+    this.soloGameText = undefined;
+    this.soloSeatText = undefined;
+    this.soloVariationText = undefined;
     this.nameCaret = undefined;
     this.codeCaret = undefined;
     this.nameBox = undefined;
@@ -783,6 +819,296 @@ export class MenuScene extends ex.Scene {
       this.errorText.text = message;
       this.errorText.color = color;
     }
+  }
+
+  private soloGame(): (typeof GAME_CATALOG)[number] {
+    return (
+      GAME_CATALOG[stepIndex(this.gameIndex, 0, GAME_CATALOG.length)] ??
+      GAME_CATALOG[0]
+    );
+  }
+
+  private openSolo(): void {
+    this.mode = 'solo';
+    this.gameIndex = 0;
+    this.soloSeatIndex = 0;
+    this.soloVariationIndex = 0;
+    this.name = preferredNameForPrompt(this.clientId, '');
+    this.shade();
+
+    const box = SOLO_PICKER.panel;
+    const panel = new ex.Actor({
+      pos: ex.vec(box.x, box.y),
+      anchor: ex.vec(0, 0),
+      width: box.w,
+      height: box.h,
+      z: 31,
+    });
+    panel.graphics.use(rect(box.w, box.h, PANEL, STROKE));
+    this.claimOverlayPointer(panel);
+    this.add(panel);
+    this.overlay.push(panel);
+    this.overlayText(box.x + 24, box.y + 20, 16, GOLD, () => 'Single Player');
+
+    this.overlayText(
+      SOLO_PICKER.gameRow.x,
+      SOLO_PICKER.gameRow.y - 18,
+      8,
+      DIM,
+      () => 'Game',
+    );
+    this.soloGameText = this.soloArrowRow(
+      SOLO_PICKER.gameRow.x,
+      SOLO_PICKER.gameRow.y,
+      (delta) => {
+        this.gameIndex = stepIndex(this.gameIndex, delta, GAME_CATALOG.length);
+        this.paintSolo();
+      },
+    );
+    this.overlayText(
+      SOLO_PICKER.seatRow.x,
+      SOLO_PICKER.seatRow.y - 18,
+      8,
+      DIM,
+      () => 'Seats',
+    );
+    this.soloSeatText = this.soloArrowRow(
+      SOLO_PICKER.seatRow.x,
+      SOLO_PICKER.seatRow.y,
+      (delta) => {
+        const game = this.soloGame();
+        const span = Math.max(game.maxPlayers - game.minPlayers + 1, 1);
+        this.soloSeatIndex = stepIndex(this.soloSeatIndex, delta, span);
+        this.paintSolo();
+      },
+    );
+    this.overlayText(
+      SOLO_PICKER.variationRow.x,
+      SOLO_PICKER.variationRow.y - 18,
+      8,
+      DIM,
+      () => 'Variation',
+    );
+    this.soloVariationText = this.soloArrowRow(
+      SOLO_PICKER.variationRow.x,
+      SOLO_PICKER.variationRow.y,
+      (delta) => {
+        if (this.soloGame().gameType !== POKER_GAME_TYPE) {
+          return;
+        }
+        this.soloVariationIndex = stepIndex(
+          this.soloVariationIndex,
+          delta,
+          POKER_VARIATIONS.length,
+        );
+        this.paintSolo();
+      },
+    );
+
+    const spec = SOLO_PICKER.nameField;
+    this.overlayText(spec.x, spec.y - 16, 8, DIM, () => 'Your Name');
+    const face = rect(spec.w, spec.h, FIELD, STROKE_HOT);
+    const actor = new ex.Actor({
+      pos: ex.vec(spec.x, spec.y),
+      anchor: ex.vec(0, 0),
+      width: spec.w,
+      height: spec.h,
+      z: 32,
+    });
+    actor.graphics.use(face);
+    actor.on('pointerdown', (event) => {
+      this.claimOverlayClick(event);
+    });
+    actor.on('pointerup', (event) => {
+      this.claimOverlayClick(event);
+      this.soloNameField?.focus();
+      this.paintSolo();
+    });
+    this.add(actor);
+    this.overlay.push(actor);
+    this.nameBox = face;
+    const metrics = promptLabel(spec);
+    const text = canvasText('', metrics.size, GOLD);
+    const textActor = new ex.Actor({
+      pos: ex.vec(metrics.x, metrics.y),
+      anchor: ex.vec(0, 0),
+      z: 33,
+    });
+    textActor.graphics.use(text);
+    const caret = makeFieldCaret(metrics.size, 34);
+    this.add(textActor);
+    this.add(caret);
+    this.overlay.push(textActor, caret);
+    this.nameText = text;
+    this.nameCaret = caret;
+
+    const error = canvasText('', 8, DANGER);
+    const errorActor = new ex.Actor({
+      pos: ex.vec(SOLO_PICKER.error.x, SOLO_PICKER.error.y),
+      anchor: ex.vec(0, 0),
+      z: 33,
+    });
+    errorActor.graphics.use(error);
+    this.add(errorActor);
+    this.overlay.push(errorActor);
+    this.errorText = error;
+
+    this.overlay.push(
+      this.button(
+        SOLO_PICKER.play.x,
+        SOLO_PICKER.play.y,
+        SOLO_PICKER.play.w,
+        SOLO_PICKER.play.h,
+        'Play',
+        BUTTON_FONT_SIZE,
+        () => {
+          void this.submitSolo();
+        },
+        32,
+        true,
+      ),
+      this.button(
+        SOLO_PICKER.cancel.x,
+        SOLO_PICKER.cancel.y,
+        SOLO_PICKER.cancel.w,
+        SOLO_PICKER.cancel.h,
+        'Cancel',
+        BUTTON_FONT_SIZE,
+        () => {
+          this.closeOverlay();
+        },
+        32,
+        true,
+      ),
+    );
+    this.paintSolo();
+    refreshCanvasTextFields();
+    this.soloNameField?.focus();
+  }
+
+  private soloArrowRow(
+    x: number,
+    y: number,
+    onCycle: (delta: number) => void,
+  ): ex.Text {
+    const arrow = CARD_STYLE.arrow;
+    this.overlay.push(
+      this.button(x, y, arrow.w, arrow.h, '<', 16, () => onCycle(-1), 32, true),
+    );
+    this.overlay.push(
+      this.button(
+        x + SOLO_PICKER.arrowGap,
+        y,
+        arrow.w,
+        arrow.h,
+        '>',
+        16,
+        () => onCycle(1),
+        32,
+        true,
+      ),
+    );
+    const text = canvasText('', 16, GOLD);
+    const textActor = new ex.Actor({
+      pos: ex.vec(x + arrow.w + 12, y + 4),
+      anchor: ex.vec(0, 0),
+      z: 33,
+    });
+    textActor.graphics.use(text);
+    this.add(textActor);
+    this.overlay.push(textActor);
+    return text;
+  }
+
+  private paintSolo(): void {
+    if (this.mode !== 'solo') {
+      return;
+    }
+    const game = this.soloGame();
+    if (this.soloGameText) {
+      this.soloGameText.text = game.name;
+    }
+    if (this.soloSeatText) {
+      const count = soloSeatCount(
+        game.minPlayers,
+        game.maxPlayers,
+        this.soloSeatIndex,
+      );
+      this.soloSeatText.text =
+        game.gameType === 'blackjack' && count === 1
+          ? '1 vs dealer'
+          : String(count);
+    }
+    if (this.soloVariationText) {
+      if (game.gameType === POKER_GAME_TYPE) {
+        const variation =
+          POKER_VARIATIONS[
+            stepIndex(this.soloVariationIndex, 0, POKER_VARIATIONS.length)
+          ] ?? POKER_VARIATIONS[0];
+        this.soloVariationText.text = POKER_VARIATION_LABELS[variation];
+      } else {
+        this.soloVariationText.text = 'None';
+      }
+    }
+    this.paintPromptField(
+      this.nameText,
+      this.nameCaret,
+      this.name,
+      true,
+      this.soloNameField,
+      promptLabel(SOLO_PICKER.nameField),
+    );
+  }
+
+  private async submitSolo(): Promise<void> {
+    if (this.mode !== 'solo' || this.busy) {
+      return;
+    }
+    if (this.name.trim().length === 0) {
+      this.setError('Name is required');
+      return;
+    }
+    rememberPreferredName(this.clientId, this.name);
+    const blocked = roomEntryError(this.phase);
+    if (blocked) {
+      this.setError(blocked);
+      return;
+    }
+    const game = this.soloGame();
+    const variation =
+      game.gameType === POKER_GAME_TYPE
+        ? (POKER_VARIATIONS[
+            stepIndex(this.soloVariationIndex, 0, POKER_VARIATIONS.length)
+          ] ?? POKER_VARIATIONS[0])
+        : undefined;
+    this.busy = true;
+    this.submitAttempt += 1;
+    const attempt = this.submitAttempt;
+    this.setError('Working...', DIM);
+    let failure: string | undefined;
+    try {
+      failure = await this.startSolo({
+        name: this.name.trim(),
+        gameType: game.gameType,
+        seatCount: soloSeatCount(
+          game.minPlayers,
+          game.maxPlayers,
+          this.soloSeatIndex,
+        ),
+        settings: soloSettingsJson(game.gameType, variation),
+      });
+    } catch (error: unknown) {
+      failure = error instanceof Error ? error.message : 'Could not start';
+    }
+    if (attempt !== this.submitAttempt || this.mode !== 'solo') {
+      return;
+    }
+    this.busy = false;
+    if (failure) {
+      this.setError(failure);
+      return;
+    }
+    this.closeOverlay();
   }
 
   private openHowToPlay(): void {
@@ -1080,6 +1406,15 @@ export class MenuScene extends ex.Scene {
     if (this.mode === 'cards') {
       return;
     }
+    if (this.mode === 'solo') {
+      if (this.busy) {
+        return;
+      }
+      if (key === ex.Keys.Enter) {
+        void this.submitSolo();
+      }
+      return;
+    }
     if (this.busy) {
       return;
     }
@@ -1115,6 +1450,34 @@ export class MenuScene extends ex.Scene {
     this.menuFieldsReady = true;
     const prompting = (): boolean =>
       this.mode === 'create' || this.mode === 'join';
+    this.soloNameField = bindCanvasTextField({
+      id: 'menu-solo-name',
+      label: 'Your Name',
+      box: SOLO_PICKER.nameField,
+      maxLength: NAME_MAX,
+      active: () => this.mode === 'solo',
+      read: () => this.name,
+      sanitize: (value) => applyFieldText(value, NAME_MAX),
+      write: (value) => {
+        this.storeName(value);
+        this.paintSolo();
+      },
+      submit: () => {
+        void this.submitSolo();
+      },
+      cancel: () => {
+        this.closeOverlay();
+      },
+      onFocus: () => {
+        this.focusPromptBox('name');
+      },
+      enterKeyHint: () => 'go',
+      autoCapitalize: 'words',
+      metrics: promptLabel(SOLO_PICKER.nameField),
+      onCaret: () => {
+        this.paintSolo();
+      },
+    });
     this.nameField = bindCanvasTextField({
       id: 'menu-name',
       label: 'Your Name',

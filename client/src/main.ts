@@ -7,6 +7,7 @@ import {
   clearLastRoom,
   forgetTable,
   readLastRoom,
+  rememberLobby,
   rememberTable,
   roomGoneMessage,
   type LastRoom,
@@ -22,6 +23,7 @@ import { discordIdentityFromSearch, roomCodeFromPath } from './join-path';
 import { LobbyScene } from './lobby-scene';
 import { mountLobbyPanel, type LobbyPanel } from './lobby-panel';
 import { MenuScene } from './menu-scene';
+import { findSoloSeat, hasOwnMembership } from './solo-room';
 import type { DbConnection } from './module_bindings';
 import { isCanvasFieldFocused, refreshCanvasTextFields } from './html-field';
 import {
@@ -119,17 +121,23 @@ void engine.start(loader).then(() => {
         menu.setConnectionPhase(phase);
       },
       onSubscribed: (connection) => {
+        const joined: { panel?: LobbyPanel } = {};
         const game = new GameScene(
           connection,
           clientId,
           () => {
+            if (!hasOwnMembership(readOwnMembers(connection), clientId)) {
+              clearLastRoom();
+              joined.panel?.resetAfterLeave();
+              engine.goToScene('menu');
+              return;
+            }
             forgetTable();
             engine.goToScene('boot');
           },
           theme,
         );
         engine.add('game', game);
-        const joined: { panel?: LobbyPanel } = {};
         const lobbyScene = new LobbyScene(
           engine,
           scene,
@@ -168,6 +176,37 @@ void engine.start(loader).then(() => {
             engine.goToScene('boot');
           },
         );
+        menu.connectSolo(async (start) => {
+          try {
+            await connection.reducers.startSoloGame({
+              clientId,
+              name: start.name,
+              gameType: start.gameType,
+              seatCount: start.seatCount,
+              settings: start.settings,
+            });
+          } catch (error: unknown) {
+            return error instanceof Error ? error.message : 'Could not start';
+          }
+          const seat = findSoloSeat(
+            clientId,
+            readSoloLobbies(connection),
+            readSoloMembers(connection),
+            readSoloTables(connection),
+          );
+          if (!seat) {
+            return 'Could not open the table';
+          }
+          rememberLobby(seat.code, start.name);
+          rememberTable(seat.tableId);
+          const ready = await lobbyScene.openLobby(seat.lobbyId, seat.code);
+          if (!ready) {
+            return 'Could not open the table';
+          }
+          game.open(seat.tableId, seat.lobbyMemberId);
+          engine.goToScene('game');
+          return undefined;
+        });
         menu.connectTheme(theme, (style) => {
           saveTheme(clientId, style);
           scene.setTableStyle(style);
@@ -245,6 +284,54 @@ void engine.start(loader).then(() => {
     clientId,
   );
 });
+
+function readOwnMembers(
+  connection: DbConnection,
+): { clientId: string; isBot: boolean }[] {
+  const rows: { clientId: string; isBot: boolean }[] = [];
+  for (const member of connection.db.lobbyMember.iter()) {
+    rows.push({ clientId: member.clientId, isBot: member.isBot });
+  }
+  return rows;
+}
+
+function readSoloLobbies(connection: DbConnection) {
+  const rows = [];
+  for (const lobby of connection.db.lobby.iter()) {
+    rows.push({
+      id: lobby.id,
+      code: lobby.code,
+      solo: lobby.solo,
+      createdAtMicros: lobby.createdAt.microsSinceUnixEpoch,
+    });
+  }
+  return rows;
+}
+
+function readSoloMembers(connection: DbConnection) {
+  const rows = [];
+  for (const member of connection.db.lobbyMember.iter()) {
+    rows.push({
+      id: member.id,
+      lobbyId: member.lobbyId,
+      clientId: member.clientId,
+      isBot: member.isBot,
+    });
+  }
+  return rows;
+}
+
+function readSoloTables(connection: DbConnection) {
+  const rows = [];
+  for (const table of connection.db.gameTable.iter()) {
+    rows.push({
+      id: table.id,
+      lobbyId: table.lobbyId,
+      createdAtMicros: table.createdAt.microsSinceUnixEpoch,
+    });
+  }
+  return rows;
+}
 
 function lobbyRows(connection: DbConnection): LobbyRow[] {
   const rows: LobbyRow[] = [];
