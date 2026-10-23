@@ -12,7 +12,8 @@
       body {
         margin: 0;
         height: 100%;
-        background: #07140d;
+        /* Black bars when the window is not 16:9. The felt stays in the frame. */
+        background: #000000;
         overflow: hidden;
         touch-action: manipulation;
         overscroll-behavior: none;
@@ -23,6 +24,7 @@
         position: fixed;
         inset: 0;
         overflow: hidden;
+        background: #000000;
       }
 
       canvas {

@@ -31,12 +31,7 @@ import {
   readSafeInsets,
   visibleSize,
 } from './mobile-shell';
-import {
-  LOGICAL_HEIGHT,
-  LOGICAL_WIDTH,
-  coverViewport,
-  fitViewport,
-} from './sheets';
+import { LOGICAL_HEIGHT, LOGICAL_WIDTH, fitViewport } from './sheets';
 import { installTouchTargets } from './touch-targets';
 import { getTheme, saveTheme } from './theme';
 
@@ -67,39 +62,19 @@ const engine = new ex.Engine({
 
 let settledSize = visibleSize();
 
-function applyCoverScale(): void {
-  if (isMobileDevice()) {
-    applyFitScale();
-  } else {
-    applyDesktopScale();
-  }
-  refreshCanvasTextFields();
-}
-
-function applyDesktopScale(): void {
-  const covered = coverViewport(window.innerWidth, window.innerHeight);
-  engine.screen.viewport = covered;
-  engine.screen.applyResolutionAndViewport();
-  canvas.style.imageRendering = 'pixelated';
-  canvas.style.position = 'absolute';
-  const extraX = covered.width - window.innerWidth;
-  const extraY = covered.height - window.innerHeight;
-  canvas.style.left = extraX > 0 ? `${-extraX / 2}px` : '0px';
-  canvas.style.top = extraY > 0 ? `${-extraY / 2}px` : '0px';
-}
-
 /**
- * A phone or tablet fits the whole frame inside the visible area and the
- * safe-area insets. The size comes from the visual viewport. While a field is
- * focused the keyboard shrinks that viewport, so the last size is kept and
- * `html-field.ts` lifts the focused box instead of shrinking the table.
+ * Fits the whole 960×540 frame inside the visible area and the safe-area
+ * insets. The same contain scale is used on every browser. While a phone
+ * keyboard has a field focused, the last size is kept and `html-field.ts`
+ * lifts the box. A desktop resize always refits, so a narrower window cannot
+ * crop the frame.
  */
-function applyFitScale(): void {
+function applyContainScale(): void {
   const size = visibleSize();
   const sameOrientation =
     isPortrait(size.width, size.height) ===
     isPortrait(settledSize.width, settledSize.height);
-  if (!isCanvasFieldFocused() || !sameOrientation) {
+  if (!isMobileDevice() || !isCanvasFieldFocused() || !sameOrientation) {
     settledSize = size;
   }
   const fitted = fitViewport(
@@ -113,6 +88,7 @@ function applyFitScale(): void {
   canvas.style.position = 'absolute';
   canvas.style.left = `${fitted.left}px`;
   canvas.style.top = `${fitted.top}px`;
+  refreshCanvasTextFields();
 }
 
 const scene = new BootScene(theme);
@@ -120,11 +96,11 @@ engine.add('boot', scene);
 const menu = new MenuScene(clientId);
 engine.add('menu', menu);
 
-window.addEventListener('resize', applyCoverScale);
-window.addEventListener('orientationchange', applyCoverScale);
-window.visualViewport?.addEventListener('resize', applyCoverScale);
-applyCoverScale();
-mountMobileShell({ onChange: applyCoverScale });
+window.addEventListener('resize', applyContainScale);
+window.addEventListener('orientationchange', applyContainScale);
+window.visualViewport?.addEventListener('resize', applyContainScale);
+applyContainScale();
+mountMobileShell({ onChange: applyContainScale });
 installTouchTargets(engine);
 
 const loader = new ex.Loader(demoImages);
@@ -136,7 +112,7 @@ void engine.start(loader).then(() => {
   } else {
     engine.goToScene('menu');
   }
-  applyCoverScale();
+  applyContainScale();
   connectCardroom(
     {
       onPhase: (phase) => {

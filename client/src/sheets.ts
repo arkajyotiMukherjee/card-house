@@ -75,35 +75,6 @@ export function integerScale(
   return Math.max(1, Math.min(scaleX, scaleY));
 }
 
-/**
- * CSS size of the 960×540 canvas so it covers the window. One axis matches
- * the viewport and the other is larger, so the page has no empty bars.
- * `Math.ceil` avoids a fractional undershoot that would show a hairline.
- */
-export function coverViewport(
-  viewportWidth: number,
-  viewportHeight: number,
-  logicalWidth = LOGICAL_WIDTH,
-  logicalHeight = LOGICAL_HEIGHT,
-): { width: number; height: number } {
-  if (
-    viewportWidth <= 0 ||
-    viewportHeight <= 0 ||
-    logicalWidth <= 0 ||
-    logicalHeight <= 0
-  ) {
-    return { width: logicalWidth, height: logicalHeight };
-  }
-  const scale = Math.max(
-    viewportWidth / logicalWidth,
-    viewportHeight / logicalHeight,
-  );
-  return {
-    width: Math.ceil(logicalWidth * scale),
-    height: Math.ceil(logicalHeight * scale),
-  };
-}
-
 export interface SafeInsets {
   top: number;
   right: number;
@@ -120,10 +91,11 @@ export interface FittedViewport {
 }
 
 /**
- * CSS size and position of the 960×540 canvas so the whole frame is visible
- * inside the area left after the safe-area insets. Used on a coarse pointer,
- * where `coverViewport` would crop a wide frame on a short phone. Empty bars
- * land on the shorter axis. `Math.floor` keeps the frame inside the area.
+ * CSS size and position of the 960×540 canvas so the whole frame fits inside
+ * the area left after the safe-area insets. One contain scale for every
+ * browser. A narrower window leaves bars on the top and bottom. A shorter
+ * window leaves bars on the left and right. `Math.floor` keeps the frame
+ * inside that area, so the page never crops it.
  */
 export function fitViewport(
   viewportWidth: number,
@@ -142,12 +114,17 @@ export function fitViewport(
   ) {
     return { width: logicalWidth, height: logicalHeight, left: 0, top: 0 };
   }
-  const scale = Math.min(
-    availableWidth / logicalWidth,
-    availableHeight / logicalHeight,
-  );
-  const width = Math.max(1, Math.floor(logicalWidth * scale));
-  const height = Math.max(1, Math.floor(logicalHeight * scale));
+  const widthLimit = availableWidth / logicalWidth;
+  const heightLimit = availableHeight / logicalHeight;
+  let width: number;
+  let height: number;
+  if (widthLimit <= heightLimit) {
+    width = Math.max(1, Math.floor(availableWidth));
+    height = Math.max(1, Math.floor((width * logicalHeight) / logicalWidth));
+  } else {
+    height = Math.max(1, Math.floor(availableHeight));
+    width = Math.max(1, Math.floor((height * logicalWidth) / logicalHeight));
+  }
   return {
     width,
     height,
