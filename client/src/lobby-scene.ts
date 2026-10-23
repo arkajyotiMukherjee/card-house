@@ -19,9 +19,13 @@ import {
 import {
   bindCanvasTextField,
   eventTargetsHtmlField,
+  fieldLabelColumns,
+  layoutFieldCaret,
   refreshCanvasTextFields,
   type CanvasTextFieldHandle,
+  type FieldLabel,
 } from './html-field';
+import { makeFieldCaret, showFieldCaret } from './canvas-ui';
 import {
   applyChatKey,
   applyChatText,
@@ -75,6 +79,22 @@ const PLAYING = ex.Color.fromHex('#e6c27a');
 const FIELD_SEATED = ex.Color.fromHex('#1a4a2c');
 const INK = ex.Color.fromHex('#0a2e1c');
 const BANNER_FILL = ex.Color.fromHex('#0a2e1c');
+
+const CHAT_TEXT_PAD = 6;
+
+function chatFieldLabel(box: {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}): FieldLabel {
+  return {
+    size: BUTTON_FONT_SIZE,
+    x: box.x + CHAT_TEXT_PAD,
+    y: box.y + Math.round((box.h - BUTTON_FONT_SIZE) / 2),
+    columns: fieldLabelColumns(box.w, CHAT_TEXT_PAD, BUTTON_FONT_SIZE),
+  };
+}
 
 function canvasText(text: string, size: number, color: ex.Color): ex.Text {
   const graphic = new ex.Text({
@@ -165,6 +185,7 @@ export class LobbyScene {
   private readonly chatMessageActors: ex.Actor[] = [];
   private chatInputBox: ex.Actor | undefined;
   private chatInputText: ex.Text | undefined;
+  private chatCaret: ex.Actor | undefined;
   private chatErrorText: ex.Text | undefined;
   private leaveConfirm: ex.Actor | undefined;
   private leavingRoom = false;
@@ -389,6 +410,7 @@ export class LobbyScene {
     );
 
     const field = CHAT_PANEL.field;
+    const chatMetrics = chatFieldLabel(field);
     this.chatInputBox = new ex.Actor({
       pos: ex.vec(field.x, field.y),
       anchor: ex.vec(0, 0),
@@ -399,12 +421,14 @@ export class LobbyScene {
     this.chatInputBox.graphics.use(panelRect(field.w, field.h, FIELD, STROKE));
     this.scene.add(this.chatInputBox);
     this.chatInputText = this.addLabel(
-      field.x + 6,
-      field.y + Math.round((field.h - BUTTON_FONT_SIZE) / 2),
-      '_',
-      BUTTON_FONT_SIZE,
+      chatMetrics.x,
+      chatMetrics.y,
+      '',
+      chatMetrics.size,
       GOLD,
     );
+    this.chatCaret = makeFieldCaret(chatMetrics.size, 22);
+    this.scene.add(this.chatCaret);
     this.chatInputBox.on('pointerup', () => {
       roomComposer.focus('chat');
     });
@@ -435,6 +459,10 @@ export class LobbyScene {
       },
       enterKeyHint: 'send',
       autoCapitalize: 'off',
+      metrics: chatFieldLabel(CHAT_PANEL.field),
+      onCaret: () => {
+        this.paintChatField();
+      },
     });
 
     this.button(CHAT_PANEL.send, 'Send', () => {
@@ -570,10 +598,11 @@ export class LobbyScene {
   }
 
   private paintChatField(): void {
-    if (!this.chatInputBox || !this.chatInputText) {
+    if (!this.chatInputBox || !this.chatInputText || !this.chatCaret) {
       return;
     }
     const field = CHAT_PANEL.field;
+    const metrics = chatFieldLabel(field);
     this.chatInputBox.graphics.use(
       panelRect(
         field.w,
@@ -582,13 +611,28 @@ export class LobbyScene {
         this.chatFocused ? STROKE_HOT : STROKE,
       ),
     );
-    this.chatInputText.text =
-      this.chatBody.length > 0
-        ? this.chatBody.slice(-58)
-        : this.chatFocused
-          ? '_'
-          : 'Say something...';
-    this.chatInputText.color = this.chatBody.length > 0 ? GOLD : DIM;
+    const index = this.chatFocused
+      ? (this.chatField?.selectionIndex() ?? this.chatBody.length)
+      : this.chatBody.length;
+    const layout = layoutFieldCaret({
+      value: this.chatBody,
+      index,
+      size: metrics.size,
+      originX: metrics.x,
+      originY: metrics.y,
+      columns: metrics.columns,
+    });
+    if (this.chatBody.length > 0) {
+      this.chatInputText.text = layout.text;
+      this.chatInputText.color = GOLD;
+    } else if (this.chatFocused) {
+      this.chatInputText.text = '';
+      this.chatInputText.color = GOLD;
+    } else {
+      this.chatInputText.text = 'Say something...';
+      this.chatInputText.color = DIM;
+    }
+    showFieldCaret(this.chatCaret, this.chatFocused, layout.x, layout.y);
   }
 
   private async sendChat(): Promise<void> {

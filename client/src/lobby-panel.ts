@@ -25,10 +25,14 @@ import {
 import {
   bindCanvasTextField,
   eventTargetsHtmlField,
+  fieldLabelColumns,
+  layoutFieldCaret,
   refreshCanvasTextFields,
   type CanvasTextFieldHandle,
+  type FieldLabel,
   type FieldMoveKey,
 } from './html-field';
+import { makeFieldCaret, showFieldCaret } from './canvas-ui';
 import { SERVER_UNREACHABLE } from './connect';
 import { joinFailureMessage } from './join-errors';
 import type { DiscordJoinIdentity } from './join-path';
@@ -56,6 +60,23 @@ const BUTTON_DOWN = ex.Color.fromHex('#0e3d24');
 const STROKE = ex.Color.fromHex('#e6c27a');
 const STROKE_HOT = ex.Color.fromHex('#fff6d0');
 const DANGER = ex.Color.fromHex('#e85d4c');
+
+const LOBBY_TEXT_SIZE = 8;
+const LOBBY_TEXT_PAD = 6;
+
+function lobbyFieldLabel(box: {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}): FieldLabel {
+  return {
+    size: LOBBY_TEXT_SIZE,
+    x: box.x + LOBBY_TEXT_PAD,
+    y: box.y + (box.h - LOBBY_TEXT_SIZE) / 2,
+    columns: fieldLabelColumns(box.w, LOBBY_TEXT_PAD, LOBBY_TEXT_SIZE),
+  };
+}
 
 type FieldId = 'name' | 'code';
 type SubmitKind = 'create' | 'join';
@@ -149,8 +170,28 @@ export function mountLobbyPanel(
 
   const nameLabel = labelActor(scene, 16, 52, 'Name', 8, DIM);
   const codeLabel = labelActor(scene, 16, 100, 'Code', 8, DIM);
-  const nameText = labelActor(scene, 22, 76, '_', 8, GOLD);
-  const codeText = labelActor(scene, 22, 124, 'optional', 8, DIM);
+  const nameMetrics = lobbyFieldLabel(LOBBY_PANEL.nameField);
+  const codeMetrics = lobbyFieldLabel(LOBBY_PANEL.codeField);
+  const nameText = labelActor(
+    scene,
+    nameMetrics.x,
+    nameMetrics.y,
+    '',
+    nameMetrics.size,
+    GOLD,
+  );
+  const codeText = labelActor(
+    scene,
+    codeMetrics.x,
+    codeMetrics.y,
+    'optional',
+    codeMetrics.size,
+    DIM,
+  );
+  const nameCaret = makeFieldCaret(nameMetrics.size, 22);
+  const codeCaret = makeFieldCaret(codeMetrics.size, 22);
+  scene.add(nameCaret);
+  scene.add(codeCaret);
   const errorText = labelActor(scene, 16, 222, '', 8, DANGER);
   const roomLabel = labelActor(scene, 16, 52, '', 8, DIM);
   const roomCode = labelActor(scene, 16, 70, '', 16, GOLD);
@@ -161,7 +202,17 @@ export function mountLobbyPanel(
   const createButton = buttonActor(scene, LOBBY_PANEL.createButton, 'Create');
   const joinButton = buttonActor(scene, LOBBY_PANEL.joinButton, 'Join');
   const renameLabel = labelActor(scene, 16, 412, 'Name', 8, DIM);
-  const renameText = labelActor(scene, 22, 436, '', 8, GOLD);
+  const renameMetrics = lobbyFieldLabel(LOBBY_PANEL.renameField);
+  const renameText = labelActor(
+    scene,
+    renameMetrics.x,
+    renameMetrics.y,
+    '',
+    renameMetrics.size,
+    GOLD,
+  );
+  const renameCaret = makeFieldCaret(renameMetrics.size, 22);
+  scene.add(renameCaret);
   const renameBox = fieldActor(scene, LOBBY_PANEL.renameField);
   const saveButton = buttonActor(scene, LOBBY_PANEL.saveButton, 'Save');
   renameLabel.opacity = 0;
@@ -189,6 +240,30 @@ export function mountLobbyPanel(
         : lobbySpeakers(readSpeaking(connection), joinedLobbyId);
   };
 
+  const paintLobbyValue = (
+    text: ex.Text,
+    caret: ex.Actor,
+    value: string,
+    showCaret: boolean,
+    handle: CanvasTextFieldHandle | undefined,
+    metrics: FieldLabel,
+  ): void => {
+    const index = showCaret
+      ? (handle?.selectionIndex() ?? value.length)
+      : value.length;
+    const layout = layoutFieldCaret({
+      value,
+      index,
+      size: metrics.size,
+      originX: metrics.x,
+      originY: metrics.y,
+      columns: metrics.columns,
+    });
+    text.text = layout.text;
+    text.color = GOLD;
+    showFieldCaret(caret, showCaret, layout.x, layout.y);
+  };
+
   const paintFields = (): void => {
     nameBox.graphics.use(
       panelRect(
@@ -206,18 +281,41 @@ export function mountLobbyPanel(
         focused === 'code' ? STROKE_HOT : STROKE,
       ),
     );
-    nameText.text = name.length > 0 ? name : focused === 'name' ? '_' : '';
-    nameText.color = GOLD;
+    paintLobbyValue(
+      nameText,
+      nameCaret,
+      name,
+      formVisible && focused === 'name',
+      formInputs.name,
+      nameMetrics,
+    );
+    const codeLayout = layoutFieldCaret({
+      value: code,
+      index:
+        formVisible && focused === 'code'
+          ? (formInputs.code?.selectionIndex() ?? code.length)
+          : code.length,
+      size: codeMetrics.size,
+      originX: codeMetrics.x,
+      originY: codeMetrics.y,
+      columns: codeMetrics.columns,
+    });
     if (code.length > 0) {
-      codeText.text = code;
+      codeText.text = codeLayout.text;
       codeText.color = GOLD;
     } else if (focused === 'code') {
-      codeText.text = '_';
+      codeText.text = '';
       codeText.color = GOLD;
     } else {
       codeText.text = 'optional';
       codeText.color = DIM;
     }
+    showFieldCaret(
+      codeCaret,
+      formVisible && focused === 'code',
+      codeLayout.x,
+      codeLayout.y,
+    );
   };
 
   const setFormVisible = (visible: boolean): void => {
@@ -236,6 +334,8 @@ export function mountLobbyPanel(
     renameText.opacity = renameOpacity;
     renameBox.graphics.opacity = renameOpacity;
     saveButton.graphics.opacity = renameOpacity;
+    paintFields();
+    paintRename();
     refreshCanvasTextFields();
   };
 
@@ -248,8 +348,14 @@ export function mountLobbyPanel(
         renameFocused ? STROKE_HOT : STROKE,
       ),
     );
-    renameText.text = renameName.length > 0 ? renameName : '_';
-    renameText.color = GOLD;
+    paintLobbyValue(
+      renameText,
+      renameCaret,
+      renameName,
+      !formVisible && renameFocused,
+      formInputs.rename,
+      renameMetrics,
+    );
   };
 
   const renderLobby = (room: string, lines: MemberLine[]): void => {
@@ -504,6 +610,10 @@ export function mountLobbyPanel(
     },
     enterKeyHint: 'go',
     autoCapitalize: 'words',
+    metrics: nameMetrics,
+    onCaret: () => {
+      paintFields();
+    },
   });
   formInputs.code = bindCanvasTextField({
     id: 'lobby-code',
@@ -537,6 +647,10 @@ export function mountLobbyPanel(
     },
     enterKeyHint: 'go',
     autoCapitalize: 'characters',
+    metrics: codeMetrics,
+    onCaret: () => {
+      paintFields();
+    },
   });
   formInputs.rename = bindCanvasTextField({
     id: 'lobby-rename',
@@ -565,6 +679,10 @@ export function mountLobbyPanel(
     },
     enterKeyHint: 'done',
     autoCapitalize: 'words',
+    metrics: renameMetrics,
+    onCaret: () => {
+      paintRename();
+    },
   });
   const onLobbyScene = (): void => {
     refreshCanvasTextFields();

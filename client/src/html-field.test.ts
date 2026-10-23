@@ -3,12 +3,16 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { applyCodeText, applyFieldText } from './lobby';
 import { applyChatText } from './table-chat';
 import { PROMPT } from './menu-layout';
+import { BUTTON_CAPTION_RASTER } from './button-style';
 import {
-  CARET_GOLD,
+  FIELD_CARET_WIDTH,
   KEYBOARD_MARGIN,
   bindCanvasTextField,
   eventTargetsHtmlField,
+  fieldCaretIndexAt,
+  fieldLabelColumns,
   keyboardLift,
+  layoutFieldCaret,
   logicalBoxToScreen,
   refreshCanvasTextFields,
   screenToLogical,
@@ -433,7 +437,7 @@ describe('canvas text field', () => {
     expect(input.value).toBe('A');
   });
 
-  it('draws a gold caret and keeps 16px text', () => {
+  it('hides the native caret and keeps 16px text', () => {
     mountCanvas();
     handles.push(
       bindCanvasTextField({
@@ -453,9 +457,173 @@ describe('canvas text field', () => {
       throw new Error('missing input');
     }
     const style = getComputedStyle(input);
-    expect(style.caretColor).toBe(CARET_GOLD);
+    expect(style.caretColor).toBe('transparent');
     expect(style.fontSize).toBe('16px');
     expect(style.color).toBe('transparent');
+  });
+
+  it('puts the insertion index on a pixel-font boundary', async () => {
+    mountCanvas();
+    const seen: number[] = [];
+    const originX = PROMPT.codeField.x + 8;
+    const size = 16;
+    handles.push(
+      bindCanvasTextField({
+        id: 'menu-code',
+        label: 'Room Code',
+        box: PROMPT.codeField,
+        metrics: {
+          size,
+          x: originX,
+          y: PROMPT.codeField.y + (PROMPT.codeField.h - size) / 2,
+        },
+        maxLength: 6,
+        active: () => true,
+        read: () => 'GKYK',
+        sanitize: (next) => next,
+        write: () => {},
+        submit: () => {},
+        onCaret: (index) => {
+          seen.push(index);
+        },
+      }),
+    );
+    const input = document.querySelector(
+      'input[data-cardhouse-field="menu-code"]',
+    );
+    if (!(input instanceof HTMLInputElement)) {
+      throw new Error('missing input');
+    }
+    input.focus();
+    const boundary = originX + BUTTON_CAPTION_RASTER + size;
+    input.dispatchEvent(
+      new PointerEvent('pointerup', {
+        bubbles: true,
+        clientX: boundary,
+        clientY: PROMPT.codeField.y + 8,
+      }),
+    );
+    await Promise.resolve();
+    expect(input.selectionStart).toBe(1);
+    expect(input.selectionEnd).toBe(1);
+    expect(seen).toContain(1);
+  });
+
+  it('maps a chat click through the visible window', async () => {
+    mountCanvas();
+    const value = 'a'.repeat(80);
+    const columns = 10;
+    const originX = 100;
+    handles.push(
+      bindCanvasTextField({
+        id: 'lobby-chat',
+        label: 'Chat',
+        box: { x: 90, y: 400, w: 200, h: 28 },
+        metrics: { size: 8, x: originX, y: 404, columns },
+        maxLength: 240,
+        active: () => true,
+        read: () => value,
+        sanitize: (next) => next,
+        write: () => {},
+        submit: () => {},
+      }),
+    );
+    const input = document.querySelector(
+      'input[data-cardhouse-field="lobby-chat"]',
+    );
+    if (!(input instanceof HTMLInputElement)) {
+      throw new Error('missing input');
+    }
+    input.focus();
+    expect(input.selectionStart).toBe(value.length);
+    const firstVisible = originX + BUTTON_CAPTION_RASTER;
+    input.dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: firstVisible,
+        clientY: 410,
+      }),
+    );
+    input.setSelectionRange(0, 0);
+    input.dispatchEvent(
+      new PointerEvent('pointerup', {
+        bubbles: true,
+        clientX: firstVisible,
+        clientY: 410,
+      }),
+    );
+    await Promise.resolve();
+    expect(input.selectionStart).toBe(value.length - columns);
+  });
+});
+
+describe('pixel caret', () => {
+  it('draws a two-pixel block the height of the letters', () => {
+    expect(
+      layoutFieldCaret({
+        value: 'GKYK',
+        index: 1,
+        size: 16,
+        originX: 252,
+        originY: 276,
+      }),
+    ).toEqual({
+      text: 'GKYK',
+      index: 1,
+      start: 0,
+      x: 252 + BUTTON_CAPTION_RASTER + 16,
+      y: 276 + BUTTON_CAPTION_RASTER,
+      w: FIELD_CARET_WIDTH,
+      h: 16,
+    });
+    expect(FIELD_CARET_WIDTH).toBeGreaterThanOrEqual(2);
+  });
+
+  it('uses the same advance for an 8px name', () => {
+    expect(
+      layoutFieldCaret({
+        value: 'Ada',
+        index: 3,
+        size: 8,
+        originX: 22,
+        originY: 76,
+      }),
+    ).toMatchObject({
+      text: 'Ada',
+      index: 3,
+      x: 22 + BUTTON_CAPTION_RASTER + 24,
+      y: 76 + BUTTON_CAPTION_RASTER,
+      w: 2,
+      h: 8,
+    });
+  });
+
+  it('windows chat around the caret', () => {
+    const value = 'a'.repeat(80);
+    const columns = fieldLabelColumns(500, 6, 8);
+    const layout = layoutFieldCaret({
+      value,
+      index: 80,
+      size: 8,
+      originX: 184,
+      originY: 450,
+      columns,
+    });
+    expect(layout.text).toHaveLength(columns);
+    expect(layout.start).toBe(80 - columns);
+    expect(layout.index).toBe(columns);
+    expect(layout.x).toBe(184 + BUTTON_CAPTION_RASTER + columns * 8);
+    expect(layout.h).toBe(8);
+    expect(
+      fieldCaretIndexAt({
+        localX: layout.x,
+        value,
+        index: 80,
+        size: 8,
+        originX: 184,
+        columns,
+      }),
+    ).toBe(80);
   });
 });
 

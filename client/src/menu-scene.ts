@@ -29,10 +29,14 @@ import {
 import {
   bindCanvasTextField,
   eventTargetsHtmlField,
+  fieldLabelColumns,
+  layoutFieldCaret,
   refreshCanvasTextFields,
   type CanvasTextFieldHandle,
+  type FieldLabel,
   type FieldMoveKey,
 } from './html-field';
+import { makeFieldCaret, showFieldCaret } from './canvas-ui';
 import {
   roomEntryError,
   SERVER_UNREACHABLE,
@@ -107,6 +111,23 @@ export interface MenuEntry {
 export type MenuEnter = (entry: MenuEntry) => Promise<string | undefined>;
 
 type Mode = MenuMode;
+
+const PROMPT_TEXT_SIZE = 16;
+const PROMPT_TEXT_PAD = 8;
+
+function promptLabel(box: {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}): FieldLabel {
+  return {
+    size: PROMPT_TEXT_SIZE,
+    x: box.x + PROMPT_TEXT_PAD,
+    y: box.y + (box.h - PROMPT_TEXT_SIZE) / 2,
+    columns: fieldLabelColumns(box.w, PROMPT_TEXT_PAD, PROMPT_TEXT_SIZE),
+  };
+}
 
 function canvasText(text: string, size: number, color: ex.Color): ex.Text {
   const graphic = new ex.Text({
@@ -183,6 +204,8 @@ export class MenuScene extends ex.Scene {
   private menuFieldsReady = false;
   private nameText: ex.Text | undefined;
   private codeText: ex.Text | undefined;
+  private nameCaret: ex.Actor | undefined;
+  private codeCaret: ex.Actor | undefined;
   private nameBox: ex.Rectangle | undefined;
   private codeBox: ex.Rectangle | undefined;
   private errorText: ex.Text | undefined;
@@ -498,6 +521,8 @@ export class MenuScene extends ex.Scene {
     this.bodyActors = [];
     this.nameText = undefined;
     this.codeText = undefined;
+    this.nameCaret = undefined;
+    this.codeCaret = undefined;
     this.nameBox = undefined;
     this.codeBox = undefined;
     this.errorText = undefined;
@@ -587,21 +612,26 @@ export class MenuScene extends ex.Scene {
       });
       this.add(actor);
       this.overlay.push(actor);
-      const text = canvasText('_', 16, GOLD);
+      const metrics = promptLabel(spec);
+      const text = canvasText('', metrics.size, GOLD);
       const textActor = new ex.Actor({
-        pos: ex.vec(spec.x + 8, spec.y + (spec.h - 16) / 2),
+        pos: ex.vec(metrics.x, metrics.y),
         anchor: ex.vec(0, 0),
         z: 33,
       });
       textActor.graphics.use(text);
+      const caret = makeFieldCaret(metrics.size, 34);
       this.add(textActor);
-      this.overlay.push(textActor);
+      this.add(caret);
+      this.overlay.push(textActor, caret);
       if (field.id === 'name') {
         this.nameBox = face;
         this.nameText = text;
+        this.nameCaret = caret;
       } else {
         this.codeBox = face;
         this.codeText = text;
+        this.codeCaret = caret;
       }
     }
 
@@ -661,14 +691,49 @@ export class MenuScene extends ex.Scene {
     if (this.codeBox) {
       this.codeBox.strokeColor = this.focused === 'code' ? STROKE_HOT : STROKE;
     }
-    if (this.nameText) {
-      this.nameText.text =
-        this.name.length > 0 ? this.name : this.focused === 'name' ? '_' : '';
+    this.paintPromptField(
+      this.nameText,
+      this.nameCaret,
+      this.name,
+      this.focused === 'name',
+      this.nameField,
+      promptLabel(PROMPT.nameField),
+    );
+    this.paintPromptField(
+      this.codeText,
+      this.codeCaret,
+      this.code,
+      this.focused === 'code',
+      this.codeField,
+      promptLabel(PROMPT.codeField),
+    );
+  }
+
+  private paintPromptField(
+    text: ex.Text | undefined,
+    caret: ex.Actor | undefined,
+    value: string,
+    focused: boolean,
+    handle: CanvasTextFieldHandle | undefined,
+    metrics: FieldLabel,
+  ): void {
+    if (!text || !caret) {
+      return;
     }
-    if (this.codeText) {
-      this.codeText.text =
-        this.code.length > 0 ? this.code : this.focused === 'code' ? '_' : '';
-    }
+    const index = focused
+      ? (handle?.selectionIndex() ?? value.length)
+      : value.length;
+    const layout = layoutFieldCaret({
+      value,
+      index,
+      size: metrics.size,
+      originX: metrics.x,
+      originY: metrics.y,
+      columns: metrics.columns,
+    });
+    text.text = layout.text;
+    text.color = GOLD;
+    showFieldCaret(caret, focused, layout.x, layout.y);
   }
 
   private async submitPrompt(): Promise<void> {
@@ -1073,6 +1138,10 @@ export class MenuScene extends ex.Scene {
       },
       enterKeyHint: () => (this.mode === 'join' ? 'next' : 'go'),
       autoCapitalize: 'words',
+      metrics: promptLabel(PROMPT.nameField),
+      onCaret: () => {
+        this.paintPrompt();
+      },
     });
     this.codeField = bindCanvasTextField({
       id: 'menu-code',
@@ -1097,6 +1166,10 @@ export class MenuScene extends ex.Scene {
       },
       enterKeyHint: 'go',
       autoCapitalize: 'characters',
+      metrics: promptLabel(PROMPT.codeField),
+      onCaret: () => {
+        this.paintPrompt();
+      },
     });
   }
 
