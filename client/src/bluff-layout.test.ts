@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BluffState } from '../../src/shared/games/bluff';
 import { BUTTON_HEIGHT } from './button-style';
+import { seatAnchorsFor } from './game-scene';
 import {
   BLUFF_CHALLENGE_BUTTON,
   BLUFF_PASS_BUTTON,
@@ -19,20 +20,41 @@ import {
   canPlay,
   cardLift,
   faceForCard,
+  fanCardRect,
   finishedLine,
   handPositions,
   leadRankHint,
   legalCard,
+  opponentCountAnchor,
+  opponentFanBox,
+  opponentNameAnchor,
   pileFaceUp,
   pileNotice,
   pilePositions,
   rankButtonColors,
   rankHintPos,
+  seatPlateWidth,
   selectedPlayCards,
   showRankPicker,
   tablePrompt,
   turnLine,
+  type CardRect,
 } from './bluff-layout';
+
+function outside(point: { x: number; y: number }, rect: CardRect): boolean {
+  return (
+    point.x < rect.x ||
+    point.x > rect.x + rect.w ||
+    point.y < rect.y ||
+    point.y > rect.y + rect.h
+  );
+}
+
+function overlaps(a: CardRect, b: CardRect): boolean {
+  return (
+    a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
+  );
+}
 
 function playState(turnSeatIndex: number | null): BluffState {
   return {
@@ -64,7 +86,8 @@ describe('bluff layout', () => {
   it('fans other hands along the side of the table', () => {
     const right = bluffSeatFan(780, 310, 26);
     const left = bluffSeatFan(180, 310, 8);
-    expect(right.length).toBeGreaterThan(1);
+    expect(right).toHaveLength(26);
+    expect(left).toHaveLength(8);
     expect(right.every((slot) => slot.y < HAND_Y - 40)).toBe(true);
     expect(right.every((slot) => slot.x > 640)).toBe(true);
     expect(left.every((slot) => slot.x < 320)).toBe(true);
@@ -77,7 +100,64 @@ describe('bluff layout', () => {
       (last?.y ?? 0) - (first?.y ?? 0),
     );
     expect(spread).toBeGreaterThan(70);
-    expect(first?.rotation).not.toBe(last?.rotation);
+    expect(first?.rotation).toBeLessThan(0);
+    expect(last?.rotation).toBeGreaterThan(0);
+    expect(Math.abs((last?.x ?? 0) - (first?.x ?? 0))).toBeGreaterThan(
+      Math.abs((last?.y ?? 0) - (first?.y ?? 0)),
+    );
+  });
+
+  it('keeps a wide fan in its seat box and the labels outside the cards', () => {
+    const anchors = seatAnchorsFor(4);
+    const seats = [anchors[1], anchors[2], anchors[3]];
+    for (const seat of seats) {
+      expect(seat).toBeDefined();
+      if (!seat) {
+        continue;
+      }
+      const box = opponentFanBox(seat.x, seat.y);
+      const slots = bluffSeatFan(seat.x, seat.y, 17);
+      expect(slots).toHaveLength(17);
+      const name = opponentNameAnchor(seat.x, seat.y, 'Bea');
+      const count = opponentCountAnchor(seat.x, seat.y, 17, 'Bea');
+      const nameRect = {
+        x: name.x,
+        y: name.y,
+        w: seatPlateWidth('Bea'),
+        h: 20,
+      };
+      const countRect = { x: count.x, y: count.y, w: 'x17'.length * 8, h: 8 };
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (let index = 0; index < slots.length; index += 1) {
+        const slot = slots[index];
+        expect(slot).toBeDefined();
+        if (!slot) {
+          continue;
+        }
+        const rect = fanCardRect(slot);
+        expect(rect.x).toBeGreaterThanOrEqual(box.x);
+        expect(rect.y).toBeGreaterThanOrEqual(box.y);
+        expect(rect.x + rect.w).toBeLessThanOrEqual(box.x + box.w);
+        expect(rect.y + rect.h).toBeLessThanOrEqual(box.y + box.h);
+        expect(outside(name, rect)).toBe(true);
+        expect(outside(count, rect)).toBe(true);
+        expect(overlaps(nameRect, rect)).toBe(false);
+        expect(overlaps(countRect, rect)).toBe(false);
+        const next = slots[index + 1];
+        if (next) {
+          expect(slot.x).toBeLessThan(next.x);
+          expect(overlaps(rect, fanCardRect(next))).toBe(true);
+        }
+        minX = Math.min(minX, rect.x);
+        minY = Math.min(minY, rect.y);
+        maxX = Math.max(maxX, rect.x + rect.w);
+        maxY = Math.max(maxY, rect.y + rect.h);
+      }
+      expect(maxX - minX).toBeGreaterThan(maxY - minY);
+    }
   });
 
   it('lifts a card only when it is legal to play', () => {

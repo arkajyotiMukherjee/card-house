@@ -12,11 +12,14 @@ import {
   BLUFF_PLAY_BUTTON,
   BLUFF_TURN_LABEL,
   CARD_DRAW,
+  OPPONENT_FAN_CARD,
+  OPPONENT_FAN_SCALE,
   PILE_NOTICE_Y,
   PILE_X,
   PILE_Y,
   PROMPT_Y,
   bluffSeatFan,
+  opponentCountAnchor,
   canChallenge,
   canPass,
   canPlay,
@@ -503,9 +506,16 @@ export class BluffDriver implements GameDriver<BluffState> {
         continue;
       }
       const count = state.hands[String(seat.seatIndex)]?.length ?? 0;
-      this.labels.push(
-        this.textActor(ctx, seat.x - 16, seat.y - 16, `x${count}`, DIM),
+      const countAt = opponentCountAnchor(seat.x, seat.y, count, seat.name);
+      const countLabel = this.textActor(
+        ctx,
+        countAt.x,
+        countAt.y,
+        `x${count}`,
+        DIM,
       );
+      countLabel.z = 80;
+      this.labels.push(countLabel);
     }
   }
 
@@ -840,12 +850,14 @@ export class BluffDriver implements GameDriver<BluffState> {
         actor = new ex.Actor({
           pos: ex.vec(PILE_X, PILE_Y),
           anchor: ex.vec(0.5, 0.5),
-          width: CARD_DRAW,
-          height: CARD_DRAW,
+          width: OPPONENT_FAN_CARD,
+          height: OPPONENT_FAN_CARD,
           z: place.z,
           rotation: place.rotation,
         });
-        actor.graphics.use(ctx.cards.back());
+        const back = ctx.cards.back();
+        back.scale = ex.vec(OPPONENT_FAN_SCALE, OPPONENT_FAN_SCALE);
+        actor.graphics.use(back);
         ctx.scene.add(actor);
         this.backs.set(key, actor);
         this.backTargets.set(key, target);

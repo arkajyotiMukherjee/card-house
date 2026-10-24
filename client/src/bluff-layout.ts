@@ -7,7 +7,7 @@ import {
   type BluffState,
 } from '../../src/shared/games/bluff';
 import { BUTTON_HEIGHT } from './button-style';
-import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from './sheets';
+import { LOGICAL_WIDTH } from './sheets';
 
 export const HAND_LEFT = 16;
 export const HAND_RIGHT = 736;
@@ -219,61 +219,243 @@ export function pilePositions(count: number): { x: number; y: number }[] {
   return positions;
 }
 
-const FAN_SHOWN = 5;
-const FAN_STEP = 28;
-const FAN_TURN = 0.28;
-const FAN_INWARD = 18;
+/**
+ * Opponent backs are a little smaller than the local hand so a full fan
+ * still fits above the prompt and beside the action buttons.
+ */
+export const OPPONENT_FAN_CARD = 48;
+export const OPPONENT_FAN_SCALE = OPPONENT_FAN_CARD / CARD_DRAW;
+
+const PLATE_HEIGHT = 20;
+const LABEL_GAP = 6;
+const FAN_HALF = OPPONENT_FAN_CARD / 2;
+
+export interface SeatBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface FanSlot {
+  x: number;
+  y: number;
+  rotation: number;
+}
+
+/** Width of the seat name plate `GameScene` draws for this name. */
+export function seatPlateWidth(name: string): number {
+  return Math.max(48, name.length * 8 + 16);
+}
 
 /**
- * Other seats' cards, fanned along the side of the table.
- * The count label stays on the seat; this only places the backs.
+ * Where that seat's cards may sit. Left, right, and top each get a wide
+ * short box on their own side, clear of the local hand and the center prompt.
+ */
+export function opponentFanBox(seatX: number, seatY: number): SeatBox {
+  const right = seatX >= TABLE_CENTER.x;
+  if (seatY < 180 && seatX > 400 && seatX < 560) {
+    return { x: 330, y: 76, w: 300, h: 82 };
+  }
+  if (seatY < 180 && right) {
+    return { x: 700, y: 96, w: 210, h: 88 };
+  }
+  if (seatY < 180) {
+    return { x: 50, y: 96, w: 210, h: 88 };
+  }
+  if (seatY > 400 && right) {
+    return { x: 760, y: 336, w: 170, h: 76 };
+  }
+  if (seatY > 400) {
+    return { x: 30, y: 336, w: 170, h: 76 };
+  }
+  if (right) {
+    return { x: 640, y: 200, w: 190, h: 100 };
+  }
+  return { x: 130, y: 200, w: 190, h: 100 };
+}
+
+export interface CardRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** Axis-aligned bounds of one rotated fan card. */
+export function fanCardRect(slot: FanSlot): CardRect {
+  const c = Math.abs(Math.cos(slot.rotation));
+  const s = Math.abs(Math.sin(slot.rotation));
+  const hw = FAN_HALF * (c + s);
+  const hh = FAN_HALF * (s + c);
+  return {
+    x: slot.x - hw,
+    y: slot.y - hh,
+    w: hw * 2,
+    h: hh * 2,
+  };
+}
+
+interface FanFit {
+  pivotX: number;
+  pivotY: number;
+  radius: number;
+  halfAngle: number;
+}
+
+function fanUnion(
+  pivotX: number,
+  pivotY: number,
+  radius: number,
+  halfAngle: number,
+): CardRect {
+  const samples = 8;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (let step = 0; step <= samples; step += 1) {
+    const angle = -halfAngle + (step / samples) * halfAngle * 2;
+    const rect = fanCardRect({
+      x: pivotX + radius * Math.sin(angle),
+      y: pivotY - radius * Math.cos(angle),
+      rotation: angle,
+    });
+    minX = Math.min(minX, rect.x);
+    minY = Math.min(minY, rect.y);
+    maxX = Math.max(maxX, rect.x + rect.w);
+    maxY = Math.max(maxY, rect.y + rect.h);
+  }
+  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+}
+
+/**
+ * One circle under the cards. The radius stays near the card bottoms, and
+ * the arc is kept wider than it is tall.
+ */
+function fitOpponentFan(box: SeatBox): FanFit {
+  const pivotX = box.x + box.w / 2;
+  let best: (FanFit & { spread: number }) | null = null;
+  for (let step = 0; step <= 32; step += 1) {
+    const halfAngle = 0.34 + (step / 32) * 0.5;
+    const sin = Math.sin(halfAngle);
+    const cos = Math.cos(halfAngle);
+    const ext = FAN_HALF * (Math.abs(cos) + Math.abs(sin));
+    const side = box.w / 2 - 2;
+    const rSide = (side - ext) / sin;
+    const rNear = FAN_HALF + (OPPONENT_FAN_CARD * 0.75 + FAN_HALF * sin) / cos;
+    const rMin = FAN_HALF * (1 + Math.tan(halfAngle));
+    if (!(rSide >= rMin)) {
+      continue;
+    }
+    const rMax = Math.min(rSide, rNear);
+    const tries = 6;
+    for (let tryIndex = 0; tryIndex < tries; tryIndex += 1) {
+      const radius = rMax - ((rMax - rMin) * tryIndex) / tries;
+      const union = fanUnion(0, 0, radius, halfAngle);
+      if (union.w > box.w - 2 || union.h > box.h - 2) {
+        continue;
+      }
+      if (union.w <= union.h) {
+        continue;
+      }
+      const gap = -union.y - union.h;
+      if (gap < -2 || gap > OPPONENT_FAN_CARD) {
+        continue;
+      }
+      const pivotY = box.y + box.h - 2 - (union.y + union.h);
+      const top = pivotY + union.y;
+      if (top < box.y + 1) {
+        continue;
+      }
+      if (!best || union.w > best.spread) {
+        best = { pivotX, pivotY, radius, halfAngle, spread: union.w };
+      }
+      break;
+    }
+  }
+  if (!best) {
+    return {
+      pivotX,
+      pivotY: box.y + box.h / 2 + FAN_HALF,
+      radius: FAN_HALF,
+      halfAngle: 0,
+    };
+  }
+  return best;
+}
+
+function fanSlots(fit: FanFit, count: number): FanSlot[] {
+  if (count <= 0) {
+    return [];
+  }
+  const slots: FanSlot[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const angle =
+      count === 1
+        ? 0
+        : -fit.halfAngle + (index / (count - 1)) * fit.halfAngle * 2;
+    slots.push({
+      x: Math.round(fit.pivotX + fit.radius * Math.sin(angle)),
+      y: Math.round(fit.pivotY - fit.radius * Math.cos(angle)),
+      rotation: angle,
+    });
+  }
+  return slots;
+}
+
+/**
+ * Card backs around one pivot at the bottom of the fan.
+ * Every card in the hand is placed. They overlap from left to right,
+ * and the arc spreads sideways more than it stacks.
  */
 export function bluffSeatFan(
   seatX: number,
   seatY: number,
   count: number,
-): { x: number; y: number; rotation: number }[] {
-  const shown = Math.min(count, FAN_SHOWN);
-  if (shown <= 0) {
-    return [];
+): FanSlot[] {
+  return fanSlots(fitOpponentFan(opponentFanBox(seatX, seatY)), count);
+}
+
+/** Top-left of the name plate, just above every card in the fan. */
+export function opponentNameAnchor(
+  seatX: number,
+  seatY: number,
+  name: string,
+): { x: number; y: number } {
+  const fit = fitOpponentFan(opponentFanBox(seatX, seatY));
+  const arc = fanUnion(fit.pivotX, fit.pivotY, fit.radius, fit.halfAngle);
+  const width = seatPlateWidth(name);
+  let x = Math.round(arc.x + arc.w / 2 - width / 2);
+  let y = Math.round(arc.y - LABEL_GAP - PLATE_HEIGHT);
+  if (y < 46) {
+    y = 46;
   }
-  const dx = TABLE_CENTER.x - seatX;
-  const dy = TABLE_CENTER.y - seatY;
-  const len = Math.hypot(dx, dy) || 1;
-  const ix = dx / len;
-  const iy = dy / len;
-  const tx = -iy;
-  const ty = ix;
-  const mid = (shown - 1) / 2;
-  const limitY = HAND_Y - 40 - CARD_DRAW / 2;
-  const minX = CARD_DRAW / 2;
-  const maxX = LOGICAL_WIDTH - CARD_DRAW / 2;
-  const minY = CARD_DRAW / 2;
-  const maxY = Math.min(limitY, LOGICAL_HEIGHT - CARD_DRAW / 2);
-  const slots: { x: number; y: number; rotation: number }[] = [];
-  for (let index = 0; index < shown; index += 1) {
-    const offset = index - mid;
-    let x = seatX + ix * FAN_INWARD + tx * offset * FAN_STEP;
-    let y = seatY + iy * FAN_INWARD + ty * offset * FAN_STEP;
-    if (x < minX) {
-      x = minX;
-    }
-    if (x > maxX) {
-      x = maxX;
-    }
-    if (y < minY) {
-      y = minY;
-    }
-    if (y > maxY) {
-      y = maxY;
-    }
-    slots.push({
-      x: Math.round(x),
-      y: Math.round(y),
-      rotation: offset * FAN_TURN,
-    });
+  if (x < 4) {
+    x = 4;
   }
-  return slots;
+  if (x + width > LOGICAL_WIDTH - 4) {
+    x = LOGICAL_WIDTH - 4 - width;
+  }
+  return { x, y };
+}
+
+/** Top-left of the `xN` count, beside the name and outside the cards. */
+export function opponentCountAnchor(
+  seatX: number,
+  seatY: number,
+  count: number,
+  name: string,
+): { x: number; y: number } {
+  const plate = opponentNameAnchor(seatX, seatY, name);
+  const width = seatPlateWidth(name);
+  const labelW = `x${count}`.length * 8;
+  const y = plate.y + Math.floor((PLATE_HEIGHT - 8) / 2);
+  let x = plate.x - 4 - labelW;
+  if (x < 4) {
+    x = plate.x + width + 4;
+  }
+  return { x, y };
 }
 
 /** Card backs fanned from a seat toward the middle of the table. */
