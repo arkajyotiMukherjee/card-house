@@ -4,10 +4,9 @@ import {
   type CardBackStyle,
   type CardFrontStyle,
 } from './card-appearance';
-import { CardAtlas, type CardFace } from './card-atlas';
+import { CardAtlas } from './card-atlas';
 import { ChipAtlas } from './chip-atlas';
 import {
-  CARD_SIZE,
   LOGICAL_HEIGHT,
   LOGICAL_WIDTH,
   TABLE_HEIGHT,
@@ -20,14 +19,6 @@ const FELT = ex.Color.fromHex('#145c38');
 const STATUS = ex.Color.fromHex('#f4e4b3');
 
 const nearest = { filtering: ex.ImageFiltering.Pixel };
-
-const CARD_SCALE = 2;
-const CHIP_SCALE = 4;
-/** Face top to stack top on chips-no-outline.png, in source pixels. */
-const CHIP_BODY_OFFSET = 21;
-/** How far each extra chip sits above the one below it. */
-const CHIP_STACK_STEP = 6;
-const CHIP_STACK_COUNT = 3;
 
 export const heartsImage = new ex.ImageSource(
   '/assets/cards-hearts.png',
@@ -128,7 +119,7 @@ const personalCardAtlases: Partial<Record<string, CardAtlas>> = {};
 /**
  * The local player's own card atlas: the front and back styles stored in
  * `card-appearance.ts`. Built once per style pair and cached, since the
- * underlying `ImageSource`s are already loaded by `demoImages`.
+ * underlying `ImageSource`s are already loaded with the boot assets.
  */
 export function personalCardAtlas(): CardAtlas {
   const appearance = getCardAppearance();
@@ -166,6 +157,12 @@ export const tableSprites: Record<TableStyle, ex.Sprite> = {
   red: redTable,
 };
 
+function feltSprite(style: TableStyle): ex.Sprite {
+  const sprite = tableSprites[style].clone();
+  sprite.scale = ex.vec(TABLE_SCALE, TABLE_SCALE);
+  return sprite;
+}
+
 export const pixelFont = new ex.FontSource(
   '/assets/press-start-2p.ttf',
   'Press Start 2P',
@@ -188,16 +185,6 @@ export const demoImages = [
   ...TABLE_STYLES.map((style) => tableSprites[style].image),
   pixelFont,
 ];
-
-const HEARTS: Array<{ card: CardFace; x: number }> = [
-  { card: { rank: 'A', suit: 'hearts' }, x: 390 },
-  { card: { rank: '5', suit: 'hearts' }, x: 530 },
-];
-
-function scaled(sprite: ex.Sprite, scale: number): ex.Sprite {
-  sprite.scale = ex.vec(scale, scale);
-  return sprite;
-}
 
 export class BootScene extends ex.Scene {
   private status = new ex.Text({
@@ -226,24 +213,9 @@ export class BootScene extends ex.Scene {
       height: TABLE_HEIGHT * TABLE_SCALE,
       z: 0,
     });
-    table.graphics.use(tableSprites[this.style]);
+    table.graphics.use(feltSprite(this.style));
     this.tableActor = table;
     this.add(table);
-
-    const cardY = LOGICAL_HEIGHT / 2 + 8;
-    for (const heart of HEARTS) {
-      const actor = new ex.Actor({
-        pos: ex.vec(heart.x, cardY),
-        anchor: ex.vec(0.5, 0.5),
-        width: CARD_SIZE * CARD_SCALE,
-        height: CARD_SIZE * CARD_SCALE,
-        z: 1,
-      });
-      actor.graphics.use(scaled(cardAtlas.sprite(heart.card), CARD_SCALE));
-      this.add(actor);
-    }
-
-    this.addChipStack(680, 188);
 
     const label = new ex.Actor({
       pos: ex.vec(16, 512),
@@ -254,7 +226,7 @@ export class BootScene extends ex.Scene {
     this.add(label);
   }
 
-  /** A short rejoin or error line. Empty by default, so the host is not shown. */
+  /** A short loading or error line. Empty by default, so the host is not shown. */
   setStatus(text: string): void {
     this.status.text = text;
   }
@@ -262,30 +234,6 @@ export class BootScene extends ex.Scene {
   /** Repaints the felt for a theme switch without waiting for a reload. */
   setTableStyle(style: TableStyle): void {
     this.style = style;
-    this.tableActor?.graphics.use(tableSprites[style]);
-  }
-
-  private addChipStack(x: number, top: number): void {
-    const step = CHIP_STACK_STEP * CHIP_SCALE;
-    const body = CHIP_BODY_OFFSET * CHIP_SCALE;
-    for (let index = 0; index < CHIP_STACK_COUNT; index += 1) {
-      const faceTop = top + index * step;
-      const depth = (CHIP_STACK_COUNT - index) * 2;
-      const stack = new ex.Actor({
-        pos: ex.vec(x, faceTop + body),
-        anchor: ex.vec(0.5, 0),
-        z: depth,
-      });
-      stack.graphics.use(scaled(chipAtlas.stackSprite('red'), CHIP_SCALE));
-      this.add(stack);
-
-      const face = new ex.Actor({
-        pos: ex.vec(x, faceTop),
-        anchor: ex.vec(0.5, 0),
-        z: depth + 1,
-      });
-      face.graphics.use(scaled(chipAtlas.sprite('red'), CHIP_SCALE));
-      this.add(face);
-    }
+    this.tableActor?.graphics.use(feltSprite(style));
   }
 }

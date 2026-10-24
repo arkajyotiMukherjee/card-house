@@ -316,7 +316,7 @@ Responsibilities:
   - `ChipAtlas` – know how to draw each denomination/stack.
   - `FontAtlas` – text drawing helpers.
 
-On completion: transition to `MainMenuScene` (or directly to `LobbyScene` if auto-joining).
+On a reload, a saved table or room stays on this empty felt with `Loading table` or `Loading room` until the session resolves. No sample cards and no chip stack. The client then opens the table, the lobby, or the main menu. With no stored room it opens the main menu and does not show that loading felt.
 
 ### LobbyScene
 
@@ -386,11 +386,12 @@ To keep things simple and anonymous but still reconnectable:
     - otherwise, create a new `LobbyMember`.
 - On reconnect (a reload with no room code in the path):
   - same `clientId` is reused from `localStorage`.
+  - while that saved session resolves, the empty table shows `Loading table` when a table id is stored, or `Loading room` when only the lobby is stored. No sample cards and no chip stack. No stored room opens the main menu instead of that loading felt.
   - the client calls `join_lobby` again with the stored room code and name. That reuses the `LobbyMember` and marks it connected.
-  - the stored room is `lastRoom`: lobby code, display name, and table id while the player is seated. Leave Table clears the table id and keeps the lobby.
-  - if that `GameTable` and this member's `GameSeat` are both still in the lobby, the client opens the table.
-  - if the seat or the table is gone, the client opens the lobby.
-  - a missing or closed lobby clears `lastRoom` and stays on the menu.
+  - the stored room is `lastRoom`: lobby code, display name, and table id while the player is seated or watching. Leave Table clears the table id and keeps the lobby.
+  - if that `GameTable` and this member's `GameSeat` or `Spectator` row are both still in the lobby, the client opens the table directly and does not show the lobby on the way.
+  - if the player is in the room and not at that table, the client opens the lobby.
+  - a missing or closed lobby clears `lastRoom` and opens the menu.
 
 No passwords, email, or long-term accounts; just soft identity.
 
