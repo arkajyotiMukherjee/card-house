@@ -1,6 +1,7 @@
 import {
   BLUFF_GAME_TYPE,
   BLUFF_RANKS,
+  BLUFF_TRUE_PER_RANK,
   type BluffIntent,
   type BluffRank,
   type BluffState,
@@ -52,19 +53,43 @@ function playCard(card: string, claimRank?: BluffRank): BluffIntent {
   return { type: 'play', cards: [card], claimRank };
 }
 
+/** Challenge on the 4th, 8th, 12th, … turn this seat takes. */
+export const BLUFF_CHALLENGE_EVERY = 4;
+
+function turnsSoFar(state: BluffState, seatIndex: number): number {
+  return state.turnCounts[String(seatIndex)] ?? 0;
+}
+
+function wantsChallenge(state: BluffState, seatIndex: number): boolean {
+  return (
+    turnsSoFar(state, seatIndex) % BLUFF_CHALLENGE_EVERY ===
+    BLUFF_CHALLENGE_EVERY - 1
+  );
+}
+
 /**
- * A one-card claim is impossible when this hand already holds every card
- * that would make it true: four of the rank and both jokers.
+ * The claim cannot be true when it asks for more cards of that rank than the
+ * deck still allows. Four of the rank and both jokers are the honest maximum,
+ * minus the true cards already in this hand.
  */
-function provablyFalse(state: BluffState, seatIndex: number): boolean {
+function claimCannotBeTrue(state: BluffState, seatIndex: number): boolean {
   const last = state.lastPlay;
   if (last === null || last.seat === seatIndex) {
     return false;
   }
   const hand = handOf(state, seatIndex);
-  const ranks = hand.filter((card) => rankOfCard(card) === last.claimRank);
-  const jokers = hand.filter((card) => isJoker(card));
-  return ranks.length >= 4 && jokers.length >= 2;
+  let held = 0;
+  for (const card of hand) {
+    if (cardIsTrue(card, last.claimRank)) {
+      held += 1;
+    }
+  }
+  return last.cards.length > BLUFF_TRUE_PER_RANK - held;
+}
+
+function canChallenge(state: BluffState, seatIndex: number): boolean {
+  const last = state.lastPlay;
+  return last !== null && last.seat !== seatIndex;
 }
 
 function leadPlay(hand: readonly string[], lie: boolean): BluffIntent {
@@ -112,7 +137,10 @@ export const bluffStrategy: BotStrategy<BluffState, BluffIntent> = {
     return [state.turnSeatIndex];
   },
   choose(state, seatIndex) {
-    if (provablyFalse(state, seatIndex)) {
+    if (
+      canChallenge(state, seatIndex) &&
+      (claimCannotBeTrue(state, seatIndex) || wantsChallenge(state, seatIndex))
+    ) {
       return { type: 'challenge' };
     }
     const hand = handOf(state, seatIndex);

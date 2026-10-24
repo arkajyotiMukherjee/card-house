@@ -30,6 +30,9 @@ export const BLUFF_SUITS = ['S', 'H', 'D', 'C'] as const;
 /** Red joker, then black joker. Neither id is a queen. */
 export const BLUFF_JOKERS = ['JR', 'JB'] as const;
 
+/** Four suits of one rank, plus both jokers, can honestly match one call. */
+export const BLUFF_TRUE_PER_RANK = BLUFF_SUITS.length + BLUFF_JOKERS.length;
+
 const BLUFF_PHASES = ['lobby', 'play', 'finished'] as const;
 
 const RANK_SET: ReadonlySet<string> = new Set(BLUFF_RANKS);
@@ -77,6 +80,8 @@ export interface BluffState {
   passed: number[];
   /** Plays each seat has made in the current hand. The Bluff bot reads its own. */
   playCounts: Record<string, number>;
+  /** Turns each seat has taken. The Bluff bot challenges on a fixed cadence of these. */
+  turnCounts: Record<string, number>;
   turnSeatIndex: number | null;
   lastPlay: BluffLastPlay | null;
   winnerSeatIndex: number | null;
@@ -106,7 +111,7 @@ export const bluffGameDefinition = {
   minPlayers: 2,
   maxPlayers: 6,
   howToPlay:
-    '# Bluff\n\nThe lead plays one card face down and calls a rank. That call may be a lie. A joker is wild and is always a true card. It is not a queen. Each other player plays one card of that rank or passes. A pass sits out for the rest of the round. Anyone else may call Bluff before the next play. A lie picks up the pile. An honest call, including a joker, makes the challenger pick it up. If everyone passes, the pile is set aside and the last player to play leads a new rank. Empty your hand to win.',
+    '# Bluff\n\nThe lead selects any number of cards and chooses a rank before playing them face down. One card is a legal play. That call may be a lie. A joker is wild and is always a true card. It is not a queen. Each other player plays any number of cards as that rank, or passes. A pass sits out for the rest of the round. Only the lead calls a rank. Anyone else may challenge the latest play. Four of a rank plus both jokers is the most that claim can honestly be. A lie picks up the pile. An honest call, including a joker, makes the challenger pick it up. If everyone passes, the pile is set aside and the last player to play leads a new rank. Empty your hand to win. Computer players lie on plays 1, 5, 9, and so on, and tell the truth on the plays between when they can. They challenge a claim that cannot be true, and also on every fourth turn of their own. They never challenge their own play.',
 } satisfies GameDefinition;
 
 function asRecord(value: unknown, message: string): Record<string, unknown> {
@@ -218,6 +223,14 @@ function handKey(seatIndex: number): string {
   return String(seatIndex);
 }
 
+function bumpTurns(
+  counts: Record<string, number>,
+  seatIndex: number,
+): Record<string, number> {
+  const key = handKey(seatIndex);
+  return { ...counts, [key]: (counts[key] ?? 0) + 1 };
+}
+
 export function readBluffState(value: unknown): BluffState {
   const record = asRecord(value, 'Invalid table state');
   if (!isPhase(record.phase)) {
@@ -257,6 +270,8 @@ export function readBluffState(value: unknown): BluffState {
     requiredRank: record.requiredRank,
     passed: readPassed(record.passed),
     playCounts: readPlayCounts(record.playCounts),
+    turnCounts:
+      record.turnCounts === undefined ? {} : readPlayCounts(record.turnCounts),
     turnSeatIndex: record.turnSeatIndex,
     lastPlay: readLastPlay(record.lastPlay),
     winnerSeatIndex: record.winnerSeatIndex,
@@ -337,6 +352,7 @@ function notStartedState(): BluffState {
     requiredRank: null,
     passed: [],
     playCounts: {},
+    turnCounts: {},
     turnSeatIndex: null,
     lastPlay: null,
     winnerSeatIndex: null,
@@ -485,6 +501,7 @@ function dealState(players: GameSeat[], tableId: string): BluffState {
     requiredRank: null,
     passed: [],
     playCounts: {},
+    turnCounts: {},
     turnSeatIndex: ordered[0].seatIndex,
     lastPlay: null,
     winnerSeatIndex: null,
@@ -511,6 +528,7 @@ function acceptUnchallengedOut(state: BluffState): BluffState | null {
     requiredRank: state.requiredRank,
     passed: state.passed.slice(),
     playCounts: state.playCounts,
+    turnCounts: state.turnCounts,
     turnSeatIndex: null,
     lastPlay: copyLastPlay(lastPlay),
     winnerSeatIndex: lastPlay.seat,
@@ -537,8 +555,8 @@ function applyPlay(
   if (state.phase !== 'play') {
     throw new Error('Invalid intent');
   }
-  if (cards.length !== 1) {
-    throw new Error('Play one card');
+  if (cards.length < 1) {
+    throw new Error('Play at least one card');
   }
   if (state.passed.includes(seatIndex)) {
     throw new Error('You passed');
@@ -548,22 +566,20 @@ function applyPlay(
   if (!hand) {
     throw new Error('Invalid intent');
   }
-  const card = cards[0];
-  if (card === undefined) {
-    throw new Error('Play one card');
-  }
-  const index = hand.indexOf(card);
-  if (index < 0) {
-    throw new Error('Invalid intent');
+  const remaining = hand.slice();
+  for (const card of cards) {
+    const index = remaining.indexOf(card);
+    if (index < 0) {
+      throw new Error('Invalid intent');
+    }
+    remaining.splice(index, 1);
   }
   let rank = state.requiredRank;
   if (rank === null) {
-    rank = calledRank(card, claimRank);
+    rank = calledRank(cards[0] ?? '', claimRank);
   } else if (claimRank !== undefined && claimRank !== rank) {
     throw new Error('The rank is already called');
   }
-  const remaining = hand.slice();
-  remaining.splice(index, 1);
   const hands: Record<string, string[]> = { ...state.hands, [key]: remaining };
   const playCounts = {
     ...state.playCounts,
@@ -572,14 +588,15 @@ function applyPlay(
   return {
     phase: 'play',
     hands,
-    discardPile: state.discardPile.concat([card]),
+    discardPile: state.discardPile.concat(cards),
     requiredRank: rank,
     passed: state.passed.slice(),
     playCounts,
+    turnCounts: bumpTurns(state.turnCounts, seatIndex),
     turnSeatIndex: nextActive(state, seatIndex),
     lastPlay: {
       seat: seatIndex,
-      cards: [card],
+      cards: cards.slice(),
       claimRank: rank,
     },
     winnerSeatIndex: null,
@@ -615,6 +632,7 @@ function applyPass(state: BluffState, seatIndex: number): BluffState {
       requiredRank: null,
       passed: [],
       playCounts: state.playCounts,
+      turnCounts: bumpTurns(state.turnCounts, seatIndex),
       turnSeatIndex: leadOut ? null : lead,
       lastPlay: null,
       winnerSeatIndex: leadOut ? lead : null,
@@ -627,6 +645,7 @@ function applyPass(state: BluffState, seatIndex: number): BluffState {
     requiredRank: state.requiredRank,
     passed,
     playCounts: state.playCounts,
+    turnCounts: bumpTurns(state.turnCounts, seatIndex),
     turnSeatIndex: nextActive({ ...state, passed }, seatIndex),
     lastPlay: copyLastPlay(state.lastPlay),
     winnerSeatIndex: null,
@@ -672,6 +691,7 @@ function applyChallenge(state: BluffState, challenger: number): BluffState {
     requiredRank: null,
     passed: [],
     playCounts: state.playCounts,
+    turnCounts: bumpTurns(state.turnCounts, challenger),
     turnSeatIndex: confirmedWin ? null : lead,
     lastPlay: null,
     winnerSeatIndex: confirmedWin ? lastPlay.seat : null,
@@ -688,6 +708,7 @@ function leaveSeat(state: BluffState, seatIndex: number): BluffState {
       requiredRank: state.requiredRank,
       passed: state.passed.slice(),
       playCounts: state.playCounts,
+      turnCounts: state.turnCounts,
       turnSeatIndex: state.turnSeatIndex,
       lastPlay: copyLastPlay(state.lastPlay),
       winnerSeatIndex: state.winnerSeatIndex,
@@ -718,6 +739,7 @@ function leaveSeat(state: BluffState, seatIndex: number): BluffState {
     requiredRank: state.requiredRank,
     passed,
     playCounts: state.playCounts,
+    turnCounts: state.turnCounts,
     turnSeatIndex,
     lastPlay: copyLastPlay(state.lastPlay),
     winnerSeatIndex,
@@ -740,7 +762,7 @@ function playWasAcceptedOut(before: BluffState, next: BluffState): boolean {
 /**
  * Bluff rules for gameType `bluff`.
  * `initialState([], table)` is the not-started lobby. Seated players are dealt.
- * One card per play. The lead calls the rank. Jokers are always true.
+ * Any number of cards per play. The lead calls the rank. Jokers are always true.
  */
 export const bluffRules = {
   initialState(players: GameSeat[], table: GameTable): BluffState {

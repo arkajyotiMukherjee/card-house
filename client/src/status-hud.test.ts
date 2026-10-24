@@ -33,6 +33,7 @@ function state(overrides: Partial<BluffState>): BluffState {
     requiredRank: 'A',
     passed: [],
     playCounts: {},
+    turnCounts: {},
     turnSeatIndex: 0,
     lastPlay: null,
     winnerSeatIndex: null,

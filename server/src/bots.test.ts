@@ -6,7 +6,10 @@ import {
   type BluffIntent,
   type BluffState,
 } from '../../src/shared/games/bluff.ts';
-import { bluffStrategy } from '../../src/shared/games/bots/bluff.ts';
+import {
+  BLUFF_CHALLENGE_EVERY,
+  bluffStrategy,
+} from '../../src/shared/games/bots/bluff.ts';
 import {
   crazyEightsRules,
   type CrazyEightsIntent,
@@ -316,6 +319,7 @@ function bluffPlaying(overrides: Partial<BluffState>): BluffState {
     requiredRank: null,
     passed: [],
     playCounts: {},
+    turnCounts: {},
     turnSeatIndex: 0,
     lastPlay: null,
     winnerSeatIndex: null,
@@ -459,4 +463,112 @@ const emptyHand = bluffPlaying({
 assert(
   JSON.stringify(sameChoice(emptyHand)) === JSON.stringify({ type: 'pass' }),
   'an empty hand passes so the last card can stand',
+);
+
+function isChallenge(intent: unknown): boolean {
+  return (
+    typeof intent === 'object' &&
+    intent !== null &&
+    'type' in intent &&
+    intent.type === 'challenge'
+  );
+}
+
+const impossible = bluffPlaying({
+  hands: { '0': ['QS', 'QH', 'QD', 'QC', 'JR', 'JB'], '1': ['2C'] },
+  requiredRank: 'Q',
+  discardPile: ['2C'],
+  turnSeatIndex: 0,
+  lastPlay: { seat: 1, cards: ['2C'], claimRank: 'Q' },
+  turnCounts: { '0': 0 },
+  playCounts: { '0': 1 },
+});
+assert(
+  isChallenge(sameChoice(impossible)),
+  'a bot challenges a claim the deck cannot support',
+);
+bluffRules.applyIntent(
+  impossible,
+  { type: 'challenge' },
+  {
+    seat: seat(0),
+    now: 1,
+  },
+);
+
+const sevenQueens = bluffPlaying({
+  hands: { '0': ['AS'], '1': ['2C'] },
+  requiredRank: 'Q',
+  turnSeatIndex: 0,
+  lastPlay: {
+    seat: 1,
+    cards: ['2C', '2D', '2H', '2S', '3C', '3D', '3H'],
+    claimRank: 'Q',
+  },
+  turnCounts: { '0': 1 },
+});
+assert(
+  isChallenge(sameChoice(sevenQueens)),
+  'seven queens cannot be true even when this hand holds none',
+);
+
+const oneJokerShort = bluffPlaying({
+  hands: { '0': ['QS', 'QH', 'QD', 'QC', 'JR', '2C'], '1': ['KH'] },
+  requiredRank: 'Q',
+  turnSeatIndex: 0,
+  lastPlay: { seat: 1, cards: ['KH', 'KD'], claimRank: 'Q' },
+  turnCounts: { '0': 0 },
+  playCounts: { '0': 1 },
+});
+assert(
+  isChallenge(sameChoice(oneJokerShort)),
+  'jokers count toward the cards that can make a claim true',
+);
+
+const stillPossible = bluffPlaying({
+  ...oneJokerShort,
+  lastPlay: { seat: 1, cards: ['KH'], claimRank: 'Q' },
+});
+const possiblePlay = sameChoice(stillPossible);
+assert(
+  !isChallenge(possiblePlay) && playedCard(possiblePlay) === 'QC',
+  'one queen still looks possible, so the bot plays a queen',
+);
+
+const cadence = bluffPlaying({
+  hands: { '0': ['4D', '2C'], '1': ['KH'] },
+  requiredRank: '4',
+  turnSeatIndex: 0,
+  lastPlay: { seat: 1, cards: ['KH'], claimRank: '4' },
+  turnCounts: { '0': BLUFF_CHALLENGE_EVERY - 1 },
+  playCounts: { '0': 1 },
+});
+assert(
+  isChallenge(sameChoice(cadence)),
+  'every fourth turn challenges an honest-looking play',
+);
+const beforeCadence = bluffPlaying({
+  ...cadence,
+  turnCounts: { '0': BLUFF_CHALLENGE_EVERY - 2 },
+});
+assert(
+  !isChallenge(sameChoice(beforeCadence)),
+  'the turns between the cadence are not automatic challenges',
+);
+
+const ownPlay = bluffPlaying({
+  hands: { '0': ['4D', '2C'], '1': ['KH'] },
+  requiredRank: '4',
+  turnSeatIndex: 0,
+  lastPlay: {
+    seat: 0,
+    cards: ['KH', 'KD', 'KC', 'KS', '2H', '2S', '2D'],
+    claimRank: '4',
+  },
+  turnCounts: { '0': BLUFF_CHALLENGE_EVERY - 1 },
+  playCounts: { '0': 1 },
+});
+assert(
+  !isChallenge(sameChoice(ownPlay)),
+  'a bot never challenges its own play',
 );
