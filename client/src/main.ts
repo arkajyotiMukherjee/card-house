@@ -1,6 +1,7 @@
 import * as ex from 'excalibur';
 import { BootScene, demoImages } from './boot-scene';
 import { getOrCreateClientId } from './client-id';
+import { reloadLanding, reloadLoadingLine } from './reload-landing';
 import { statsCaption, statsForClient } from './client-stats';
 import { connectCardroom } from './connect';
 import {
@@ -94,9 +95,20 @@ function applyContainScale(): void {
 }
 
 const scene = new BootScene(theme);
-engine.add('boot', scene);
+const loading = new BootScene(theme);
 const menu = new MenuScene(clientId);
-engine.add('menu', menu);
+const savedRoomAtStart = joinCode ? undefined : readLastRoom();
+const loadingLine = reloadLoadingLine(savedRoomAtStart);
+if (loadingLine) {
+  loading.setStatus(loadingLine);
+  engine.add('loading', loading);
+  engine.add('boot', scene);
+  engine.add('menu', menu);
+} else {
+  engine.add('menu', menu);
+  engine.add('boot', scene);
+  engine.add('loading', loading);
+}
 
 window.addEventListener('resize', applyContainScale);
 window.addEventListener('orientationchange', applyContainScale);
@@ -106,11 +118,9 @@ mountMobileShell({ onChange: applyContainScale });
 installTouchTargets(engine);
 
 const loader = new ex.Loader(demoImages);
-const savedRoomAtStart = joinCode ? undefined : readLastRoom();
 void engine.start(loader).then(() => {
-  if (savedRoomAtStart) {
-    scene.setStatus('Rejoining room');
-    engine.goToScene('boot');
+  if (loadingLine) {
+    engine.goToScene('loading');
   } else {
     engine.goToScene('menu');
   }
@@ -155,6 +165,9 @@ void engine.start(loader).then(() => {
           },
         );
         lobbyScene.mount();
+        const savedRoom = joinCode ? undefined : readLastRoom();
+        let pendingReload: LastRoom | undefined = savedRoom;
+        let reloadBusy = false;
         const panel = mountLobbyPanel(
           engine,
           scene,
@@ -164,6 +177,10 @@ void engine.start(loader).then(() => {
           {
             returning: savedRoomAtStart !== undefined,
             onJoined: (lobby) => {
+              if (pendingReload) {
+                void finishReload(lobby);
+                return;
+              }
               scene.setStatus('');
               void lobbyScene.openLobby(lobby.id, lobby.code);
             },
@@ -210,9 +227,9 @@ void engine.start(loader).then(() => {
         menu.connectTheme(theme, (style) => {
           saveTheme(clientId, style);
           scene.setTableStyle(style);
+          loading.setTableStyle(style);
           game.setTableStyle(style);
         });
-        const savedRoom = joinCode ? undefined : readLastRoom();
         if (joinCode) {
           const joinName = joinNameFromSearch(window.location.search);
           if (joinName.state === 'ready') {
@@ -229,35 +246,61 @@ void engine.start(loader).then(() => {
           void rejoinSavedRoom(connection, savedRoom);
         }
 
+        async function finishReload(lobby: LobbyRow): Promise<void> {
+          const saved = pendingReload;
+          if (!saved || reloadBusy || lobby.code !== saved.lobbyCode) {
+            return;
+          }
+          reloadBusy = true;
+          try {
+            const ready = await lobbyScene.openLobby(lobby.id, lobby.code);
+            const atTable =
+              ready &&
+              saved.tableId.length > 0 &&
+              lobbyScene.reopenIfSeated(saved.tableId);
+            const landing = reloadLanding({ atTable, inRoom: true });
+            pendingReload = undefined;
+            if (landing === 'table') {
+              return;
+            }
+            if (landing === 'lobby') {
+              if (ready && saved.tableId.length > 0) {
+                forgetTable();
+              }
+              scene.setStatus('');
+              engine.goToScene('boot');
+              return;
+            }
+            clearLastRoom();
+            panel.resetAfterLeave();
+            engine.goToScene('menu');
+          } finally {
+            reloadBusy = false;
+          }
+        }
+
         async function rejoinSavedRoom(
           db: DbConnection,
           saved: LastRoom,
         ): Promise<void> {
           const error = await panel.enter('join', saved.name, saved.lobbyCode);
           if (error) {
+            pendingReload = undefined;
             if (roomGoneMessage(error)) {
               clearLastRoom();
               panel.resetAfterLeave();
-              engine.goToScene('menu');
+              const landing = reloadLanding({ atTable: false, inRoom: false });
+              if (landing === 'menu') {
+                engine.goToScene('menu');
+              }
             } else {
-              scene.setStatus(error);
+              loading.setStatus(error);
             }
             return;
           }
-          engine.goToScene('boot');
-          if (saved.tableId.length === 0) {
-            return;
-          }
           const lobby = lobbyByCode(lobbyRows(db), saved.lobbyCode);
-          if (!lobby) {
-            return;
-          }
-          const ready = await lobbyScene.openLobby(lobby.id, lobby.code);
-          if (!ready) {
-            return;
-          }
-          if (!lobbyScene.reopenIfSeated(saved.tableId)) {
-            forgetTable();
+          if (lobby) {
+            await finishReload(lobby);
           }
         }
 
