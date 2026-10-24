@@ -25,6 +25,11 @@ import {
   canvasText,
   panelRect,
 } from './canvas-ui';
+import {
+  isFrontHandCard,
+  localHandHitBoxes,
+  type CardHitBox,
+} from './card-hit';
 import { HandHover, placeCardLift, startHandHoverClock } from './hand-hover';
 import type { CardAtlas } from './card-atlas';
 import { ChipAtlas, type ChipDenomination } from './chip-atlas';
@@ -641,10 +646,20 @@ export class PokerDriver implements GameDriver<PokerState> {
         }
         this.hovered = null;
       });
-      actor.on('pointerup', () => {
+      actor.on('pointerup', (event) => {
         const current = this.state;
         const context = this.ctx;
         if (!current || !context) {
+          return;
+        }
+        if (
+          !isFrontHandCard(
+            cardId,
+            event.worldPos.x,
+            event.worldPos.y,
+            this.handBoxes(),
+          )
+        ) {
           return;
         }
         this.handleInput(
@@ -683,6 +698,16 @@ export class PokerDriver implements GameDriver<PokerState> {
       ? this.handHover.current(cardId)
       : 0;
     return y - Math.round(lift);
+  }
+
+  private handBoxes(): CardHitBox[] {
+    const state = this.state;
+    const ctx = this.ctx;
+    if (!state || !ctx || ctx.meSeatIndex === null) {
+      return [];
+    }
+    const hole = state.seats[String(ctx.meSeatIndex)]?.hole ?? [];
+    return localHandHitBoxes(hole, this.cards, CARD_DRAW);
   }
 
   private followHole(cardId: string, pointerX: number, entered: boolean): void {
