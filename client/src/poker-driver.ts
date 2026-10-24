@@ -25,7 +25,7 @@ import {
   canvasText,
   panelRect,
 } from './canvas-ui';
-import { cardLift } from './bluff-layout';
+import { HandHover, placeCardLift, startHandHoverClock } from './hand-hover';
 import type { CardAtlas } from './card-atlas';
 import { ChipAtlas, type ChipDenomination } from './chip-atlas';
 import type { GameDriver, InputEvent, RenderContext } from './game-driver';
@@ -126,6 +126,7 @@ interface CardRecord {
   /** True for a card in the local player's own hole cards. */
   personal: boolean;
   home: { x: number; y: number };
+  restZ: number;
 }
 
 interface ButtonRecord {
@@ -209,6 +210,9 @@ export class PokerDriver implements GameDriver<PokerState> {
   private lastHole: string[] = [];
   private droppable = new Set<string>();
   private hovered: string | null = null;
+  private readonly handHover = new HandHover();
+  private hoverClock: ex.Actor | null = null;
+  private dropMarkKey = '';
   private dropMarks: ex.Actor[] = [];
   private buttonsReady = false;
   private state: PokerState | null = null;
@@ -217,6 +221,7 @@ export class PokerDriver implements GameDriver<PokerState> {
   render(state: PokerState, ctx: RenderContext): void {
     this.state = state;
     this.ctx = ctx;
+    this.ensureHoverClock(ctx);
     if (!this.buttonsReady) {
       this.addButtons(ctx);
       this.buttonsReady = true;
@@ -318,6 +323,7 @@ export class PokerDriver implements GameDriver<PokerState> {
     }
     this.buttons = [];
     this.buttonsReady = false;
+    this.stopHoverClock();
     this.state = null;
     this.ctx = null;
   }
@@ -620,20 +626,20 @@ export class PokerDriver implements GameDriver<PokerState> {
         height: CARD_DRAW,
         z: place.z,
       });
+      actor.pointer.useGraphicsBounds = false;
       actor.graphics.use(cardSprite(atlas, cardId, place.faceUp));
-      actor.on('pointerenter', () => {
-        if (!this.droppable.has(cardId)) {
-          return;
-        }
-        this.hovered = cardId;
-        this.relift();
+      actor.on('pointerenter', (event) => {
+        this.followHole(cardId, event.worldPos.x, true);
+      });
+      actor.on('pointermove', (event) => {
+        this.followHole(cardId, event.worldPos.x, false);
       });
       actor.on('pointerleave', () => {
+        this.handHover.leave(cardId);
         if (this.hovered !== cardId) {
           return;
         }
         this.hovered = null;
-        this.relift();
       });
       actor.on('pointerup', () => {
         const current = this.state;
@@ -653,14 +659,18 @@ export class PokerDriver implements GameDriver<PokerState> {
         faceUp: place.faceUp,
         personal: place.personal,
         home: place,
+        restZ: place.z,
       };
       this.cards.set(cardId, record);
     }
     record.home = { x: place.x, y: place.y };
-    record.actor.z = place.z;
+    record.restZ = place.z;
     record.actor.graphics.opacity = place.opacity;
     record.actor.scale = ex.vec(1, 1);
-    record.actor.pos = ex.vec(place.x, this.liftedY(cardId, place.y));
+    const lift = this.droppable.has(cardId)
+      ? this.handHover.current(cardId)
+      : 0;
+    placeCardLift(record.actor, place.x, place.y, place.z, lift);
     if (record.faceUp !== place.faceUp || record.personal !== place.personal) {
       record.faceUp = place.faceUp;
       record.personal = place.personal;
@@ -669,26 +679,87 @@ export class PokerDriver implements GameDriver<PokerState> {
   }
 
   private liftedY(cardId: string, y: number): number {
-    return (
-      y -
-      cardLift({
-        legal: this.droppable.has(cardId),
-        hovered: this.hovered === cardId,
-        selected: false,
-      })
-    );
+    const lift = this.droppable.has(cardId)
+      ? this.handHover.current(cardId)
+      : 0;
+    return y - Math.round(lift);
   }
 
-  private relift(): void {
-    for (const [cardId, record] of this.cards) {
-      record.actor.pos = ex.vec(
+  private followHole(cardId: string, pointerX: number, entered: boolean): void {
+    if (!this.droppable.has(cardId)) {
+      this.handHover.leave(cardId);
+      return;
+    }
+    if (entered) {
+      this.hovered = cardId;
+      this.handHover.enter(cardId, pointerX);
+      return;
+    }
+    this.handHover.move(pointerX);
+  }
+
+  private ensureHoverClock(ctx: RenderContext): void {
+    if (this.hoverClock) {
+      return;
+    }
+    this.hoverClock = startHandHoverClock(ctx.scene, (elapsedMs) => {
+      this.easeHand(elapsedMs);
+    });
+  }
+
+  private stopHoverClock(): void {
+    this.hoverClock?.kill();
+    this.hoverClock = null;
+    this.handHover.clear();
+    this.dropMarkKey = '';
+  }
+
+  private easeHand(elapsedMs: number): void {
+    const state = this.state;
+    const ctx = this.ctx;
+    if (!state || !ctx || ctx.meSeatIndex === null) {
+      return;
+    }
+    const hole = state.seats[String(ctx.meSeatIndex)]?.hole ?? [];
+    const slots = holePositions(true, 0, 0, hole.length);
+    const ids: string[] = [];
+    const centers: number[] = [];
+    for (let index = 0; index < hole.length; index += 1) {
+      const cardId = hole[index];
+      const slot = slots[index];
+      if (!cardId || !slot || !this.droppable.has(cardId)) {
+        continue;
+      }
+      ids.push(cardId);
+      centers.push(slot.x);
+    }
+    this.handHover.step(ids, centers, elapsedMs);
+    for (let index = 0; index < hole.length; index += 1) {
+      const cardId = hole[index];
+      const record = cardId ? this.cards.get(cardId) : undefined;
+      if (!cardId || !record) {
+        continue;
+      }
+      const lift = this.droppable.has(cardId)
+        ? this.handHover.current(cardId)
+        : 0;
+      placeCardLift(
+        record.actor,
         record.home.x,
-        this.liftedY(cardId, record.home.y),
+        record.home.y,
+        record.restZ,
+        lift,
       );
     }
-    if (this.ctx) {
-      this.refreshDropMarks(this.ctx);
+    const pixels = this.hovered
+      ? Math.round(this.handHover.current(this.hovered))
+      : 0;
+    const key = `${this.hovered ?? ''}:${pixels}`;
+    if (key === this.dropMarkKey) {
+      return;
     }
+    this.dropMarkKey = key;
+    this.refreshDropMarks(ctx);
   }
 
   /** A red outline and "Drop" tag on the hole card the click would discard. */
@@ -717,12 +788,16 @@ export class PokerDriver implements GameDriver<PokerState> {
       smoothing: false,
     });
     outline.graphics.use(frame);
+    outline.pointer.useColliderShape = false;
+    outline.pointer.useGraphicsBounds = false;
     const tag = new ex.Actor({
       pos: ex.vec(x - 16, y - CARD_DRAW / 2 - 14),
       anchor: ex.vec(0, 0),
       z: 30,
     });
     tag.graphics.use(canvasText('Drop', 8, FLASH_STROKE));
+    tag.pointer.useColliderShape = false;
+    tag.pointer.useGraphicsBounds = false;
     ctx.scene.add(outline);
     ctx.scene.add(tag);
     this.dropMarks.push(outline, tag);
@@ -773,6 +848,8 @@ export class PokerDriver implements GameDriver<PokerState> {
     this.cards.clear();
     this.hovered = null;
     this.droppable = new Set();
+    this.handHover.clear();
+    this.dropMarkKey = '';
     for (const actor of this.dropMarks) {
       actor.kill();
     }

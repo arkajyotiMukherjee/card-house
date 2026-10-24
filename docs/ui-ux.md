@@ -208,7 +208,7 @@ Active player highlight:
 - Each card:
   - full-color front face,
   - slight overlap with neighbors,
-  - hovered card pops up a few pixels and scales slightly.
+  - the card under the pointer eases up, and the next card on each side eases up less. The rest of the hand stays down.
 - Selection:
   - click toggles selection.
   - selected cards get a brighter outline or drop shadow.
