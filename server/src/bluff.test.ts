@@ -87,6 +87,7 @@ function playing(overrides: Partial<BluffState>): BluffState {
     requiredRank: null,
     passed: [],
     playCounts: {},
+    turnCounts: {},
     turnSeatIndex: 0,
     lastPlay: null,
     winnerSeatIndex: null,
@@ -140,6 +141,7 @@ assert(played.discardPile.at(-1) === card, 'the played card lands on the pile');
 const called = isJoker(card) ? 'A' : rankOfCard(card);
 assert(played.requiredRank === called, 'the lead calls the played card rank');
 assert(played.playCounts[actorKey] === 1, 'the play is counted for that seat');
+assert(played.turnCounts[actorKey] === 1, 'the play counts as a turn');
 assert(played.turnSeatIndex === 1, 'the next seated player acts');
 assert(
   played.lastPlay?.seat === actor,
@@ -177,21 +179,90 @@ assert(dealt.hands === handsBefore, 'a rejected move keeps the same hands');
 assert(dealt.discardPile === pileBefore, 'a rejected move keeps the same pile');
 assert(dealt.turnSeatIndex === actor, 'a rejected move keeps the same turn');
 
-let tooMany = false;
+const many = bluffRules.applyIntent(
+  playing({
+    hands: { '0': ['AS', 'AH', 'AD', 'KS'], '1': ['KH'] },
+    requiredRank: 'A',
+    turnSeatIndex: 0,
+  }),
+  { type: 'play', cards: ['AS', 'AH', 'AD'] },
+  context(0),
+);
+assert(many.hands['0'].length === 1, 'three aces leave the other card');
+assert(many.hands['0'][0] === 'KS', 'the unplayed card stays in the hand');
+assert(
+  many.discardPile.join(',') === 'AS,AH,AD',
+  'the whole selection lands on the pile',
+);
+assert(
+  many.lastPlay?.cards.join(',') === 'AS,AH,AD' &&
+    many.lastPlay.claimRank === 'A',
+  'a multi-card play keeps the rank already called',
+);
+assert(many.requiredRank === 'A', 'a follow play does not call a new rank');
+const manyNote = bluffRules.eventNote(
+  playing({
+    hands: { '0': ['AS', 'AH', 'AD', 'KS'], '1': ['KH'] },
+    requiredRank: 'A',
+    turnSeatIndex: 0,
+  }),
+  { type: 'play', cards: ['AS', 'AH', 'AD'] },
+  many,
+  context(0),
+);
+assert(
+  manyNote !== null && manyNote.kind === 'play' && manyNote.count === 3,
+  'a multi-card play notes the count',
+);
+
+let wrongRank = false;
 try {
   bluffRules.applyIntent(
     playing({
-      hands: { '0': ['AS', 'AH', 'AD'], '1': ['KH'] },
+      hands: { '0': ['AS', 'KH'], '1': ['QD'] },
       requiredRank: 'A',
       turnSeatIndex: 0,
     }),
-    { type: 'play', cards: ['AS', 'AH', 'AD'] },
+    { type: 'play', cards: ['AS'], claimRank: 'K' },
     context(0),
   );
 } catch (error) {
-  tooMany = error instanceof Error && error.message === 'Play one card';
+  wrongRank =
+    error instanceof Error && error.message === 'The rank is already called';
 }
-assert(tooMany, 'three aces are not a legal play');
+assert(wrongRank, 'a follow play cannot call a new rank');
+
+const leadCall = bluffRules.applyIntent(
+  playing({
+    hands: { '0': ['2C', '2D', 'KH'], '1': ['QD'] },
+    requiredRank: null,
+    turnSeatIndex: 0,
+  }),
+  { type: 'play', cards: ['2C', '2D'], claimRank: 'Q' },
+  context(0),
+);
+assert(leadCall.requiredRank === 'Q', 'only the lead calls the rank');
+assert(
+  leadCall.lastPlay?.cards.length === 2,
+  'the lead may play more than one card',
+);
+
+let emptyPlay = false;
+try {
+  bluffRules.applyIntent(
+    playing({
+      hands: { '0': ['AS'], '1': ['KH'] },
+      requiredRank: null,
+      turnSeatIndex: 0,
+    }),
+    { type: 'play', cards: [] },
+    context(0),
+  );
+} catch (error) {
+  emptyPlay =
+    error instanceof Error && error.message === 'Play at least one card';
+}
+assert(emptyPlay, 'an empty selection is not a play');
 
 const oneAce = bluffRules.applyIntent(
   playing({

@@ -74,8 +74,8 @@ export const HOW_TO_PLAY_TEXT = {
 export const COUNTER_BUTTON = { x: 392, y: 220, w: 176, h: 72 } as const;
 
 /**
- * Clockwise from the local seat at bottom center.
- * Your seat stays at the first anchor. The rest follow seat order.
+ * Points around the felt. Index 0 is bottom center. `seatAnchorsFor` picks
+ * a subset so a short table does not stack every opponent on one side.
  */
 export const SEAT_ANCHORS = [
   { x: 480, y: 456 },
@@ -87,6 +87,46 @@ export const SEAT_ANCHORS = [
   { x: 280, y: 456 },
   { x: 680, y: 456 },
 ] as const;
+
+/**
+ * Seats for this many players. The local player is first (bottom).
+ * Three players use the left and right and leave the top empty.
+ * The fourth player sits at the top. Larger tables spread around the felt.
+ */
+export function seatAnchorsFor(
+  count: number,
+): readonly { x: number; y: number }[] {
+  const bottom = SEAT_ANCHORS[0];
+  const right = SEAT_ANCHORS[1];
+  const topRight = SEAT_ANCHORS[2];
+  const top = SEAT_ANCHORS[3];
+  const topLeft = SEAT_ANCHORS[4];
+  const left = SEAT_ANCHORS[5];
+  const bottomLeft = SEAT_ANCHORS[6];
+  const bottomRight = SEAT_ANCHORS[7];
+  if (count <= 1) {
+    return [bottom];
+  }
+  if (count === 2) {
+    return [bottom, top];
+  }
+  if (count === 3) {
+    return [bottom, right, left];
+  }
+  if (count === 4) {
+    return [bottom, right, left, top];
+  }
+  if (count === 5) {
+    return [bottom, right, topRight, topLeft, left];
+  }
+  if (count === 6) {
+    return [bottom, right, topRight, top, topLeft, left];
+  }
+  if (count === 7) {
+    return [bottom, bottomRight, right, topRight, topLeft, left, bottomLeft];
+  }
+  return [bottom, bottomRight, right, topRight, top, topLeft, left, bottomLeft];
+}
 
 export interface TableRef {
   id: string;
@@ -190,9 +230,10 @@ export function placeSeats(labels: readonly NamedSeat[]): PlacedSeat[] {
   if (start < 0) {
     start = 0;
   }
+  const anchors = seatAnchorsFor(ordered.length);
   return ordered.map((seat, index) => {
     const slot = (index - start + ordered.length) % ordered.length;
-    const anchor = SEAT_ANCHORS[slot % SEAT_ANCHORS.length] ?? SEAT_ANCHORS[0];
+    const anchor = anchors[slot % anchors.length] ?? anchors[0];
     return { ...seat, x: anchor.x, y: anchor.y };
   });
 }

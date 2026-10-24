@@ -6,6 +6,7 @@ import {
   memberForClient,
   memberIsWatching,
   placeSeats,
+  seatAnchorsFor,
   seatLabels,
   SEAT_ANCHORS,
   spectatingLine,
@@ -77,7 +78,7 @@ describe('seat labels', () => {
     expect(memberForClient(members, 'lobby-2', 'client-b')).toBeUndefined();
   });
 
-  it('puts this client at the bottom-center seat', () => {
+  it('puts this client at the bottom and the other player across', () => {
     const labels: NamedSeat[] = [
       {
         seatIndex: 0,
@@ -95,10 +96,61 @@ describe('seat labels', () => {
       },
     ];
     const placed = placeSeats(labels);
+    const pair = seatAnchorsFor(2);
     const bea = placed.find((seat) => seat.name === 'Bea');
     const ada = placed.find((seat) => seat.name === 'Ada');
-    expect(bea).toMatchObject({ x: SEAT_ANCHORS[0].x, y: SEAT_ANCHORS[0].y });
-    expect(ada).toMatchObject({ x: SEAT_ANCHORS[1].x, y: SEAT_ANCHORS[1].y });
+    expect(bea).toMatchObject({ x: pair[0]?.x, y: pair[0]?.y });
+    expect(ada).toMatchObject({ x: pair[1]?.x, y: pair[1]?.y });
+    expect(ada?.y).toBe(SEAT_ANCHORS[3].y);
+  });
+});
+
+describe('seat anchors', () => {
+  function names(count: number, self = 0): NamedSeat[] {
+    return Array.from({ length: count }, (_item, index) => ({
+      seatIndex: index,
+      name: `Seat ${index}`,
+      self: index === self,
+      lobbyMemberId: `member-${index}`,
+      inVoice: false,
+    }));
+  }
+
+  it('puts three players on the bottom, right, and left', () => {
+    const anchors = seatAnchorsFor(3);
+    expect(anchors.map((anchor) => anchor.y)).not.toContain(SEAT_ANCHORS[3].y);
+    expect(anchors.some((anchor) => anchor.x > 560)).toBe(true);
+    expect(anchors.some((anchor) => anchor.x < 400)).toBe(true);
+    const placed = placeSeats(names(3));
+    expect(placed.find((seat) => seat.self)).toMatchObject({
+      x: SEAT_ANCHORS[0].x,
+      y: SEAT_ANCHORS[0].y,
+    });
+    const others = placed.filter((seat) => !seat.self);
+    expect(others.map((seat) => seat.x).sort((a, b) => a - b)).toEqual([
+      SEAT_ANCHORS[5].x,
+      SEAT_ANCHORS[1].x,
+    ]);
+  });
+
+  it('gives the fourth player the top', () => {
+    const anchors = seatAnchorsFor(4);
+    expect(anchors[3]).toEqual(SEAT_ANCHORS[3]);
+    expect(anchors[1]).toEqual(SEAT_ANCHORS[1]);
+    expect(anchors[2]).toEqual(SEAT_ANCHORS[5]);
+  });
+
+  it('spreads five or more seats around both sides', () => {
+    for (const count of [5, 6, 7, 8]) {
+      const anchors = seatAnchorsFor(count);
+      expect(anchors).toHaveLength(count);
+      expect(
+        new Set(anchors.map((anchor) => `${anchor.x},${anchor.y}`)).size,
+      ).toBe(count);
+      const others = anchors.slice(1);
+      expect(others.every((anchor) => anchor.x > 560)).toBe(false);
+      expect(others.every((anchor) => anchor.x < 400)).toBe(false);
+    }
   });
 });
 

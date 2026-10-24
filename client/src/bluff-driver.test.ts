@@ -13,6 +13,7 @@ function state(): BluffState {
     requiredRank: 'A',
     passed: [],
     playCounts: {},
+    turnCounts: {},
     turnSeatIndex: 0,
     lastPlay: null,
     winnerSeatIndex: null,
@@ -111,7 +112,7 @@ describe('BluffDriver input', () => {
     ]);
   });
 
-  it('keeps one selected card and calls a rank when leading', () => {
+  it('plays every selected card and calls a rank only after the lead chooses one', () => {
     const driver = new BluffDriver();
     const sent: unknown[] = [];
     const table = state();
@@ -119,9 +120,25 @@ describe('BluffDriver input', () => {
     const ctx = context(sent, 0);
     driver.handleInput({ type: 'pointerup', target: 'AS' }, table, ctx);
     driver.handleInput({ type: 'pointerup', target: '10H' }, table, ctx);
+    driver.handleInput({ type: 'pointerup', target: 'play' }, table, ctx);
+    expect(sent).toEqual([]);
     driver.handleInput({ type: 'pointerup', target: 'rank:4' }, table, ctx);
     driver.handleInput({ type: 'pointerup', target: 'play' }, table, ctx);
-    expect(sent).toEqual([{ type: 'play', cards: ['10H'], claimRank: '4' }]);
+    expect(sent).toEqual([
+      { type: 'play', cards: ['AS', '10H'], claimRank: '4' },
+    ]);
+  });
+
+  it('plays the selection as the current rank during a round', () => {
+    const driver = new BluffDriver();
+    const sent: unknown[] = [];
+    const table = state();
+    const ctx = context(sent, 0);
+    driver.handleInput({ type: 'pointerup', target: 'AS' }, table, ctx);
+    driver.handleInput({ type: 'pointerup', target: '10H' }, table, ctx);
+    driver.handleInput({ type: 'pointerup', target: 'rank:K' }, table, ctx);
+    driver.handleInput({ type: 'pointerup', target: 'play' }, table, ctx);
+    expect(sent).toEqual([{ type: 'play', cards: ['AS', '10H'] }]);
   });
 
   it('sends a pass when a rank is already called', () => {

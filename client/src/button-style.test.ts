@@ -8,7 +8,13 @@ import {
   SPLIT_BUTTON,
   STAND_BUTTON,
 } from './blackjack-layout';
-import { CHALLENGE_BUTTON, PLAY_BUTTON as BLUFF_PLAY } from './bluff-layout';
+import {
+  BLUFF_CHALLENGE_BUTTON,
+  BLUFF_PASS_BUTTON,
+  BLUFF_PLAY_BUTTON,
+  CHALLENGE_BUTTON,
+  PLAY_BUTTON as BLUFF_PLAY,
+} from './bluff-layout';
 import {
   BUTTON_FONT_SIZE,
   BUTTON_HEIGHT,
@@ -129,6 +135,9 @@ describe('shared button height', () => {
     HOW_TO_PLAY_BUTTON,
     BLUFF_PLAY,
     CHALLENGE_BUTTON,
+    BLUFF_PLAY_BUTTON,
+    BLUFF_PASS_BUTTON,
+    BLUFF_CHALLENGE_BUTTON,
     PRESIDENT_PLAY,
     PRESIDENT_PASS,
     HEARTS_PLAY,
