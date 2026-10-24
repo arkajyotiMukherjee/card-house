@@ -35,6 +35,7 @@ import {
   selectedPlayCards,
   showRankPicker,
   tablePrompt,
+  turnLine,
 } from './bluff-layout';
 import {
   BUTTON_FONT_SIZE,
@@ -479,14 +480,14 @@ export class BluffDriver implements GameDriver<BluffState> {
       this.labels.push(this.banner(ctx, line));
       return;
     }
-    const mine =
-      ctx.meSeatIndex !== null && state.turnSeatIndex === ctx.meSeatIndex;
-    const turn = mine ? 'Your turn' : 'Wait';
+    const turn = turnLine(state, ctx.meSeatIndex);
     this.labels.push(
       this.textActor(ctx, BLUFF_TURN_LABEL.x, BLUFF_TURN_LABEL.y, turn, GOLD),
     );
-    const prompt = tablePrompt(state);
-    this.labels.push(this.centeredLine(ctx, PROMPT_Y, prompt, GOLD));
+    const prompt = tablePrompt(state, ctx.meSeatIndex);
+    if (prompt !== null) {
+      this.labels.push(this.centeredLine(ctx, PROMPT_Y, prompt, GOLD));
+    }
     this.syncHint(state, ctx);
     const notice = pileNotice(state, ctx.seats);
     if (notice) {
