@@ -19,6 +19,7 @@ import {
 import { canvasText, panelRect } from './canvas-ui';
 import type { CardAtlas } from './card-atlas';
 import type { GameDriver, InputEvent, RenderContext } from './game-driver';
+import { HandHover, placeCardLift, startHandHoverClock } from './hand-hover';
 import {
   STOCK_LABEL_DY,
   askButtonBox,
@@ -103,6 +104,7 @@ interface CardRecord {
   faceUp: boolean;
   moving: boolean;
   placed: boolean;
+  restZ: number;
 }
 
 interface BookRecord {
@@ -151,12 +153,15 @@ export class GoFishDriver implements GameDriver<GoFishState> {
   private flashes: ex.Actor[] = [];
   private selectedRank: string | null = null;
   private hover: string | null = null;
+  private readonly handHover = new HandHover();
+  private hoverClock: ex.Actor | null = null;
   private state: GoFishState | null = null;
   private ctx: RenderContext | null = null;
 
   render(state: GoFishState, ctx: RenderContext): void {
     this.state = state;
     this.ctx = ctx;
+    this.ensureHoverClock(ctx);
     this.syncAskButtons(ctx);
     this.syncLabels(state, ctx);
     if (state.phase === 'lobby') {
@@ -267,6 +272,7 @@ export class GoFishDriver implements GameDriver<GoFishState> {
     this.askBoxes.clear();
     this.selectedRank = null;
     this.hover = null;
+    this.stopHoverClock();
     this.state = null;
     this.ctx = null;
   }
@@ -394,11 +400,17 @@ export class GoFishDriver implements GameDriver<GoFishState> {
         height: CARD_DRAW,
         z: place.z,
       });
+      actor.pointer.useGraphicsBounds = false;
       actor.graphics.use(cardSprite(ctx.myCards, cardId, place.faceUp));
-      actor.on('pointerenter', () => {
+      actor.on('pointerenter', (event) => {
+        this.followHand(cardId, event.worldPos.x, true);
         this.onCard('pointerenter', cardId);
       });
+      actor.on('pointermove', (event) => {
+        this.followHand(cardId, event.worldPos.x, false);
+      });
       actor.on('pointerleave', () => {
+        this.handHover.leave(cardId);
         this.onCard('pointerleave', cardId);
       });
       actor.on('pointerup', () => {
@@ -412,10 +424,10 @@ export class GoFishDriver implements GameDriver<GoFishState> {
         faceUp: place.faceUp,
         moving: false,
         placed: false,
+        restZ: place.z,
       };
       this.cards.set(cardId, record);
     }
-    record.actor.z = this.lifted(cardId) ? 30 : place.z;
     if (record.faceUp !== place.faceUp) {
       record.faceUp = place.faceUp;
       record.actor.graphics.use(cardSprite(ctx.myCards, cardId, place.faceUp));
@@ -423,6 +435,7 @@ export class GoFishDriver implements GameDriver<GoFishState> {
     const moved = record.restX !== place.x || record.restY !== place.y;
     record.restX = place.x;
     record.restY = place.y;
+    record.restZ = place.z;
     if (!record.placed || moved) {
       const fromDeal = !record.placed;
       record.placed = true;
@@ -440,6 +453,8 @@ export class GoFishDriver implements GameDriver<GoFishState> {
     delay: number,
   ): void {
     record.moving = true;
+    record.actor.graphics.offset = ex.vec(0, 0);
+    record.actor.z = record.restZ;
     record.actor.actions.clearActions();
     const motion = record.actor.actions;
     if (delay > 0) {
@@ -466,15 +481,20 @@ export class GoFishDriver implements GameDriver<GoFishState> {
     if (!record || record.moving || !state || !ctx) {
       return;
     }
-    const lift = cardLift({
-      legal: legalCard(state, ctx.meSeatIndex, cardId),
-      hovered: this.hover === cardId,
+    const legal = legalCard(state, ctx.meSeatIndex, cardId);
+    const held = cardLift({
+      legal,
+      hovered: false,
       selected: this.rankSelected(cardId),
     });
-    record.actor.pos = ex.vec(record.restX, record.restY - lift);
-    if (lift > 0) {
-      record.actor.z = 30;
-    }
+    const hover = legal && held === 0 ? this.handHover.current(cardId) : 0;
+    placeCardLift(
+      record.actor,
+      record.restX,
+      record.restY,
+      record.restZ,
+      held > 0 ? held : hover,
+    );
   }
 
   private refreshLifts(state: GoFishState, ctx: RenderContext): void {
@@ -483,8 +503,58 @@ export class GoFishDriver implements GameDriver<GoFishState> {
     }
   }
 
-  private lifted(cardId: string): boolean {
-    return this.hover === cardId || this.rankSelected(cardId);
+  private followHand(cardId: string, pointerX: number, entered: boolean): void {
+    const state = this.state;
+    const ctx = this.ctx;
+    if (!state || !ctx || !legalCard(state, ctx.meSeatIndex, cardId)) {
+      this.handHover.leave(cardId);
+      return;
+    }
+    if (entered) {
+      this.handHover.enter(cardId, pointerX);
+      return;
+    }
+    this.handHover.move(pointerX);
+  }
+
+  private ensureHoverClock(ctx: RenderContext): void {
+    if (this.hoverClock) {
+      return;
+    }
+    this.hoverClock = startHandHoverClock(ctx.scene, (elapsedMs) => {
+      this.easeHand(elapsedMs);
+    });
+  }
+
+  private stopHoverClock(): void {
+    this.hoverClock?.kill();
+    this.hoverClock = null;
+    this.handHover.clear();
+  }
+
+  private easeHand(elapsedMs: number): void {
+    const state = this.state;
+    const ctx = this.ctx;
+    if (!state || !ctx) {
+      return;
+    }
+    const hand =
+      ctx.meSeatIndex === null
+        ? []
+        : (state.hands[String(ctx.meSeatIndex)] ?? []);
+    const slots = handPositions(hand.length);
+    const centers: number[] = [];
+    for (let index = 0; index < slots.length; index += 1) {
+      centers.push(slots[index]?.x ?? 0);
+    }
+    this.handHover.step(hand, centers, elapsedMs);
+    for (let index = 0; index < hand.length; index += 1) {
+      const cardId = hand[index];
+      if (!cardId) {
+        continue;
+      }
+      this.applyLift(cardId, state, ctx);
+    }
   }
 
   private rankSelected(cardId: string): boolean {
@@ -715,6 +785,7 @@ export class GoFishDriver implements GameDriver<GoFishState> {
     this.stockKey = '';
     this.selectedRank = null;
     this.hover = null;
+    this.handHover.clear();
   }
 
   private banner(ctx: RenderContext, text: string): ex.Actor {
