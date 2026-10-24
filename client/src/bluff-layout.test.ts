@@ -8,7 +8,9 @@ import {
   faceForCard,
   finishedLine,
   handPositions,
+  lastCallLine,
   legalCard,
+  tablePrompt,
   opponentBackPositions,
   pileFaceUp,
   pilePositions,
@@ -21,6 +23,8 @@ function playState(turnSeatIndex: number | null): BluffState {
     hands: { '0': ['AS', '10H'], '1': ['KD', 'QC'] },
     discardPile: [],
     requiredRank: 'A',
+    passed: [],
+    playCounts: {},
     turnSeatIndex,
     lastPlay: null,
     winnerSeatIndex: null,
@@ -75,6 +79,22 @@ describe('bluff layout', () => {
     };
     expect(pileFaceUp(state, 'AS', 0)).toBe(true);
     expect(pileFaceUp(state, 'AS', 1)).toBe(false);
+  });
+
+  it('names the called rank and says one card may be played', () => {
+    expect(tablePrompt(playState(0))).toBe('Play one Ace');
+    expect(tablePrompt({ ...playState(0), requiredRank: '4' })).toBe(
+      'Play one Four',
+    );
+    expect(tablePrompt({ ...playState(0), requiredRank: null })).toBe(
+      'Call a rank',
+    );
+    expect(
+      lastCallLine({
+        ...playState(1),
+        lastPlay: { seat: 0, cards: ['AS'], claimRank: '4' },
+      }),
+    ).toBe('Last Four');
   });
 
   it('names the subscribed winner seat when the rules finish', () => {

@@ -11,6 +11,8 @@ function state(): BluffState {
     hands: { '0': ['AS', '10H'], '1': ['KD'] },
     discardPile: [],
     requiredRank: 'A',
+    passed: [],
+    playCounts: {},
     turnSeatIndex: 0,
     lastPlay: null,
     winnerSeatIndex: null,
@@ -107,5 +109,29 @@ describe('BluffDriver input', () => {
       { type: 'play', cards: [] },
       { type: 'play', cards: ['AS'] },
     ]);
+  });
+
+  it('keeps one selected card and calls a rank when leading', () => {
+    const driver = new BluffDriver();
+    const sent: unknown[] = [];
+    const table = state();
+    table.requiredRank = null;
+    const ctx = context(sent, 0);
+    driver.handleInput({ type: 'pointerup', target: 'AS' }, table, ctx);
+    driver.handleInput({ type: 'pointerup', target: '10H' }, table, ctx);
+    driver.handleInput({ type: 'pointerup', target: 'rank:4' }, table, ctx);
+    driver.handleInput({ type: 'pointerup', target: 'play' }, table, ctx);
+    expect(sent).toEqual([{ type: 'play', cards: ['10H'], claimRank: '4' }]);
+  });
+
+  it('sends a pass when a rank is already called', () => {
+    const driver = new BluffDriver();
+    const sent: unknown[] = [];
+    driver.handleInput(
+      { type: 'pointerup', target: 'pass' },
+      state(),
+      context(sent, 0),
+    );
+    expect(sent).toEqual([{ type: 'pass' }]);
   });
 });

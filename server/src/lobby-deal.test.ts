@@ -59,7 +59,7 @@ const dealt = bluffRules.initialState([seat(0), seat(1)], table);
 assert(dealt.phase === 'play', 'dealing leaves the lobby');
 const dealtCards =
   (dealt.hands['0']?.length ?? 0) + (dealt.hands['1']?.length ?? 0);
-assert(dealtCards === 52, 'both seats are dealt the deck');
+assert(dealtCards === 54, 'both seats are dealt the deck');
 assert(dealt.discardPile.length === 0, 'the pile starts empty');
 assert(dealt.turnSeatIndex === 0, 'the first seat acts');
 

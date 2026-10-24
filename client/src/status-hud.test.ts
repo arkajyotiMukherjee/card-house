@@ -31,6 +31,8 @@ function state(overrides: Partial<BluffState>): BluffState {
     hands: { '0': ['AS'], '1': ['2S'] },
     discardPile: [],
     requiredRank: 'A',
+    passed: [],
+    playCounts: {},
     turnSeatIndex: 0,
     lastPlay: null,
     winnerSeatIndex: null,
@@ -43,7 +45,7 @@ describe('bluffStatusHud', () => {
     expect(bluffStatusHud(state({}), seats)).toEqual({
       turn: 'Turn: Ada',
       phase: 'Phase: Play',
-      round: 'Round: 1/13 (A)',
+      round: 'Round: Ace',
     });
   });
 
@@ -53,7 +55,7 @@ describe('bluffStatusHud', () => {
       seats,
     );
     expect(lines.turn).toBe('Turn: Bea');
-    expect(lines.round).toBe('Round: 10/13 (10)');
+    expect(lines.round).toBe('Round: Ten');
   });
 
   it('falls back to the seat index without a seated name', () => {

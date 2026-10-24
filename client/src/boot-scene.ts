@@ -69,17 +69,27 @@ export const spadesDarkImage = new ex.ImageSource(
   '/assets/cards-spades-dark.png',
   nearest,
 );
+export const jokersImage = new ex.ImageSource('/assets/jokers.png', nearest);
+export const jokersDarkImage = new ex.ImageSource(
+  '/assets/jokers-dark.png',
+  nearest,
+);
 export const chipsImage = new ex.ImageSource(
   '/assets/chips-no-outline.png',
   nearest,
 );
 
 const tables = new TableAtlas();
-export const cardAtlas = new CardAtlas(heartsImage, cardBackImage, {
-  diamonds: diamondsImage,
-  clubs: clubsImage,
-  spades: spadesImage,
-});
+export const cardAtlas = new CardAtlas(
+  heartsImage,
+  cardBackImage,
+  {
+    diamonds: diamondsImage,
+    clubs: clubsImage,
+    spades: spadesImage,
+  },
+  jokersImage,
+);
 export const chipAtlas = new ChipAtlas(chipsImage);
 
 const FRONT_IMAGES: Record<
@@ -89,6 +99,7 @@ const FRONT_IMAGES: Record<
     diamonds: ex.ImageSource;
     clubs: ex.ImageSource;
     spades: ex.ImageSource;
+    jokers: ex.ImageSource;
   }
 > = {
   light: {
@@ -96,12 +107,14 @@ const FRONT_IMAGES: Record<
     diamonds: diamondsImage,
     clubs: clubsImage,
     spades: spadesImage,
+    jokers: jokersImage,
   },
   dark: {
     hearts: heartsDarkImage,
     diamonds: diamondsDarkImage,
     clubs: clubsDarkImage,
     spades: spadesDarkImage,
+    jokers: jokersDarkImage,
   },
 };
 
@@ -125,11 +138,16 @@ export function personalCardAtlas(): CardAtlas {
     return cached;
   }
   const fronts = FRONT_IMAGES[appearance.front];
-  const atlas = new CardAtlas(fronts.hearts, BACK_IMAGES[appearance.back], {
-    diamonds: fronts.diamonds,
-    clubs: fronts.clubs,
-    spades: fronts.spades,
-  });
+  const atlas = new CardAtlas(
+    fronts.hearts,
+    BACK_IMAGES[appearance.back],
+    {
+      diamonds: fronts.diamonds,
+      clubs: fronts.clubs,
+      spades: fronts.spades,
+    },
+    fronts.jokers,
+  );
   personalCardAtlases[key] = atlas;
   return atlas;
 }
@@ -164,6 +182,8 @@ export const demoImages = [
   diamondsDarkImage,
   clubsDarkImage,
   spadesDarkImage,
+  jokersImage,
+  jokersDarkImage,
   chipsImage,
   ...TABLE_STYLES.map((style) => tableSprites[style].image),
   pixelFont,

@@ -144,6 +144,9 @@ export function eventMessage(
   if (!parsed) {
     return null;
   }
+  if (parsed.kind === 'pass') {
+    return clip(`${shortName(seatName(parsed.seat))} passed`);
+  }
   if (parsed.kind === 'play') {
     const cards = parsed.count === 1 ? 'card' : 'cards';
     return clip(

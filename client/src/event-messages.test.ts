@@ -60,6 +60,12 @@ describe('eventMessage', () => {
     ).toBe('Bea called bluff but Ada was honest. Bea takes the pile');
   });
 
+  it('announces a pass', () => {
+    expect(eventMessage('bluff', { kind: 'pass', seat: 0 }, names)).toBe(
+      'Ada passed',
+    );
+  });
+
   it('announces a play', () => {
     expect(
       eventMessage(
