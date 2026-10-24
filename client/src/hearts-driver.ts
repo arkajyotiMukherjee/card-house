@@ -12,6 +12,11 @@ import {
 import { pixelFont } from './boot-scene';
 import type { CardAtlas } from './card-atlas';
 import type { GameDriver, InputEvent, RenderContext } from './game-driver';
+import {
+  isFrontHandCard,
+  localHandHitBoxes,
+  type CardHitBox,
+} from './card-hit';
 import { HandHover, placeCardLift, startHandHoverClock } from './hand-hover';
 import {
   CARD_DRAW,
@@ -509,7 +514,17 @@ export class HeartsDriver implements GameDriver<HeartsState> {
         this.handHover.leave(cardId);
         this.onCard('pointerleave', cardId);
       });
-      actor.on('pointerup', () => {
+      actor.on('pointerup', (event) => {
+        if (
+          !isFrontHandCard(
+            cardId,
+            event.worldPos.x,
+            event.worldPos.y,
+            this.handBoxes(),
+          )
+        ) {
+          return;
+        }
         this.onCard('pointerup', cardId);
       });
       ctx.scene.add(actor);
@@ -656,6 +671,16 @@ export class HeartsDriver implements GameDriver<HeartsState> {
       }
       this.applyLift(cardId, state, ctx);
     }
+  }
+
+  private handBoxes(): CardHitBox[] {
+    const state = this.state;
+    const ctx = this.ctx;
+    if (!state || !ctx || ctx.meSeatIndex === null) {
+      return [];
+    }
+    const hand = state.hands[String(ctx.meSeatIndex)] ?? [];
+    return localHandHitBoxes(hand, this.cards, CARD_DRAW);
   }
 
   private onCard(
