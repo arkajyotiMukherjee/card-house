@@ -1,5 +1,5 @@
 import {
-  BLUFF_RANKS,
+  BLUFF_RANK_NAMES,
   type BluffPhase,
   type BluffState,
 } from '../../src/shared/games/bluff';
@@ -48,7 +48,7 @@ function shortName(name: string): string {
 /**
  * Status lines from the subscribed Bluff `stateJson`.
  * `turnSeatIndex` names the player, `phase` is the label, and the round is the
- * place of `requiredRank` in the Ace-to-King run. Bluff stores no other counter.
+ * rank the lead called. `Call` means the lead has not called yet.
  */
 export function bluffStatusHud(
   state: BluffState,
@@ -61,11 +61,13 @@ export function bluffStatusHud(
     const name = seat?.name ?? '';
     turn = name.length > 0 ? shortName(name) : `Seat ${seatIndex}`;
   }
-  const rankIndex = BLUFF_RANKS.indexOf(state.requiredRank);
-  const round =
-    state.phase === 'lobby'
-      ? '-'
-      : `${rankIndex + 1}/${BLUFF_RANKS.length} (${state.requiredRank})`;
+  let round = '-';
+  if (state.phase !== 'lobby') {
+    round =
+      state.requiredRank === null
+        ? 'Call'
+        : BLUFF_RANK_NAMES[state.requiredRank];
+  }
   return {
     turn: `Turn: ${turn}`,
     phase: `Phase: ${PHASE_LABELS[state.phase]}`,

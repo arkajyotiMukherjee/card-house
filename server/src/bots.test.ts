@@ -1,5 +1,12 @@
 import { blackjackRules } from '../../src/shared/games/blackjack.ts';
-import { bluffRules } from '../../src/shared/games/bluff.ts';
+import {
+  bluffRules,
+  cardIsTrue,
+  rankOfCard,
+  type BluffIntent,
+  type BluffState,
+} from '../../src/shared/games/bluff.ts';
+import { bluffStrategy } from '../../src/shared/games/bots/bluff.ts';
 import {
   crazyEightsRules,
   type CrazyEightsIntent,
@@ -300,3 +307,156 @@ const stopped = playBotTurns(
 assert(stopped.applied.length === 0, 'bots wait for the person');
 assert(stopped.pending === false, 'waiting is not a scheduled leftover');
 assert(stopped.error === undefined, 'waiting is not an error');
+
+function bluffPlaying(overrides: Partial<BluffState>): BluffState {
+  return {
+    phase: 'play',
+    hands: {},
+    discardPile: [],
+    requiredRank: null,
+    passed: [],
+    playCounts: {},
+    turnSeatIndex: 0,
+    lastPlay: null,
+    winnerSeatIndex: null,
+    ...overrides,
+  };
+}
+
+function sameChoice(state: BluffState, seatIndex = 0): unknown {
+  const first = bluffStrategy.choose(state, seatIndex);
+  const second = bluffStrategy.choose(state, seatIndex);
+  assert(
+    JSON.stringify(first) === JSON.stringify(second),
+    'the same Bluff state chooses the same cards',
+  );
+  return first;
+}
+
+function asPlay(intent: unknown): BluffIntent & { type: 'play' } {
+  if (
+    !intent ||
+    typeof intent !== 'object' ||
+    !('type' in intent) ||
+    intent.type !== 'play' ||
+    !('cards' in intent) ||
+    !Array.isArray(intent.cards) ||
+    intent.cards.length !== 1 ||
+    typeof intent.cards[0] !== 'string'
+  ) {
+    throw new Error('the Bluff bot plays one card');
+  }
+  return intent as BluffIntent & { type: 'play' };
+}
+
+function playedCard(intent: unknown): string {
+  const card = asPlay(intent).cards[0];
+  if (card === undefined) {
+    throw new Error('the Bluff bot plays one card');
+  }
+  return card;
+}
+
+const followHand = ['2C', '4D', 'KS', '4H'];
+for (const [count, card, truthful] of [
+  [0, '2C', false],
+  [1, '4D', true],
+  [2, '4D', true],
+  [3, '4D', true],
+  [4, '2C', false],
+  [8, '2C', false],
+] as const) {
+  const state = bluffPlaying({
+    hands: { '0': followHand, '1': ['KH'] },
+    requiredRank: '4',
+    playCounts: { '0': count, '1': 99 },
+    turnSeatIndex: 0,
+  });
+  const intent = sameChoice(state);
+  const cardId = playedCard(intent);
+  assert(cardId === card, `play ${count + 1} chooses ${card}, saw ${cardId}`);
+  assert(
+    cardIsTrue(cardId, '4') === truthful,
+    `play ${count + 1} ${truthful ? 'tells the truth' : 'lies'}`,
+  );
+  bluffRules.applyIntent(state, asPlay(intent), {
+    seat: seat(0),
+    now: 1,
+  });
+}
+
+const onlyTruth = bluffPlaying({
+  hands: { '0': ['4S', '4H'], '1': ['KH'] },
+  requiredRank: '4',
+  playCounts: { '0': 0 },
+  turnSeatIndex: 0,
+});
+const truthFallback = playedCard(sameChoice(onlyTruth));
+assert(
+  cardIsTrue(truthFallback, '4'),
+  'a lie falls back to one card of the called rank',
+);
+
+const onlyLie = bluffPlaying({
+  hands: { '0': ['KS', '2C'], '1': ['KH'] },
+  requiredRank: '4',
+  playCounts: { '0': 1 },
+  turnSeatIndex: 0,
+});
+const lieFallback = playedCard(sameChoice(onlyLie));
+assert(
+  !cardIsTrue(lieFallback, '4'),
+  'the truth falls back to a card of another rank',
+);
+assert(lieFallback === '2C', 'the fallback lie is the same low card');
+
+const jokersOnly = bluffPlaying({
+  hands: { '0': ['JR', 'JB'], '1': ['KH'] },
+  requiredRank: 'Q',
+  playCounts: { '0': 0 },
+  turnSeatIndex: 0,
+});
+const jokerPlay = playedCard(sameChoice(jokersOnly));
+assert(jokerPlay === 'JB', 'a joker-only hand plays the same joker');
+assert(cardIsTrue(jokerPlay, 'Q'), 'a joker is a true card, not a queen');
+
+const leadLie = bluffPlaying({
+  hands: { '0': ['4H', '2C'], '1': ['KH'] },
+  requiredRank: null,
+  playCounts: { '0': 0 },
+  turnSeatIndex: 0,
+});
+const leadLieIntent = asPlay(sameChoice(leadLie));
+const leadLieCard = playedCard(leadLieIntent);
+assert(
+  leadLieIntent.claimRank === 'A' &&
+    leadLieCard === '2C' &&
+    rankOfCard(leadLieCard) !== 'A',
+  'the first lead play calls a rank the card is not',
+);
+bluffRules.applyIntent(leadLie, leadLieIntent, {
+  seat: seat(0),
+  now: 1,
+});
+
+const leadTruth = bluffPlaying({
+  ...leadLie,
+  playCounts: { '0': 1 },
+});
+const leadTruthIntent = asPlay(sameChoice(leadTruth));
+const leadTruthCard = playedCard(leadTruthIntent);
+assert(
+  leadTruthIntent.claimRank === '2' && leadTruthCard === '2C',
+  'the next lead play calls the card rank',
+);
+
+const emptyHand = bluffPlaying({
+  hands: { '0': [], '1': ['KH'] },
+  requiredRank: 'A',
+  turnSeatIndex: 0,
+  lastPlay: { seat: 1, cards: ['KH'], claimRank: 'A' },
+});
+assert(
+  JSON.stringify(sameChoice(emptyHand)) === JSON.stringify({ type: 'pass' }),
+  'an empty hand passes so the last card can stand',
+);

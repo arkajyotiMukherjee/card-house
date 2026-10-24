@@ -104,8 +104,9 @@ Sprites are SoapBoy's Pixel Poker Pack, checked in under `card-assest -pack`. Th
 
 The client loads copies in `client/public/assets/`, not the pack directory:
 
-- `cards-hearts.png`, `cards-diamonds.png`, `cards-clubs.png`, `cards-spades.png` — light suit sheets, 320×256, five columns by four rows of 64×64. Column 0 row 0 is blank. The Ace is the next cell. The Jack, a joker, the King, and the Queen share row 2.
+- `cards-hearts.png`, `cards-diamonds.png`, `cards-clubs.png`, `cards-spades.png` — light suit sheets, 320×256, five columns by four rows of 64×64. Column 0 row 0 is blank. The Ace is the next cell. Row 2 is 10, Jack index, Jack face, Queen index, Queen face. Row 3 starts with the King index and the King face.
 - `cards-hearts-dark.png`, `cards-diamonds-dark.png`, `cards-clubs-dark.png`, `cards-spades-dark.png` — the dark standard deck variant, same grid. `card-appearance.ts` offers this as the `dark` front style a player can pick for their own cards.
+- `jokers.png`, `jokers-dark.png` — 128×64, two 64×64 cells. The left cell is the red joker and the right cell is the black joker. Both say Joker.
 - `card-back-01.png`, `card-back-02.png` — 192×128, three columns by two rows. The first cell is the back. `card-appearance.ts` offers these as the `classic` and `bold` back styles.
 - `chips-no-outline.png` — 192×44, six 32×44 chips, left to right: green, red, blue, yellow, black, white.
 - `table-green.png`, `table-purple.png`, `table-red.png` — 129×80, no guide overlay.

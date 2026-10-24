@@ -1,8 +1,16 @@
 import * as ex from 'excalibur';
-import { BLUFF_GAME_TYPE, type BluffState } from '../../src/shared/games/bluff';
+import {
+  BLUFF_GAME_TYPE,
+  BLUFF_RANKS,
+  isJoker,
+  rankOfCard,
+  type BluffRank,
+  type BluffState,
+} from '../../src/shared/games/bluff';
 import {
   CARD_DRAW,
   CHALLENGE_BUTTON,
+  PASS_BUTTON,
   PILE_X,
   PILE_Y,
   PLAY_BUTTON,
@@ -10,11 +18,14 @@ import {
   faceForCard,
   finishedLine,
   handPositions,
+  lastCallLine,
   legalCard,
   opponentBackPositions,
   pileFaceUp,
   pilePositions,
+  rankCallButtons,
   selectedPlayCards,
+  tablePrompt,
 } from './bluff-layout';
 import {
   BUTTON_FONT_SIZE,
@@ -137,6 +148,9 @@ function cardSprite(
   if (!faceUp) {
     return atlas.back();
   }
+  if (isJoker(cardId)) {
+    return atlas.joker(cardId === 'JR' ? 'red' : 'black');
+  }
   const face = faceForCard(cardId);
   if (!face) {
     return atlas.back();
@@ -163,6 +177,14 @@ export class BluffDriver implements GameDriver<BluffState> {
   private readonly handHover = new HandHover();
   private hoverClock: ex.Actor | null = null;
   private buttonsReady = false;
+  private claimRank: BluffRank = 'A';
+  private claimTouched = false;
+  private passActor: ex.Actor | null = null;
+  private rankActors: {
+    rank: BluffRank;
+    actor: ex.Actor;
+    face: ex.Rectangle;
+  }[] = [];
   private state: BluffState | null = null;
   private ctx: RenderContext | null = null;
 
@@ -173,9 +195,19 @@ export class BluffDriver implements GameDriver<BluffState> {
     if (!this.buttonsReady) {
       this.addButton(ctx, PLAY_BUTTON, 'Play', 'play');
       this.addButton(ctx, CHALLENGE_BUTTON, 'Challenge', 'challenge');
+      this.passActor = this.addButton(ctx, PASS_BUTTON, 'Pass', 'pass').actor;
+      for (const box of rankCallButtons()) {
+        const made = this.addButton(ctx, box, box.rank, `rank:${box.rank}`);
+        this.rankActors.push({
+          rank: box.rank,
+          actor: made.actor,
+          face: made.face,
+        });
+      }
       this.buttonsReady = true;
     }
     this.syncLabels(state, ctx);
+    this.syncCalls(state, ctx);
     if (state.phase === 'lobby') {
       this.clearTableCards();
       return;
@@ -197,8 +229,16 @@ export class BluffDriver implements GameDriver<BluffState> {
       this.sendPlay(state, ctx);
       return;
     }
+    if (event.target === 'pass' && event.type === 'pointerup') {
+      ctx.sendIntent({ type: 'pass' });
+      return;
+    }
     if (event.target === 'challenge' && event.type === 'pointerup') {
       ctx.sendIntent({ type: 'challenge' });
+      return;
+    }
+    if (event.type === 'pointerup' && event.target.startsWith('rank:')) {
+      this.chooseRank(event.target.slice('rank:'.length), state);
       return;
     }
     if (!legalCard(state, ctx.meSeatIndex, event.target)) {
@@ -217,12 +257,17 @@ export class BluffDriver implements GameDriver<BluffState> {
       return;
     }
     if (event.type === 'pointerup') {
+      const previous = [...this.selected];
       if (this.selected.has(event.target)) {
         this.selected.delete(event.target);
       } else {
+        this.selected.clear();
         this.selected.add(event.target);
+        this.claimFromCard(event.target, state);
       }
-      this.applyLift(event.target, state, ctx);
+      for (const cardId of new Set([...previous, event.target])) {
+        this.applyLift(cardId, state, ctx);
+      }
     }
   }
 
@@ -235,6 +280,16 @@ export class BluffDriver implements GameDriver<BluffState> {
       typeof intent === 'object' && intent !== null && 'type' in intent
         ? intent.type
         : null;
+    if (type === 'pass') {
+      this.flashBox(
+        ctx,
+        PASS_BUTTON.x,
+        PASS_BUTTON.y,
+        PASS_BUTTON.w,
+        PASS_BUTTON.h,
+      );
+      return;
+    }
     if (type === 'challenge') {
       this.flashBox(
         ctx,
@@ -301,6 +356,10 @@ export class BluffDriver implements GameDriver<BluffState> {
     }
     this.buttons = [];
     this.buttonsReady = false;
+    this.passActor = null;
+    this.rankActors = [];
+    this.claimRank = 'A';
+    this.claimTouched = false;
     this.selected.clear();
     this.hover = null;
     this.stopHoverClock();
@@ -314,7 +373,56 @@ export class BluffDriver implements GameDriver<BluffState> {
     }
     const hand = state.hands[String(ctx.meSeatIndex)] ?? [];
     const cards = selectedPlayCards(hand, this.selected);
+    if (state.requiredRank === null) {
+      ctx.sendIntent({ type: 'play', cards, claimRank: this.claimRank });
+      return;
+    }
     ctx.sendIntent({ type: 'play', cards });
+  }
+
+  private claimFromCard(cardId: string, state: BluffState): void {
+    if (state.requiredRank !== null || this.claimTouched) {
+      return;
+    }
+    const rank = rankOfCard(cardId);
+    if (rank) {
+      this.claimRank = rank;
+    }
+  }
+
+  private chooseRank(rank: string, state: BluffState): void {
+    if (
+      state.requiredRank !== null ||
+      !(BLUFF_RANKS as readonly string[]).includes(rank)
+    ) {
+      return;
+    }
+    this.claimRank = rank as BluffRank;
+    this.claimTouched = true;
+    this.paintRanks(true);
+  }
+
+  private syncCalls(state: BluffState, ctx: RenderContext): void {
+    const mine =
+      state.phase === 'play' &&
+      ctx.meSeatIndex !== null &&
+      state.turnSeatIndex === ctx.meSeatIndex;
+    const calling = mine && state.requiredRank === null;
+    if (!calling) {
+      this.claimTouched = false;
+    }
+    if (this.passActor) {
+      this.passActor.graphics.isVisible = mine && state.requiredRank !== null;
+    }
+    this.paintRanks(calling);
+  }
+
+  private paintRanks(visible: boolean): void {
+    for (const row of this.rankActors) {
+      row.actor.graphics.isVisible = visible;
+      row.face.strokeColor =
+        visible && row.rank === this.claimRank ? STROKE_HOT : STROKE;
+    }
   }
 
   private syncLabels(state: BluffState, ctx: RenderContext): void {
@@ -334,20 +442,10 @@ export class BluffDriver implements GameDriver<BluffState> {
       ctx.meSeatIndex !== null && state.turnSeatIndex === ctx.meSeatIndex;
     const turn = mine ? 'Your turn' : 'Wait';
     this.labels.push(this.textActor(ctx, 748, 428, turn, GOLD));
-    this.labels.push(
-      this.textActor(ctx, 430, 196, `Need ${state.requiredRank}`, GOLD),
-    );
-    if (state.lastPlay) {
-      const last = state.lastPlay;
-      this.labels.push(
-        this.textActor(
-          ctx,
-          390,
-          214,
-          `Last ${last.cards.length} ${last.claimRank}`,
-          DIM,
-        ),
-      );
+    this.labels.push(this.textActor(ctx, 390, 180, tablePrompt(state), GOLD));
+    const last = lastCallLine(state);
+    if (last) {
+      this.labels.push(this.textActor(ctx, 390, 198, last, DIM));
     }
     for (const seat of ctx.seats) {
       if (seat.self) {
@@ -741,8 +839,8 @@ export class BluffDriver implements GameDriver<BluffState> {
     ctx: RenderContext,
     box: { x: number; y: number; w: number; h: number },
     label: string,
-    target: 'play' | 'challenge',
-  ): void {
+    target: 'play' | 'challenge' | 'pass' | `rank:${BluffRank}`,
+  ): { actor: ex.Actor; face: ex.Rectangle } {
     const actor = new ex.Actor({
       pos: ex.vec(box.x, box.y),
       anchor: ex.vec(0, 0),
@@ -762,8 +860,12 @@ export class BluffDriver implements GameDriver<BluffState> {
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;
     });
+    const rank = target.startsWith('rank:')
+      ? target.slice('rank:'.length)
+      : null;
     actor.on('pointerleave', () => {
-      face.strokeColor = STROKE;
+      face.strokeColor =
+        rank !== null && rank === this.claimRank ? STROKE_HOT : STROKE;
       face.color = BUTTON;
       caption.pos = ex.vec(rest.x, rest.y);
     });
@@ -783,5 +885,6 @@ export class BluffDriver implements GameDriver<BluffState> {
     });
     ctx.scene.add(actor);
     this.buttons.push(actor);
+    return { actor, face };
   }
 }

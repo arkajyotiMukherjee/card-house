@@ -27,17 +27,38 @@ export const BLUFF_RANKS = [
 
 export const BLUFF_SUITS = ['S', 'H', 'D', 'C'] as const;
 
+/** Red joker, then black joker. Neither id is a queen. */
+export const BLUFF_JOKERS = ['JR', 'JB'] as const;
+
 const BLUFF_PHASES = ['lobby', 'play', 'finished'] as const;
 
 const RANK_SET: ReadonlySet<string> = new Set(BLUFF_RANKS);
 const SUIT_SET: ReadonlySet<string> = new Set(BLUFF_SUITS);
+const JOKER_SET: ReadonlySet<string> = new Set(BLUFF_JOKERS);
 
 export type BluffRank = (typeof BLUFF_RANKS)[number];
 export type BluffSuit = (typeof BLUFF_SUITS)[number];
+export type BluffJokerId = (typeof BLUFF_JOKERS)[number];
 export type BluffPhase = (typeof BLUFF_PHASES)[number];
 
-/** Rank plus suit, such as `AS` or `10H`. */
-export type BluffCardId = `${BluffRank}${BluffSuit}`;
+/** Rank plus suit, such as `AS` or `10H`, or a joker id `JR` / `JB`. */
+export type BluffCardId = `${BluffRank}${BluffSuit}` | BluffJokerId;
+
+export const BLUFF_RANK_NAMES: Record<BluffRank, string> = {
+  A: 'Ace',
+  '2': 'Two',
+  '3': 'Three',
+  '4': 'Four',
+  '5': 'Five',
+  '6': 'Six',
+  '7': 'Seven',
+  '8': 'Eight',
+  '9': 'Nine',
+  '10': 'Ten',
+  J: 'Jack',
+  Q: 'Queen',
+  K: 'King',
+};
 
 export interface BluffLastPlay {
   seat: number;
@@ -50,23 +71,31 @@ export interface BluffState {
   /** Seat index string to the cards that seat holds. */
   hands: Record<string, string[]>;
   discardPile: string[];
-  requiredRank: BluffRank;
+  /** Rank called for this round. Null while the lead has not called. */
+  requiredRank: BluffRank | null;
+  /** Seats that passed and cannot play again until the next call. */
+  passed: number[];
+  /** Plays each seat has made in the current hand. The Bluff bot reads its own. */
+  playCounts: Record<string, number>;
   turnSeatIndex: number | null;
   lastPlay: BluffLastPlay | null;
   winnerSeatIndex: number | null;
 }
 
 export type BluffIntent =
-  { type: 'play'; cards: string[] } | { type: 'challenge' };
+  | { type: 'play'; cards: string[]; claimRank?: BluffRank }
+  | { type: 'pass' }
+  | { type: 'challenge' };
 
 /** What a table event says. Seat numbers stay indexes; clients add names. */
 export type BluffEventNote =
   | { kind: 'play'; seat: number; count: number; claimRank: BluffRank }
+  | { kind: 'pass'; seat: number }
   | {
       kind: 'challenge';
       challenger: number;
       accused: number;
-      /** True when the accused played cards that were not the claimed rank. */
+      /** True when the accused played a card that was not the called rank. */
       bluff: boolean;
       pickedUp: number;
     };
@@ -77,7 +106,7 @@ export const bluffGameDefinition = {
   minPlayers: 2,
   maxPlayers: 6,
   howToPlay:
-    '# Bluff\n\nPlay 1 to 4 cards on your turn. The table claims they are the required rank. That rank starts at Ace and steps forward after each play. The next player may challenge the last play or play in turn. A false claim makes the previous player pick up the pile. An honest claim makes the challenger pick it up. Empty your hand to win.',
+    '# Bluff\n\nThe lead plays one card face down and calls a rank. That call may be a lie. A joker is wild and is always a true card. It is not a queen. Each other player plays one card of that rank or passes. A pass sits out for the rest of the round. Anyone else may call Bluff before the next play. A lie picks up the pile. An honest call, including a joker, makes the challenger pick it up. If everyone passes, the pile is set aside and the last player to play leads a new rank. Empty your hand to win.',
 } satisfies GameDefinition;
 
 function asRecord(value: unknown, message: string): Record<string, unknown> {
@@ -108,14 +137,29 @@ function isPhase(value: unknown): value is BluffPhase {
   );
 }
 
+export function isJoker(card: string): card is BluffJokerId {
+  return JOKER_SET.has(card);
+}
+
 /** Rank encoded at the front of a card id. `10` is the only two-letter rank. */
 export function rankOfCard(card: string): BluffRank | null {
+  if (isJoker(card)) {
+    return null;
+  }
   const suit = card.slice(-1);
   const rank = card.slice(0, -1);
   if (!SUIT_SET.has(suit) || !isRank(rank)) {
     return null;
   }
   return rank;
+}
+
+/** A joker matches every call. Any other card matches only its own rank. */
+export function cardIsTrue(card: string, rank: BluffRank): boolean {
+  if (isJoker(card)) {
+    return true;
+  }
+  return rankOfCard(card) === rank;
 }
 
 function readLastPlay(value: unknown): BluffLastPlay | null {
@@ -136,13 +180,50 @@ function readLastPlay(value: unknown): BluffLastPlay | null {
   };
 }
 
+function readPassed(value: unknown): number[] {
+  if (!Array.isArray(value)) {
+    throw new Error('Invalid table state');
+  }
+  const passed: number[] = [];
+  for (const seat of value) {
+    if (!isSeatIndex(seat)) {
+      throw new Error('Invalid table state');
+    }
+    passed.push(seat);
+  }
+  return passed;
+}
+
+function readPlayCounts(value: unknown): Record<string, number> {
+  const record = asRecord(value, 'Invalid table state');
+  const counts: Record<string, number> = {};
+  for (const key of Object.keys(record)) {
+    const seatIndex = Number(key);
+    const count = record[key];
+    if (
+      !isSeatIndex(seatIndex) ||
+      handKey(seatIndex) !== key ||
+      typeof count !== 'number' ||
+      !Number.isSafeInteger(count) ||
+      count < 0
+    ) {
+      throw new Error('Invalid table state');
+    }
+    counts[key] = count;
+  }
+  return counts;
+}
+
 function handKey(seatIndex: number): string {
   return String(seatIndex);
 }
 
 export function readBluffState(value: unknown): BluffState {
   const record = asRecord(value, 'Invalid table state');
-  if (!isPhase(record.phase) || !isRank(record.requiredRank)) {
+  if (!isPhase(record.phase)) {
+    throw new Error('Invalid table state');
+  }
+  if (!(record.requiredRank === null || isRank(record.requiredRank))) {
     throw new Error('Invalid table state');
   }
   if (!isStringArray(record.discardPile)) {
@@ -174,6 +255,8 @@ export function readBluffState(value: unknown): BluffState {
     hands,
     discardPile: record.discardPile.slice(),
     requiredRank: record.requiredRank,
+    passed: readPassed(record.passed),
+    playCounts: readPlayCounts(record.playCounts),
     turnSeatIndex: record.turnSeatIndex,
     lastPlay: readLastPlay(record.lastPlay),
     winnerSeatIndex: record.winnerSeatIndex,
@@ -185,6 +268,9 @@ export function readBluffIntent(value: unknown): BluffIntent {
   if (record.type === 'challenge') {
     return { type: 'challenge' };
   }
+  if (record.type === 'pass') {
+    return { type: 'pass' };
+  }
   if (record.type !== 'play' || !Array.isArray(record.cards)) {
     throw new Error('Invalid intent');
   }
@@ -195,7 +281,13 @@ export function readBluffIntent(value: unknown): BluffIntent {
     }
     cards.push(card);
   }
-  return { type: 'play', cards };
+  if (record.claimRank === undefined) {
+    return { type: 'play', cards };
+  }
+  if (!isRank(record.claimRank)) {
+    throw new Error('Invalid intent');
+  }
+  return { type: 'play', cards, claimRank: record.claimRank };
 }
 
 export function readBluffEventNote(value: unknown): BluffEventNote | null {
@@ -203,6 +295,9 @@ export function readBluffEventNote(value: unknown): BluffEventNote | null {
     return null;
   }
   const note = value as Record<string, unknown>;
+  if (note.kind === 'pass' && isSeatIndex(note.seat)) {
+    return { kind: 'pass', seat: note.seat };
+  }
   if (
     note.kind === 'play' &&
     isSeatIndex(note.seat) &&
@@ -239,7 +334,9 @@ function notStartedState(): BluffState {
     phase: 'lobby',
     hands: {},
     discardPile: [],
-    requiredRank: 'A',
+    requiredRank: null,
+    passed: [],
+    playCounts: {},
     turnSeatIndex: null,
     lastPlay: null,
     winnerSeatIndex: null,
@@ -252,6 +349,9 @@ function freshDeck(): string[] {
     for (const rank of BLUFF_RANKS) {
       deck.push(`${rank}${suit}`);
     }
+  }
+  for (const joker of BLUFF_JOKERS) {
+    deck.push(joker);
   }
   return deck;
 }
@@ -327,6 +427,21 @@ function nextSeat(
   return seats[0];
 }
 
+function nextActive(state: BluffState, after: number): number | null {
+  const seats = seatedIndexes(state.hands).filter(
+    (seat) => !state.passed.includes(seat),
+  );
+  if (seats.length === 0) {
+    return null;
+  }
+  for (const seat of seats) {
+    if (seat > after) {
+      return seat;
+    }
+  }
+  return seats[0];
+}
+
 function seatsWithCards(hands: Record<string, string[]>): number[] {
   const holding: number[] = [];
   for (const seat of seatedIndexes(hands)) {
@@ -367,56 +482,154 @@ function dealState(players: GameSeat[], tableId: string): BluffState {
     phase: 'play',
     hands,
     discardPile: [],
-    requiredRank: 'A',
+    requiredRank: null,
+    passed: [],
+    playCounts: {},
     turnSeatIndex: ordered[0].seatIndex,
     lastPlay: null,
     winnerSeatIndex: null,
   };
 }
 
-function nextRank(rank: BluffRank): BluffRank {
-  const index = BLUFF_RANKS.indexOf(rank);
-  return BLUFF_RANKS[(index + 1) % BLUFF_RANKS.length];
+/**
+ * Playing the last card does not win until the next player lets it stand.
+ * A play or a pass closes that window. A challenge still judges the card.
+ */
+function acceptUnchallengedOut(state: BluffState): BluffState | null {
+  const lastPlay = state.lastPlay;
+  if (lastPlay === null) {
+    return null;
+  }
+  const hand = state.hands[handKey(lastPlay.seat)];
+  if (hand === undefined || hand.length > 0) {
+    return null;
+  }
+  return {
+    phase: 'finished',
+    hands: state.hands,
+    discardPile: state.discardPile.slice(),
+    requiredRank: state.requiredRank,
+    passed: state.passed.slice(),
+    playCounts: state.playCounts,
+    turnSeatIndex: null,
+    lastPlay: copyLastPlay(lastPlay),
+    winnerSeatIndex: lastPlay.seat,
+  };
+}
+
+function calledRank(card: string, claimRank: BluffRank | undefined): BluffRank {
+  if (claimRank !== undefined) {
+    return claimRank;
+  }
+  return rankOfCard(card) ?? 'A';
 }
 
 function applyPlay(
   state: BluffState,
   cards: string[],
+  claimRank: BluffRank | undefined,
   seatIndex: number,
 ): BluffState {
+  const accepted = acceptUnchallengedOut(state);
+  if (accepted) {
+    return accepted;
+  }
   if (state.phase !== 'play') {
     throw new Error('Invalid intent');
   }
-  if (cards.length < 1 || cards.length > 4) {
-    throw new Error('Pick 1 to 4 cards');
+  if (cards.length !== 1) {
+    throw new Error('Play one card');
+  }
+  if (state.passed.includes(seatIndex)) {
+    throw new Error('You passed');
   }
   const key = handKey(seatIndex);
   const hand = state.hands[key];
   if (!hand) {
     throw new Error('Invalid intent');
   }
-  const remaining = hand.slice();
-  for (const card of cards) {
-    const index = remaining.indexOf(card);
-    if (index < 0) {
-      throw new Error('Invalid intent');
-    }
-    remaining.splice(index, 1);
+  const card = cards[0];
+  if (card === undefined) {
+    throw new Error('Play one card');
   }
+  const index = hand.indexOf(card);
+  if (index < 0) {
+    throw new Error('Invalid intent');
+  }
+  let rank = state.requiredRank;
+  if (rank === null) {
+    rank = calledRank(card, claimRank);
+  } else if (claimRank !== undefined && claimRank !== rank) {
+    throw new Error('The rank is already called');
+  }
+  const remaining = hand.slice();
+  remaining.splice(index, 1);
   const hands: Record<string, string[]> = { ...state.hands, [key]: remaining };
-  const emptied = remaining.length === 0;
+  const playCounts = {
+    ...state.playCounts,
+    [key]: (state.playCounts[key] ?? 0) + 1,
+  };
   return {
-    phase: emptied ? 'finished' : 'play',
+    phase: 'play',
     hands,
-    discardPile: state.discardPile.concat(cards),
-    requiredRank: nextRank(state.requiredRank),
-    turnSeatIndex: nextSeat(hands, seatIndex),
+    discardPile: state.discardPile.concat([card]),
+    requiredRank: rank,
+    passed: state.passed.slice(),
+    playCounts,
+    turnSeatIndex: nextActive(state, seatIndex),
     lastPlay: {
       seat: seatIndex,
-      cards: cards.slice(),
-      claimRank: state.requiredRank,
+      cards: [card],
+      claimRank: rank,
     },
-    winnerSeatIndex: emptied ? seatIndex : null,
+    winnerSeatIndex: null,
+  };
+}
+
+function applyPass(state: BluffState, seatIndex: number): BluffState {
+  const accepted = acceptUnchallengedOut(state);
+  if (accepted) {
+    return accepted;
+  }
+  if (state.phase !== 'play') {
+    throw new Error('Invalid intent');
+  }
+  if (state.requiredRank === null) {
+    throw new Error('Call a rank');
+  }
+  if (state.passed.includes(seatIndex)) {
+    throw new Error('You passed');
+  }
+  const passed = state.passed.concat(seatIndex);
+  const stillIn = seatedIndexes(state.hands).filter(
+    (seat) => !passed.includes(seat),
+  );
+  if (stillIn.length === 0) {
+    const lead = state.lastPlay?.seat ?? seatIndex;
+    const leadHand = state.hands[handKey(lead)];
+    const leadOut = leadHand !== undefined && leadHand.length === 0;
+    return {
+      phase: leadOut ? 'finished' : 'play',
+      hands: state.hands,
+      discardPile: [],
+      requiredRank: null,
+      passed: [],
+      playCounts: state.playCounts,
+      turnSeatIndex: leadOut ? null : lead,
+      lastPlay: null,
+      winnerSeatIndex: leadOut ? lead : null,
+    };
+  }
+  return {
+    phase: 'play',
+    hands: state.hands,
+    discardPile: state.discardPile.slice(),
+    requiredRank: state.requiredRank,
+    passed,
+    playCounts: state.playCounts,
+    turnSeatIndex: nextActive({ ...state, passed }, seatIndex),
+    lastPlay: copyLastPlay(state.lastPlay),
+    winnerSeatIndex: null,
   };
 }
 
@@ -431,29 +644,35 @@ function givePile(
 }
 
 /**
- * A challenge judges only the last play.
- * The player who does not pick up the pile acts next.
+ * A challenge judges only the last play and ends the round.
+ * The next lead is the seat to the left of the player who played.
  * An emptied hand wins only when that play was honest.
  */
 function applyChallenge(state: BluffState, challenger: number): BluffState {
   if (state.lastPlay === null) {
     throw new Error('Nothing to challenge');
   }
+  if (state.lastPlay.seat === challenger) {
+    throw new Error('Not your play to challenge');
+  }
   const lastPlay = state.lastPlay;
   const previousHand = state.hands[handKey(lastPlay.seat)];
   const emptied = previousHand !== undefined && previousHand.length === 0;
-  const honest = lastPlay.cards.every(
-    (card) => rankOfCard(card) === lastPlay.claimRank,
+  const honest = lastPlay.cards.every((card) =>
+    cardIsTrue(card, lastPlay.claimRank),
   );
   const picker = honest ? challenger : lastPlay.seat;
   const hands = givePile(state.hands, picker, state.discardPile);
   const confirmedWin = honest && emptied;
+  const lead = nextSeat(hands, lastPlay.seat);
   return {
     phase: confirmedWin ? 'finished' : 'play',
     hands,
     discardPile: [],
-    requiredRank: state.requiredRank,
-    turnSeatIndex: picker === challenger ? lastPlay.seat : challenger,
+    requiredRank: null,
+    passed: [],
+    playCounts: state.playCounts,
+    turnSeatIndex: confirmedWin ? null : lead,
     lastPlay: null,
     winnerSeatIndex: confirmedWin ? lastPlay.seat : null,
   };
@@ -467,6 +686,8 @@ function leaveSeat(state: BluffState, seatIndex: number): BluffState {
       hands: state.hands,
       discardPile: state.discardPile.slice(),
       requiredRank: state.requiredRank,
+      passed: state.passed.slice(),
+      playCounts: state.playCounts,
       turnSeatIndex: state.turnSeatIndex,
       lastPlay: copyLastPlay(state.lastPlay),
       winnerSeatIndex: state.winnerSeatIndex,
@@ -474,16 +695,16 @@ function leaveSeat(state: BluffState, seatIndex: number): BluffState {
   }
   const hands: Record<string, string[]> = { ...state.hands };
   delete hands[key];
+  const passed = state.passed.filter((seat) => seat !== seatIndex);
   let turnSeatIndex = state.turnSeatIndex;
   if (turnSeatIndex === seatIndex) {
-    turnSeatIndex = nextSeat(hands, seatIndex);
+    turnSeatIndex = nextActive({ ...state, hands, passed }, seatIndex);
   }
   const holding = seatsWithCards(hands);
   let phase = state.phase;
   let winnerSeatIndex = state.winnerSeatIndex;
   const winnerStillSeated =
     winnerSeatIndex !== null && handKey(winnerSeatIndex) in hands;
-  // An emptied-hand winner stays while that seat is still seated.
   if (holding.length === 1 && (phase !== 'finished' || !winnerStillSeated)) {
     phase = 'finished';
     winnerSeatIndex = holding[0];
@@ -495,15 +716,31 @@ function leaveSeat(state: BluffState, seatIndex: number): BluffState {
     hands,
     discardPile: state.discardPile.slice(),
     requiredRank: state.requiredRank,
+    passed,
+    playCounts: state.playCounts,
     turnSeatIndex,
     lastPlay: copyLastPlay(state.lastPlay),
     winnerSeatIndex,
   };
 }
 
+function playWasAcceptedOut(before: BluffState, next: BluffState): boolean {
+  const lastPlay = before.lastPlay;
+  if (lastPlay === null || next.phase !== 'finished') {
+    return false;
+  }
+  const hand = before.hands[handKey(lastPlay.seat)];
+  return (
+    hand !== undefined &&
+    hand.length === 0 &&
+    next.winnerSeatIndex === lastPlay.seat
+  );
+}
+
 /**
  * Bluff rules for gameType `bluff`.
  * `initialState([], table)` is the not-started lobby. Seated players are dealt.
+ * One card per play. The lead calls the rank. Jokers are always true.
  */
 export const bluffRules = {
   initialState(players: GameSeat[], table: GameTable): BluffState {
@@ -519,13 +756,19 @@ export const bluffRules = {
   ): BluffState {
     const state = readBluffState(prev);
     const action = readBluffIntent(intent);
+    if (!(handKey(ctx.seat.seatIndex) in state.hands)) {
+      throw new Error('Invalid intent');
+    }
+    if (action.type === 'challenge') {
+      return applyChallenge(state, ctx.seat.seatIndex);
+    }
     if (state.turnSeatIndex !== ctx.seat.seatIndex) {
       throw new Error('Not your turn');
     }
-    if (action.type === 'play') {
-      return applyPlay(state, action.cards, ctx.seat.seatIndex);
+    if (action.type === 'pass') {
+      return applyPass(state, ctx.seat.seatIndex);
     }
-    return applyChallenge(state, ctx.seat.seatIndex);
+    return applyPlay(state, action.cards, action.claimRank, ctx.seat.seatIndex);
   },
   eventNote(
     prev: BluffState,
@@ -533,23 +776,36 @@ export const bluffRules = {
     next: BluffState,
     ctx: IntentContext,
   ): BluffEventNote | null {
-    void next;
     const before = readBluffState(prev);
+    const after = readBluffState(next);
     const action = readBluffIntent(intent);
+    if (action.type === 'pass') {
+      if (playWasAcceptedOut(before, after)) {
+        return null;
+      }
+      return { kind: 'pass', seat: ctx.seat.seatIndex };
+    }
     if (action.type === 'play') {
+      if (playWasAcceptedOut(before, after)) {
+        return null;
+      }
+      const claim = after.lastPlay?.claimRank ?? before.requiredRank;
+      if (claim === null) {
+        return null;
+      }
       return {
         kind: 'play',
         seat: ctx.seat.seatIndex,
         count: action.cards.length,
-        claimRank: before.requiredRank,
+        claimRank: claim,
       };
     }
     const lastPlay = before.lastPlay;
     if (lastPlay === null) {
       return null;
     }
-    const bluff = !lastPlay.cards.every(
-      (card) => rankOfCard(card) === lastPlay.claimRank,
+    const bluff = !lastPlay.cards.every((card) =>
+      cardIsTrue(card, lastPlay.claimRank),
     );
     return {
       kind: 'challenge',

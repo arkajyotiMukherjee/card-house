@@ -158,7 +158,7 @@ describe('how to play text', () => {
   it('splits the heading from the Bluff rules', () => {
     const parts = splitHowToPlay(bluffGameDefinition.howToPlay);
     expect(parts.title).toBe('Bluff');
-    expect(parts.body.startsWith('Play 1 to 4 cards')).toBe(true);
+    expect(parts.body.startsWith('The lead plays one card')).toBe(true);
   });
 
   it('wraps at word boundaries within the column limit', () => {

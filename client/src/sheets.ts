@@ -17,7 +17,8 @@ export const HEARTS_COLUMNS = 5;
 export const HEARTS_ROWS = 4;
 
 /**
- * Visual order is blank, Ace, 2–10, jack, queen, king, then jokers.
+ * Visual order is blank, Ace, 2–9, then 10, jack, queen index, and king index.
+ * Jokers live on the separate joker sheet, not in this grid.
  * Column 0 row 0 is the blank card. The Ace is the next cell.
  */
 export const BLANK_HEART: GridCell = { col: 0, row: 0 };

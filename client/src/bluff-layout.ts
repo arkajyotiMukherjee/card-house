@@ -1,6 +1,13 @@
 import type { CardFace } from './card-atlas';
-import { rankOfCard, type BluffState } from '../../src/shared/games/bluff';
+import {
+  BLUFF_RANK_NAMES,
+  BLUFF_RANKS,
+  rankOfCard,
+  type BluffRank,
+  type BluffState,
+} from '../../src/shared/games/bluff';
 import { BUTTON_HEIGHT } from './button-style';
+import { LOGICAL_WIDTH } from './sheets';
 
 export const HAND_LEFT = 16;
 export const HAND_RIGHT = 736;
@@ -18,6 +25,51 @@ export const CHALLENGE_BUTTON = {
   w: 96,
   h: BUTTON_HEIGHT,
 } as const;
+export const PASS_BUTTON = {
+  x: 852,
+  y: 412,
+  w: 96,
+  h: BUTTON_HEIGHT,
+} as const;
+
+const RANK_BUTTON_W = 32;
+const RANK_BUTTON_GAP = 4;
+
+/** One button per rank, used when the lead calls the rank for the round. */
+export function rankCallButtons(): {
+  rank: BluffRank;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}[] {
+  const span =
+    BLUFF_RANKS.length * RANK_BUTTON_W +
+    (BLUFF_RANKS.length - 1) * RANK_BUTTON_GAP;
+  const start = Math.floor((LOGICAL_WIDTH - span) / 2);
+  return BLUFF_RANKS.map((rank, index) => ({
+    rank,
+    x: start + index * (RANK_BUTTON_W + RANK_BUTTON_GAP),
+    y: 368,
+    w: RANK_BUTTON_W,
+    h: BUTTON_HEIGHT,
+  }));
+}
+
+/** The center prompt. A called four reads as the rank, and the count is one. */
+export function tablePrompt(state: BluffState): string {
+  if (state.requiredRank === null) {
+    return 'Call a rank';
+  }
+  return `Play one ${BLUFF_RANK_NAMES[state.requiredRank]}`;
+}
+
+export function lastCallLine(state: BluffState): string | null {
+  if (state.lastPlay === null) {
+    return null;
+  }
+  return `Last ${BLUFF_RANK_NAMES[state.lastPlay.claimRank]}`;
+}
 
 const PILE_SHOWN = 8;
 const PILE_STEP = 20;

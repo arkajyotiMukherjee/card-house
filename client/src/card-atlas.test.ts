@@ -16,6 +16,9 @@ const sheetPath = fileURLToPath(
 const diamondsPath = fileURLToPath(
   new URL('../public/assets/cards-diamonds.png', import.meta.url),
 );
+const jokersPath = fileURLToPath(
+  new URL('../public/assets/jokers.png', import.meta.url),
+);
 
 function cellBytes(png: PNG, col: number, row: number): Buffer {
   const out = Buffer.alloc(CARD_SIZE * CARD_SIZE * 4);
@@ -115,5 +118,48 @@ describe('CardAtlas', () => {
     const diamondBytes = cellBytes(diamonds, ACE_HEART.col, ACE_HEART.row);
     expect(diamondBytes.equals(heartBytes)).toBe(false);
     expect(() => suited.sprite({ rank: 'A', suit: 'clubs' })).toThrow(/clubs/);
+
+    const queen = atlas.sprite({ rank: 'Q', suit: 'hearts' });
+    const king = atlas.sprite({ rank: 'K', suit: 'hearts' });
+    expect(queen.sourceView).toEqual({ x: 192, y: 128, width: 64, height: 64 });
+    expect(king.sourceView).toEqual({ x: 0, y: 192, width: 64, height: 64 });
+    expect(queen.sourceView).not.toEqual(king.sourceView);
+    const queenBytes = cellBytes(png, 3, 2);
+    const kingBytes = cellBytes(png, 0, 3);
+    expect(queenBytes.equals(kingBytes)).toBe(false);
+
+    const jokerSheet = new ex.ImageSource('/assets/jokers.png', {
+      filtering: ex.ImageFiltering.Pixel,
+    });
+    const withJokers = new CardAtlas(
+      new ex.ImageSource('/assets/cards-hearts.png', {
+        filtering: ex.ImageFiltering.Pixel,
+      }),
+      new ex.ImageSource('/assets/card-back-01.png', {
+        filtering: ex.ImageFiltering.Pixel,
+      }),
+      {},
+      jokerSheet,
+    );
+    expect(withJokers.joker('red').sourceView).toEqual({
+      x: 0,
+      y: 0,
+      width: 64,
+      height: 64,
+    });
+    expect(withJokers.joker('black').sourceView).toEqual({
+      x: 64,
+      y: 0,
+      width: 64,
+      height: 64,
+    });
+    const jokers = PNG.sync.read(readFileSync(jokersPath));
+    expect(jokers.width).toBe(128);
+    expect(jokers.height).toBe(64);
+    const redBytes = cellBytes(jokers, 0, 0);
+    const blackBytes = cellBytes(jokers, 1, 0);
+    expect(redBytes.equals(queenBytes)).toBe(false);
+    expect(blackBytes.equals(queenBytes)).toBe(false);
+    expect(redBytes.equals(blackBytes)).toBe(false);
   });
 });

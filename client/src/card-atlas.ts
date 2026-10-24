@@ -27,11 +27,12 @@ export interface CardFace {
 
 /**
  * Light suit sheets, five columns by four rows. Diamonds, clubs, and spades
- * use this same grid.
+ * use this same grid. Jokers are a separate two-cell sheet, not these faces.
  * Row 0 is blank, Ace, 2, 3, 4.
  * Row 1 is 5, 6, 7, 8, 9.
- * Row 2 starts with 10, Jack, then a joker, King, and Queen.
- * Ace is column 1 of row 0.
+ * Row 2 is 10, Jack index, Jack face, Queen index, Queen face.
+ * Row 3 is King index, King face, then empty cells.
+ * The index cells are the big rank letters. King is not the Queen cell.
  */
 const HEART_CELLS: Record<Rank, GridCell> = {
   A: { col: 1, row: 0 },
@@ -45,8 +46,15 @@ const HEART_CELLS: Record<Rank, GridCell> = {
   '9': { col: 4, row: 1 },
   '10': { col: 0, row: 2 },
   J: { col: 1, row: 2 },
-  K: { col: 3, row: 2 },
-  Q: { col: 4, row: 2 },
+  Q: { col: 3, row: 2 },
+  K: { col: 0, row: 3 },
+};
+
+export type JokerColor = 'red' | 'black';
+
+const JOKER_CELLS: Record<JokerColor, GridCell> = {
+  red: { col: 0, row: 0 },
+  black: { col: 1, row: 0 },
 };
 
 export class CardAtlas {
@@ -56,6 +64,7 @@ export class CardAtlas {
     hearts: ex.ImageSource,
     private readonly cardBack: ex.ImageSource,
     others: Partial<Record<Exclude<Suit, 'hearts'>, ex.ImageSource>> = {},
+    private readonly jokers?: ex.ImageSource,
   ) {
     this.sheets = {
       hearts,
@@ -78,6 +87,16 @@ export class CardAtlas {
   back(): ex.Sprite {
     return this.cardBack.toSprite({
       sourceView: cellRect(CARD_BACK, CARD_SIZE),
+    });
+  }
+
+  /** A joker face. The sheet says Joker, and it is not a queen cell. */
+  joker(color: JokerColor): ex.Sprite {
+    if (!this.jokers) {
+      throw new Error('CardAtlas has no joker sheet');
+    }
+    return this.jokers.toSprite({
+      sourceView: cellRect(JOKER_CELLS[color], CARD_SIZE),
     });
   }
 }
