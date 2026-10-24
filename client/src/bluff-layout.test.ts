@@ -31,6 +31,7 @@ import {
   selectedPlayCards,
   showRankPicker,
   tablePrompt,
+  turnLine,
 } from './bluff-layout';
 
 function playState(turnSeatIndex: number | null): BluffState {
@@ -114,17 +115,21 @@ describe('bluff layout', () => {
   });
 
   it('names the called rank without fixing the count', () => {
-    expect(tablePrompt(playState(0))).toBe('Play Aces');
-    expect(tablePrompt({ ...playState(0), requiredRank: '4' })).toBe(
+    expect(tablePrompt(playState(0), 0)).toBe('Play Aces');
+    expect(tablePrompt(playState(0), 1)).toBe('Play Aces');
+    expect(tablePrompt({ ...playState(0), requiredRank: '4' }, 1)).toBe(
       'Play Fours',
     );
-    expect(tablePrompt({ ...playState(0), requiredRank: '6' })).toBe(
+    expect(tablePrompt({ ...playState(0), requiredRank: '6' }, 0)).toBe(
       'Play Sixes',
     );
-    expect(tablePrompt({ ...playState(0), requiredRank: null })).toBe(
-      'Call a rank',
-    );
-    expect(tablePrompt(playState(0))).not.toContain('Play one');
+    const calling = { ...playState(0), requiredRank: null };
+    expect(tablePrompt(calling, 0)).toBe('Call a rank');
+    expect(tablePrompt(calling, 1)).toBeNull();
+    expect(turnLine(calling, 0)).toBe('Your turn');
+    expect(turnLine(calling, 1)).toBe('Wait');
+    expect(showRankPicker(calling, 1)).toBe(false);
+    expect(tablePrompt(playState(0), 0)).not.toContain('Play one');
   });
 
   it('states the latest claim above the pile', () => {

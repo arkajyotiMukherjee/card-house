@@ -420,6 +420,179 @@ try {
 }
 assert(passedAgain, 'a seat that passed cannot play again this round');
 
+const lieRound = playing({
+  hands: { '0': ['2S'], '1': ['KH'], '2': ['QH', 'QD'] },
+  discardPile: ['5S', '3C'],
+  requiredRank: 'A',
+  turnSeatIndex: 1,
+  lastPlay: { seat: 0, cards: ['3C'], claimRank: 'A' },
+});
+const caught = bluffRules.applyIntent(
+  lieRound,
+  { type: 'challenge' },
+  context(2),
+);
+assert(caught.phase === 'play', 'a caught lie stays in play');
+assert(caught.turnSeatIndex === 2, 'a caught lie lets the challenger lead');
+assert(caught.requiredRank === null, 'the challenger calls the next rank');
+assert(caught.discardPile.length === 0, 'a caught lie clears the pile');
+assert(caught.lastPlay === null, 'the new lead has not played');
+assert(
+  caught.hands['0'].includes('3C') && caught.hands['0'].includes('5S'),
+  'the player who lied picks up the pile',
+);
+assert(
+  !caught.hands['2'].includes('3C'),
+  'the challenger does not pick up a lie',
+);
+let liarCalled = false;
+try {
+  bluffRules.applyIntent(
+    caught,
+    { type: 'play', cards: ['2S'], claimRank: 'K' },
+    context(0),
+  );
+} catch (error) {
+  liarCalled = error instanceof Error && error.message === 'Not your turn';
+}
+assert(liarCalled, 'the player who lied does not call the next rank');
+const challengerLed = bluffRules.applyIntent(
+  caught,
+  { type: 'play', cards: ['QH'], claimRank: 'Q' },
+  context(2),
+);
+assert(
+  challengerLed.requiredRank === 'Q' && challengerLed.lastPlay?.seat === 2,
+  'the challenger calls the next rank',
+);
+
+const honestRound = playing({
+  hands: { '0': ['2S'], '1': ['KH'], '2': ['QH'] },
+  discardPile: ['5S', 'AC'],
+  requiredRank: 'A',
+  turnSeatIndex: 1,
+  lastPlay: { seat: 0, cards: ['AC'], claimRank: 'A' },
+});
+const stood = bluffRules.applyIntent(
+  honestRound,
+  { type: 'challenge' },
+  context(2),
+);
+assert(
+  stood.turnSeatIndex === 0,
+  'an honest play lets the player who was challenged lead',
+);
+assert(stood.requiredRank === null, 'the honest player calls the next rank');
+assert(
+  stood.hands['2'].includes('AC') && stood.hands['2'].includes('5S'),
+  'the challenger picks up an honest pile',
+);
+assert(
+  !stood.hands['0'].includes('AC'),
+  'the honest player does not pick the pile up',
+);
+let challengerCalled = false;
+try {
+  bluffRules.applyIntent(
+    stood,
+    { type: 'play', cards: ['QH'], claimRank: 'Q' },
+    context(2),
+  );
+} catch (error) {
+  challengerCalled =
+    error instanceof Error && error.message === 'Not your turn';
+}
+assert(challengerCalled, 'the challenger who lost does not call the next rank');
+
+const jokerRound = playing({
+  hands: { '0': ['2S'], '1': ['KH'], '2': ['QH'] },
+  discardPile: ['QD', 'JR'],
+  requiredRank: 'Q',
+  turnSeatIndex: 1,
+  lastPlay: { seat: 0, cards: ['QD', 'JR'], claimRank: 'Q' },
+});
+const jokerStood = bluffRules.applyIntent(
+  jokerRound,
+  { type: 'challenge' },
+  context(2),
+);
+assert(
+  jokerStood.turnSeatIndex === 0,
+  'a joker lets the player who was challenged lead',
+);
+assert(
+  jokerStood.requiredRank === null,
+  'a challenged joker starts a new call',
+);
+assert(
+  jokerStood.hands['2'].includes('JR') && jokerStood.hands['2'].includes('QD'),
+  'the challenger picks up a joker',
+);
+assert(
+  !jokerStood.hands['0'].includes('JR'),
+  'the player who played the joker does not pick it up',
+);
+
+const openRound = playing({
+  hands: { '0': ['4S'], '1': ['KH'], '2': ['4C', '4D'] },
+  discardPile: ['4H'],
+  requiredRank: '4',
+  turnSeatIndex: 1,
+  lastPlay: { seat: 0, cards: ['4H'], claimRank: '4' },
+});
+const firstPass = bluffRules.applyIntent(
+  openRound,
+  { type: 'pass' },
+  context(1),
+);
+assert(firstPass.requiredRank === '4', 'one pass keeps the called rank');
+assert(firstPass.discardPile.length === 1, 'one pass leaves the pile');
+assert(firstPass.turnSeatIndex === 2, 'one pass moves to the next seat');
+const followed = bluffRules.applyIntent(
+  firstPass,
+  { type: 'play', cards: ['4C', '4D'] },
+  context(2),
+);
+assert(
+  followed.requiredRank === '4',
+  'a later seat still plays the called rank',
+);
+assert(
+  followed.lastPlay?.seat === 2 && followed.lastPlay.cards.length === 2,
+  'that play is one selection of the called rank',
+);
+const secondPass = bluffRules.applyIntent(
+  firstPass,
+  { type: 'pass' },
+  context(2),
+);
+assert(
+  secondPass.turnSeatIndex === 0,
+  'the last player to play leads after everyone else passes',
+);
+assert(secondPass.requiredRank === null, 'passes start a new call');
+assert(secondPass.discardPile.length === 0, 'passes set the pile aside');
+assert(secondPass.passed.length === 0, 'a new call clears the passes');
+assert(secondPass.lastPlay === null, 'the set-aside pile is not a last play');
+assert(
+  secondPass.hands['0'].length === 1 && secondPass.hands['0'][0] === '4S',
+  'the lead does not pick up a set-aside pile',
+);
+assert(
+  !secondPass.hands['1'].includes('4H') &&
+    !secondPass.hands['2'].includes('4H'),
+  'no other seat picks up a set-aside pile',
+);
+const calledAgain = bluffRules.applyIntent(
+  secondPass,
+  { type: 'play', cards: ['4S'], claimRank: 'K' },
+  context(0),
+);
+assert(
+  calledAgain.requiredRank === 'K',
+  'the last player to play calls the next rank',
+);
+
 for (const count of [2, 3, 4, 5, 6]) {
   for (const id of ['table-bluff', 'a', 'queens', 'five', 'joker']) {
     const players = Array.from({ length: count }, (_item, index) =>

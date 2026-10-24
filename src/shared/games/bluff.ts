@@ -111,7 +111,7 @@ export const bluffGameDefinition = {
   minPlayers: 2,
   maxPlayers: 6,
   howToPlay:
-    '# Bluff\n\nThe lead selects any number of cards and chooses a rank before playing them face down. One card is a legal play. That call may be a lie. A joker is wild and is always a true card. It is not a queen. Each other player plays any number of cards as that rank, or passes. A pass sits out for the rest of the round. Only the lead calls a rank. Anyone else may challenge the latest play. Four of a rank plus both jokers is the most that claim can honestly be. A lie picks up the pile. An honest call, including a joker, makes the challenger pick it up. If everyone passes, the pile is set aside and the last player to play leads a new rank. Empty your hand to win. Computer players lie on plays 1, 5, 9, and so on, and tell the truth on the plays between when they can. They challenge a claim that cannot be true, and also on every fourth turn of their own. They never challenge their own play.',
+    '# Bluff\n\nThe lead selects any number of cards and chooses a rank before playing them face down. One card is a legal play. That call may be a lie. A joker is wild and is always a true card. It is not a queen. Each other player plays any number of cards as that rank, or passes. A pass sits out for the rest of the round. Only the lead calls a rank. Anyone else may challenge the latest play. Four of a rank plus both jokers is the most that claim can honestly be. A lie makes the player who played pick up the pile, and the challenger leads. An honest call, including a joker, makes the challenger pick it up, and the player who was challenged leads. If everyone else passes, the pile is set aside and the last player to play leads. Empty your hand to win. Computer players lie on plays 1, 5, 9, and so on, and tell the truth on the plays between when they can. They challenge a claim that cannot be true, and also on every fourth turn of their own. They never challenge their own play.',
 } satisfies GameDefinition;
 
 function asRecord(value: unknown, message: string): Record<string, unknown> {
@@ -427,22 +427,6 @@ function seatedIndexes(hands: Record<string, string[]>): number[] {
   return seats;
 }
 
-function nextSeat(
-  hands: Record<string, string[]>,
-  after: number,
-): number | null {
-  const seats = seatedIndexes(hands);
-  if (seats.length === 0) {
-    return null;
-  }
-  for (const seat of seats) {
-    if (seat > after) {
-      return seat;
-    }
-  }
-  return seats[0];
-}
-
 function nextActive(state: BluffState, after: number): number | null {
   const seats = seatedIndexes(state.hands).filter(
     (seat) => !state.passed.includes(seat),
@@ -603,6 +587,24 @@ function applyPlay(
   };
 }
 
+/** Every seated player except the last one to play has passed. */
+function everyOtherSeatPassed(
+  hands: Record<string, string[]>,
+  passed: readonly number[],
+  lastSeat: number,
+): boolean {
+  const seats = seatedIndexes(hands);
+  if (seats.length === 0 || !seats.includes(lastSeat)) {
+    return false;
+  }
+  for (const seat of seats) {
+    if (seat !== lastSeat && !passed.includes(seat)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function applyPass(state: BluffState, seatIndex: number): BluffState {
   const accepted = acceptUnchallengedOut(state);
   if (accepted) {
@@ -618,10 +620,14 @@ function applyPass(state: BluffState, seatIndex: number): BluffState {
     throw new Error('You passed');
   }
   const passed = state.passed.concat(seatIndex);
+  const lastSeat = state.lastPlay?.seat;
+  const othersDone =
+    lastSeat !== undefined &&
+    everyOtherSeatPassed(state.hands, passed, lastSeat);
   const stillIn = seatedIndexes(state.hands).filter(
     (seat) => !passed.includes(seat),
   );
-  if (stillIn.length === 0) {
+  if (othersDone || stillIn.length === 0) {
     const lead = state.lastPlay?.seat ?? seatIndex;
     const leadHand = state.hands[handKey(lead)];
     const leadOut = leadHand !== undefined && leadHand.length === 0;
@@ -664,7 +670,9 @@ function givePile(
 
 /**
  * A challenge judges only the last play and ends the round.
- * The next lead is the seat to the left of the player who played.
+ * A lie sends the pile to the player who played, and the challenger leads.
+ * An honest play, including a joker, sends the pile to the challenger, and
+ * the player who was challenged leads.
  * An emptied hand wins only when that play was honest.
  */
 function applyChallenge(state: BluffState, challenger: number): BluffState {
@@ -683,7 +691,7 @@ function applyChallenge(state: BluffState, challenger: number): BluffState {
   const picker = honest ? challenger : lastPlay.seat;
   const hands = givePile(state.hands, picker, state.discardPile);
   const confirmedWin = honest && emptied;
-  const lead = nextSeat(hands, lastPlay.seat);
+  const lead = honest ? lastPlay.seat : challenger;
   return {
     phase: confirmedWin ? 'finished' : 'play',
     hands,

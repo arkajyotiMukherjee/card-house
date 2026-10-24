@@ -116,12 +116,40 @@ export function rankWord(rank: BluffRank, count: number): string {
   return `${name}s`;
 }
 
-/** The center prompt names the called rank and does not fix a count. */
-export function tablePrompt(state: BluffState): string {
+/**
+ * The center prompt names the called rank and does not fix a count.
+ * `Call a rank` is only for the lead. Everyone else still sees the rank
+ * once it has been called.
+ */
+export function tablePrompt(
+  state: BluffState,
+  seatIndex: number | null,
+): string | null {
+  if (state.phase !== 'play') {
+    return null;
+  }
   if (state.requiredRank === null) {
-    return 'Call a rank';
+    if (seatIndex !== null && seatIndex === state.turnSeatIndex) {
+      return 'Call a rank';
+    }
+    return null;
   }
   return `Play ${rankWord(state.requiredRank, 2)}`;
+}
+
+/** Side label. Only the seat that must act reads `Your turn`. */
+export function turnLine(
+  state: BluffState,
+  seatIndex: number | null,
+): 'Your turn' | 'Wait' {
+  if (
+    state.phase === 'play' &&
+    seatIndex !== null &&
+    state.turnSeatIndex === seatIndex
+  ) {
+    return 'Your turn';
+  }
+  return 'Wait';
 }
 
 const NOTICE_NAME_LIMIT = 16;
