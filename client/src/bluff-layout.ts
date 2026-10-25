@@ -227,15 +227,11 @@ export const OPPONENT_FAN_CARD = 48;
 export const OPPONENT_FAN_SCALE = OPPONENT_FAN_CARD / CARD_DRAW;
 
 const PLATE_HEIGHT = 20;
-const LABEL_GAP = 6;
 const FAN_HALF = OPPONENT_FAN_CARD / 2;
-
-export interface SeatBox {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
+/** How far a card center sits in from the point on the table edge. */
+const FAN_BOTTOM_INSET = 0.92;
+const LABEL_BLOCK_H = 32;
+const FAN_CARD_REACH = FAN_HALF * 1.25;
 
 export interface FanSlot {
   x: number;
@@ -243,36 +239,21 @@ export interface FanSlot {
   rotation: number;
 }
 
+/** Which table edge that seat sits on. The fan's bottom lies along it. */
+export type FanEdge = 'left' | 'right' | 'top' | 'bottom';
+
+export function fanEdge(seatX: number, seatY: number): FanEdge {
+  const dx = seatX - TABLE_CENTER.x;
+  const dy = seatY - TABLE_CENTER.y;
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    return dx >= 0 ? 'right' : 'left';
+  }
+  return dy >= 0 ? 'bottom' : 'top';
+}
+
 /** Width of the seat name plate `GameScene` draws for this name. */
 export function seatPlateWidth(name: string): number {
   return Math.max(48, name.length * 8 + 16);
-}
-
-/**
- * Where that seat's cards may sit. Left, right, and top each get a wide
- * short box on their own side, clear of the local hand and the center prompt.
- */
-export function opponentFanBox(seatX: number, seatY: number): SeatBox {
-  const right = seatX >= TABLE_CENTER.x;
-  if (seatY < 180 && seatX > 400 && seatX < 560) {
-    return { x: 330, y: 76, w: 300, h: 82 };
-  }
-  if (seatY < 180 && right) {
-    return { x: 700, y: 96, w: 210, h: 88 };
-  }
-  if (seatY < 180) {
-    return { x: 50, y: 96, w: 210, h: 88 };
-  }
-  if (seatY > 400 && right) {
-    return { x: 760, y: 336, w: 170, h: 76 };
-  }
-  if (seatY > 400) {
-    return { x: 30, y: 336, w: 170, h: 76 };
-  }
-  if (right) {
-    return { x: 640, y: 200, w: 190, h: 100 };
-  }
-  return { x: 130, y: 200, w: 190, h: 100 };
 }
 
 export interface CardRect {
@@ -296,166 +277,205 @@ export function fanCardRect(slot: FanSlot): CardRect {
   };
 }
 
-interface FanFit {
-  pivotX: number;
-  pivotY: number;
-  radius: number;
-  halfAngle: number;
+interface FanFrame {
+  edge: FanEdge;
+  edgeX: number;
+  edgeY: number;
+  /** The label is wide along this edge, so the gap is horizontal. */
+  horizontal: boolean;
+  outwardX: number;
+  outwardY: number;
+  inwardX: number;
+  inwardY: number;
+  /** How far card bottoms may travel from the seat, along the edge. */
+  room: number;
 }
 
-function fanUnion(
-  pivotX: number,
-  pivotY: number,
-  radius: number,
-  halfAngle: number,
-): CardRect {
-  const samples = 8;
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (let step = 0; step <= samples; step += 1) {
-    const angle = -halfAngle + (step / samples) * halfAngle * 2;
-    const rect = fanCardRect({
-      x: pivotX + radius * Math.sin(angle),
-      y: pivotY - radius * Math.cos(angle),
-      rotation: angle,
-    });
-    minX = Math.min(minX, rect.x);
-    minY = Math.min(minY, rect.y);
-    maxX = Math.max(maxX, rect.x + rect.w);
-    maxY = Math.max(maxY, rect.y + rect.h);
-  }
-  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
 }
 
-/**
- * One circle under the cards. The radius stays near the card bottoms, and
- * the arc is kept wider than it is tall.
- */
-function fitOpponentFan(box: SeatBox): FanFit {
-  const pivotX = box.x + box.w / 2;
-  let best: (FanFit & { spread: number }) | null = null;
-  for (let step = 0; step <= 32; step += 1) {
-    const halfAngle = 0.34 + (step / 32) * 0.5;
-    const sin = Math.sin(halfAngle);
-    const cos = Math.cos(halfAngle);
-    const ext = FAN_HALF * (Math.abs(cos) + Math.abs(sin));
-    const side = box.w / 2 - 2;
-    const rSide = (side - ext) / sin;
-    const rNear = FAN_HALF + (OPPONENT_FAN_CARD * 0.75 + FAN_HALF * sin) / cos;
-    const rMin = FAN_HALF * (1 + Math.tan(halfAngle));
-    if (!(rSide >= rMin)) {
-      continue;
-    }
-    const rMax = Math.min(rSide, rNear);
-    const tries = 6;
-    for (let tryIndex = 0; tryIndex < tries; tryIndex += 1) {
-      const radius = rMax - ((rMax - rMin) * tryIndex) / tries;
-      const union = fanUnion(0, 0, radius, halfAngle);
-      if (union.w > box.w - 2 || union.h > box.h - 2) {
-        continue;
-      }
-      if (union.w <= union.h) {
-        continue;
-      }
-      const gap = -union.y - union.h;
-      if (gap < -2 || gap > OPPONENT_FAN_CARD) {
-        continue;
-      }
-      const pivotY = box.y + box.h - 2 - (union.y + union.h);
-      const top = pivotY + union.y;
-      if (top < box.y + 1) {
-        continue;
-      }
-      if (!best || union.w > best.spread) {
-        best = { pivotX, pivotY, radius, halfAngle, spread: union.w };
-      }
-      break;
-    }
-  }
-  if (!best) {
+function fanFrame(seatX: number, seatY: number): FanFrame {
+  const edge = fanEdge(seatX, seatY);
+  if (edge === 'left') {
     return {
-      pivotX,
-      pivotY: box.y + box.h / 2 + FAN_HALF,
-      radius: FAN_HALF,
-      halfAngle: 0,
+      edge,
+      edgeX: 10,
+      edgeY: clamp(seatY, 168, 392),
+      horizontal: false,
+      outwardX: -1,
+      outwardY: 0,
+      inwardX: 1,
+      inwardY: 0,
+      room: 156,
     };
   }
-  return best;
+  if (edge === 'right') {
+    return {
+      edge,
+      edgeX: LOGICAL_WIDTH - 10,
+      edgeY: clamp(seatY, 168, 392),
+      horizontal: false,
+      outwardX: 1,
+      outwardY: 0,
+      inwardX: -1,
+      inwardY: 0,
+      room: 156,
+    };
+  }
+  if (edge === 'top') {
+    return {
+      edge,
+      edgeX: clamp(seatX, 280, 680),
+      edgeY: 78,
+      horizontal: true,
+      outwardX: 0,
+      outwardY: -1,
+      inwardX: 0,
+      inwardY: 1,
+      room: 210,
+    };
+  }
+  return {
+    edge,
+    edgeX: clamp(seatX, 200, 760),
+    edgeY: 392,
+    horizontal: true,
+    outwardX: 0,
+    outwardY: 1,
+    inwardX: 0,
+    inwardY: -1,
+    room: 130,
+  };
 }
 
-function fanSlots(fit: FanFit, count: number): FanSlot[] {
-  if (count <= 0) {
-    return [];
+export interface FanLabel {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** Name plate over the count. Both sit in the middle of the fan. */
+export function fanLabelBox(name: string): { w: number; h: number } {
+  return { w: seatPlateWidth(name), h: LABEL_BLOCK_H };
+}
+
+function labelOrigin(frame: FanFrame, name: string): FanLabel {
+  const box = fanLabelBox(name);
+  const x = frame.edgeX + frame.inwardX * FAN_HALF - box.w / 2;
+  const y = frame.edgeY + frame.inwardY * FAN_HALF - box.h / 2;
+  return {
+    x: Math.round(x),
+    y: Math.round(y),
+    w: box.w,
+    h: box.h,
+  };
+}
+
+/** Center of the card's outer edge. It lies on the seat's table edge. */
+export function fanCardBottom(slot: FanSlot): { x: number; y: number } {
+  return {
+    x: slot.x + Math.sin(slot.rotation) * FAN_HALF * FAN_BOTTOM_INSET,
+    y: slot.y + Math.cos(slot.rotation) * FAN_HALF * FAN_BOTTOM_INSET,
+  };
+}
+
+function bottomDirection(
+  frame: FanFrame,
+  tilt: number,
+): { x: number; y: number } {
+  const c = Math.cos(tilt);
+  const s = Math.sin(tilt);
+  if (frame.horizontal) {
+    return { x: frame.outwardX * c + s, y: frame.outwardY * c };
   }
+  return { x: frame.outwardX * c, y: frame.outwardY * c + s };
+}
+
+function wingStep(cards: number, inner: number, room: number): number {
+  if (cards <= 1) {
+    return 0;
+  }
+  const fit = (room - FAN_HALF - inner) / (cards - 1);
+  return Math.max(6, Math.min(12, fit));
+}
+
+function wingSlots(
+  frame: FanFrame,
+  cards: number,
+  sign: -1 | 1,
+  inner: number,
+  step: number,
+): FanSlot[] {
   const slots: FanSlot[] = [];
-  for (let index = 0; index < count; index += 1) {
-    const angle =
-      count === 1
-        ? 0
-        : -fit.halfAngle + (index / (count - 1)) * fit.halfAngle * 2;
+  for (let index = 0; index < cards; index += 1) {
+    const t = cards === 1 ? 0 : index / (cards - 1);
+    const along = sign * (inner + index * step);
+    const tilt = sign * (0.08 + t * 0.72);
+    const dir = bottomDirection(frame, tilt);
+    const reach = FAN_HALF * FAN_BOTTOM_INSET;
+    const bottomX = frame.horizontal ? frame.edgeX + along : frame.edgeX;
+    const bottomY = frame.horizontal ? frame.edgeY : frame.edgeY + along;
     slots.push({
-      x: Math.round(fit.pivotX + fit.radius * Math.sin(angle)),
-      y: Math.round(fit.pivotY - fit.radius * Math.cos(angle)),
-      rotation: angle,
+      x: Math.round(bottomX - dir.x * reach),
+      y: Math.round(bottomY - dir.y * reach),
+      rotation: Math.atan2(dir.x, dir.y),
     });
   }
   return slots;
 }
 
 /**
- * Card backs around one pivot at the bottom of the fan.
- * Every card in the hand is placed. They overlap from left to right,
- * and the arc spreads sideways more than it stacks.
+ * Card backs with their bottoms on that seat's table edge.
+ * Left fans grow inward from the left, right from the right, and top
+ * from the top. The middle of the fan is left open for the name.
  */
 export function bluffSeatFan(
   seatX: number,
   seatY: number,
   count: number,
+  name = 'Seat',
 ): FanSlot[] {
-  return fanSlots(fitOpponentFan(opponentFanBox(seatX, seatY)), count);
+  if (count <= 0) {
+    return [];
+  }
+  const frame = fanFrame(seatX, seatY);
+  const box = fanLabelBox(name);
+  const labelHalf = frame.horizontal ? box.w / 2 : box.h / 2;
+  const inner = labelHalf + FAN_CARD_REACH + 4;
+  const upper = Math.ceil(count / 2);
+  const lower = count - upper;
+  const step = wingStep(Math.max(upper, lower), inner, frame.room);
+  return [
+    ...wingSlots(frame, upper, -1, inner, step),
+    ...wingSlots(frame, lower, 1, inner, step),
+  ];
 }
 
-/** Top-left of the name plate, just above every card in the fan. */
+/** Top-left of the name plate, centered on the fan. */
 export function opponentNameAnchor(
   seatX: number,
   seatY: number,
   name: string,
 ): { x: number; y: number } {
-  const fit = fitOpponentFan(opponentFanBox(seatX, seatY));
-  const arc = fanUnion(fit.pivotX, fit.pivotY, fit.radius, fit.halfAngle);
-  const width = seatPlateWidth(name);
-  let x = Math.round(arc.x + arc.w / 2 - width / 2);
-  let y = Math.round(arc.y - LABEL_GAP - PLATE_HEIGHT);
-  if (y < 46) {
-    y = 46;
-  }
-  if (x < 4) {
-    x = 4;
-  }
-  if (x + width > LOGICAL_WIDTH - 4) {
-    x = LOGICAL_WIDTH - 4 - width;
-  }
-  return { x, y };
+  const label = labelOrigin(fanFrame(seatX, seatY), name);
+  return { x: label.x, y: label.y };
 }
 
-/** Top-left of the `xN` count, beside the name and outside the cards. */
+/** Top-left of the `xN` count, under the name and still in the fan center. */
 export function opponentCountAnchor(
   seatX: number,
   seatY: number,
   count: number,
   name: string,
 ): { x: number; y: number } {
-  const plate = opponentNameAnchor(seatX, seatY, name);
-  const width = seatPlateWidth(name);
+  const label = labelOrigin(fanFrame(seatX, seatY), name);
   const labelW = `x${count}`.length * 8;
-  const y = plate.y + Math.floor((PLATE_HEIGHT - 8) / 2);
-  let x = plate.x - 4 - labelW;
-  if (x < 4) {
-    x = plate.x + width + 4;
-  }
-  return { x, y };
+  return {
+    x: Math.round(label.x + (label.w - labelW) / 2),
+    y: label.y + PLATE_HEIGHT + 4,
+  };
 }
 
 /** Card backs fanned from a seat toward the middle of the table. */

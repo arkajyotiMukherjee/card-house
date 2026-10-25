@@ -2,6 +2,7 @@ import {
   BLUFF_GAME_TYPE,
   readBluffEventNote,
 } from '../../src/shared/games/bluff';
+import { challengeLine } from './bluff-challenge';
 import {
   CRAZY_EIGHTS_GAME_TYPE,
   CRAZY_EIGHTS_SUIT_NAMES,
@@ -112,6 +113,7 @@ export function eventMessage(
   gameType: string,
   note: unknown,
   seatName: (seatIndex: number) => string,
+  viewerSeat: number | null = null,
 ): string | null {
   if (gameType === PRESIDENT_GAME_TYPE) {
     return presidentEventMessage(note, seatName);
@@ -153,15 +155,10 @@ export function eventMessage(
       `${shortName(seatName(parsed.seat))} played ${parsed.count} ${cards} as ${parsed.claimRank}`,
     );
   }
-  const challenger = shortName(seatName(parsed.challenger));
-  const accused = shortName(seatName(parsed.accused));
-  if (parsed.bluff) {
-    return clip(
-      `${challenger} called bluff! ${accused} lied and takes the pile`,
-    );
-  }
   return clip(
-    `${challenger} called bluff but ${accused} was honest. ${challenger} takes the pile`,
+    challengeLine(parsed.challenger, parsed.accused, viewerSeat, (seatIndex) =>
+      shortName(seatName(seatIndex)),
+    ),
   );
 }
 

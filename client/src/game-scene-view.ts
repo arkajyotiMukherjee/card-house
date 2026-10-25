@@ -606,10 +606,12 @@ export class GameScene extends ex.Scene {
     for (const seat of this.placed) {
       names.set(seat.seatIndex, seat.name);
     }
+    const viewer = this.placed.find((seat) => seat.self)?.seatIndex ?? null;
     const message = eventMessage(
       this.gameTypeOfTable(),
       stored.note,
       (seatIndex) => names.get(seatIndex) ?? `Seat ${seatIndex + 1}`,
+      viewer,
     );
     if (message) {
       this.showStrip(message, false);

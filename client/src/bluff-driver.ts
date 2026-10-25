@@ -12,6 +12,7 @@ import {
   BLUFF_PLAY_BUTTON,
   BLUFF_TURN_LABEL,
   CARD_DRAW,
+  HOVER_LIFT,
   OPPONENT_FAN_CARD,
   OPPONENT_FAN_SCALE,
   PILE_NOTICE_Y,
@@ -53,6 +54,13 @@ import {
   localHandHitBoxes,
   type CardHitBox,
 } from './card-hit';
+import {
+  CHALLENGE_MOVE_MS,
+  challengeFrame,
+  challengePickup,
+  pileAnchors,
+  type PileAnchor,
+} from './bluff-challenge';
 import { HandHover, placeCardLift, startHandHoverClock } from './hand-hover';
 import { LOGICAL_WIDTH } from './sheets';
 
@@ -185,7 +193,9 @@ function cardSprite(
 
 /**
  * Bluff table: your hand along the bottom, other hands as backs,
- * and the discard pile in the center.
+ * and the discard pile in the center. A challenge holds the pile in the
+ * center under a line such as "Ada challenged you", then moves those
+ * cards into the hand, lifts them, and lets them settle.
  */
 export class BluffDriver implements GameDriver<BluffState> {
   readonly name = 'Bluff';
@@ -218,8 +228,18 @@ export class BluffDriver implements GameDriver<BluffState> {
   }[] = [];
   private state: BluffState | null = null;
   private ctx: RenderContext | null = null;
+  private arrival: {
+    cards: string[];
+    seat: number;
+    local: boolean;
+    line: string;
+    elapsed: number;
+    anchors: Map<string, PileAnchor>;
+  } | null = null;
+  private arrivalRaised = new Set<string>();
 
   render(state: BluffState, ctx: RenderContext): void {
+    this.noteArrival(state, ctx);
     this.state = state;
     this.ctx = ctx;
     this.ensureHoverClock(ctx);
@@ -405,6 +425,8 @@ export class BluffDriver implements GameDriver<BluffState> {
     this.claimTouched = false;
     this.selected.clear();
     this.hover = null;
+    this.arrival = null;
+    this.arrivalRaised.clear();
     this.stopHoverClock();
     this.state = null;
     this.ctx = null;
@@ -501,6 +523,10 @@ export class BluffDriver implements GameDriver<BluffState> {
     if (notice) {
       this.labels.push(this.banner(ctx, notice, PILE_NOTICE_Y));
     }
+    const arrival = this.arrival;
+    if (arrival && challengeFrame(arrival.elapsed).phase !== 'settled') {
+      this.labels.push(this.banner(ctx, arrival.line, PILE_NOTICE_Y));
+    }
     for (const seat of ctx.seats) {
       if (seat.self) {
         continue;
@@ -529,12 +555,25 @@ export class BluffDriver implements GameDriver<BluffState> {
         delay: number;
         z: number;
         personal: boolean;
+        duration?: number;
       }
     >();
-    const hand =
+    const frame = this.arrival ? challengeFrame(this.arrival.elapsed) : null;
+    const holding =
+      this.arrival && frame && !frame.cardsInHand
+        ? new Set(this.arrival.cards)
+        : null;
+    this.arrivalRaised = new Set(
+      frame?.lifted && this.arrival?.local ? this.arrival.cards : [],
+    );
+    const owned =
       ctx.meSeatIndex === null
         ? []
         : (state.hands[String(ctx.meSeatIndex)] ?? []);
+    const hand =
+      holding && this.arrival?.local
+        ? owned.filter((cardId) => !holding.has(cardId))
+        : owned;
     const handSlots = handPositions(hand.length);
     for (let index = 0; index < hand.length; index += 1) {
       const cardId = hand[index];
@@ -542,13 +581,18 @@ export class BluffDriver implements GameDriver<BluffState> {
       if (!cardId || !slot) {
         continue;
       }
+      const arriving =
+        frame?.cardsInHand && this.arrival?.local
+          ? this.arrival.cards.includes(cardId)
+          : false;
       desired.set(cardId, {
         x: slot.x,
         y: slot.y,
         faceUp: true,
-        delay: index * 16,
+        delay: arriving ? 0 : index * 16,
         z: 12 + index,
         personal: true,
+        duration: arriving ? CHALLENGE_MOVE_MS : undefined,
       });
     }
     const pileSlots = pilePositions(state.discardPile.length);
@@ -567,6 +611,34 @@ export class BluffDriver implements GameDriver<BluffState> {
         z: 5 + index,
         personal: false,
       });
+    }
+    if (holding && this.arrival) {
+      for (const cardId of this.arrival.cards) {
+        const at = this.arrival.anchors.get(cardId);
+        desired.set(cardId, {
+          x: at?.x ?? PILE_X,
+          y: at?.y ?? PILE_Y,
+          faceUp: at?.faceUp ?? false,
+          delay: 0,
+          z: 8,
+          personal: false,
+        });
+      }
+    } else if (this.arrival && frame?.cardsInHand && !this.arrival.local) {
+      const seat = ctx.seats.find(
+        (row) => row.seatIndex === this.arrival?.seat,
+      );
+      for (const cardId of this.arrival.cards) {
+        desired.set(cardId, {
+          x: seat?.x ?? PILE_X,
+          y: seat?.y ?? PILE_Y,
+          faceUp: false,
+          delay: 0,
+          z: 6,
+          personal: false,
+          duration: CHALLENGE_MOVE_MS,
+        });
+      }
     }
     for (const cardId of [...this.selected]) {
       if (!hand.includes(cardId)) {
@@ -594,6 +666,7 @@ export class BluffDriver implements GameDriver<BluffState> {
       delay: number;
       z: number;
       personal: boolean;
+      duration?: number;
     },
     ctx: RenderContext,
   ): void {
@@ -658,7 +731,14 @@ export class BluffDriver implements GameDriver<BluffState> {
     if (!record.placed || moved) {
       const fromDeal = !record.placed;
       record.placed = true;
-      this.travel(cardId, record, place.x, place.y, fromDeal ? place.delay : 0);
+      this.travel(
+        cardId,
+        record,
+        place.x,
+        place.y,
+        fromDeal ? place.delay : 0,
+        place.duration ?? TRAVEL_MS,
+      );
       return;
     }
     this.applyLift(cardId, this.state, ctx);
@@ -670,6 +750,7 @@ export class BluffDriver implements GameDriver<BluffState> {
     x: number,
     y: number,
     delay: number,
+    duration: number,
   ): void {
     record.moving = true;
     record.actor.graphics.offset = ex.vec(0, 0);
@@ -682,7 +763,7 @@ export class BluffDriver implements GameDriver<BluffState> {
     motion
       .moveTo({
         pos: ex.vec(x, y),
-        duration: TRAVEL_MS,
+        duration,
         easing: ex.EasingFunctions.EaseOutCubic,
       })
       .callMethod(() => {
@@ -701,11 +782,14 @@ export class BluffDriver implements GameDriver<BluffState> {
       return;
     }
     const legal = legalCard(state, ctx.meSeatIndex, cardId);
-    const held = cardLift({
-      legal,
-      hovered: false,
-      selected: this.selected.has(cardId),
-    });
+    const held = Math.max(
+      cardLift({
+        legal,
+        hovered: false,
+        selected: this.selected.has(cardId),
+      }),
+      this.arrivalRaised.has(cardId) ? HOVER_LIFT : 0,
+    );
     const hover =
       record.personal && legal && held === 0
         ? this.handHover.current(cardId)
@@ -754,7 +838,59 @@ export class BluffDriver implements GameDriver<BluffState> {
     this.handHover.clear();
   }
 
+  private noteArrival(state: BluffState, ctx: RenderContext): void {
+    const previous = this.state;
+    if (!previous || JSON.stringify(previous) === JSON.stringify(state)) {
+      return;
+    }
+    const beat = challengePickup(
+      previous,
+      state,
+      ctx.meSeatIndex,
+      (seatIndex) =>
+        ctx.seats.find((seat) => seat.seatIndex === seatIndex)?.name ?? '',
+    );
+    if (beat) {
+      this.arrival = {
+        cards: beat.cards,
+        seat: beat.seat,
+        local: ctx.meSeatIndex === beat.seat,
+        line: beat.line,
+        elapsed: 0,
+        anchors: pileAnchors(previous, ctx.meSeatIndex),
+      };
+      return;
+    }
+    if (this.arrival) {
+      this.arrival = null;
+      this.arrivalRaised.clear();
+    }
+  }
+
+  private advanceArrival(elapsedMs: number): void {
+    const arrival = this.arrival;
+    const state = this.state;
+    const ctx = this.ctx;
+    if (!arrival || !state || !ctx) {
+      return;
+    }
+    const before = challengeFrame(arrival.elapsed).phase;
+    arrival.elapsed += elapsedMs;
+    const after = challengeFrame(arrival.elapsed).phase;
+    if (before === after) {
+      return;
+    }
+    if (after === 'settled') {
+      this.arrival = null;
+      this.arrivalRaised.clear();
+    }
+    this.syncLabels(state, ctx);
+    this.syncCards(state, ctx);
+    this.syncBacks(state, ctx);
+  }
+
   private easeHand(elapsedMs: number): void {
+    this.advanceArrival(elapsedMs);
     const state = this.state;
     const ctx = this.ctx;
     if (!state || !ctx) {
@@ -821,8 +957,17 @@ export class BluffDriver implements GameDriver<BluffState> {
       if (seat.self) {
         continue;
       }
-      const count = state.hands[String(seat.seatIndex)]?.length ?? 0;
-      const slots = bluffSeatFan(seat.x, seat.y, count);
+      let count = state.hands[String(seat.seatIndex)]?.length ?? 0;
+      const arrival = this.arrival;
+      if (
+        arrival &&
+        !arrival.local &&
+        arrival.seat === seat.seatIndex &&
+        !challengeFrame(arrival.elapsed).cardsInHand
+      ) {
+        count = Math.max(0, count - arrival.cards.length);
+      }
+      const slots = bluffSeatFan(seat.x, seat.y, count, seat.name);
       for (let index = 0; index < slots.length; index += 1) {
         const slot = slots[index];
         if (!slot) {

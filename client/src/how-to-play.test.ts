@@ -98,6 +98,16 @@ describe('layoutHowToPlay', () => {
     expect(layout.title).toBe('How to Play Bluff');
   });
 
+  it('keeps the Bluff rules and leaves out the computer cadence', () => {
+    const text = bluffGameDefinition.howToPlay;
+    expect(text).toContain('Anyone else may challenge');
+    expect(text).toContain('Empty your hand to win');
+    expect(text.toLowerCase()).not.toContain('computer');
+    expect(text).not.toContain('every fourth');
+    expect(text).not.toContain('plays 1, 5, 9');
+    expect(text.toLowerCase()).not.toContain('lie on plays');
+  });
+
   it('keeps every body word of the Bluff how-to-play text', () => {
     const layout = layoutHowToPlay(bluffGameDefinition, 84);
     const body = bluffGameDefinition.howToPlay
