@@ -123,7 +123,7 @@ import {
   tournamentTableCountError,
   type TournamentTableRow,
 } from './tournament';
-import { playBotTurns } from './bot-runner';
+import { BOT_BEAT_MICROS, botIsNext, playBotTurns } from './bot-runner';
 import {
   botClientId,
   botIntentRejection,
@@ -489,7 +489,7 @@ const BotTurnSchedule = table(
   },
 );
 
-const BOT_TURN_DELAY_MICROS = 1_000n;
+const BOT_TURN_DELAY_MICROS = BOT_BEAT_MICROS;
 
 const ClientStats = table(
   { name: 'ClientStats', public: true },
@@ -2938,20 +2938,28 @@ function scheduleBotTurns(ctx: ModuleCtx, tableId: string): void {
   });
 }
 
-function continueBotTurns(ctx: ModuleCtx, tableId: string): void {
+function soloActors(
+  ctx: ModuleCtx,
+  tableId: string,
+): {
+  gameType: string;
+  lobbyId: string;
+  state: unknown;
+  actors: { seatIndex: number; isBot: boolean }[];
+} | null {
   const gameTable = ctx.db.GameTable.id.find(tableId);
   if (!gameTable) {
-    return;
+    return null;
   }
   const lobby = ctx.db.Lobby.id.find(gameTable.lobbyId);
   if (!lobby || !lobby.solo || lobby.status.tag !== 'open') {
-    return;
+    return null;
   }
   let state: unknown;
   try {
     state = JSON.parse(gameTable.stateJson);
   } catch {
-    return;
+    return null;
   }
   const actors: { seatIndex: number; isBot: boolean }[] = [];
   for (const seat of ctx.db.GameSeat.byTable.filter(tableId)) {
@@ -2961,10 +2969,33 @@ function continueBotTurns(ctx: ModuleCtx, tableId: string): void {
     }
     actors.push({ seatIndex: seat.seatIndex, isBot: member.isBot });
   }
-  const batch = playBotTurns(
-    gameTable.gameType,
+  return {
+    gameType: gameTable.gameType,
+    lobbyId: gameTable.lobbyId,
     state,
     actors,
+  };
+}
+
+/** A person's move is already stored. The next bot play waits one beat. */
+function queueBotTurns(ctx: ModuleCtx, tableId: string): void {
+  const solo = soloActors(ctx, tableId);
+  if (!solo || !botIsNext(solo.gameType, solo.state, solo.actors)) {
+    return;
+  }
+  scheduleBotTurns(ctx, tableId);
+}
+
+/** One bot intent, then another beat when a bot still has to act. */
+function applyOneBotTurn(ctx: ModuleCtx, tableId: string): void {
+  const solo = soloActors(ctx, tableId);
+  if (!solo) {
+    return;
+  }
+  const batch = playBotTurns(
+    solo.gameType,
+    solo.state,
+    solo.actors,
     (current, intent, seatIndex) => {
       const seat = seatAt(ctx, tableId, seatIndex);
       if (!seat) {
@@ -2979,9 +3010,10 @@ function continueBotTurns(ctx: ModuleCtx, tableId: string): void {
         current,
       );
     },
+    1,
   );
   if (batch.error) {
-    console.error(rulesErrorLine(gameTable.id, gameTable.lobbyId, batch.error));
+    console.error(rulesErrorLine(tableId, solo.lobbyId, batch.error));
   }
   if (batch.pending) {
     scheduleBotTurns(ctx, tableId);
@@ -3060,7 +3092,7 @@ export const handle_game_intent = spacetimedb.reducer(
     }
 
     commitIntent(ctx, gameTable.id, member.id, seat.id, intent, prev);
-    continueBotTurns(ctx, gameTable.id);
+    queueBotTurns(ctx, gameTable.id);
   },
 );
 
@@ -3071,7 +3103,7 @@ export const play_bot_turns = spacetimedb.reducer(
     if (ctx.db.BotTurnSchedule.scheduledId.find(row.scheduledId)) {
       ctx.db.BotTurnSchedule.scheduledId.delete(row.scheduledId);
     }
-    continueBotTurns(ctx, row.tableId);
+    applyOneBotTurn(ctx, row.tableId);
   },
 );
 
@@ -3253,6 +3285,6 @@ export const start_solo_game = spacetimedb.reducer(
     });
     rememberTable(ctx.db, sender, lobbyId, row.id);
     noteLobbyActivity(ctx, lobbyId);
-    continueBotTurns(ctx, row.id);
+    queueBotTurns(ctx, row.id);
   },
 );

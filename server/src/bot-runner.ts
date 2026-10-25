@@ -1,7 +1,10 @@
 import { strategyFor } from '../../src/shared/games/bots/registry.ts';
 
-/** Intents applied in one reducer call. The rest wait for the schedule. */
+/** Intents one catch-up call may apply. A live table applies one per beat. */
 export const BOT_TURN_CAP = 32;
+
+/** Gap between bot plays, so each one arrives as its own update. */
+export const BOT_BEAT_MICROS = 800_000n;
 
 export interface BotActor {
   seatIndex: number;
@@ -37,15 +40,35 @@ function isBotSeat(actors: readonly BotActor[], seatIndex: number): boolean {
   return false;
 }
 
+/** True when the next actor is a bot. A person's turn is not one of these. */
+export function botIsNext(
+  gameType: string,
+  state: unknown,
+  actors: readonly BotActor[],
+): boolean {
+  const strategy = strategyFor(gameType);
+  if (!strategy) {
+    return false;
+  }
+  try {
+    const next = strategy.actingSeats(state)[0];
+    return next !== undefined && isBotSeat(actors, next);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Plays bot seats until the next actor is a person, the hand is over,
- * or the cap is reached. One thrown intent stops the loop and is reported.
+ * or the step limit is reached. One thrown intent stops the loop and is
+ * reported. The live schedule passes `1` so each play is its own update.
  */
 export function playBotTurns(
   gameType: string,
   state: unknown,
   actors: readonly BotActor[],
   apply: (state: unknown, intent: unknown, seatIndex: number) => unknown,
+  stepLimit = BOT_TURN_CAP,
 ): BotTurnBatch {
   const strategy = strategyFor(gameType);
   if (!strategy) {
@@ -53,7 +76,8 @@ export function playBotTurns(
   }
   let current = state;
   const applied: AppliedBotIntent[] = [];
-  for (let step = 0; step < BOT_TURN_CAP; step += 1) {
+  const steps = stepLimit < 1 ? 0 : stepLimit;
+  for (let step = 0; step < steps; step += 1) {
     let seats: number[];
     try {
       seats = strategy.actingSeats(current);

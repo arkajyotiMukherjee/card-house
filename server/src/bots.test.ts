@@ -30,7 +30,7 @@ import type {
   GameTable,
   IntentContext,
 } from '../../src/shared/games/game-rules.ts';
-import { playBotTurns } from './bot-runner.ts';
+import { BOT_BEAT_MICROS, botIsNext, playBotTurns } from './bot-runner.ts';
 
 function assert(condition: boolean, message: string): asserts condition {
   if (!condition) {
@@ -174,6 +174,54 @@ function openingIntent(
 function loose(rules: object): LooseRules {
   return rules as LooseRules;
 }
+
+const bluffPlayers = seats(2);
+const bluffOpening = bluffRules.initialState(bluffPlayers, table('bluff'));
+const bothBots = bluffPlayers.map((row) => ({
+  seatIndex: row.seatIndex,
+  isBot: true,
+}));
+const humanLead = [
+  { seatIndex: 0, isBot: false },
+  { seatIndex: 1, isBot: true },
+];
+function applyBluff(
+  current: unknown,
+  intent: unknown,
+  seatIndex: number,
+): unknown {
+  const who = bluffPlayers.find((row) => row.seatIndex === seatIndex);
+  if (!who) {
+    throw new Error(`bluff missing seat ${seatIndex}`);
+  }
+  return bluffRules.applyIntent(current as BluffState, intent as BluffIntent, {
+    seat: who,
+    now: 1,
+  });
+}
+assert(
+  botIsNext('bluff', bluffOpening, humanLead) === false,
+  'a human lead is not a bot beat',
+);
+assert(BOT_BEAT_MICROS === 800_000n, 'bot beats are 800ms apart');
+const oneBeat = playBotTurns('bluff', bluffOpening, bothBots, applyBluff, 1);
+assert(oneBeat.applied.length === 1, 'one reducer publishes one bot play');
+assert(oneBeat.pending === true, 'the next bot waits for the next beat');
+assert(oneBeat.error === undefined, 'one beat is not an error');
+const nextBeat = playBotTurns('bluff', oneBeat.state, bothBots, applyBluff, 1);
+assert(nextBeat.applied.length === 1, 'the following beat is its own play');
+assert(
+  JSON.stringify(oneBeat.applied[0]?.intent) !==
+    JSON.stringify(nextBeat.applied[0]?.intent) ||
+    oneBeat.applied[0]?.seatIndex !== nextBeat.applied[0]?.seatIndex,
+  'the second beat is not a repeat of the first',
+);
+const sameBeat = playBotTurns('bluff', bluffOpening, bothBots, applyBluff, 1);
+assert(
+  JSON.stringify(sameBeat.applied[0]?.intent) ===
+    JSON.stringify(oneBeat.applied[0]?.intent),
+  'the same state plays the same bot card',
+);
 
 const games: ReadonlyArray<{
   gameType: string;

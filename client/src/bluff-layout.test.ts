@@ -15,6 +15,8 @@ import {
   RANK_FILL,
   RANK_FILL_CHOSEN,
   bluffSeatFan,
+  fanCardBottom,
+  fanEdge,
   canChallenge,
   canPass,
   canPlay,
@@ -26,7 +28,6 @@ import {
   leadRankHint,
   legalCard,
   opponentCountAnchor,
-  opponentFanBox,
   opponentNameAnchor,
   pileFaceUp,
   pileNotice,
@@ -40,15 +41,6 @@ import {
   turnLine,
   type CardRect,
 } from './bluff-layout';
-
-function outside(point: { x: number; y: number }, rect: CardRect): boolean {
-  return (
-    point.x < rect.x ||
-    point.x > rect.x + rect.w ||
-    point.y < rect.y ||
-    point.y > rect.y + rect.h
-  );
-}
 
 function overlaps(a: CardRect, b: CardRect): boolean {
   return (
@@ -83,80 +75,69 @@ describe('bluff layout', () => {
     expect(pile).toEqual([{ x: PILE_X, y: PILE_Y }]);
   });
 
-  it('fans other hands along the side of the table', () => {
-    const right = bluffSeatFan(780, 310, 26);
-    const left = bluffSeatFan(180, 310, 8);
-    expect(right).toHaveLength(26);
-    expect(left).toHaveLength(8);
-    expect(right.every((slot) => slot.y < HAND_Y - 40)).toBe(true);
-    expect(right.every((slot) => slot.x > 640)).toBe(true);
-    expect(left.every((slot) => slot.x < 320)).toBe(true);
-    const first = right[0];
-    const last = right[right.length - 1];
-    expect(first).toBeDefined();
-    expect(last).toBeDefined();
-    const spread = Math.hypot(
-      (last?.x ?? 0) - (first?.x ?? 0),
-      (last?.y ?? 0) - (first?.y ?? 0),
-    );
-    expect(spread).toBeGreaterThan(70);
-    expect(first?.rotation).toBeLessThan(0);
-    expect(last?.rotation).toBeGreaterThan(0);
-    expect(Math.abs((last?.x ?? 0) - (first?.x ?? 0))).toBeGreaterThan(
-      Math.abs((last?.y ?? 0) - (first?.y ?? 0)),
-    );
-  });
-
-  it('keeps a wide fan in its seat box and the labels outside the cards', () => {
+  it('sets each fan on that seat edge and grows it inward', () => {
     const anchors = seatAnchorsFor(4);
-    const seats = [anchors[1], anchors[2], anchors[3]];
-    for (const seat of seats) {
-      expect(seat).toBeDefined();
-      if (!seat) {
+    const right = anchors[1];
+    const left = anchors[2];
+    const top = anchors[3];
+    expect(right && fanEdge(right.x, right.y)).toBe('right');
+    expect(left && fanEdge(left.x, left.y)).toBe('left');
+    expect(top && fanEdge(top.x, top.y)).toBe('top');
+    const seats = [
+      { seat: left, edge: 'left' as const },
+      { seat: right, edge: 'right' as const },
+      { seat: top, edge: 'top' as const },
+    ];
+    for (const row of seats) {
+      expect(row.seat).toBeDefined();
+      if (!row.seat) {
         continue;
       }
-      const box = opponentFanBox(seat.x, seat.y);
-      const slots = bluffSeatFan(seat.x, seat.y, 17);
+      const slots = bluffSeatFan(row.seat.x, row.seat.y, 17, 'Ada');
       expect(slots).toHaveLength(17);
-      const name = opponentNameAnchor(seat.x, seat.y, 'Bea');
-      const count = opponentCountAnchor(seat.x, seat.y, 17, 'Bea');
+      let along = 0;
+      let inward = 0;
+      for (const slot of slots) {
+        const bottom = fanCardBottom(slot);
+        if (row.edge === 'left') {
+          expect(bottom.x).toBeLessThan(28);
+          expect(slot.x).toBeGreaterThan(bottom.x + 8);
+          along += slot.y;
+          inward += slot.x;
+        } else if (row.edge === 'right') {
+          expect(bottom.x).toBeGreaterThan(960 - 28);
+          expect(slot.x).toBeLessThan(bottom.x - 8);
+          along += slot.y;
+          inward += 960 - slot.x;
+        } else {
+          expect(bottom.y).toBeLessThan(96);
+          expect(slot.y).toBeGreaterThan(bottom.y + 8);
+          along += slot.x;
+          inward += slot.y;
+        }
+      }
+      const name = opponentNameAnchor(row.seat.x, row.seat.y, 'Ada');
+      const count = opponentCountAnchor(row.seat.x, row.seat.y, 17, 'Ada');
       const nameRect = {
         x: name.x,
         y: name.y,
-        w: seatPlateWidth('Bea'),
+        w: seatPlateWidth('Ada'),
         h: 20,
       };
       const countRect = { x: count.x, y: count.y, w: 'x17'.length * 8, h: 8 };
-      let minX = Infinity;
-      let minY = Infinity;
-      let maxX = -Infinity;
-      let maxY = -Infinity;
-      for (let index = 0; index < slots.length; index += 1) {
-        const slot = slots[index];
-        expect(slot).toBeDefined();
-        if (!slot) {
-          continue;
-        }
+      const labelCenter = {
+        x: (nameRect.x + countRect.x) / 2,
+        y: (name.y + count.y + 8) / 2,
+      };
+      const fanAlong = along / slots.length;
+      const labelAlong = row.edge === 'top' ? labelCenter.x : labelCenter.y;
+      expect(Math.abs(labelAlong - fanAlong)).toBeLessThan(12);
+      for (const slot of slots) {
         const rect = fanCardRect(slot);
-        expect(rect.x).toBeGreaterThanOrEqual(box.x);
-        expect(rect.y).toBeGreaterThanOrEqual(box.y);
-        expect(rect.x + rect.w).toBeLessThanOrEqual(box.x + box.w);
-        expect(rect.y + rect.h).toBeLessThanOrEqual(box.y + box.h);
-        expect(outside(name, rect)).toBe(true);
-        expect(outside(count, rect)).toBe(true);
         expect(overlaps(nameRect, rect)).toBe(false);
         expect(overlaps(countRect, rect)).toBe(false);
-        const next = slots[index + 1];
-        if (next) {
-          expect(slot.x).toBeLessThan(next.x);
-          expect(overlaps(rect, fanCardRect(next))).toBe(true);
-        }
-        minX = Math.min(minX, rect.x);
-        minY = Math.min(minY, rect.y);
-        maxX = Math.max(maxX, rect.x + rect.w);
-        maxY = Math.max(maxY, rect.y + rect.h);
       }
-      expect(maxX - minX).toBeGreaterThan(maxY - minY);
+      expect(inward / slots.length).toBeGreaterThan(16);
     }
   });
 

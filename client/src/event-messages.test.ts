@@ -29,35 +29,27 @@ describe('stored event', () => {
 
 describe('eventMessage', () => {
   it('announces a called bluff that caught a lie', () => {
-    expect(
-      eventMessage(
-        'bluff',
-        {
-          kind: 'challenge',
-          challenger: 1,
-          accused: 0,
-          bluff: true,
-          pickedUp: 0,
-        },
-        names,
-      ),
-    ).toBe('Bea called bluff! Ada lied and takes the pile');
+    const note = {
+      kind: 'challenge',
+      challenger: 1,
+      accused: 0,
+      bluff: true,
+      pickedUp: 0,
+    };
+    expect(eventMessage('bluff', note, names, 0)).toBe('Bea challenged you');
+    expect(eventMessage('bluff', note, names, 1)).toBe('You challenged Ada');
   });
 
   it('announces a called bluff on an honest play', () => {
-    expect(
-      eventMessage(
-        'bluff',
-        {
-          kind: 'challenge',
-          challenger: 1,
-          accused: 0,
-          bluff: false,
-          pickedUp: 1,
-        },
-        names,
-      ),
-    ).toBe('Bea called bluff but Ada was honest. Bea takes the pile');
+    const note = {
+      kind: 'challenge',
+      challenger: 1,
+      accused: 0,
+      bluff: false,
+      pickedUp: 1,
+    };
+    expect(eventMessage('bluff', note, names, 0)).toBe('Bea challenged you');
+    expect(eventMessage('bluff', note, names, 1)).toBe('You challenged Ada');
   });
 
   it('announces a pass', () => {
