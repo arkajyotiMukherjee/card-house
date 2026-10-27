@@ -949,7 +949,7 @@ export class PokerDriver implements GameDriver<PokerState> {
           z: 8 + index,
         });
         const faceUp = cardId !== null;
-        actor.graphics.use(cardSprite(ctx.cards, cardId ?? '', faceUp));
+        actor.graphics.use(cardSprite(ctx.cards, cardId ?? '', faceUp, false));
         ctx.scene.add(actor);
         slot = {
           actor,
@@ -981,7 +981,7 @@ export class PokerDriver implements GameDriver<PokerState> {
         slot.showingFace = true;
         slot.flipMs = null;
         slot.actor.scale = ex.vec(1, 1);
-        slot.actor.graphics.use(cardSprite(ctx.cards, cardId, true));
+        slot.actor.graphics.use(cardSprite(ctx.cards, cardId, true, false));
         continue;
       }
       slot.cardId = cardId;
@@ -1005,7 +1005,7 @@ export class PokerDriver implements GameDriver<PokerState> {
       slot.flipMs += elapsedMs;
       const frame = boardFlip(slot.flipMs);
       if (frame.face && !slot.showingFace) {
-        slot.actor.graphics.use(cardSprite(ctx.cards, slot.cardId, true));
+        slot.actor.graphics.use(cardSprite(ctx.cards, slot.cardId, true, false));
         slot.showingFace = true;
       }
       slot.actor.scale = ex.vec(frame.scaleX, 1);
