@@ -197,7 +197,7 @@ const SHELL_CSS = `
   gap: 20px;
   padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right))
     max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
-  background: #145c38;
+  background: var(--cardhouse-bg, #145c38);
   color: #f4e4b3;
   text-align: center;
   touch-action: manipulation;

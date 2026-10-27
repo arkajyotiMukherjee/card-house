@@ -46,7 +46,8 @@ import {
   type PresenceRef,
 } from './voice-presence';
 import { PokerDriver } from './poker-driver';
-import { cardAtlas, personalCardAtlas, tableSprites } from './boot-scene';
+import { personalCardAtlas, tableSprites } from './boot-scene';
+import { tableScenePaint } from './client-look';
 import { statsCaption } from './client-stats';
 import { type TableStyle } from './table-atlas';
 import {
@@ -60,7 +61,6 @@ import {
   canvasText,
   DANGER,
   DIM,
-  FELT,
   GOLD,
   panelRect,
   PLATE,
@@ -179,7 +179,20 @@ export class GameScene extends ex.Scene {
     this.tableActor?.graphics.use(tableSprites[style].clone());
   }
 
+  /** Paints the margin around the felt from the saved background color. */
+  setBackground(hex: string): void {
+    this.backgroundColor = ex.Color.fromHex(hex);
+  }
+
+  /** Reads this browser's Theme again so a reload or a join paints it. */
+  private applyStoredLook(): void {
+    const paint = tableScenePaint(this.clientId);
+    this.setTableStyle(paint.table);
+    this.setBackground(paint.background);
+  }
+
   open(tableId: string, lobbyMemberId: string): void {
+    this.applyStoredLook();
     this.tableId = tableId;
     this.lobbyMemberId = lobbyMemberId;
     this.leaving = false;
@@ -205,7 +218,7 @@ export class GameScene extends ex.Scene {
   }
 
   onInitialize(): void {
-    this.backgroundColor = FELT;
+    this.applyStoredLook();
 
     const sprite = tableSprites[this.style].clone();
     sprite.scale = ex.vec(TABLE_SCALE, TABLE_SCALE);
@@ -1087,12 +1100,13 @@ export class GameScene extends ex.Scene {
         meSeatIndex = seat.seatIndex;
       }
     }
+    const mine = personalCardAtlas();
     return {
       scene: this,
       seats: this.placed,
       meSeatIndex,
-      cards: cardAtlas,
-      myCards: personalCardAtlas(),
+      cards: mine,
+      myCards: mine,
       sendIntent: (intent) => {
         this.sendPayload(JSON.stringify(intent), intent);
       },

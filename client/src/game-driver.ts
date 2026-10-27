@@ -13,12 +13,14 @@ export interface RenderContext {
   scene: Scene;
   seats: readonly DriverSeat[];
   meSeatIndex: number | null;
-  /** Shared look: the table, piles, melds, and every other seat's cards and backs. */
+  /**
+   * Card front and back for this browser. The table scene sets this to the
+   * saved Theme, so the menu, the lobby, and every card on the table match.
+   */
   cards: CardAtlas;
   /**
-   * The local player's own front and back style, from `card-appearance.ts`.
-   * Only the cards still in this player's own hand read it; everything else
-   * (including this player's own played or melded cards) stays on `cards`.
+   * The local player's own front and back. The table scene uses the same
+   * saved Theme here. Own-hand cards still pass `personal: true`.
    */
   myCards: CardAtlas;
   sendIntent: (intent: unknown) => void;

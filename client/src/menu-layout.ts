@@ -1,10 +1,9 @@
 import { BUTTON_HEIGHT } from './button-style';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from './sheets';
-import type { TableStyle } from './table-atlas';
 
 export const MENU_VERSION = 'v0.1';
 
-export type MenuAction = 'create' | 'join' | 'solo' | 'howto' | 'cards';
+export type MenuAction = 'create' | 'join' | 'solo' | 'howto' | 'theme';
 
 export interface MenuButtonSpec {
   action: MenuAction;
@@ -26,7 +25,7 @@ const MENU_ENTRIES: ReadonlyArray<Pick<MenuButtonSpec, 'action' | 'caption'>> =
     { action: 'join', caption: 'Join Room' },
     { action: 'solo', caption: 'Single Player' },
     { action: 'howto', caption: 'How to Play (All Games)' },
-    { action: 'cards', caption: 'Card Style' },
+    { action: 'theme', caption: 'Theme' },
   ];
 
 export const MENU_BUTTONS: readonly MenuButtonSpec[] = MENU_ENTRIES.map(
@@ -40,18 +39,6 @@ export const MENU_BUTTONS: readonly MenuButtonSpec[] = MENU_ENTRIES.map(
 );
 
 export const MENU_BACKDROP = { x: 200, y: 48, w: 560, h: 420 } as const;
-
-export const MENU_THEME_BUTTON = {
-  x: 816,
-  y: 16,
-  w: 128,
-  h: BUTTON_HEIGHT,
-} as const;
-
-/** Caption for the theme toggle button, e.g. `Theme: Green`. */
-export function themeButtonLabel(style: TableStyle): string {
-  return `Theme: ${style.charAt(0).toUpperCase()}${style.slice(1)}`;
-}
 
 export const MENU_TITLE = { text: 'Card House', size: 48, y: 72 } as const;
 export const MENU_TAGLINE = {
@@ -117,23 +104,76 @@ export const HOW_TO_PLAY = {
   back: { x: 56, y: 450, w: 120, h: BUTTON_HEIGHT },
 } as const;
 
-export const CARD_STYLE = {
-  panel: { x: 240, y: 130, w: 480, h: 280 },
-  frontRow: { x: 264, y: 196, labelY: 180 },
-  backRow: { x: 264, y: 256, labelY: 240 },
+export type ThemeChoiceId = 'front' | 'back' | 'table' | 'background';
+
+export type ThemePreview = 'face' | 'back' | 'table' | 'background';
+
+export interface ThemeChoiceSpec {
+  id: ThemeChoiceId;
+  label: string;
+  preview: ThemePreview;
+  x: number;
+  y: number;
+  labelY: number;
+  previewBox: { x: number; y: number; w: number; h: number };
+}
+
+/**
+ * One Theme panel. Each row has arrows and a preview beside the choice:
+ * a card face, a card back, a table swatch, and a background swatch.
+ */
+export const THEME_PANEL = {
+  panel: { x: 120, y: 24, w: 720, h: 432 },
   arrow: { w: 24, h: 24 },
-  arrowGap: 180,
-  preview: { frontX: 560, backX: 632, y: 170 },
-  close: { x: 264, y: 360, w: 160, h: BUTTON_HEIGHT },
+  arrowGap: 200,
+  close: { x: 280, y: 416, w: 160, h: BUTTON_HEIGHT },
+  choices: [
+    {
+      id: 'front',
+      label: 'Card Front',
+      preview: 'face',
+      x: 168,
+      y: 108,
+      labelY: 88,
+      previewBox: { x: 400, y: 88, w: 64, h: 64 },
+    },
+    {
+      id: 'back',
+      label: 'Card Back',
+      preview: 'back',
+      x: 168,
+      y: 196,
+      labelY: 176,
+      previewBox: { x: 400, y: 176, w: 64, h: 64 },
+    },
+    {
+      id: 'table',
+      label: 'Table Color',
+      preview: 'table',
+      x: 168,
+      y: 284,
+      labelY: 264,
+      previewBox: { x: 400, y: 256, w: 129, h: 80 },
+    },
+    {
+      id: 'background',
+      label: 'Background',
+      preview: 'background',
+      x: 168,
+      y: 372,
+      labelY: 352,
+      previewBox: { x: 400, y: 360, w: 48, h: 32 },
+    },
+  ] as const satisfies readonly ThemeChoiceSpec[],
 } as const;
 
 export type PromptKind = 'create' | 'join';
 
-export type MenuMode = 'main' | PromptKind | 'solo' | 'howto' | 'cards';
+export type MenuMode = 'main' | PromptKind | 'solo' | 'howto' | 'theme';
 
 /**
  * A menu button runs only on the main menu, and only when the open dialog
- * did not already take this click. Card Style's Close sits on How to Play.
+ * did not already take this click. Theme's Close sits on the Theme button.
  * Closing the dialog must not count as pressing the button underneath.
  */
 export function menuAcceptsAction(

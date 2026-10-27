@@ -8,12 +8,16 @@
     />
     <title>Card House</title>
     <style>
+      html {
+        /* Green bars when the window is not 16:9. Theme can change this. */
+        --cardhouse-bg: #145c38;
+      }
+
       html,
       body {
         margin: 0;
         height: 100%;
-        /* Black bars when the window is not 16:9. The felt stays in the frame. */
-        background: #000000;
+        background: var(--cardhouse-bg);
         overflow: hidden;
         touch-action: manipulation;
         overscroll-behavior: none;
@@ -24,7 +28,7 @@
         position: fixed;
         inset: 0;
         overflow: hidden;
-        background: #000000;
+        background: var(--cardhouse-bg);
       }
 
       canvas {

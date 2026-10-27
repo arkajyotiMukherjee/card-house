@@ -1,13 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { bluffGameDefinition } from '../../src/shared/games/bluff';
 import {
-  CARD_STYLE,
   FLOATER_MARGIN,
   MENU_BACKDROP,
   MENU_BUTTONS,
-  MENU_THEME_BUTTON,
   MENU_TITLE,
   SOLO_PICKER,
+  THEME_PANEL,
   soloSeatCount,
   soloSettingsJson,
   floaterPose,
@@ -18,7 +17,6 @@ import {
   promptFields,
   splitHowToPlay,
   stepIndex,
-  themeButtonLabel,
   wrapText,
 } from './menu-layout';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from './sheets';
@@ -30,13 +28,13 @@ describe('menu title', () => {
 });
 
 describe('menu buttons', () => {
-  it('lists Create Room, Join Room, Single Player, How to Play, and Card Style in a centered stack', () => {
+  it('lists Create Room, Join Room, Single Player, How to Play, and Theme in a centered stack', () => {
     expect(MENU_BUTTONS.map((button) => button.caption)).toEqual([
       'Create Room',
       'Join Room',
       'Single Player',
       'How to Play (All Games)',
-      'Card Style',
+      'Theme',
     ]);
     for (const button of MENU_BUTTONS) {
       expect(button.x + button.w / 2).toBe(LOGICAL_WIDTH / 2);
@@ -59,41 +57,86 @@ describe('menu buttons', () => {
 });
 
 describe('overlay clicks', () => {
-  it('draws Card Style Close over How to Play', () => {
-    const howto = MENU_BUTTONS.find((button) => button.action === 'howto');
-    const close = CARD_STYLE.close;
-    expect(howto).toBeDefined();
-    if (!howto) {
+  it('draws Theme Close over the Theme button', () => {
+    const theme = MENU_BUTTONS.find((button) => button.action === 'theme');
+    const close = THEME_PANEL.close;
+    expect(theme).toBeDefined();
+    if (!theme) {
       return;
     }
     const overlaps =
-      close.x < howto.x + howto.w &&
-      close.x + close.w > howto.x &&
-      close.y < howto.y + howto.h &&
-      close.y + close.h > howto.y;
+      close.x < theme.x + theme.w &&
+      close.x + close.w > theme.x &&
+      close.y < theme.y + theme.h &&
+      close.y + close.h > theme.y;
     expect(overlaps).toBe(true);
   });
 
   it('ignores a menu action when the dialog already took the click', () => {
-    expect(menuAcceptsAction('cards', true)).toBe(false);
+    expect(menuAcceptsAction('theme', true)).toBe(false);
     expect(menuAcceptsAction('main', true)).toBe(false);
     expect(menuAcceptsAction('howto', false)).toBe(false);
     expect(menuAcceptsAction('main', false)).toBe(true);
   });
 });
 
-describe('theme button', () => {
-  it('sits clear of the main menu panel', () => {
-    expect(MENU_THEME_BUTTON.x + MENU_THEME_BUTTON.w).toBeLessThanOrEqual(
-      LOGICAL_WIDTH,
-    );
-    expect(MENU_THEME_BUTTON.y + MENU_THEME_BUTTON.h).toBeLessThanOrEqual(72);
-  });
-
-  it('names the current table style', () => {
-    expect(themeButtonLabel('green')).toBe('Theme: Green');
-    expect(themeButtonLabel('purple')).toBe('Theme: Purple');
-    expect(themeButtonLabel('red')).toBe('Theme: Red');
+describe('theme panel', () => {
+  it('lists card front, card back, table color, and background with previews', () => {
+    expect(THEME_PANEL.choices.map((choice) => choice.id)).toEqual([
+      'front',
+      'back',
+      'table',
+      'background',
+    ]);
+    expect(THEME_PANEL.choices.map((choice) => choice.label)).toEqual([
+      'Card Front',
+      'Card Back',
+      'Table Color',
+      'Background',
+    ]);
+    expect(THEME_PANEL.choices.map((choice) => choice.preview)).toEqual([
+      'face',
+      'back',
+      'table',
+      'background',
+    ]);
+    const panel = THEME_PANEL.panel;
+    for (const choice of THEME_PANEL.choices) {
+      const preview = choice.previewBox;
+      expect(preview.w).toBeGreaterThan(0);
+      expect(preview.h).toBeGreaterThan(0);
+      expect(preview.x).toBeGreaterThanOrEqual(panel.x);
+      expect(preview.y).toBeGreaterThanOrEqual(panel.y);
+      expect(preview.x + preview.w).toBeLessThanOrEqual(panel.x + panel.w);
+      expect(preview.y + preview.h).toBeLessThanOrEqual(panel.y + panel.h);
+      expect(preview.x).toBeGreaterThan(choice.x);
+    }
+    for (let index = 0; index < THEME_PANEL.choices.length; index += 1) {
+      const box = THEME_PANEL.choices[index]?.previewBox;
+      if (!box) {
+        continue;
+      }
+      for (
+        let other = index + 1;
+        other < THEME_PANEL.choices.length;
+        other += 1
+      ) {
+        const next = THEME_PANEL.choices[other]?.previewBox;
+        if (!next) {
+          continue;
+        }
+        const overlaps =
+          box.x < next.x + next.w &&
+          box.x + box.w > next.x &&
+          box.y < next.y + next.h &&
+          box.y + box.h > next.y;
+        expect(overlaps).toBe(false);
+      }
+    }
+    expect(panel.x).toBeGreaterThanOrEqual(0);
+    expect(panel.y).toBeGreaterThanOrEqual(0);
+    expect(panel.x + panel.w).toBeLessThanOrEqual(LOGICAL_WIDTH);
+    expect(panel.y + panel.h).toBeLessThanOrEqual(LOGICAL_HEIGHT);
   });
 });
 
