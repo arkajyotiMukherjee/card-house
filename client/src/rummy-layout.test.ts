@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RummyState } from '../../src/shared/games/rummy';
 import { CARD_DRAW, HAND_Y } from './bluff-layout';
-import { SEAT_ANCHORS } from './game-scene';
+import { seatAnchorsFor } from './game-scene';
 import {
   belowFelt,
   fanCardRect,
@@ -73,7 +73,7 @@ describe('rummy layout', () => {
         b.x < a.x + a.w &&
         a.y < b.y + b.h &&
         b.y < a.y + a.h;
-      const seats = SEAT_ANCHORS.slice(0, 6);
+      const seats = seatAnchorsFor(6);
       const fixed: Box[] = [
         { name: 'hud', x: 668, y: 16, w: 240, h: 52 },
         { name: 'hint', x: HINT_X, y: HINT_Y, w: 120, h: 22 },
