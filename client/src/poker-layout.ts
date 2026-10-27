@@ -39,6 +39,43 @@ export const STAKE_MAX = actionBox(3);
 export const STAKE_CONFIRM = actionBox(4);
 export const STAKE_CANCEL = actionBox(5);
 
+export interface StakeHitBox {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * The stake control under `point`.
+ *
+ * `boxes` is draw order, later last. The right and bottom edges are open,
+ * so a shared edge belongs to the later box only. An overlap belongs to
+ * that same later box. A miss is null.
+ */
+export function frontStakeControl(
+  boxes: readonly StakeHitBox[],
+  point: { x: number; y: number },
+): string | null {
+  let front: string | null = null;
+  for (let index = 0; index < boxes.length; index += 1) {
+    const box = boxes[index];
+    if (!box) {
+      continue;
+    }
+    if (
+      point.x >= box.x &&
+      point.x < box.x + box.w &&
+      point.y >= box.y &&
+      point.y < box.y + box.h
+    ) {
+      front = box.id;
+    }
+  }
+  return front;
+}
+
 /** Chip step for the amount control. Raises move by the current min-raise. */
 export function stakeStep(state: PokerState, kind: 'bet' | 'raise'): number {
   const raw = kind === 'raise' ? state.minRaise : state.bigBlind;
