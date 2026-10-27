@@ -19,6 +19,8 @@ import { goFishRules } from '../../src/shared/games/go-fish.ts';
 import { heartsRules } from '../../src/shared/games/hearts.ts';
 import {
   pokerRules,
+  type PokerIntent,
+  type PokerState,
   type PokerVariation,
 } from '../../src/shared/games/poker.ts';
 import { presidentRules } from '../../src/shared/games/president.ts';
@@ -30,7 +32,12 @@ import type {
   GameTable,
   IntentContext,
 } from '../../src/shared/games/game-rules.ts';
-import { BOT_BEAT_MICROS, botIsNext, playBotTurns } from './bot-runner.ts';
+import {
+  BOT_BEAT_MICROS,
+  POKER_HAND_PAUSE_MICROS,
+  botIsNext,
+  playBotTurns,
+} from './bot-runner.ts';
 
 function assert(condition: boolean, message: string): asserts condition {
   if (!condition) {
@@ -204,6 +211,10 @@ assert(
   'a human lead is not a bot beat',
 );
 assert(BOT_BEAT_MICROS === 800_000n, 'bot beats are 800ms apart');
+assert(
+  POKER_HAND_PAUSE_MICROS === BOT_BEAT_MICROS * 3n,
+  'a finished poker hand stays up for three beats',
+);
 const oneBeat = playBotTurns('bluff', bluffOpening, bothBots, applyBluff, 1);
 assert(oneBeat.applied.length === 1, 'one reducer publishes one bot play');
 assert(oneBeat.pending === true, 'the next bot waits for the next beat');
@@ -222,6 +233,49 @@ assert(
     JSON.stringify(oneBeat.applied[0]?.intent),
   'the same state plays the same bot card',
 );
+
+const holdemPlayers = seats(2);
+const holdemButton = holdemPlayers[0];
+const holdemBlind = holdemPlayers[1];
+assert(
+  holdemButton !== undefined && holdemBlind !== undefined,
+  'two poker seats',
+);
+const holdemOpening = pokerRules.initialState(
+  holdemPlayers,
+  table('poker', JSON.stringify({ variation: 'holdem' })),
+);
+const holdemFlop = pokerRules.applyIntent(
+  pokerRules.applyIntent(
+    holdemOpening,
+    { type: 'call' },
+    { seat: holdemButton, now: 1 },
+  ),
+  { type: 'check' },
+  { seat: holdemBlind, now: 1 },
+);
+const pokerBeat = playBotTurns(
+  'poker',
+  holdemFlop,
+  holdemPlayers.map((row) => ({ seatIndex: row.seatIndex, isBot: true })),
+  (current, intent, seatIndex) => {
+    const who = holdemPlayers.find((row) => row.seatIndex === seatIndex);
+    if (!who) {
+      throw new Error('poker missing seat');
+    }
+    return pokerRules.applyIntent(current as PokerState, intent as PokerIntent, {
+      seat: who,
+      now: 1,
+    });
+  },
+  1,
+);
+assert(pokerBeat.applied.length === 1, 'one poker beat publishes one action');
+assert(
+  pokerBeat.pending === true,
+  'the next poker seat waits for the next beat',
+);
+assert(phaseOf(pokerBeat.state) === 'play', 'one beat does not finish the flop');
 
 const games: ReadonlyArray<{
   gameType: string;

@@ -41,8 +41,13 @@ import {
 import {
   POKER_GAME_TYPE,
   POKER_VARIATIONS,
+  advancePoker,
+  pokerAdvanceKind,
   pokerGameDefinition,
   pokerRules,
+  pokerSeatLeft,
+  readPokerState,
+  type PokerState,
 } from '../../src/shared/games/poker';
 import {
   dummyCounterRules,
@@ -123,7 +128,12 @@ import {
   tournamentTableCountError,
   type TournamentTableRow,
 } from './tournament';
-import { BOT_BEAT_MICROS, botIsNext, playBotTurns } from './bot-runner';
+import {
+  BOT_BEAT_MICROS,
+  POKER_HAND_PAUSE_MICROS,
+  botIsNext,
+  playBotTurns,
+} from './bot-runner';
 import {
   botClientId,
   botIntentRejection,
@@ -488,8 +498,6 @@ const BotTurnSchedule = table(
     tableId: t.string(),
   },
 );
-
-const BOT_TURN_DELAY_MICROS = BOT_BEAT_MICROS;
 
 const ClientStats = table(
   { name: 'ClientStats', public: true },
@@ -2325,7 +2333,11 @@ export const join_table = spacetimedb.reducer(
       const next = rules.initialState(seatedNow, rulesTable(gameTable));
       stateJson = storedState(next);
       status = storedStatus(
-        statusTagForState(next, currentStatusTag(gameTable.status.tag)),
+        tableStatusTag(
+          gameTable.gameType,
+          next,
+          currentStatusTag(gameTable.status.tag),
+        ),
       );
     }
     ctx.db.GameTable.id.update({
@@ -2564,9 +2576,11 @@ export const leave_table = spacetimedb.reducer(
     }
 
     const seatIds: string[] = [];
+    const leavingSeats: number[] = [];
     for (const seat of ctx.db.GameSeat.byTable.filter(gameTable.id)) {
       if (seat.lobbyMemberId === member.id) {
         seatIds.push(seat.id);
+        leavingSeats.push(seat.seatIndex);
       }
     }
     const spectatorIds: string[] = [];
@@ -2589,10 +2603,36 @@ export const leave_table = spacetimedb.reducer(
     for (const spectatorId of spectatorIds) {
       ctx.db.Spectator.id.delete(spectatorId);
     }
+    let stateJson = gameTable.stateJson;
+    let status = gameTable.status;
+    if (gameTable.gameType === POKER_GAME_TYPE && leavingSeats.length > 0) {
+      try {
+        let parsed: unknown = JSON.parse(gameTable.stateJson);
+        for (const seatIndex of leavingSeats) {
+          parsed = pokerSeatLeft(parsed as PokerState, seatIndex);
+        }
+        stateJson = storedState(parsed);
+        status = storedStatus(
+          tableStatusTag(
+            POKER_GAME_TYPE,
+            parsed,
+            currentStatusTag(gameTable.status.tag),
+          ),
+        );
+      } catch {
+        stateJson = gameTable.stateJson;
+        status = gameTable.status;
+      }
+    }
     ctx.db.GameTable.id.update({
       ...gameTable,
+      stateJson,
+      status,
       lastActivityAt: ctx.timestamp,
     });
+    if (gameTable.gameType === POKER_GAME_TYPE && leavingSeats.length > 0) {
+      queueTableBeat(ctx, gameTable.id);
+    }
     forgetTable(ctx.db, ctx.sender.toHexString(), gameTable.id);
     noteLobbyActivity(ctx, lobby.id);
   },
@@ -2720,6 +2760,22 @@ function rulesSeat(seat: {
     joinedAt: Number(seat.joinedAt.toMillis()),
     seatState,
   };
+}
+
+/**
+ * Poker is a cash game. A finished hand is the pause before the next deal,
+ * so the table stays in progress while people are still seated.
+ */
+function tableStatusTag(
+  gameType: string,
+  state: unknown,
+  current: TableStatusTag,
+): TableStatusTag {
+  const tag = statusTagForState(state, current);
+  if (gameType === POKER_GAME_TYPE && tag === 'finished') {
+    return 'in_progress';
+  }
+  return tag;
 }
 
 function currentStatusTag(tag: string): TableStatusTag {
@@ -2881,7 +2937,11 @@ function commitIntent(
 
   const stateJson = storedState(next);
   const status = storedStatus(
-    statusTagForState(next, currentStatusTag(gameTable.status.tag)),
+    tableStatusTag(
+      gameTable.gameType,
+      next,
+      currentStatusTag(gameTable.status.tag),
+    ),
   );
   ctx.db.GameTable.id.update({
     ...gameTable,
@@ -2923,7 +2983,11 @@ function seatAt(
   return undefined;
 }
 
-function scheduleBotTurns(ctx: ModuleCtx, tableId: string): void {
+function scheduleBotTurns(
+  ctx: ModuleCtx,
+  tableId: string,
+  delayMicros: bigint,
+): void {
   for (const row of ctx.db.BotTurnSchedule.iter()) {
     if (row.tableId === tableId) {
       return;
@@ -2932,10 +2996,98 @@ function scheduleBotTurns(ctx: ModuleCtx, tableId: string): void {
   ctx.db.BotTurnSchedule.insert({
     scheduledId: 0n,
     scheduledAt: ScheduleAt.time(
-      ctx.timestamp.microsSinceUnixEpoch + BOT_TURN_DELAY_MICROS,
+      ctx.timestamp.microsSinceUnixEpoch + delayMicros,
     ),
     tableId,
   });
+}
+
+function seatIndexes(ctx: ModuleCtx, tableId: string): number[] {
+  const indexes: number[] = [];
+  for (const seat of ctx.db.GameSeat.byTable.filter(tableId)) {
+    indexes.push(seat.seatIndex);
+  }
+  indexes.sort((left, right) => left - right);
+  return indexes;
+}
+
+function readTablePoker(state: unknown): PokerState | null {
+  try {
+    return readPokerState(state);
+  } catch {
+    return null;
+  }
+}
+
+/** One bot action, or one poker street or the next hand, on a later beat. */
+function queueTableBeat(ctx: ModuleCtx, tableId: string): void {
+  const solo = soloActors(ctx, tableId);
+  if (solo && botIsNext(solo.gameType, solo.state, solo.actors)) {
+    scheduleBotTurns(ctx, tableId, BOT_BEAT_MICROS);
+    return;
+  }
+  const gameTable = ctx.db.GameTable.id.find(tableId);
+  if (!gameTable || gameTable.gameType !== POKER_GAME_TYPE) {
+    return;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(gameTable.stateJson);
+  } catch {
+    return;
+  }
+  const poker = readTablePoker(parsed);
+  if (!poker) {
+    return;
+  }
+  const kind = pokerAdvanceKind(poker, seatIndexes(ctx, tableId));
+  if (!kind) {
+    return;
+  }
+  scheduleBotTurns(
+    ctx,
+    tableId,
+    kind === 'hand' ? POKER_HAND_PAUSE_MICROS : BOT_BEAT_MICROS,
+  );
+}
+
+function advancePokerTable(ctx: ModuleCtx, tableId: string): void {
+  const gameTable = ctx.db.GameTable.id.find(tableId);
+  if (!gameTable || gameTable.gameType !== POKER_GAME_TYPE) {
+    return;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(gameTable.stateJson);
+  } catch {
+    return;
+  }
+  const poker = readTablePoker(parsed);
+  if (!poker) {
+    return;
+  }
+  const seated = seatIndexes(ctx, tableId);
+  if (pokerAdvanceKind(poker, seated) === null) {
+    return;
+  }
+  const next = advancePoker(poker, rulesTable(gameTable), seated);
+  ctx.db.GameTable.id.update({
+    ...gameTable,
+    stateJson: storedState(next),
+    status: storedStatus(
+      tableStatusTag(
+        POKER_GAME_TYPE,
+        next,
+        currentStatusTag(gameTable.status.tag),
+      ),
+    ),
+    lastActivityAt: ctx.timestamp,
+  });
+  if (gameTable.tournamentId.length > 0) {
+    refreshTournamentRoundStatus(ctx, gameTable.tournamentId, gameTable.round);
+  }
+  noteLobbyActivity(ctx, gameTable.lobbyId);
+  queueTableBeat(ctx, tableId);
 }
 
 function soloActors(
@@ -2977,13 +3129,9 @@ function soloActors(
   };
 }
 
-/** A person's move is already stored. The next bot play waits one beat. */
+/** A person's move is already stored. The next bot or poker beat waits. */
 function queueBotTurns(ctx: ModuleCtx, tableId: string): void {
-  const solo = soloActors(ctx, tableId);
-  if (!solo || !botIsNext(solo.gameType, solo.state, solo.actors)) {
-    return;
-  }
-  scheduleBotTurns(ctx, tableId);
+  queueTableBeat(ctx, tableId);
 }
 
 /** One bot intent, then another beat when a bot still has to act. */
@@ -3014,10 +3162,9 @@ function applyOneBotTurn(ctx: ModuleCtx, tableId: string): void {
   );
   if (batch.error) {
     console.error(rulesErrorLine(tableId, solo.lobbyId, batch.error));
+    return;
   }
-  if (batch.pending) {
-    scheduleBotTurns(ctx, tableId);
-  }
+  queueTableBeat(ctx, tableId);
 }
 
 export const handle_game_intent = spacetimedb.reducer(
@@ -3103,7 +3250,12 @@ export const play_bot_turns = spacetimedb.reducer(
     if (ctx.db.BotTurnSchedule.scheduledId.find(row.scheduledId)) {
       ctx.db.BotTurnSchedule.scheduledId.delete(row.scheduledId);
     }
-    applyOneBotTurn(ctx, row.tableId);
+    const solo = soloActors(ctx, row.tableId);
+    if (solo && botIsNext(solo.gameType, solo.state, solo.actors)) {
+      applyOneBotTurn(ctx, row.tableId);
+      return;
+    }
+    advancePokerTable(ctx, row.tableId);
   },
 );
 
@@ -3274,7 +3426,7 @@ export const start_solo_game = spacetimedb.reducer(
       );
       stateJson = storedState(next);
       status = storedStatus(
-        statusTagForState(next, currentStatusTag(row.status.tag)),
+        tableStatusTag(gameType, next, currentStatusTag(row.status.tag)),
       );
     }
     ctx.db.GameTable.id.update({

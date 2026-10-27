@@ -419,6 +419,7 @@ function pokerState(overrides: Partial<PokerState> = {}): PokerState {
     variation: 'omaha',
     street: 'flop',
     step: 'bet',
+    handNumber: 1,
     deck: [],
     board: [],
     seats: {},
@@ -449,5 +450,20 @@ describe('pokerStatusHud', () => {
     expect(pokerStatusHud(pokerState({ step: 'discard' }), seats).phase).toBe(
       'Phase: Discard',
     );
+    expect(pokerStatusHud(pokerState({ turnSeatIndex: 4 }), []).turn).toBe(
+      'Turn: Player',
+    );
+    expect(
+      pokerStatusHud(
+        pokerState({ phase: 'finished', end: 'showdown', turnSeatIndex: null }),
+        seats,
+      ).phase,
+    ).toBe('Phase: Showdown');
+    expect(
+      pokerStatusHud(
+        pokerState({ phase: 'finished', end: 'fold', turnSeatIndex: null }),
+        seats,
+      ).phase,
+    ).toBe('Phase: Hand');
   });
 });
