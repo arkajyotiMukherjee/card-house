@@ -22,6 +22,7 @@ import {
   droppedPositions,
   faceForPokerCard,
   finishedLine,
+  frontStakeControl,
   holePositions,
   moveStake,
   seatNote,
@@ -170,6 +171,45 @@ describe('poker layout', () => {
     expect(moveStake(20, -20, 20, 980)).toBe(20);
     expect(moveStake(20, 20, 20, 980)).toBe(40);
     expect(moveStake(960, 20, 20, 980)).toBe(980);
+  });
+
+  it('gives one stake control the click, including a shared edge', () => {
+    const boxes = [
+      { id: 'stake-down', ...STAKE_DOWN },
+      { id: 'stake-up', ...STAKE_UP },
+      { id: 'stake-max', ...STAKE_MAX },
+      { id: 'stake-confirm', ...STAKE_CONFIRM },
+      { id: 'stake-cancel', ...STAKE_CANCEL },
+    ];
+    const down = boxes[0]!;
+    const up = boxes[1]!;
+    expect(up.x).toBeGreaterThan(down.x + down.w);
+    const y = down.y + Math.floor(down.h / 2);
+    expect(frontStakeControl(boxes, { x: down.x + down.w - 1, y })).toBe(
+      'stake-down',
+    );
+    expect(frontStakeControl(boxes, { x: up.x, y })).toBe('stake-up');
+    expect(frontStakeControl(boxes, { x: down.x + down.w, y })).toBeNull();
+    for (let x = down.x; x < down.x + down.w; x += 1) {
+      for (let row = down.y; row < down.y + down.h; row += 1) {
+        expect(frontStakeControl(boxes, { x, y: row })).toBe('stake-down');
+      }
+    }
+
+    const touching = [
+      { id: 'stake-down', x: 0, y: 0, w: 96, h: 28 },
+      { id: 'stake-up', x: 96, y: 0, w: 96, h: 28 },
+    ];
+    expect(frontStakeControl(touching, { x: 95, y: 14 })).toBe('stake-down');
+    expect(frontStakeControl(touching, { x: 96, y: 14 })).toBe('stake-up');
+    expect(frontStakeControl(touching, { x: 95, y: 28 })).toBeNull();
+
+    const overlap = [
+      { id: 'stake-down', x: 0, y: 0, w: 96, h: 28 },
+      { id: 'stake-up', x: 48, y: 0, w: 96, h: 28 },
+    ];
+    expect(frontStakeControl(overlap, { x: 60, y: 10 })).toBe('stake-up');
+    expect(frontStakeControl(overlap, { x: 20, y: 10 })).toBe('stake-down');
   });
 
   it('labels the small and big blind from the button', () => {

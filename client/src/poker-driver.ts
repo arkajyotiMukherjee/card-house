@@ -67,9 +67,11 @@ import {
   faceForPokerCard,
   finishedLine,
   holePositions,
+  frontStakeControl,
   moveStake,
   seatNote,
   stakeStep,
+  type StakeHitBox,
 } from './poker-layout';
 import {
   OPPONENT_FAN_CARD,
@@ -469,12 +471,17 @@ export class PokerDriver implements GameDriver<PokerState> {
       face.color = down;
       caption.pos = ex.vec(record.rest.x, record.rest.y + BUTTON_PRESS_SHIFT);
     });
-    actor.on('pointerup', () => {
+    actor.on('pointerup', (event) => {
       face.color = fill;
       caption.pos = ex.vec(record.rest.x, record.rest.y);
       const current = this.state;
       const context = this.ctx;
       if (!current || !context) {
+        return;
+      }
+      if (
+        !this.ownsStakeClick(spec.target, event.worldPos.x, event.worldPos.y)
+      ) {
         return;
       }
       this.handleInput(
@@ -506,7 +513,13 @@ export class PokerDriver implements GameDriver<PokerState> {
     record.caption.graphics.isVisible = show;
     record.actor.graphics.opacity = enabled ? 1 : DIMMED;
     if (show) {
-      record.actor.collider.useBoxCollider(record.box.w, record.box.h);
+      // The actor anchor is the top-left. Excalibur's default collider
+      // anchor is the center, which lays this face over the button beside it.
+      record.actor.collider.useBoxCollider(
+        record.box.w,
+        record.box.h,
+        ex.vec(0, 0),
+      );
     } else {
       record.actor.collider.clear();
     }
@@ -686,6 +699,29 @@ export class PokerDriver implements GameDriver<PokerState> {
       return String(range.min);
     }
     return '';
+  }
+
+  /**
+   * True when this pointer should run `target`.
+   * A point on a stake face runs only that face. A point in the touch
+   * margin, off every face, keeps the actor Excalibur already hit.
+   */
+  private ownsStakeClick(target: string, x: number, y: number): boolean {
+    if (!target.startsWith('stake-')) {
+      return true;
+    }
+    const boxes: StakeHitBox[] = [];
+    for (const button of this.stakeButtons) {
+      boxes.push({
+        id: button.target,
+        x: button.box.x,
+        y: button.box.y,
+        w: button.box.w,
+        h: button.box.h,
+      });
+    }
+    const front = frontStakeControl(boxes, { x, y });
+    return front === null || front === target;
   }
 
   private stakeEnabled(target: string, range: PokerStakeRange | null): boolean {
