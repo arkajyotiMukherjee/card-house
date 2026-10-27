@@ -186,7 +186,7 @@ describe('full table seating', () => {
     expect(problems).toEqual([]);
   });
 
-  it('draws top fans at the same card size as side fans', () => {
+  it('draws every opponent fan at the local hand size', () => {
     const seats = seatAnchorsFor(4);
     const top = seats.find((seat) => seat.edge === 'top');
     const right = seats.find((seat) => seat.edge === 'right');
@@ -197,17 +197,20 @@ describe('full table seating', () => {
     if (!top || !right || !left) {
       return;
     }
-    for (const cards of [2, 4]) {
-      const topScale = seatFan(top.x, top.y, cards, 'Ada')[0]?.scale;
-      const rightScale = seatFan(right.x, right.y, cards, 'Ada')[0]?.scale;
-      const leftScale = seatFan(left.x, left.y, cards, 'Ada')[0]?.scale;
-      expect(topScale).toBe(rightScale);
-      expect(leftScale).toBe(rightScale);
-      expect(topScale).toBeGreaterThan(0);
+    for (const cards of [2, 4, 13]) {
+      for (const seat of [top, right, left]) {
+        const slots = seatFan(seat.x, seat.y, cards, 'Ada');
+        expect(slots.every((slot) => slot.scale === 1)).toBe(true);
+        for (const slot of slots) {
+          const rect = fanCardRect(slot);
+          expect(rect.w).toBeGreaterThanOrEqual(64);
+          expect(rect.h).toBeGreaterThanOrEqual(64);
+        }
+      }
     }
   });
 
-  it('draws a smaller card when the edge is shared and the hand is longer', () => {
+  it('keeps full-size cards when the edge is shared and the hand is longer', () => {
     const headsUp = seatAnchorsFor(2)[1];
     const full = seatAnchorsFor(8).find(
       (seat) => seat.edge === 'top' && seat.edgeIndex === 1,
@@ -219,6 +222,7 @@ describe('full table seating', () => {
     }
     const roomy = seatFan(headsUp.x, headsUp.y, 2, 'Ada')[0];
     const tight = seatFan(full.x, full.y, 4, 'Ada')[0];
-    expect(roomy?.scale).toBeGreaterThan(tight?.scale ?? 1);
+    expect(roomy?.scale).toBe(1);
+    expect(tight?.scale).toBe(1);
   });
 });

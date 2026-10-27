@@ -106,9 +106,9 @@ const MELD_ZONES: readonly MeldZone[] = [
     dir: -1,
     flow: true,
   },
-  { seatX: 636, seatY: 104, left: 620, right: 880, y: 172, dir: 1, flow: true },
-  { seatX: 480, seatY: 104, left: 376, right: 616, y: 168, dir: 1, flow: true },
-  { seatX: 324, seatY: 104, left: 120, right: 360, y: 172, dir: 1, flow: true },
+  { seatX: 636, seatY: 104, left: 620, right: 880, y: 184, dir: 1, flow: true },
+  { seatX: 480, seatY: 104, left: 376, right: 616, y: 184, dir: 1, flow: true },
+  { seatX: 324, seatY: 104, left: 120, right: 360, y: 184, dir: 1, flow: true },
   { seatX: 92, seatY: 268, left: 150, right: 400, y: 312, dir: 1, flow: true },
 ];
 
