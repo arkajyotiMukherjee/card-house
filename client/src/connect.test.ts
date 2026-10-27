@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { SERVER_UNREACHABLE, roomEntryError, sdkHost } from './connect';
+import {
+  RECONNECTING_LABEL,
+  SERVER_UNREACHABLE,
+  roomEntryError,
+  sdkHost,
+} from './connect';
 
 describe('sdk host', () => {
   it('turns a websocket URI into the http URI the SDK opens itself', () => {
@@ -24,6 +29,7 @@ describe('room entry', () => {
   it('blocks Create until the socket is up, and says when it failed', () => {
     expect(roomEntryError('connecting')).toBe('Still connecting to the server');
     expect(roomEntryError('connected')).toBeUndefined();
+    expect(roomEntryError('reconnecting')).toBe(RECONNECTING_LABEL);
     expect(roomEntryError('disconnected')).toBe(SERVER_UNREACHABLE);
     expect(roomEntryError('error')).toBe(SERVER_UNREACHABLE);
     expect(SERVER_UNREACHABLE).toBe('Could not reach the server. Try again.');

@@ -40,6 +40,8 @@ import {
 } from './html-field';
 import { makeFieldCaret, showFieldCaret } from './canvas-ui';
 import {
+  linkStatusLine,
+  RECONNECTING_LABEL,
   roomEntryError,
   SERVER_UNREACHABLE,
   type ConnectionPhase,
@@ -240,6 +242,9 @@ export class MenuScene extends ex.Scene {
   private nameBox: ex.Rectangle | undefined;
   private codeBox: ex.Rectangle | undefined;
   private errorText: ex.Text | undefined;
+  private linkLine = '';
+  private linkText = canvasText('', 8, GOLD);
+  private linkActor: ex.Actor | undefined;
 
   private gameIndex = 0;
   private listRows: Array<{ face: ex.Rectangle; label: ex.Text }> = [];
@@ -265,12 +270,28 @@ export class MenuScene extends ex.Scene {
    */
   setConnectionPhase(phase: ConnectionPhase): void {
     this.phase = phase;
+    this.setLinkStatus(linkStatusLine(phase));
+    if (phase === 'connected' && this.errorText?.text === RECONNECTING_LABEL) {
+      this.setError('');
+    }
     if (!this.busy || phase === 'connected' || phase === 'connecting') {
       return;
     }
     this.submitAttempt += 1;
     this.busy = false;
-    this.setError(SERVER_UNREACHABLE);
+    this.setError(
+      phase === 'reconnecting' ? RECONNECTING_LABEL : SERVER_UNREACHABLE,
+    );
+  }
+
+  /** A short line while the socket is being replaced. Empty once it is up. */
+  setLinkStatus(line: string): void {
+    this.linkLine = line;
+    this.linkText.text = line;
+    if (!this.linkActor) {
+      return;
+    }
+    this.linkActor.pos = ex.vec(16, 4);
   }
 
   setStats(line: string): void {
@@ -478,6 +499,14 @@ export class MenuScene extends ex.Scene {
     });
     this.statsActor.graphics.use(this.statsText);
     this.add(this.statsActor);
+    this.linkText.text = this.linkLine;
+    this.linkActor = new ex.Actor({
+      pos: ex.vec(16, 4),
+      anchor: ex.vec(0, 0),
+      z: 30,
+    });
+    this.linkActor.graphics.use(this.linkText);
+    this.add(this.linkActor);
     const width = MENU_VERSION.length * 8;
     this.addText(
       LOGICAL_WIDTH - width - 12,

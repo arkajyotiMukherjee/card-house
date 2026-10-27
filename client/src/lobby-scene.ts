@@ -165,6 +165,9 @@ export class LobbyScene {
   private codeText: ex.Text | undefined;
   private codeActor: ex.Actor | undefined;
   private errorText: ex.Text | undefined;
+  private linkLine = '';
+  private linkText = canvasText('', 8, GOLD);
+  private linkActor: ex.Actor | undefined;
   private gameText: ex.Text | undefined;
   private maxText: ex.Text | undefined;
   private variationText: ex.Text | undefined;
@@ -210,11 +213,28 @@ export class LobbyScene {
     this.statsText.text = line;
   }
 
+  /** A short line while the socket is being replaced. Empty once it is up. */
+  setLinkStatus(line: string): void {
+    this.linkLine = line;
+    this.linkText.text = line;
+    if (this.linkActor) {
+      this.linkActor.pos = ex.vec(16, 4);
+    }
+  }
+
   mount(): void {
     if (this.watching) {
       return;
     }
     this.watching = true;
+    this.linkText.text = this.linkLine;
+    this.linkActor = new ex.Actor({
+      pos: ex.vec(16, 4),
+      anchor: ex.vec(0, 0),
+      z: 30,
+    });
+    this.linkActor.graphics.use(this.linkText);
+    this.scene.add(this.linkActor);
     this.connection.db.gameTable.onInsert(() => {
       this.render();
     });
