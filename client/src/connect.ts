@@ -37,6 +37,8 @@ export function roomEntryError(phase: ConnectionPhase): string | undefined {
 export interface CardroomHandlers {
   onPhase: (phase: ConnectionPhase) => void;
   onSubscribed: (connection: DbConnection) => void;
+  /** Fires when this clientId's ClientStats subscription has applied. */
+  onClientStats?: () => void;
 }
 
 export function connectCardroom(
@@ -57,6 +59,9 @@ export function connectCardroom(
         report('connected');
         connection
           .subscriptionBuilder()
+          .onApplied(() => {
+            handlers.onClientStats?.();
+          })
           .subscribe([clientStatsQuery(clientId)]);
         connection
           .subscriptionBuilder()

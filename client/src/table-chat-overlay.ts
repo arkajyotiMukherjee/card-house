@@ -41,9 +41,12 @@ import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from './sheets';
 import {
   applyChatKey,
   applyChatText,
+  tableChatButtonVisible,
   tableChatLine,
   tableChatMessagesForTable,
   TABLE_CHAT_BODY_MAX,
+  type ChatLobbyRef,
+  type ChatTableRef,
   type TableChatRow,
 } from './table-chat';
 
@@ -70,6 +73,7 @@ function tableChatLabel(): FieldLabel {
  * `setTable` resets the draft and history when the table id changes, and
  * `send_table_chat` on the module rejects a sender who is not seated or
  * watching that table, so a message never reaches the rest of the lobby.
+ * A solo lobby hides the Chat button. A shared table keeps it.
  */
 export class TableChatOverlay {
   private opened = false;
@@ -77,6 +81,9 @@ export class TableChatOverlay {
   private lobbyMemberId = '';
   private draft = '';
   private sending = false;
+  private chatAvailable = true;
+  private button!: ex.Actor;
+  private chatCaption!: ex.Actor;
   private overlayActors: ex.Actor[] = [];
   private lineTexts: ex.Text[] = [];
   private inputField: ex.Text | undefined;
@@ -121,6 +128,16 @@ export class TableChatOverlay {
       },
     });
     this.buildButton();
+    this.connection.db.lobby.onInsert(() => {
+      this.refreshChatButton();
+    });
+    this.connection.db.lobby.onUpdate(() => {
+      this.refreshChatButton();
+    });
+    this.connection.db.gameTable.onInsert(() => {
+      this.refreshChatButton();
+    });
+    this.refreshChatButton();
   }
 
   get isOpen(): boolean {
@@ -138,6 +155,7 @@ export class TableChatOverlay {
         this.close();
       }
     }
+    this.refreshChatButton();
   }
 
   toggle(): void {
@@ -149,7 +167,7 @@ export class TableChatOverlay {
   }
 
   open(): void {
-    if (this.opened || this.tableId.length === 0) {
+    if (!this.chatAvailable || this.opened || this.tableId.length === 0) {
       return;
     }
     this.onBeforeOpen();
@@ -288,7 +306,7 @@ export class TableChatOverlay {
     return actor;
   }
 
-  private buildButton(): ex.Actor {
+  private buildButton(): void {
     const box = TABLE_CHAT_BUTTON;
     const actor = new ex.Actor({
       pos: ex.vec(box.x, box.y),
@@ -307,23 +325,53 @@ export class TableChatOverlay {
     caption.graphics.use(canvasText('Chat', BUTTON_FONT_SIZE, GOLD));
     actor.addChild(caption);
     actor.on('pointerenter', () => {
+      if (!this.chatAvailable) {
+        return;
+      }
       face.strokeColor = STROKE_HOT;
     });
     actor.on('pointerleave', () => {
+      if (!this.chatAvailable) {
+        return;
+      }
       face.strokeColor = STROKE;
       face.color = PLATE;
     });
     actor.on('pointerdown', () => {
+      if (!this.chatAvailable) {
+        return;
+      }
       face.color = BUTTON_DOWN;
       caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
     });
     actor.on('pointerup', () => {
+      if (!this.chatAvailable) {
+        return;
+      }
       face.color = PLATE;
       caption.pos = ex.vec(rest.x, rest.y);
       this.toggle();
     });
+    this.button = actor;
+    this.chatCaption = caption;
     this.scene.add(actor);
-    return actor;
+  }
+
+  /** Hides Chat on a solo table and keeps it on a shared table. */
+  private refreshChatButton(): void {
+    const show = tableChatButtonVisible(
+      this.tableId,
+      readChatTables(this.connection),
+      readChatLobbies(this.connection),
+    );
+    this.chatAvailable = show;
+    this.button.graphics.isVisible = show;
+    this.chatCaption.graphics.isVisible = show;
+    this.button.pointer.useColliderShape = show;
+    this.button.pointer.useGraphicsBounds = show;
+    if (!show) {
+      this.close();
+    }
   }
 
   private buildOverlay(): void {
@@ -501,6 +549,22 @@ export class TableChatOverlay {
     });
     return actor;
   }
+}
+
+function readChatTables(connection: DbConnection): ChatTableRef[] {
+  const rows: ChatTableRef[] = [];
+  for (const table of connection.db.gameTable.iter()) {
+    rows.push({ id: table.id, lobbyId: table.lobbyId });
+  }
+  return rows;
+}
+
+function readChatLobbies(connection: DbConnection): ChatLobbyRef[] {
+  const rows: ChatLobbyRef[] = [];
+  for (const lobby of connection.db.lobby.iter()) {
+    rows.push({ id: lobby.id, solo: lobby.solo });
+  }
+  return rows;
 }
 
 function readChatRows(connection: DbConnection): TableChatRow[] {

@@ -73,6 +73,58 @@ function memberName(
   return 'Player';
 }
 
+export interface ChatTableRef {
+  id: string;
+  lobbyId: string;
+}
+
+export interface ChatLobbyRef {
+  id: string;
+  solo: boolean;
+}
+
+/** True when this table belongs to a single-player lobby. */
+export function tableIsSolo(
+  tableId: string,
+  tables: Iterable<ChatTableRef>,
+  lobbies: Iterable<ChatLobbyRef>,
+): boolean {
+  const id = tableId.trim();
+  if (id.length === 0) {
+    return false;
+  }
+  let lobbyId = '';
+  for (const table of tables) {
+    if (table.id === id) {
+      lobbyId = table.lobbyId;
+      break;
+    }
+  }
+  if (lobbyId.length === 0) {
+    return false;
+  }
+  for (const lobby of lobbies) {
+    if (lobby.id === lobbyId) {
+      return lobby.solo;
+    }
+  }
+  return false;
+}
+
+/** A solo table has no one else to talk to. A shared table keeps Chat. */
+export function showTableChatButton(solo: boolean): boolean {
+  return !solo;
+}
+
+/** Whether the table chrome draws the Chat control for this table. */
+export function tableChatButtonVisible(
+  tableId: string,
+  tables: Iterable<ChatTableRef>,
+  lobbies: Iterable<ChatLobbyRef>,
+): boolean {
+  return showTableChatButton(tableIsSolo(tableId, tables, lobbies));
+}
+
 /** `"You: hi"` for the sender, `"Name: hi"` for everyone else at that table. */
 export function tableChatLine(
   row: TableChatRow,

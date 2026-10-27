@@ -2,7 +2,13 @@ import * as ex from 'excalibur';
 import { BootScene, demoImages } from './boot-scene';
 import { getOrCreateClientId } from './client-id';
 import { reloadLanding, reloadLoadingLine } from './reload-landing';
-import { statsCaption, statsForClient } from './client-stats';
+import {
+  clearTableSession,
+  countsForTableSession,
+  emptyClientStats,
+  statsCaptionFor,
+  statsForClient,
+} from './client-stats';
 import { connectCardroom } from './connect';
 import {
   clearLastRoom,
@@ -125,24 +131,38 @@ void engine.start(loader).then(() => {
     engine.goToScene('menu');
   }
   applyContainScale();
+  let clientStatsReady = false;
+  let publishStats = (): void => {};
   connectCardroom(
     {
       onPhase: (phase) => {
         menu.setConnectionPhase(phase);
       },
+      onClientStats: () => {
+        clientStatsReady = true;
+        publishStats();
+      },
       onSubscribed: (connection) => {
         const joined: { panel?: LobbyPanel } = {};
+        let openTableId = '';
+        let endTableSession = (): void => {};
+        let openSeatedTable = (
+          _tableId: string,
+          _lobbyMemberId: string,
+        ): void => {};
         const game = new GameScene(
           connection,
           clientId,
           () => {
             if (!hasOwnMembership(readOwnMembers(connection), clientId)) {
               clearLastRoom();
+              endTableSession();
               joined.panel?.resetAfterLeave();
               engine.goToScene('menu');
               return;
             }
             forgetTable();
+            endTableSession();
             engine.goToScene('boot');
           },
           theme,
@@ -154,16 +174,45 @@ void engine.start(loader).then(() => {
           connection,
           clientId,
           (tableId, lobbyMemberId) => {
-            rememberTable(tableId);
-            game.open(tableId, lobbyMemberId);
-            engine.goToScene('game');
+            openSeatedTable(tableId, lobbyMemberId);
           },
           () => {
             clearLastRoom();
+            endTableSession();
             joined.panel?.resetAfterLeave();
             engine.goToScene('menu');
           },
         );
+        publishStats = (): void => {
+          const lifetime = statsForClient(
+            connection.db.clientStats.iter(),
+            clientId,
+          );
+          const session =
+            openTableId.length > 0 && clientStatsReady
+              ? countsForTableSession(
+                  clientId,
+                  openTableId,
+                  lifetime,
+                  localStorage,
+                )
+              : emptyClientStats();
+          menu.setStats(statsCaptionFor('menu', lifetime, session));
+          lobbyScene.setStats(statsCaptionFor('lobby', lifetime, session));
+          game.setStats(statsCaptionFor('table', lifetime, session));
+        };
+        endTableSession = (): void => {
+          openTableId = '';
+          clearTableSession(localStorage);
+          publishStats();
+        };
+        openSeatedTable = (tableId, lobbyMemberId): void => {
+          rememberTable(tableId);
+          openTableId = tableId;
+          publishStats();
+          game.open(tableId, lobbyMemberId);
+          engine.goToScene('game');
+        };
         lobbyScene.mount();
         const savedRoom = joinCode ? undefined : readLastRoom();
         let pendingReload: LastRoom | undefined = savedRoom;
@@ -215,13 +264,11 @@ void engine.start(loader).then(() => {
             return 'Could not open the table';
           }
           rememberLobby(seat.code, start.name);
-          rememberTable(seat.tableId);
           const ready = await lobbyScene.openLobby(seat.lobbyId, seat.code);
           if (!ready) {
             return 'Could not open the table';
           }
-          game.open(seat.tableId, seat.lobbyMemberId);
-          engine.goToScene('game');
+          openSeatedTable(seat.tableId, seat.lobbyMemberId);
           return undefined;
         });
         menu.connectTheme(theme, (style) => {
@@ -263,6 +310,7 @@ void engine.start(loader).then(() => {
             if (landing === 'table') {
               return;
             }
+            endTableSession();
             if (landing === 'lobby') {
               if (ready && saved.tableId.length > 0) {
                 forgetTable();
@@ -288,6 +336,7 @@ void engine.start(loader).then(() => {
             pendingReload = undefined;
             if (roomGoneMessage(error)) {
               clearLastRoom();
+              endTableSession();
               panel.resetAfterLeave();
               const landing = reloadLanding({ atTable: false, inRoom: false });
               if (landing === 'menu') {
@@ -304,14 +353,6 @@ void engine.start(loader).then(() => {
           }
         }
 
-        const publishStats = (): void => {
-          const line = statsCaption(
-            statsForClient(connection.db.clientStats.iter(), clientId),
-          );
-          menu.setStats(line);
-          lobbyScene.setStats(line);
-          game.setStats(line);
-        };
         connection.db.clientStats.onInsert(() => {
           publishStats();
         });
