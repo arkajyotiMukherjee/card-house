@@ -112,10 +112,14 @@ const LABEL_BLOCK_H = 56;
 const LEFT_EDGE = 10;
 const RIGHT_EDGE = 950;
 const TOP_EDGE = 78;
-/** Name plate for a top fan. It stays under the arc and above the board. */
-const TOP_LABEL_Y = 114;
-/** Lowest pixel a top-fan card may use. The name starts just under this. */
-const TOP_CARD_LIMIT = 110;
+/** Name plate for a top fan. It stays under the arc, in the open middle. */
+const TOP_LABEL_Y = 140;
+/**
+ * Lowest pixel a top-fan card may use.
+ * High enough that a top fan keeps the same card size as a side fan.
+ * The name starts just under this.
+ */
+const TOP_CARD_LIMIT = 136;
 /** How far a side fan may reach inward before the name. */
 const SIDE_POCKET = 54;
 /** Same rails `seatPoint` divides, so a fan stays inside its seat's slice. */
@@ -346,26 +350,23 @@ function bottomDirection(
 }
 
 /**
- * Pixel size of one opponent card. A shared edge and a longer hand
- * both shrink the card so the arc still fits the slice.
+ * Pixel size of one opponent card. Top and side edges start at the same
+ * size. A shared edge and a longer hand shrink the card so the arc still
+ * fits the slice.
  */
 function fanCardPixels(handCount: number, frame: FanFrame): number {
   const crowded = frame.edgeSeats >= 3 ? 6 : frame.edgeSeats >= 2 ? 2 : 0;
-  let size = frame.edge === 'top' ? 34 : 44;
-  size -= crowded;
+  let size = 44 - crowded;
   if (handCount <= 2) {
-    size += frame.edge === 'top' ? 0 : 2;
-  } else if (handCount <= 4) {
-    size -= frame.edge === 'top' ? 2 : 0;
-  } else if (handCount <= 5) {
+    size += 2;
+  } else if (handCount <= 5 && handCount > 4) {
     size -= 4;
   } else if (handCount >= 13) {
     size -= frame.edgeSeats >= 2 ? 10 : 6;
   } else if (handCount >= 8) {
     size -= 8;
   }
-  const cap = frame.edge === 'top' ? 34 : 46;
-  return clamp(size, 22, cap);
+  return clamp(size, 22, 46);
 }
 
 function tiltSpan(handCount: number, edge: FanEdge): number {

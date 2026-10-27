@@ -3,9 +3,12 @@ import type { PokerState } from '../../src/shared/games/poker';
 import { HAND_Y } from './bluff-layout';
 import { pokerBlindMark } from '../../src/shared/games/poker';
 import {
+  BANNER_Y,
   BET_BUTTON,
   BOARD_Y,
   CALL_BUTTON,
+  CARD_DRAW,
+  COUNTDOWN_Y,
   CHECK_BUTTON,
   FOLD_BUTTON,
   RAISE_BUTTON,
@@ -25,9 +28,13 @@ import {
   frontStakeControl,
   holePositions,
   moveStake,
+  nextHandCountdown,
+  POT_CHIP_BOTTOM,
   seatNote,
 } from './poker-layout';
+import { POKER_HAND_PAUSE_MS } from '../../src/shared/games/poker';
 import {
+  FELT_BOTTOM,
   belowFelt,
   fanCardRect,
   fanGapLine,
@@ -64,6 +71,27 @@ function finished(winners: number[]): PokerState {
 }
 
 describe('poker layout', () => {
+  it('counts the pause from 10 down to 1 and keeps the board under the pot', () => {
+    expect(POKER_HAND_PAUSE_MS).toBe(10_000);
+    expect(nextHandCountdown(0)).toBe('Next hand in 10');
+    expect(nextHandCountdown(999)).toBe('Next hand in 10');
+    expect(nextHandCountdown(1_000)).toBe('Next hand in 9');
+    expect(nextHandCountdown(9_000)).toBe('Next hand in 1');
+    expect(nextHandCountdown(9_999)).toBe('Next hand in 1');
+    expect(nextHandCountdown(POKER_HAND_PAUSE_MS)).toBeNull();
+    expect(nextHandCountdown(POKER_HAND_PAUSE_MS + 500)).toBeNull();
+    const boardTop = BOARD_Y - CARD_DRAW / 2;
+    const boardBottom = BOARD_Y + CARD_DRAW / 2;
+    expect(boardTop).toBeGreaterThan(POT_CHIP_BOTTOM);
+    expect(BANNER_Y).toBeGreaterThanOrEqual(POT_CHIP_BOTTOM);
+    expect(COUNTDOWN_Y).toBeGreaterThan(BANNER_Y);
+    expect(boardTop).toBeGreaterThan(COUNTDOWN_Y);
+    expect(boardBottom).toBeLessThan(FELT_BOTTOM);
+    const board = boardPositions(5);
+    expect(board.every((slot) => slot.y === BOARD_Y)).toBe(true);
+    expect(BOARD_Y).toBeGreaterThan(POT_CHIP_BOTTOM);
+  });
+
   it('puts the board in the center and your hole cards on the shared hand row', () => {
     const board = boardPositions(5);
     expect(board).toHaveLength(5);

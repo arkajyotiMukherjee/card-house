@@ -1,4 +1,5 @@
 import { strategyFor } from '../../src/shared/games/bots/registry.ts';
+import { POKER_HAND_PAUSE_MS } from '../../src/shared/games/poker.ts';
 
 /** Intents one catch-up call may apply. A live table applies one per beat. */
 export const BOT_TURN_CAP = 32;
@@ -7,7 +8,7 @@ export const BOT_TURN_CAP = 32;
 export const BOT_BEAT_MICROS = 800_000n;
 
 /** How long a finished poker hand stays up before the next deal. */
-export const POKER_HAND_PAUSE_MICROS = 5_000_000n;
+export const POKER_HAND_PAUSE_MICROS = BigInt(POKER_HAND_PAUSE_MS) * 1_000n;
 
 /**
  * Delay before the next scheduled beat.

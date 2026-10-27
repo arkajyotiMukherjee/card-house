@@ -186,6 +186,27 @@ describe('full table seating', () => {
     expect(problems).toEqual([]);
   });
 
+  it('draws top fans at the same card size as side fans', () => {
+    const seats = seatAnchorsFor(4);
+    const top = seats.find((seat) => seat.edge === 'top');
+    const right = seats.find((seat) => seat.edge === 'right');
+    const left = seats.find((seat) => seat.edge === 'left');
+    expect(top).toBeDefined();
+    expect(right).toBeDefined();
+    expect(left).toBeDefined();
+    if (!top || !right || !left) {
+      return;
+    }
+    for (const cards of [2, 4]) {
+      const topScale = seatFan(top.x, top.y, cards, 'Ada')[0]?.scale;
+      const rightScale = seatFan(right.x, right.y, cards, 'Ada')[0]?.scale;
+      const leftScale = seatFan(left.x, left.y, cards, 'Ada')[0]?.scale;
+      expect(topScale).toBe(rightScale);
+      expect(leftScale).toBe(rightScale);
+      expect(topScale).toBeGreaterThan(0);
+    }
+  });
+
   it('draws a smaller card when the edge is shared and the hand is longer', () => {
     const headsUp = seatAnchorsFor(2)[1];
     const full = seatAnchorsFor(8).find(
