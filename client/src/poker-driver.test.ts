@@ -74,7 +74,7 @@ function context(
 }
 
 describe('PokerDriver input', () => {
-  it('sends fold, check, and the minimum bet on your turn', () => {
+  it('sends fold and check immediately, and a bet only after confirm', () => {
     const driver = new PokerDriver();
     const sent: unknown[] = [];
     const table = state();
@@ -82,6 +82,12 @@ describe('PokerDriver input', () => {
     driver.handleInput({ type: 'pointerup', target: 'fold' }, table, ctx);
     driver.handleInput({ type: 'pointerup', target: 'check' }, table, ctx);
     driver.handleInput({ type: 'pointerup', target: 'bet' }, table, ctx);
+    expect(sent).toEqual([{ type: 'fold' }, { type: 'check' }]);
+    driver.handleInput(
+      { type: 'pointerup', target: 'stake-confirm' },
+      table,
+      ctx,
+    );
     expect(sent).toEqual([
       { type: 'fold' },
       { type: 'check' },
@@ -89,7 +95,46 @@ describe('PokerDriver input', () => {
     ]);
   });
 
-  it('sends call and the minimum raise when facing a bet', () => {
+  it('steps a bet up to all-in and can cancel without sending', () => {
+    const driver = new PokerDriver();
+    const sent: unknown[] = [];
+    const table = state();
+    const ctx = context(sent, 0);
+    driver.handleInput({ type: 'pointerup', target: 'bet' }, table, ctx);
+    driver.handleInput({ type: 'pointerup', target: 'stake-down' }, table, ctx);
+    driver.handleInput({ type: 'pointerup', target: 'stake-up' }, table, ctx);
+    driver.handleInput(
+      { type: 'pointerup', target: 'stake-confirm' },
+      table,
+      ctx,
+    );
+    expect(sent).toEqual([{ type: 'bet', amount: 40 }]);
+    driver.handleInput({ type: 'pointerup', target: 'bet' }, table, ctx);
+    driver.handleInput({ type: 'pointerup', target: 'stake-max' }, table, ctx);
+    driver.handleInput(
+      { type: 'pointerup', target: 'stake-confirm' },
+      table,
+      ctx,
+    );
+    expect(sent).toEqual([
+      { type: 'bet', amount: 40 },
+      { type: 'bet', amount: 980 },
+    ]);
+    driver.handleInput({ type: 'pointerup', target: 'bet' }, table, ctx);
+    driver.handleInput(
+      { type: 'pointerup', target: 'stake-cancel' },
+      table,
+      ctx,
+    );
+    driver.handleInput({ type: 'pointerup', target: 'check' }, table, ctx);
+    expect(sent).toEqual([
+      { type: 'bet', amount: 40 },
+      { type: 'bet', amount: 980 },
+      { type: 'check' },
+    ]);
+  });
+
+  it('sends call immediately and a chosen raise only after confirm', () => {
     const driver = new PokerDriver();
     const sent: unknown[] = [];
     const table = state({
@@ -99,22 +144,25 @@ describe('PokerDriver input', () => {
         '1': seat(960, ['QC', 'JH'], 20),
       },
     });
+    const ctx = context(sent, 0);
+    driver.handleInput({ type: 'pointerup', target: 'call' }, table, ctx);
+    driver.handleInput({ type: 'pointerup', target: 'raise' }, table, ctx);
+    driver.handleInput({ type: 'pointerup', target: 'check' }, table, ctx);
+    expect(sent).toEqual([{ type: 'call' }]);
     driver.handleInput(
-      { type: 'pointerup', target: 'call' },
+      { type: 'pointerup', target: 'stake-confirm' },
       table,
-      context(sent, 0),
-    );
-    driver.handleInput(
-      { type: 'pointerup', target: 'raise' },
-      table,
-      context(sent, 0),
-    );
-    driver.handleInput(
-      { type: 'pointerup', target: 'check' },
-      table,
-      context(sent, 0),
+      ctx,
     );
     expect(sent).toEqual([{ type: 'call' }, { type: 'raise', amount: 40 }]);
+    driver.handleInput({ type: 'pointerup', target: 'raise' }, table, ctx);
+    driver.handleInput({ type: 'pointerup', target: 'stake-up' }, table, ctx);
+    driver.handleInput(
+      { type: 'pointerup', target: 'stake-confirm' },
+      table,
+      ctx,
+    );
+    expect(sent[sent.length - 1]).toEqual({ type: 'raise', amount: 60 });
   });
 
   it('sends a discard for the clicked hole card in Oklahoma', () => {

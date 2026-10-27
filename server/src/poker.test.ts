@@ -10,6 +10,7 @@ import {
   bestPokerHand,
   comparePokerScores,
   pokerAdvanceKind,
+  pokerBlindMark,
   pokerGameDefinition,
   pokerHoleFaceUp,
   pokerRules,
@@ -291,6 +292,65 @@ const bet = pokerRules.applyIntent(
   context(checked.turnSeatIndex ?? 0),
 );
 assert(bet.currentBet === POKER_BIG_BLIND, 'an opening bet sets the street');
+const flopSeat = checked.turnSeatIndex ?? 0;
+const flopStack = checked.seats[String(flopSeat)]?.chips ?? 0;
+rejects(
+  () =>
+    pokerRules.applyIntent(
+      checked,
+      { type: 'bet', amount: POKER_BIG_BLIND - 1 },
+      context(flopSeat),
+    ),
+  'Invalid intent',
+);
+const maxBet = pokerRules.applyIntent(
+  checked,
+  { type: 'bet', amount: flopStack },
+  context(flopSeat),
+);
+assert(maxBet.currentBet === flopStack, 'the max bet is the whole stack');
+assert(maxBet.seats[String(flopSeat)]?.allIn === true, 'the max bet is all-in');
+const chosenBet = pokerRules.applyIntent(
+  checked,
+  { type: 'bet', amount: 80 },
+  context(flopSeat),
+);
+assert(chosenBet.currentBet === 80, 'a chosen opening bet is the amount sent');
+const answer = chosenBet.turnSeatIndex ?? 0;
+rejects(
+  () =>
+    pokerRules.applyIntent(
+      chosenBet,
+      { type: 'raise', amount: 80 + POKER_BIG_BLIND - 1 },
+      context(answer),
+    ),
+  'Invalid intent',
+);
+const chosenRaise = pokerRules.applyIntent(
+  chosenBet,
+  { type: 'raise', amount: 160 },
+  context(answer),
+);
+assert(
+  chosenRaise.currentBet === 160,
+  'a chosen raise becomes the bet to call',
+);
+assert(
+  chosenRaise.seats[String(answer)]?.streetBet === 160,
+  'a legal chosen raise is applied',
+);
+const answerStack =
+  (chosenBet.seats[String(answer)]?.streetBet ?? 0) +
+  (chosenBet.seats[String(answer)]?.chips ?? 0);
+const allInRaise = pokerRules.applyIntent(
+  chosenBet,
+  { type: 'raise', amount: answerStack },
+  context(answer),
+);
+assert(
+  allInRaise.seats[String(answer)]?.allIn === true,
+  'the max raise is all-in',
+);
 rejects(
   () =>
     pokerRules.applyIntent(
@@ -452,6 +512,15 @@ assert(holeAt(omahaDealt, 0).length === 4, 'Omaha deals four hole cards');
 assert(holeAt(omahaDealt, 1).length === 4, 'both Omaha seats get four cards');
 const omahaCeiling = potLimitCeiling(omahaDealt, 0);
 assert(omahaCeiling === 60, 'the pot-sized raise includes the call');
+const omahaChosen = pokerRules.applyIntent(
+  omahaDealt,
+  { type: 'raise', amount: 50 },
+  context(0),
+);
+assert(
+  omahaChosen.currentBet === 50,
+  'a chosen pot-limit raise under the ceiling is legal',
+);
 rejects(
   () =>
     pokerRules.applyIntent(
@@ -787,6 +856,22 @@ assert(nextHand.end === null, 'the next hand has not ended');
 assert(nextHand.board.length === 0, 'the next hand has no board yet');
 assert(nextHand.street === 'preflop', 'the next hand starts preflop');
 assert(nextHand.dealerSeatIndex === 1, 'the button moves');
+assert(
+  pokerBlindMark(dealt, 0) === 'SB',
+  'heads-up the button is the small blind',
+);
+assert(
+  pokerBlindMark(dealt, 1) === 'BB',
+  'heads-up the other seat is the big blind',
+);
+assert(
+  pokerBlindMark(nextHand, 1) === 'SB',
+  'the small blind follows the button',
+);
+assert(
+  pokerBlindMark(nextHand, 0) === 'BB',
+  'the big blind follows the button',
+);
 assert(holeAt(nextHand, 0).length === 2, 'the next hand deals two cards');
 assert(holeAt(nextHand, 1).length === 2, 'both seats are dealt again');
 assert(

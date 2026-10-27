@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PokerState } from '../../src/shared/games/poker';
 import { HAND_Y } from './bluff-layout';
+import { pokerBlindMark } from '../../src/shared/games/poker';
 import {
   BET_BUTTON,
   BOARD_Y,
@@ -8,13 +9,21 @@ import {
   CHECK_BUTTON,
   FOLD_BUTTON,
   RAISE_BUTTON,
+  STAKE_AMOUNT,
+  STAKE_CANCEL,
+  STAKE_CONFIRM,
+  STAKE_DOWN,
+  STAKE_MAX,
+  STAKE_UP,
   bannerX,
+  blindChipLine,
   boardFlip,
   boardPositions,
   droppedPositions,
   faceForPokerCard,
   finishedLine,
   holePositions,
+  moveStake,
   seatNote,
 } from './poker-layout';
 import {
@@ -23,6 +32,7 @@ import {
   fanGapLine,
   insideCluster,
   opponentNameAnchor,
+  rectsOverlap,
   seatPlateWidth,
 } from './table-presentation';
 
@@ -143,6 +153,87 @@ describe('poker layout', () => {
       expect(belowFelt(button)).toBe(true);
       expect(insideCluster(button)).toBe(true);
     }
+  });
+
+  it('keeps the bet amount control in the cluster, below the felt', () => {
+    for (const button of [
+      STAKE_DOWN,
+      STAKE_UP,
+      STAKE_AMOUNT,
+      STAKE_MAX,
+      STAKE_CONFIRM,
+      STAKE_CANCEL,
+    ]) {
+      expect(belowFelt(button)).toBe(true);
+      expect(insideCluster(button)).toBe(true);
+    }
+    expect(moveStake(20, -20, 20, 980)).toBe(20);
+    expect(moveStake(20, 20, 20, 980)).toBe(40);
+    expect(moveStake(960, 20, 20, 980)).toBe(980);
+  });
+
+  it('labels the small and big blind from the button', () => {
+    const headsUp = finished([0]);
+    expect(pokerBlindMark(headsUp, 0)).toBe('SB');
+    expect(pokerBlindMark(headsUp, 1)).toBe('BB');
+    const moved = { ...headsUp, dealerSeatIndex: 1 };
+    expect(pokerBlindMark(moved, 1)).toBe('SB');
+    expect(pokerBlindMark(moved, 0)).toBe('BB');
+    const three = {
+      ...headsUp,
+      phase: 'play' as const,
+      end: null,
+      order: [0, 1, 2],
+      dealerSeatIndex: 0,
+    };
+    expect(pokerBlindMark(three, 0)).toBeNull();
+    expect(pokerBlindMark(three, 1)).toBe('SB');
+    expect(pokerBlindMark(three, 2)).toBe('BB');
+    const buttonMoved = { ...three, dealerSeatIndex: 1 };
+    expect(pokerBlindMark(buttonMoved, 2)).toBe('SB');
+    expect(pokerBlindMark(buttonMoved, 0)).toBe('BB');
+    expect(pokerBlindMark(buttonMoved, 1)).toBeNull();
+    expect(pokerBlindMark({ ...three, phase: 'finished' }, 1)).toBe('SB');
+    expect(pokerBlindMark({ ...headsUp, phase: 'lobby' }, 0)).toBeNull();
+  });
+
+  it('puts SB and BB beside the name and clear of the hole cards', () => {
+    const seats = [
+      { x: 780, y: 310, name: 'Ada' },
+      { x: 180, y: 310, name: 'Bea' },
+      { x: 480, y: 72, name: 'Cam' },
+      { x: 280, y: 456, name: 'Dee' },
+    ];
+    for (const seat of seats) {
+      const line = blindChipLine(
+        false,
+        seat.x,
+        seat.y,
+        seat.name,
+        '1000',
+        'SB',
+      );
+      expect(line.mark).not.toBeNull();
+      const bits = [
+        { x: line.mark?.x ?? 0, y: line.mark?.y ?? 0, w: 16, h: 8 },
+        { x: line.chips.x, y: line.chips.y, w: 32, h: 8 },
+      ];
+      const slots = holePositions(false, seat.x, seat.y, 4, seat.name);
+      for (const slot of slots) {
+        const card = fanCardRect(slot);
+        for (const bit of bits) {
+          expect(rectsOverlap(bit, card)).toBe(false);
+        }
+      }
+      const plate = opponentNameAnchor(seat.x, seat.y, seat.name);
+      expect(line.mark?.y).toBeGreaterThanOrEqual(plate.y);
+      expect(Math.abs((line.mark?.x ?? 0) - plate.x)).toBeLessThan(
+        seatPlateWidth(seat.name),
+      );
+    }
+    const mine = blindChipLine(true, 480, 456, 'Ada', '980', 'BB');
+    expect(mine.mark?.x).toBeGreaterThan(480);
+    expect(mine.chips.x).toBeGreaterThan(mine.mark?.x ?? 0);
   });
 
   it('notes folds, bets, all-ins, and showdown hands', () => {

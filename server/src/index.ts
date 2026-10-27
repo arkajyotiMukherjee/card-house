@@ -130,9 +130,9 @@ import {
 } from './tournament';
 import {
   BOT_BEAT_MICROS,
-  POKER_HAND_PAUSE_MICROS,
   botIsNext,
   playBotTurns,
+  tableBeatDelay,
 } from './bot-runner';
 import {
   botClientId,
@@ -3047,7 +3047,7 @@ function queueTableBeat(ctx: ModuleCtx, tableId: string): void {
   scheduleBotTurns(
     ctx,
     tableId,
-    kind === 'hand' ? POKER_HAND_PAUSE_MICROS : BOT_BEAT_MICROS,
+    tableBeatDelay(kind === 'hand' ? 'hand' : 'street'),
   );
 }
 

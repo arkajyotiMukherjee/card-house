@@ -7,7 +7,19 @@ export const BOT_TURN_CAP = 32;
 export const BOT_BEAT_MICROS = 800_000n;
 
 /** How long a finished poker hand stays up before the next deal. */
-export const POKER_HAND_PAUSE_MICROS = BOT_BEAT_MICROS * 3n;
+export const POKER_HAND_PAUSE_MICROS = 5_000_000n;
+
+/**
+ * Delay before the next scheduled beat.
+ * A bot action and a poker street stay on the 800ms beat.
+ * A finished hand waits the full pause, so the winner can be read.
+ */
+export function tableBeatDelay(kind: 'bot' | 'street' | 'hand'): bigint {
+  if (kind === 'hand') {
+    return POKER_HAND_PAUSE_MICROS;
+  }
+  return BOT_BEAT_MICROS;
+}
 
 export interface BotActor {
   seatIndex: number;

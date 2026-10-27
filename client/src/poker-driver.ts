@@ -2,14 +2,16 @@ import * as ex from 'excalibur';
 import {
   POKER_GAME_TYPE,
   POKER_VARIATION_LABELS,
-  pokerBetTo,
+  pokerBetRange,
+  pokerBlindMark,
   pokerCallAmount,
   pokerCanCall,
   pokerCanCheck,
   pokerCanDiscard,
   pokerCanFold,
   pokerHoleFaceUp,
-  pokerRaiseTo,
+  pokerRaiseRange,
+  type PokerStakeRange,
   type PokerState,
 } from '../../src/shared/games/poker';
 import {
@@ -49,16 +51,25 @@ import {
   POT_X,
   POT_Y,
   RAISE_BUTTON,
+  STAKE_AMOUNT,
+  STAKE_CANCEL,
+  STAKE_CONFIRM,
+  STAKE_DOWN,
+  STAKE_MAX,
+  STAKE_UP,
   BANNER_Y,
   BOARD_SLOTS,
   bannerX,
+  blindChipLine,
   boardFlip,
   boardPositions,
   droppedPositions,
   faceForPokerCard,
   finishedLine,
   holePositions,
+  moveStake,
   seatNote,
+  stakeStep,
 } from './poker-layout';
 import {
   OPPONENT_FAN_CARD,
@@ -66,7 +77,6 @@ import {
   TURN_LINE,
   fanGapLine,
   isGiveUpControl,
-  seatPlateWidth,
 } from './table-presentation';
 
 const BUTTON = ex.Color.fromHex('#1b5c38');
@@ -163,6 +173,16 @@ interface ButtonRecord {
   target: string;
   face: ex.Rectangle;
   caption: ex.Actor;
+  label: string;
+  rest: { x: number; y: number };
+}
+
+interface AmountRecord {
+  actor: ex.Actor;
+  value: ex.Actor;
+  range: ex.Actor;
+  valueText: string;
+  rangeText: string;
 }
 
 function cardSprite(
@@ -223,12 +243,23 @@ function actionEnabled(
     return pokerCanCall(state, seatIndex);
   }
   if (target === 'bet') {
-    return pokerBetTo(state, seatIndex) !== null;
+    return pokerBetRange(state, seatIndex) !== null;
   }
   if (target === 'raise') {
-    return pokerRaiseTo(state, seatIndex) !== null;
+    return pokerRaiseRange(state, seatIndex) !== null;
   }
   return false;
+}
+
+function stakeRange(
+  state: PokerState,
+  seatIndex: number,
+  kind: 'bet' | 'raise',
+): PokerStakeRange | null {
+  if (kind === 'bet') {
+    return pokerBetRange(state, seatIndex);
+  }
+  return pokerRaiseRange(state, seatIndex);
 }
 
 /**
@@ -246,6 +277,9 @@ export class PokerDriver implements GameDriver<PokerState> {
   private chipActors: ex.Actor[] = [];
   private labels: ex.Actor[] = [];
   private buttons: ButtonRecord[] = [];
+  private stakeButtons: ButtonRecord[] = [];
+  private amount: AmountRecord | null = null;
+  private stake: { kind: 'bet' | 'raise'; amount: number } | null = null;
   private flashes: ex.Actor[] = [];
   private dropped: string[] = [];
   private droppedActors = new Map<string, ex.Actor>();
@@ -267,6 +301,7 @@ export class PokerDriver implements GameDriver<PokerState> {
     this.ensureHoverClock(ctx);
     if (!this.buttonsReady) {
       this.addButtons(ctx);
+      this.addStakeControls(ctx);
       this.buttonsReady = true;
     }
     this.placeButtons(state, ctx);
@@ -295,9 +330,14 @@ export class PokerDriver implements GameDriver<PokerState> {
       return;
     }
     if (ctx.meSeatIndex === null || state.turnSeatIndex !== ctx.meSeatIndex) {
+      this.stake = null;
       return;
     }
     const seatIndex = ctx.meSeatIndex;
+    if (this.stake) {
+      this.handleStake(event.target, state, seatIndex, ctx);
+      return;
+    }
     if (event.target === 'fold' && pokerCanFold(state, seatIndex)) {
       ctx.sendIntent({ type: 'fold' });
       return;
@@ -310,17 +350,11 @@ export class PokerDriver implements GameDriver<PokerState> {
       ctx.sendIntent({ type: 'call' });
       return;
     }
-    if (event.target === 'bet') {
-      const amount = pokerBetTo(state, seatIndex);
-      if (amount !== null) {
-        ctx.sendIntent({ type: 'bet', amount });
-      }
-      return;
-    }
-    if (event.target === 'raise') {
-      const amount = pokerRaiseTo(state, seatIndex);
-      if (amount !== null) {
-        ctx.sendIntent({ type: 'raise', amount });
+    if (event.target === 'bet' || event.target === 'raise') {
+      const range = stakeRange(state, seatIndex, event.target);
+      if (range) {
+        this.stake = { kind: event.target, amount: range.min };
+        this.placeButtons(state, ctx);
       }
       return;
     }
@@ -365,6 +399,13 @@ export class PokerDriver implements GameDriver<PokerState> {
       button.actor.kill();
     }
     this.buttons = [];
+    for (const button of this.stakeButtons) {
+      button.actor.kill();
+    }
+    this.stakeButtons = [];
+    this.amount?.actor.kill();
+    this.amount = null;
+    this.stake = null;
     this.buttonsReady = false;
     this.stopHoverClock();
     this.state = null;
@@ -385,62 +426,310 @@ export class PokerDriver implements GameDriver<PokerState> {
     this.flashes.push(actor);
   }
 
+  private makeButton(
+    ctx: RenderContext,
+    spec: {
+      target: string;
+      label: string;
+      box: { x: number; y: number; w: number; h: number };
+    },
+    giveUp: boolean,
+  ): ButtonRecord {
+    const fill = giveUp ? GIVE_UP : BUTTON;
+    const down = giveUp ? GIVE_UP_DOWN : BUTTON_DOWN;
+    const face = panelRect(spec.box.w, spec.box.h, fill, STROKE);
+    const actor = new ex.Actor({
+      pos: ex.vec(spec.box.x, spec.box.y),
+      anchor: ex.vec(0, 0),
+      width: spec.box.w,
+      height: spec.box.h,
+      z: 20,
+    });
+    actor.graphics.use(face);
+    const rest = buttonCaptionPos(spec.label, spec.box.w, spec.box.h);
+    const caption = new ex.Actor({
+      pos: ex.vec(rest.x, rest.y),
+      anchor: ex.vec(0, 0),
+    });
+    caption.graphics.use(canvasText(spec.label, BUTTON_FONT_SIZE, GOLD));
+    actor.addChild(caption);
+    const record: ButtonRecord = {
+      actor,
+      box: spec.box,
+      target: spec.target,
+      face,
+      caption,
+      label: spec.label,
+      rest,
+    };
+    actor.on('pointerenter', () => {
+      face.strokeColor = STROKE_HOT;
+    });
+    actor.on('pointerleave', () => {
+      face.strokeColor = STROKE;
+      face.color = fill;
+      caption.pos = ex.vec(record.rest.x, record.rest.y);
+    });
+    actor.on('pointerdown', () => {
+      face.color = down;
+      caption.pos = ex.vec(record.rest.x, record.rest.y + BUTTON_PRESS_SHIFT);
+    });
+    actor.on('pointerup', () => {
+      face.color = fill;
+      caption.pos = ex.vec(record.rest.x, record.rest.y);
+      const current = this.state;
+      const context = this.ctx;
+      if (!current || !context) {
+        return;
+      }
+      this.handleInput(
+        { type: 'pointerup', target: spec.target },
+        current,
+        context,
+      );
+    });
+    ctx.scene.add(actor);
+    return record;
+  }
+
+  private setCaption(record: ButtonRecord, label: string): void {
+    if (record.label === label) {
+      return;
+    }
+    record.label = label;
+    record.rest = buttonCaptionPos(label, record.box.w, record.box.h);
+    record.caption.graphics.use(canvasText(label, BUTTON_FONT_SIZE, GOLD));
+    record.caption.pos = ex.vec(record.rest.x, record.rest.y);
+  }
+
+  private showControl(
+    record: ButtonRecord,
+    show: boolean,
+    enabled: boolean,
+  ): void {
+    record.actor.graphics.isVisible = show;
+    record.caption.graphics.isVisible = show;
+    record.actor.graphics.opacity = enabled ? 1 : DIMMED;
+    if (show) {
+      record.actor.collider.useBoxCollider(record.box.w, record.box.h);
+    } else {
+      record.actor.collider.clear();
+    }
+  }
+
   private addButtons(ctx: RenderContext): void {
     for (const spec of ACTION_BUTTONS) {
-      const giveUp = isGiveUpControl(spec.label);
-      const fill = giveUp ? GIVE_UP : BUTTON;
-      const down = giveUp ? GIVE_UP_DOWN : BUTTON_DOWN;
-      const face = panelRect(spec.box.w, spec.box.h, fill, STROKE);
-      const actor = new ex.Actor({
-        pos: ex.vec(spec.box.x, spec.box.y),
-        anchor: ex.vec(0, 0),
-        width: spec.box.w,
-        height: spec.box.h,
-        z: 20,
-      });
-      actor.graphics.use(face);
-      const rest = buttonCaptionPos(spec.label, spec.box.w, spec.box.h);
-      const caption = new ex.Actor({
-        pos: ex.vec(rest.x, rest.y),
-        anchor: ex.vec(0, 0),
-      });
-      caption.graphics.use(canvasText(spec.label, BUTTON_FONT_SIZE, GOLD));
-      actor.addChild(caption);
-      const target = spec.target;
-      actor.on('pointerenter', () => {
-        face.strokeColor = STROKE_HOT;
-      });
-      actor.on('pointerleave', () => {
-        face.strokeColor = STROKE;
-        face.color = fill;
-        caption.pos = ex.vec(rest.x, rest.y);
-      });
-      actor.on('pointerdown', () => {
-        face.color = down;
-        caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
-      });
-      actor.on('pointerup', () => {
-        face.color = fill;
-        caption.pos = ex.vec(rest.x, rest.y);
-        const current = this.state;
-        const context = this.ctx;
-        if (!current || !context) {
-          return;
-        }
-        this.handleInput({ type: 'pointerup', target }, current, context);
-      });
-      ctx.scene.add(actor);
-      this.buttons.push({ actor, box: spec.box, target, face, caption });
+      this.buttons.push(
+        this.makeButton(ctx, spec, isGiveUpControl(spec.label)),
+      );
+    }
+  }
+
+  private addStakeControls(ctx: RenderContext): void {
+    const specs = [
+      { target: 'stake-down', label: '-', box: STAKE_DOWN },
+      { target: 'stake-up', label: '+', box: STAKE_UP },
+      { target: 'stake-max', label: 'All-in', box: STAKE_MAX },
+      { target: 'stake-confirm', label: 'Bet', box: STAKE_CONFIRM },
+      { target: 'stake-cancel', label: 'Cancel', box: STAKE_CANCEL },
+    ];
+    for (const spec of specs) {
+      const record = this.makeButton(ctx, spec, false);
+      record.actor.z = 22;
+      this.stakeButtons.push(record);
+    }
+    const value = new ex.Actor({
+      pos: ex.vec(0, 2),
+      anchor: ex.vec(0, 0),
+    });
+    const range = new ex.Actor({
+      pos: ex.vec(0, 14),
+      anchor: ex.vec(0, 0),
+    });
+    value.graphics.use(canvasText('0', BUTTON_FONT_SIZE, GOLD));
+    range.graphics.use(canvasText('0 to 0', BUTTON_FONT_SIZE, DIM));
+    const actor = new ex.Actor({
+      pos: ex.vec(STAKE_AMOUNT.x, STAKE_AMOUNT.y),
+      anchor: ex.vec(0, 0),
+      width: STAKE_AMOUNT.w,
+      height: STAKE_AMOUNT.h,
+      z: 22,
+    });
+    const face = panelRect(STAKE_AMOUNT.w, STAKE_AMOUNT.h, BUTTON, STROKE);
+    actor.graphics.use(face);
+    actor.addChild(value);
+    actor.addChild(range);
+    actor.collider.clear();
+    ctx.scene.add(actor);
+    this.amount = { actor, value, range, valueText: '', rangeText: '' };
+  }
+
+  private handleStake(
+    target: string,
+    state: PokerState,
+    seatIndex: number,
+    ctx: RenderContext,
+  ): void {
+    const open = this.stake;
+    if (!open) {
+      return;
+    }
+    const range = stakeRange(state, seatIndex, open.kind);
+    if (!range) {
+      this.stake = null;
+      this.placeButtons(state, ctx);
+      return;
+    }
+    if (target === 'stake-cancel') {
+      this.stake = null;
+      this.placeButtons(state, ctx);
+      return;
+    }
+    if (target === 'stake-down') {
+      open.amount = moveStake(
+        open.amount,
+        -stakeStep(state, open.kind),
+        range.min,
+        range.max,
+      );
+      this.placeButtons(state, ctx);
+      return;
+    }
+    if (target === 'stake-up') {
+      open.amount = moveStake(
+        open.amount,
+        stakeStep(state, open.kind),
+        range.min,
+        range.max,
+      );
+      this.placeButtons(state, ctx);
+      return;
+    }
+    if (target === 'stake-max') {
+      open.amount = range.max;
+      this.placeButtons(state, ctx);
+      return;
+    }
+    if (target === 'stake-confirm') {
+      const amount = moveStake(open.amount, 0, range.min, range.max);
+      const kind = open.kind;
+      this.stake = null;
+      this.placeButtons(state, ctx);
+      ctx.sendIntent({ type: kind, amount });
     }
   }
 
   private placeButtons(state: PokerState, ctx: RenderContext): void {
-    const show = state.phase === 'play';
+    this.syncStake(state, ctx);
+    const staking = this.stake !== null && state.phase === 'play';
+    const showActions = state.phase === 'play' && !staking;
     for (const button of this.buttons) {
-      button.actor.graphics.isVisible = show;
-      const enabled =
-        show && actionEnabled(state, ctx.meSeatIndex, button.target);
-      button.actor.graphics.opacity = enabled ? 1 : DIMMED;
+      this.showControl(
+        button,
+        showActions,
+        showActions && actionEnabled(state, ctx.meSeatIndex, button.target),
+      );
+    }
+    const seat = ctx.meSeatIndex;
+    const range =
+      staking && this.stake && seat !== null
+        ? stakeRange(state, seat, this.stake.kind)
+        : null;
+    for (const button of this.stakeButtons) {
+      const label = this.stakeCaption(button.target, state, range);
+      this.setCaption(button, label);
+      const enabled = this.stakeEnabled(button.target, range);
+      this.showControl(button, staking, enabled);
+    }
+    this.placeAmount(staking, range);
+  }
+
+  private syncStake(state: PokerState, ctx: RenderContext): void {
+    if (!this.stake) {
+      return;
+    }
+    const seat = ctx.meSeatIndex;
+    if (
+      seat === null ||
+      state.phase !== 'play' ||
+      state.turnSeatIndex !== seat
+    ) {
+      this.stake = null;
+      return;
+    }
+    const range = stakeRange(state, seat, this.stake.kind);
+    if (!range) {
+      this.stake = null;
+      return;
+    }
+    this.stake.amount = moveStake(this.stake.amount, 0, range.min, range.max);
+  }
+
+  private stakeCaption(
+    target: string,
+    state: PokerState,
+    range: PokerStakeRange | null,
+  ): string {
+    const kind = this.stake?.kind ?? 'bet';
+    const step = stakeStep(state, kind);
+    if (target === 'stake-down') {
+      return `-${step}`;
+    }
+    if (target === 'stake-up') {
+      return `+${step}`;
+    }
+    if (target === 'stake-max') {
+      return 'All-in';
+    }
+    if (target === 'stake-confirm') {
+      return kind === 'raise' ? 'Raise' : 'Bet';
+    }
+    if (target === 'stake-cancel') {
+      return 'Cancel';
+    }
+    if (range) {
+      return String(range.min);
+    }
+    return '';
+  }
+
+  private stakeEnabled(target: string, range: PokerStakeRange | null): boolean {
+    if (!this.stake || !range) {
+      return false;
+    }
+    if (target === 'stake-down') {
+      return this.stake.amount > range.min;
+    }
+    if (target === 'stake-up' || target === 'stake-max') {
+      return this.stake.amount < range.max;
+    }
+    return true;
+  }
+
+  private placeAmount(show: boolean, range: PokerStakeRange | null): void {
+    const box = this.amount;
+    if (!box) {
+      return;
+    }
+    box.actor.graphics.isVisible = show;
+    box.value.graphics.isVisible = show;
+    box.range.graphics.isVisible = show;
+    if (!show || !this.stake || !range) {
+      return;
+    }
+    const valueText = String(this.stake.amount);
+    const rangeText = `${range.min} to ${range.max}`;
+    if (box.valueText !== valueText) {
+      box.valueText = valueText;
+      box.value.graphics.use(canvasText(valueText, BUTTON_FONT_SIZE, GOLD));
+      const pos = buttonCaptionPos(valueText, STAKE_AMOUNT.w, STAKE_AMOUNT.h);
+      box.value.pos = ex.vec(pos.x, 1);
+    }
+    if (box.rangeText !== rangeText) {
+      box.rangeText = rangeText;
+      box.range.graphics.use(canvasText(rangeText, BUTTON_FONT_SIZE, DIM));
+      const pos = buttonCaptionPos(rangeText, STAKE_AMOUNT.w, STAKE_AMOUNT.h);
+      box.range.pos = ex.vec(pos.x, 14);
     }
   }
 
@@ -493,23 +782,46 @@ export class PokerDriver implements GameDriver<PokerState> {
       if (!row) {
         continue;
       }
-      const marker = state.dealerSeatIndex === seat.seatIndex ? ' D' : '';
-      const chips = `${row.chips}${marker}`;
+      const blind = pokerBlindMark(state, seat.seatIndex);
+      const dealer =
+        state.dealerSeatIndex === seat.seatIndex && blind === null ? ' D' : '';
+      const chips = `${row.chips}${dealer}`;
       const note = seatNote(state, seat.seatIndex);
-      const origin = seat.self
-        ? {
-            x: seat.x + seatPlateWidth(seat.name) / 2 + 6,
-            y: seat.y + 6,
-          }
-        : fanGapLine(seat.x, seat.y, seat.name, chips, 0);
-      const chipLabel = this.textActor(ctx, origin.x, origin.y, chips, DIM);
+      const line = blindChipLine(
+        seat.self,
+        seat.x,
+        seat.y,
+        seat.name,
+        chips,
+        blind,
+      );
+      if (blind && line.mark) {
+        const blindLabel = this.textActor(
+          ctx,
+          line.mark.x,
+          line.mark.y,
+          blind,
+          GOLD,
+        );
+        if (!seat.self) {
+          blindLabel.z = 80;
+        }
+        this.labels.push(blindLabel);
+      }
+      const chipLabel = this.textActor(
+        ctx,
+        line.chips.x,
+        line.chips.y,
+        chips,
+        DIM,
+      );
       if (!seat.self) {
         chipLabel.z = 80;
       }
       this.labels.push(chipLabel);
       if (note) {
         const noteAt = seat.self
-          ? { x: origin.x, y: origin.y + 12 }
+          ? { x: line.chips.x, y: line.chips.y + 12 }
           : fanGapLine(seat.x, seat.y, seat.name, note, 1);
         const noteLabel = this.textActor(ctx, noteAt.x, noteAt.y, note, GOLD);
         if (!seat.self) {
@@ -1005,7 +1317,9 @@ export class PokerDriver implements GameDriver<PokerState> {
       slot.flipMs += elapsedMs;
       const frame = boardFlip(slot.flipMs);
       if (frame.face && !slot.showingFace) {
-        slot.actor.graphics.use(cardSprite(ctx.cards, slot.cardId, true, false));
+        slot.actor.graphics.use(
+          cardSprite(ctx.cards, slot.cardId, true, false),
+        );
         slot.showingFace = true;
       }
       slot.actor.scale = ex.vec(frame.scaleX, 1);
