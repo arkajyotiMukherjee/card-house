@@ -2,6 +2,7 @@ import * as ex from 'excalibur';
 import {
   POKER_GAME_TYPE,
   POKER_VARIATION_LABELS,
+  pokerAdvanceKind,
   pokerBetRange,
   pokerBlindMark,
   pokerCallAmount,
@@ -59,7 +60,10 @@ import {
   STAKE_UP,
   BANNER_Y,
   BOARD_SLOTS,
+  COUNTDOWN_Y,
+  POT_CHIP_SCALE,
   bannerX,
+  nextHandCountdown,
   blindChipLine,
   boardFlip,
   boardPositions,
@@ -86,7 +90,6 @@ const FLASH_STROKE = ex.Color.fromHex('#ff3b2f');
 const FLASH_ON_MS = 130;
 const FLASH_OFF_MS = 80;
 const FLASH_BLINKS = 3;
-const CHIP_SCALE = 2;
 const CHIP_STACK_STEP = 4;
 const CHIP_STACK_MAX = 4;
 const DIMMED = 0.45;
@@ -261,7 +264,9 @@ function stakeRange(
  * Poker table on the shared seat layout.
  * Your hole cards are face up. Other hole cards stay down unless that seat
  * reached showdown. Five community cards sit face down and flip in place.
- * The board and pot sit in the center, and the action buttons sit at the bottom.
+ * The pot sits in the center and the community cards sit below it.
+ * A finished hand stays up for 10 seconds, with the winner line, the
+ * showdown hole cards, and a countdown, then the next hand deals.
  */
 export class PokerDriver implements GameDriver<PokerState> {
   readonly name = 'Poker';
@@ -284,6 +289,11 @@ export class PokerDriver implements GameDriver<PokerState> {
   private hovered: string | null = null;
   private readonly handHover = new HandHover();
   private hoverClock: ex.Actor | null = null;
+  private countdown: ex.Actor | null = null;
+  private countdownText = '';
+  /** Hand number the pause clock belongs to. `-1` while no hand is waiting. */
+  private pauseHand = -1;
+  private pauseElapsed = 0;
   private dropMarkKey = '';
   private dropMarks: ex.Actor[] = [];
   private buttonsReady = false;
@@ -400,6 +410,11 @@ export class PokerDriver implements GameDriver<PokerState> {
     this.stakeButtons = [];
     this.amount?.actor.kill();
     this.amount = null;
+    this.countdown?.kill();
+    this.countdown = null;
+    this.countdownText = '';
+    this.pauseHand = -1;
+    this.pauseElapsed = 0;
     this.stake = null;
     this.buttonsReady = false;
     this.stopHoverClock();
@@ -734,6 +749,7 @@ export class PokerDriver implements GameDriver<PokerState> {
     }
     this.labels = [];
     if (state.phase === 'lobby') {
+      this.clearCountdown();
       return;
     }
     const variation = POKER_VARIATION_LABELS[state.variation];
@@ -743,7 +759,9 @@ export class PokerDriver implements GameDriver<PokerState> {
       this.labels.push(
         this.textActor(ctx, bannerX(line), BANNER_Y, line, GOLD),
       );
+      this.syncCountdown(state, ctx);
     } else {
+      this.clearCountdown();
       const mine =
         ctx.meSeatIndex !== null && state.turnSeatIndex === ctx.meSeatIndex;
       let hint = mine ? 'Your turn' : 'Wait';
@@ -1096,6 +1114,68 @@ export class PokerDriver implements GameDriver<PokerState> {
     this.handHover.move(pointerX);
   }
 
+  /**
+   * The finished hand stays up for the pause. The winner line is drawn
+   * with the other labels, and this clock counts the seconds until the deal.
+   */
+  private syncCountdown(state: PokerState, ctx: RenderContext): void {
+    const seats = ctx.seats.map((seat) => seat.seatIndex);
+    if (pokerAdvanceKind(state, seats) !== 'hand') {
+      this.clearCountdown();
+      return;
+    }
+    if (this.pauseHand !== state.handNumber) {
+      this.pauseHand = state.handNumber;
+      this.pauseElapsed = 0;
+    }
+    const line = nextHandCountdown(this.pauseElapsed) ?? 'Next hand in 1';
+    this.paintCountdown(ctx, line);
+  }
+
+  private tickPause(elapsedMs: number): void {
+    const state = this.state;
+    const ctx = this.ctx;
+    if (this.pauseHand < 0 || !state || !ctx || state.phase !== 'finished') {
+      return;
+    }
+    this.pauseElapsed += elapsedMs;
+    const line = nextHandCountdown(this.pauseElapsed);
+    this.paintCountdown(ctx, line ?? 'Next hand in 1');
+  }
+
+  private paintCountdown(ctx: RenderContext, text: string): void {
+    if (text.length === 0) {
+      this.clearCountdown();
+      return;
+    }
+    if (text === this.countdownText && this.countdown) {
+      return;
+    }
+    this.countdownText = text;
+    if (!this.countdown) {
+      this.countdown = this.textActor(
+        ctx,
+        bannerX(text),
+        COUNTDOWN_Y,
+        text,
+        GOLD,
+      );
+      return;
+    }
+    this.countdown.graphics.isVisible = true;
+    this.countdown.pos = ex.vec(bannerX(text), COUNTDOWN_Y);
+    this.countdown.graphics.use(canvasText(text, 8, GOLD));
+  }
+
+  private clearCountdown(): void {
+    this.pauseHand = -1;
+    this.pauseElapsed = 0;
+    this.countdownText = '';
+    if (this.countdown) {
+      this.countdown.graphics.isVisible = false;
+    }
+  }
+
   private ensureHoverClock(ctx: RenderContext): void {
     if (this.hoverClock) {
       return;
@@ -1103,6 +1183,7 @@ export class PokerDriver implements GameDriver<PokerState> {
     this.hoverClock = startHandHoverClock(ctx.scene, (elapsedMs) => {
       this.easeHand(elapsedMs);
       this.easeBoard(elapsedMs);
+      this.tickPause(elapsedMs);
     });
   }
 
@@ -1211,7 +1292,7 @@ export class PokerDriver implements GameDriver<PokerState> {
         continue;
       }
       const sprite = chips.sprite(value);
-      sprite.scale = ex.vec(CHIP_SCALE, CHIP_SCALE);
+      sprite.scale = ex.vec(POT_CHIP_SCALE, POT_CHIP_SCALE);
       const actor = new ex.Actor({
         pos: ex.vec(POT_X - 20 + index * 18, POT_Y - index * CHIP_STACK_STEP),
         anchor: ex.vec(0.5, 0.5),

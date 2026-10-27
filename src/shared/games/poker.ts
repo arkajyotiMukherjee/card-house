@@ -9,6 +9,12 @@ import type {
 /** Catalog key for Poker. Texas Hold'em, Omaha, and Oklahoma share this table. */
 export const POKER_GAME_TYPE = 'poker' as const;
 
+/**
+ * How long a finished hand stays on the table before the next deal.
+ * The 800ms bot beat is a separate delay.
+ */
+export const POKER_HAND_PAUSE_MS = 10_000;
+
 export const POKER_VARIATIONS = ['holdem', 'omaha', 'oklahoma'] as const;
 
 export const POKER_RANKS = [

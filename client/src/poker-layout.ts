@@ -1,6 +1,11 @@
 import type { CardFace } from './card-atlas';
-import { rankOfPokerCard, type PokerState } from '../../src/shared/games/poker';
+import {
+  POKER_HAND_PAUSE_MS,
+  rankOfPokerCard,
+  type PokerState,
+} from '../../src/shared/games/poker';
 import { handPositions } from './bluff-layout';
+import { CHIP_HEIGHT } from './sheets';
 import {
   FELT_BOTTOM,
   actionBox,
@@ -10,20 +15,28 @@ import {
   seatPlateWidth,
 } from './table-presentation';
 
-export const BOARD_Y = 188;
 export const BOARD_STEP = 70;
 export const BOARD_SLOTS = 5;
 /** Half the card closes, then the face opens. Short enough to finish before the next street. */
 export const BOARD_FLIP_MS = 280;
 export const POT_X = 480;
 export const POT_Y = 272;
+/** Pot chips are drawn at this scale. The stack grows upward from `POT_Y`. */
+export const POT_CHIP_SCALE = 2;
+/** Bottom of the lowest pot chip. The board sits in the band under this. */
+export const POT_CHIP_BOTTOM = POT_Y + (CHIP_HEIGHT * POT_CHIP_SCALE) / 2;
 export const CARD_DRAW = 64;
+/** Winner line, just under the pot chips. */
+export const BANNER_Y = POT_CHIP_BOTTOM + 8;
+/** Countdown line under the winner, still above the community cards. */
+export const COUNTDOWN_Y = BANNER_Y + 14;
+/** Community cards, below the pot. The top of the table is the opponent fans. */
+export const BOARD_Y = COUNTDOWN_Y + 8 + 12 + CARD_DRAW / 2;
 export const DROPPED_SCALE = 0.75;
 export const DROPPED_Y = FELT_BOTTOM + 28;
 export const DROPPED_LABEL = { x: 16, y: FELT_BOTTOM + 8 } as const;
 const DROPPED_X = [48, 108] as const;
 export const DISCARD_PROMPT = { x: 16, y: FELT_BOTTOM } as const;
-export const BANNER_Y = 312;
 
 export const FOLD_BUTTON = actionBox(0);
 export const CHECK_BUTTON = actionBox(1);
@@ -124,7 +137,21 @@ export function boardFlip(elapsedMs: number): {
   return { scaleX: (t - 0.5) * 2, face: true, done: false };
 }
 
-/** Community cards in a row across the middle of the shared table. */
+/**
+ * Countdown while a finished hand stays up.
+ * `Next hand in 10` at the start, then one less each second, down to 1.
+ * The line is gone once the pause has elapsed and the next hand deals.
+ */
+export function nextHandCountdown(elapsedMs: number): string | null {
+  const remain = POKER_HAND_PAUSE_MS - Math.max(0, elapsedMs);
+  if (remain <= 0) {
+    return null;
+  }
+  const seconds = Math.ceil(remain / 1000);
+  return `Next hand in ${seconds}`;
+}
+
+/** Community cards in a row under the pot, across the middle of the table. */
 export function boardPositions(count: number): { x: number; y: number }[] {
   if (count <= 0) {
     return [];

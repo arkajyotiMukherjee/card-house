@@ -222,12 +222,12 @@ assert(
   'a poker street still waits 800ms',
 );
 assert(
-  POKER_HAND_PAUSE_MICROS === 5_000_000n,
-  'a finished poker hand stays up for 5 seconds',
+  POKER_HAND_PAUSE_MICROS === 10_000_000n,
+  'a finished poker hand stays up for 10 seconds',
 );
 assert(
-  tableBeatDelay('hand') === 5_000_000n,
-  'the next hand is not dealt before 5 seconds',
+  tableBeatDelay('hand') === 10_000_000n,
+  'the next hand is not dealt before 10 seconds',
 );
 assert(
   tableBeatDelay('hand') > BOT_BEAT_MICROS * 3n,
