@@ -1,5 +1,11 @@
 import { BUTTON_HEIGHT } from './button-style';
-import { anchorAt } from './game-scene';
+import {
+  HOW_TO_PLAY_BUTTON,
+  LEAVE_TABLE_BUTTON,
+  TABLE_CHAT_BUTTON,
+  anchorAt,
+} from './game-scene';
+import { STATUS_HUD } from './status-hud';
 import {
   CARD_SIZE,
   LOGICAL_HEIGHT,
@@ -94,10 +100,11 @@ export function insideCluster(box: ActionBox): boolean {
 export const TABLE_CENTER = { x: 480, y: 270 } as const;
 
 /**
- * Largest opponent card. A crowded edge or a long hand draws smaller,
- * and `FanSlot.scale` is that size over `CARD_SIZE`.
+ * Opponent fan cards draw at the same 64px size as the local hand
+ * (`CARD_DRAW`) and the community cards. `FanSlot.scale` stays 1.
+ * A crowded edge or a long hand tightens the spread instead of the card.
  */
-export const OPPONENT_FAN_CARD = 48;
+export const OPPONENT_FAN_CARD = CARD_SIZE;
 export const OPPONENT_FAN_SCALE = OPPONENT_FAN_CARD / CARD_SIZE;
 
 const PLATE_HEIGHT = 20;
@@ -108,20 +115,26 @@ const FAN_BOTTOM_INSET = 0.92;
  * The arc stays outside this block.
  */
 const LABEL_BLOCK_H = 56;
-/** Card bottoms sit on this screen edge. */
-const LEFT_EDGE = 10;
-const RIGHT_EDGE = 950;
-const TOP_EDGE = 78;
-/** Name plate for a top fan. It stays under the arc, in the open middle. */
-const TOP_LABEL_Y = 140;
 /**
- * Lowest pixel a top-fan card may use.
- * High enough that a top fan keeps the same card size as a side fan.
- * The name starts just under this.
+ * Card bottoms sit on this screen edge, a little farther out than the
+ * old rail so a full-size card still ends before the name.
  */
-const TOP_CARD_LIMIT = 136;
-/** How far a side fan may reach inward before the name. */
-const SIDE_POCKET = 54;
+const LEFT_EDGE = 4;
+const RIGHT_EDGE = 956;
+const TOP_EDGE = 75;
+/** Name plate for a top fan. It stays under the arc, in the open middle. */
+const TOP_LABEL_Y = 144;
+/** Lowest pixel a top-fan card may use. The name starts just under this. */
+const TOP_CARD_LIMIT = TOP_LABEL_Y - 4;
+/**
+ * How far a side fan may reach inward before the name.
+ * Past the inner edge of a 64px card, so a short name plus a showdown
+ * hand name still sits in the open middle.
+ */
+const SIDE_POCKET = 108;
+/** Side fans stay below the header row and above the hand and cluster. */
+const LEFT_SAFE = { start: 46, end: 470 } as const;
+const RIGHT_SAFE = { start: 70, end: 440 } as const;
 /** Same rails `seatPoint` divides, so a fan stays inside its seat's slice. */
 const TOP_SPAN = 714 - 246;
 const SIDE_SPAN = 400 - 136;
@@ -209,15 +222,32 @@ function cornerBias(edge: FanEdge, index: number, count: number): number {
     return 0;
   }
   if (edge === 'top') {
-    return end * 0.16;
+    return 0;
   }
   if (edge === 'right') {
-    return end * 0.1;
+    return end * 0.05;
   }
   if (edge === 'left') {
-    return -end * 0.1;
+    return -end * 0.05;
   }
   return 0;
+}
+
+/** Keep `along ± half` inside a safe band without moving a seat that already fits. */
+function contained(
+  along: number,
+  half: number,
+  safeStart: number,
+  safeEnd: number,
+): { along: number; half: number } {
+  const start = Math.max(along - half, safeStart);
+  const end = Math.min(along + half, safeEnd);
+  if (end - start < 48) {
+    return { along, half };
+  }
+  const nextAlong = clamp(along, start, end);
+  const nextHalf = Math.min(nextAlong - start, end - nextAlong);
+  return { along: nextAlong, half: Math.max(nextHalf, 24) };
 }
 
 function fanFrame(seatX: number, seatY: number): FanFrame {
@@ -229,14 +259,17 @@ function fanFrame(seatX: number, seatY: number): FanFrame {
   const span = edge === 'top' || edge === 'bottom' ? TOP_SPAN : SIDE_SPAN;
   const sliced = Math.max(40, span / edgeSeats / 2 - 10);
   if (edge === 'left' || edge === 'right') {
-    const along = known ? known.y : clamp(seatY, 168, 380);
+    const rawAlong = known ? known.y : clamp(seatY, 168, 380);
+    const rawHalf = known ? sliced : 120;
     const right = edge === 'right';
+    const safe = right ? RIGHT_SAFE : LEFT_SAFE;
+    const fitted = contained(rawAlong, rawHalf, safe.start, safe.end);
     return {
       edge,
       edgeX: right ? RIGHT_EDGE : LEFT_EDGE,
-      edgeY: along,
-      along,
-      half: known ? sliced : 120,
+      edgeY: fitted.along,
+      along: fitted.along,
+      half: fitted.half,
       horizontal: false,
       outwardX: right ? 1 : -1,
       outwardY: 0,
@@ -350,55 +383,46 @@ function bottomDirection(
 }
 
 /**
- * Pixel size of one opponent card. Top and side edges start at the same
- * size. A shared edge and a longer hand shrink the card so the arc still
- * fits the slice.
+ * How far the end cards lean. Short hands open a little. Long hands and
+ * the top edge stay flatter so a 64px card still fits the slice.
  */
-function fanCardPixels(handCount: number, frame: FanFrame): number {
-  const crowded = frame.edgeSeats >= 3 ? 6 : frame.edgeSeats >= 2 ? 2 : 0;
-  let size = 44 - crowded;
-  if (handCount <= 2) {
-    size += 2;
-  } else if (handCount <= 5 && handCount > 4) {
-    size -= 4;
-  } else if (handCount >= 13) {
-    size -= frame.edgeSeats >= 2 ? 10 : 6;
-  } else if (handCount >= 8) {
-    size -= 8;
-  }
-  return clamp(size, 22, 46);
-}
-
 function tiltSpan(handCount: number, edge: FanEdge): number {
   const top = edge === 'top';
   if (handCount <= 1) {
-    return 0.08;
-  }
-  if (handCount <= 2) {
-    return top ? 0.24 : 0.34;
+    return top ? 0.04 : 0.08;
   }
   if (handCount <= 4) {
-    return top ? 0.36 : 0.5;
+    return top ? 0.1 : 0.16;
   }
   if (handCount <= 5) {
-    return top ? 0.32 : 0.44;
+    return top ? 0.08 : 0.14;
   }
-  return top ? 0.26 : 0.36;
+  return top ? 0.06 : 0.12;
 }
 
-function placeArc(frame: FanFrame, count: number, size: number): FanSlot[] {
-  const scale = size / CARD_SIZE;
-  const half = size / 2;
-  const tiltMax = tiltSpan(count, frame.edge);
+/** Header, hand, and the hands-and-wins line. Fans stay off these. */
+const FAN_CLEAR: readonly CardRect[] = [
+  LEAVE_TABLE_BUTTON,
+  TABLE_CHAT_BUTTON,
+  HOW_TO_PLAY_BUTTON,
+  STATUS_HUD,
+  { x: 280, y: 16, w: 176, h: 20 },
+  { x: 16, y: 476, w: 720, h: 64 },
+];
+
+function placeArc(
+  frame: FanFrame,
+  count: number,
+  tiltMax: number,
+  stepCap: number,
+): FanSlot[] {
+  const half = OPPONENT_FAN_CARD / 2;
   const bleed =
     half * (Math.abs(Math.cos(tiltMax)) + Math.abs(Math.sin(tiltMax)));
   const usable = Math.max(0, frame.half * 2 - bleed * 2);
-  const prefer =
-    count <= 4
-      ? Math.round(size * 0.55)
-      : Math.min(12, Math.round(size * 0.42));
-  const step = count <= 1 ? 0 : Math.min(prefer, usable / (count - 1));
-  const droop = frame.edge === 'top' || count <= 2 ? 2 : 4;
+  const step =
+    count <= 1 ? 0 : Math.min(stepCap, usable / Math.max(1, count - 1));
+  const droop = frame.edge === 'top' ? 0 : 2;
   const slots: FanSlot[] = [];
   for (let index = 0; index < count; index += 1) {
     const t = count === 1 ? 0 : (index / (count - 1)) * 2 - 1;
@@ -413,7 +437,7 @@ function placeArc(frame: FanFrame, count: number, size: number): FanSlot[] {
       x: Math.round(bottomX + frame.inwardX * bow - dir.x * reach),
       y: Math.round(bottomY + frame.inwardY * bow - dir.y * reach),
       rotation: Math.atan2(dir.x, dir.y),
-      scale,
+      scale: OPPONENT_FAN_SCALE,
     });
   }
   return slots;
@@ -423,7 +447,7 @@ function arcFits(frame: FanFrame, slots: readonly FanSlot[]): boolean {
   for (const slot of slots) {
     const rect = fanCardRect(slot);
     if (frame.edge === 'top') {
-      if (rect.y < 69 || rect.y + rect.h > TOP_CARD_LIMIT) {
+      if (rect.y + rect.h > TOP_CARD_LIMIT) {
         return false;
       }
       if (
@@ -456,6 +480,11 @@ function arcFits(frame: FanFrame, slots: readonly FanSlot[]): boolean {
     if (coversCluster(slot)) {
       return false;
     }
+    for (const block of FAN_CLEAR) {
+      if (rectsOverlap(rect, block)) {
+        return false;
+      }
+    }
   }
   return true;
 }
@@ -463,8 +492,8 @@ function arcFits(frame: FanFrame, slots: readonly FanSlot[]): boolean {
 /**
  * One arc whose bottoms lie on that seat's table edge.
  * Top arcs open downward. A corner seat leans a little.
- * Card size and spread shrink when the edge is shared or the hand is long,
- * and the name sits in the open middle of the arc.
+ * Every card is `OPPONENT_FAN_CARD` (64). The spread tightens when the
+ * edge is shared or the hand is long, and the name sits in the open middle.
  */
 export function seatFan(
   seatX: number,
@@ -476,11 +505,17 @@ export function seatFan(
     return [];
   }
   const frame = fanFrame(seatX, seatY);
-  let size = fanCardPixels(count, frame);
-  let slots = placeArc(frame, count, size);
-  while (size > 22 && !arcFits(frame, slots)) {
-    size -= 2;
-    slots = placeArc(frame, count, size);
+  let tilt = tiltSpan(count, frame.edge);
+  let stepCap = count <= 4 ? 28 : 12;
+  let slots = placeArc(frame, count, tilt, stepCap);
+  const tiltFloor = frame.edge === 'top' ? 0.04 : 0.1;
+  while (!arcFits(frame, slots) && (tilt > tiltFloor || stepCap > 6)) {
+    if (tilt > tiltFloor) {
+      tilt = Math.max(tiltFloor, +(tilt - 0.02).toFixed(2));
+    } else {
+      stepCap -= 2;
+    }
+    slots = placeArc(frame, count, tilt, stepCap);
   }
   return slots;
 }
