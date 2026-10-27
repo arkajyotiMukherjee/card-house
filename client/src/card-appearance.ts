@@ -93,16 +93,40 @@ export function setCardBackStyle(
   return saveAppearance({ ...current, back }, storage);
 }
 
+function stepStyle<T extends string>(
+  values: readonly T[],
+  current: T,
+  delta: number,
+  fallback: T,
+): T {
+  const count = values.length;
+  const index = values.indexOf(current);
+  const next = ((((index < 0 ? 0 : index) + delta) % count) + count) % count;
+  return values[next] ?? fallback;
+}
+
+/** Steps through the front styles. `delta` may be negative. */
+export function stepCardFrontStyle(
+  current: CardFrontStyle,
+  delta: number,
+): CardFrontStyle {
+  return stepStyle(CARD_FRONT_STYLES, current, delta, DEFAULT_CARD_FRONT_STYLE);
+}
+
+/** Steps through the back styles. `delta` may be negative. */
+export function stepCardBackStyle(
+  current: CardBackStyle,
+  delta: number,
+): CardBackStyle {
+  return stepStyle(CARD_BACK_STYLES, current, delta, DEFAULT_CARD_BACK_STYLE);
+}
+
 /** Cycles to the next style in `CARD_FRONT_STYLES`, wrapping around. */
 export function nextCardFrontStyle(current: CardFrontStyle): CardFrontStyle {
-  const index = CARD_FRONT_STYLES.indexOf(current);
-  const next = CARD_FRONT_STYLES[(index + 1) % CARD_FRONT_STYLES.length];
-  return next ?? DEFAULT_CARD_FRONT_STYLE;
+  return stepCardFrontStyle(current, 1);
 }
 
 /** Cycles to the next style in `CARD_BACK_STYLES`, wrapping around. */
 export function nextCardBackStyle(current: CardBackStyle): CardBackStyle {
-  const index = CARD_BACK_STYLES.indexOf(current);
-  const next = CARD_BACK_STYLES[(index + 1) % CARD_BACK_STYLES.length];
-  return next ?? DEFAULT_CARD_BACK_STYLE;
+  return stepCardBackStyle(current, 1);
 }

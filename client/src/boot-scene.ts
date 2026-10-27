@@ -13,9 +13,9 @@ import {
   TABLE_SCALE,
   TABLE_WIDTH,
 } from './sheets';
+import { backgroundHex } from './theme';
 import { TABLE_STYLES, TableAtlas, type TableStyle } from './table-atlas';
 
-const FELT = ex.Color.fromHex('#145c38');
 const STATUS = ex.Color.fromHex('#f4e4b3');
 
 const nearest = { filtering: ex.ImageFiltering.Pixel };
@@ -198,13 +198,18 @@ export class BootScene extends ex.Scene {
     }),
   });
   private tableActor: ex.Actor | undefined;
+  private backgroundHex: string;
 
-  constructor(private style: TableStyle = 'green') {
+  constructor(
+    private style: TableStyle = 'green',
+    background: string = backgroundHex('green'),
+  ) {
     super();
+    this.backgroundHex = background;
   }
 
   onInitialize(engine: ex.Engine): void {
-    engine.backgroundColor = FELT;
+    this.applyBackground(engine);
 
     const table = new ex.Actor({
       pos: ex.vec(LOGICAL_WIDTH / 2, LOGICAL_HEIGHT / 2 + 16),
@@ -235,5 +240,19 @@ export class BootScene extends ex.Scene {
   setTableStyle(style: TableStyle): void {
     this.style = style;
     this.tableActor?.graphics.use(feltSprite(style));
+  }
+
+  /** Paints the margin around the felt, and the canvas behind it. */
+  setBackground(hex: string): void {
+    this.backgroundHex = hex;
+    this.applyBackground(this.engine);
+  }
+
+  private applyBackground(engine: ex.Engine | undefined): void {
+    const color = ex.Color.fromHex(this.backgroundHex);
+    this.backgroundColor = color;
+    if (engine) {
+      engine.backgroundColor = color;
+    }
   }
 }

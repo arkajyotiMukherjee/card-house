@@ -36,10 +36,13 @@ import {
 } from './mobile-shell';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH, fitViewport } from './sheets';
 import { installTouchTargets } from './touch-targets';
-import { getTheme, saveTheme } from './theme';
+import { tableScenePaint } from './client-look';
+import { applyPageBackground } from './page-background';
+import { backgroundHex } from './theme';
 
 const clientId = getOrCreateClientId();
-const theme = getTheme(clientId);
+const theme = tableScenePaint(clientId);
+applyPageBackground(theme.background);
 const joinCode = roomCodeFromPath(window.location.pathname);
 const parsedIdentity = discordIdentityFromSearch(window.location.search);
 const discordIdentity =
@@ -59,7 +62,7 @@ const engine = new ex.Engine({
   suppressHiDPIScaling: true,
   suppressPlayButton: true,
   snapToPixel: true,
-  backgroundColor: ex.Color.fromHex('#145c38'),
+  backgroundColor: ex.Color.fromHex(theme.background),
   pixelRatio: 1,
 });
 
@@ -94,8 +97,8 @@ function applyContainScale(): void {
   refreshCanvasTextFields();
 }
 
-const scene = new BootScene(theme);
-const loading = new BootScene(theme);
+const scene = new BootScene(theme.table, theme.background);
+const loading = new BootScene(theme.table, theme.background);
 const menu = new MenuScene(clientId);
 const savedRoomAtStart = joinCode ? undefined : readLastRoom();
 const loadingLine = reloadLoadingLine(savedRoomAtStart);
@@ -145,7 +148,7 @@ void engine.start(loader).then(() => {
             forgetTable();
             engine.goToScene('boot');
           },
-          theme,
+          theme.table,
         );
         engine.add('game', game);
         const lobbyScene = new LobbyScene(
@@ -224,11 +227,18 @@ void engine.start(loader).then(() => {
           engine.goToScene('game');
           return undefined;
         });
-        menu.connectTheme(theme, (style) => {
-          saveTheme(clientId, style);
-          scene.setTableStyle(style);
-          loading.setTableStyle(style);
-          game.setTableStyle(style);
+        menu.connectLook((look) => {
+          const hex = backgroundHex(look.background);
+          applyPageBackground(hex);
+          const color = ex.Color.fromHex(hex);
+          engine.backgroundColor = color;
+          scene.setTableStyle(look.table);
+          scene.setBackground(hex);
+          loading.setTableStyle(look.table);
+          loading.setBackground(hex);
+          game.setTableStyle(look.table);
+          game.setBackground(hex);
+          lobbyScene.refreshCards();
         });
         if (joinCode) {
           const joinName = joinNameFromSearch(window.location.search);

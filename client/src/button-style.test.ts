@@ -40,13 +40,7 @@ import {
   TABLE_LIST,
   WATCH_BUTTON,
 } from './lobby';
-import {
-  CARD_STYLE,
-  HOW_TO_PLAY,
-  MENU_BUTTONS,
-  MENU_THEME_BUTTON,
-  PROMPT,
-} from './menu-layout';
+import { HOW_TO_PLAY, MENU_BUTTONS, PROMPT, THEME_PANEL } from './menu-layout';
 import {
   BET_BUTTON,
   CALL_BUTTON,
@@ -106,11 +100,10 @@ describe('button captions', () => {
 
 describe('shared button height', () => {
   const standard = [
-    MENU_THEME_BUTTON,
     PROMPT.submit,
     PROMPT.cancel,
     HOW_TO_PLAY.back,
-    CARD_STYLE.close,
+    THEME_PANEL.close,
     LOBBY_PANEL.createButton,
     LOBBY_PANEL.joinButton,
     LOBBY_PANEL.saveButton,
@@ -170,7 +163,7 @@ describe('shared button height', () => {
     for (const button of MENU_BUTTONS) {
       expect(button.h).toBe(44);
     }
-    expect(CARD_STYLE.arrow.h).toBe(24);
+    expect(THEME_PANEL.arrow.h).toBe(24);
     expect(ASK_BUTTON.h).toBe(22);
     expect(WATCH_BUTTON.h).toBe(12);
   });

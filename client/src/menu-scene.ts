@@ -1,6 +1,5 @@
 import * as ex from 'excalibur';
 import {
-  cardAtlas,
   chipsImage,
   personalCardAtlas,
   pixelFont,
@@ -11,12 +10,12 @@ import type { Rank, Suit } from './card-atlas';
 import {
   CARD_BACK_LABELS,
   CARD_FRONT_LABELS,
-  getCardAppearance,
-  nextCardBackStyle,
-  nextCardFrontStyle,
   setCardBackStyle,
   setCardFrontStyle,
+  stepCardBackStyle,
+  stepCardFrontStyle,
 } from './card-appearance';
+import { readClientLook, type ClientLook } from './client-look';
 import {
   GAME_CATALOG,
   applyCodeKey,
@@ -46,16 +45,15 @@ import {
   type ConnectionPhase,
 } from './connect';
 import {
-  CARD_STYLE,
   HOW_TO_PLAY,
   MENU_BACKDROP,
   MENU_BUTTONS,
   MENU_TAGLINE,
-  MENU_THEME_BUTTON,
   MENU_TITLE,
   MENU_VERSION,
   PROMPT,
   SOLO_PICKER,
+  THEME_PANEL,
   floaterPose,
   makeFloaters,
   menuAcceptsAction,
@@ -68,12 +66,12 @@ import {
   soloSettingsJson,
   splitHowToPlay,
   stepIndex,
-  themeButtonLabel,
   wrapText,
   type FloaterSpec,
   type MenuAction,
   type MenuMode,
   type PromptKind,
+  type ThemeChoiceId,
 } from './menu-layout';
 import { statsCaption } from './client-stats';
 import {
@@ -86,9 +84,13 @@ import {
   buttonCaptionPos,
 } from './button-style';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from './sheets';
-import { TABLE_STYLES, type TableStyle } from './table-atlas';
+import {
+  backgroundHex,
+  saveBackground,
+  saveTheme,
+  stepTableStyle,
+} from './theme';
 
-const FELT = ex.Color.fromHex('#145c38');
 const GOLD = ex.Color.fromHex('#f4e4b3');
 const DIM = ex.Color.fromHex('#d7c08a');
 const FIELD = ex.Color.fromHex('#0b2418');
@@ -104,7 +106,7 @@ const TITLE_SHADOW = ex.Color.fromHex('#07140d');
 
 const FLOATER_COUNT = 14;
 const TITLE_DROP = 4;
-/** Below the Card Style button (y 408, h 44) and above the version marker. */
+/** Below the Theme button (y 408, h 44) and above the version marker. */
 const STATS_Y = 480;
 
 export interface MenuEntry {
@@ -179,6 +181,10 @@ function rect(
   return graphic;
 }
 
+function styleName(value: string): string {
+  return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
+}
+
 function scaled(sprite: ex.Sprite, scale: number): ex.Sprite {
   sprite.scale = ex.vec(scale, scale);
   return sprite;
@@ -240,14 +246,17 @@ export class MenuScene extends ex.Scene {
 
   private frontValueText: ex.Text | undefined;
   private backValueText: ex.Text | undefined;
+  private tableValueText: ex.Text | undefined;
+  private backgroundValueText: ex.Text | undefined;
   private previewFront: ex.Actor | undefined;
   private previewBack: ex.Actor | undefined;
+  private previewTable: ex.Actor | undefined;
+  private previewBackground: ex.Actor | undefined;
 
-  private style: TableStyle = 'green';
-  private onThemeChange: (style: TableStyle) => void = () => {};
+  private look: ClientLook = readClientLook('');
+  private onLookChange: (look: ClientLook) => void = () => {};
   private tableActor: ex.Actor | undefined;
-  private themeCaption: ex.Text | undefined;
-  private themeCaptionActor: ex.Actor | undefined;
+  private readonly chips = new ChipAtlas(chipsImage);
 
   /**
    * Create and Join read this before they call a reducer. A drop while the
@@ -275,13 +284,14 @@ export class MenuScene extends ex.Scene {
   }
 
   /**
-   * Sets the starting theme and the handler the Theme button calls on each
-   * switch. Repaints immediately if the menu table already exists.
+   * Reads the saved Theme and tells the rest of the app whenever it changes.
+   * Repaints the menu table, margin, and drifting cards immediately.
    */
-  connectTheme(style: TableStyle, onChange: (style: TableStyle) => void): void {
-    this.style = style;
-    this.onThemeChange = onChange;
-    this.repaintTheme();
+  connectLook(onChange: (look: ClientLook) => void): void {
+    this.onLookChange = onChange;
+    this.look = readClientLook(this.clientId);
+    this.paintLook();
+    this.onLookChange(this.look);
   }
 
   /** Called once the lobby panel can accept a name and code. */
@@ -312,13 +322,15 @@ export class MenuScene extends ex.Scene {
   }
 
   onInitialize(engine: ex.Engine): void {
-    this.backgroundColor = FELT;
+    this.look = readClientLook(this.clientId);
+    this.backgroundColor = ex.Color.fromHex(
+      backgroundHex(this.look.background),
+    );
     this.buildTable();
     this.buildDrifters();
     this.buildBackdrop();
     this.buildTitle();
     this.buildButtons();
-    this.buildThemeButton();
     this.buildFooter();
     this.bindMenuFields();
     engine.input.keyboard.on('press', (evt) => {
@@ -358,100 +370,50 @@ export class MenuScene extends ex.Scene {
       anchor: ex.vec(0.5, 0.5),
       z: 0,
     });
-    table.graphics.use(scaled(tableSprites[this.style].clone(), 8));
+    table.graphics.use(scaled(tableSprites[this.look.table].clone(), 8));
     this.tableActor = table;
     this.add(table);
   }
 
-  private buildThemeButton(): void {
-    const box = MENU_THEME_BUTTON;
-    const face = rect(box.w, box.h, BUTTON, STROKE);
-    const actor = new ex.Actor({
-      pos: ex.vec(box.x, box.y),
-      anchor: ex.vec(0, 0),
-      width: box.w,
-      height: box.h,
-      z: 10,
-    });
-    actor.graphics.use(face);
-    const caption = canvasText(
-      themeButtonLabel(this.style),
-      BUTTON_FONT_SIZE,
-      GOLD,
+  private paintLook(): void {
+    this.backgroundColor = ex.Color.fromHex(
+      backgroundHex(this.look.background),
     );
-    const captionActor = new ex.Actor({
-      pos: ex.vec(0, 0),
-      anchor: ex.vec(0, 0),
-    });
-    captionActor.graphics.use(caption);
-    this.themeCaptionActor = captionActor;
-    this.placeThemeCaption();
-    actor.addChild(captionActor);
-    actor.on('pointerenter', () => {
-      face.strokeColor = STROKE_HOT;
-    });
-    actor.on('pointerleave', () => {
-      face.strokeColor = STROKE;
-    });
-    actor.on('pointerup', () => {
-      this.cycleTheme();
-    });
-    this.add(actor);
-    this.themeCaption = caption;
-  }
-
-  private cycleTheme(): void {
-    if (!menuAcceptsAction(this.mode, this.clickClaimedByOverlay)) {
-      return;
-    }
-    const index = TABLE_STYLES.indexOf(this.style);
-    const next = TABLE_STYLES[(index + 1) % TABLE_STYLES.length] ?? 'green';
-    this.style = next;
-    this.repaintTheme();
-    this.onThemeChange(next);
-  }
-
-  private repaintTheme(): void {
-    this.tableActor?.graphics.use(scaled(tableSprites[this.style].clone(), 8));
-    this.placeThemeCaption();
-  }
-
-  private placeThemeCaption(): void {
-    const box = MENU_THEME_BUTTON;
-    const label = themeButtonLabel(this.style);
-    if (this.themeCaption) {
-      this.themeCaption.text = label;
-    }
-    const pos = buttonCaptionPos(label, box.w, box.h, BUTTON_FONT_SIZE);
-    if (this.themeCaptionActor) {
-      this.themeCaptionActor.pos = ex.vec(pos.x, pos.y);
+    this.tableActor?.graphics.use(
+      scaled(tableSprites[this.look.table].clone(), 8),
+    );
+    for (const drifter of this.drifters) {
+      drifter.actor.graphics.use(
+        scaled(this.floaterSprite(drifter.spec), drifter.spec.scale),
+      );
+      drifter.actor.graphics.opacity = 0.9;
     }
   }
 
   private buildDrifters(): void {
-    const chips = new ChipAtlas(chipsImage);
     for (const spec of makeFloaters(FLOATER_COUNT)) {
       const actor = new ex.Actor({
         pos: ex.vec(spec.x, spec.y),
         anchor: ex.vec(0.5, 0.5),
         z: 1,
       });
-      actor.graphics.use(scaled(this.floaterSprite(spec, chips), spec.scale));
+      actor.graphics.use(scaled(this.floaterSprite(spec), spec.scale));
       actor.graphics.opacity = 0.9;
       this.add(actor);
       this.drifters.push({ actor, spec });
     }
   }
 
-  private floaterSprite(spec: FloaterSpec, chips: ChipAtlas): ex.Sprite {
+  private floaterSprite(spec: FloaterSpec): ex.Sprite {
     if (spec.kind === 'chip') {
-      return chips.sprite(spec.face as ChipColor);
+      return this.chips.sprite(spec.face as ChipColor);
     }
+    const mine = personalCardAtlas();
     if (spec.kind === 'back') {
-      return cardAtlas.back();
+      return mine.back();
     }
     const [rank, suit] = spec.face.split(':');
-    return cardAtlas.sprite({ rank: rank as Rank, suit: suit as Suit });
+    return mine.sprite({ rank: rank as Rank, suit: suit as Suit });
   }
 
   private buildBackdrop(): void {
@@ -534,8 +496,8 @@ export class MenuScene extends ex.Scene {
       this.openHowToPlay();
       return;
     }
-    if (action === 'cards') {
-      this.openCardStyle();
+    if (action === 'theme') {
+      this.openTheme();
       return;
     }
     if (action === 'solo') {
@@ -564,8 +526,12 @@ export class MenuScene extends ex.Scene {
     this.errorText = undefined;
     this.frontValueText = undefined;
     this.backValueText = undefined;
+    this.tableValueText = undefined;
+    this.backgroundValueText = undefined;
     this.previewFront = undefined;
     this.previewBack = undefined;
+    this.previewTable = undefined;
+    this.previewBackground = undefined;
     this.mode = 'main';
     this.busy = false;
     refreshCanvasTextFields();
@@ -991,7 +957,7 @@ export class MenuScene extends ex.Scene {
     y: number,
     onCycle: (delta: number) => void,
   ): ex.Text {
-    const arrow = CARD_STYLE.arrow;
+    const arrow = THEME_PANEL.arrow;
     this.overlay.push(
       this.button(x, y, arrow.w, arrow.h, '<', 16, () => onCycle(-1), 32, true),
     );
@@ -1240,11 +1206,11 @@ export class MenuScene extends ex.Scene {
     }
   }
 
-  private openCardStyle(): void {
-    this.mode = 'cards';
+  private openTheme(): void {
+    this.mode = 'theme';
     this.shade();
 
-    const box = CARD_STYLE.panel;
+    const box = THEME_PANEL.panel;
     const panel = new ex.Actor({
       pos: ex.vec(box.x, box.y),
       anchor: ex.vec(0, 0),
@@ -1256,69 +1222,48 @@ export class MenuScene extends ex.Scene {
     this.claimOverlayPointer(panel);
     this.add(panel);
     this.overlay.push(panel);
-    this.overlayText(box.x + 24, box.y + 16, 16, GOLD, () => 'Card Style');
+    this.overlayText(box.x + 24, box.y + 16, 16, GOLD, () => 'Theme');
     this.overlayText(
       box.x + 24,
       box.y + 44,
       8,
       DIM,
-      () => 'Only your own cards use this. Saved on this browser.',
+      () => 'Saved on this browser.',
     );
 
-    this.overlayText(
-      CARD_STYLE.frontRow.x,
-      CARD_STYLE.frontRow.labelY,
-      8,
-      DIM,
-      () => 'Card Front',
-    );
-    this.frontValueText = this.styleArrowRow(
-      CARD_STYLE.frontRow.x,
-      CARD_STYLE.frontRow.y,
-      () => {
-        const next = nextCardFrontStyle(getCardAppearance().front);
-        setCardFrontStyle(next);
-        this.refreshCardStyle();
-      },
-    );
+    for (const choice of THEME_PANEL.choices) {
+      this.overlayText(choice.x, choice.labelY, 8, DIM, () => choice.label);
+      const value = this.styleArrowRow(choice.x, choice.y, (delta) => {
+        this.stepTheme(choice.id, delta);
+      });
+      if (choice.id === 'front') {
+        this.frontValueText = value;
+      } else if (choice.id === 'back') {
+        this.backValueText = value;
+      } else if (choice.id === 'table') {
+        this.tableValueText = value;
+      } else {
+        this.backgroundValueText = value;
+      }
+      const preview = new ex.Actor({
+        pos: ex.vec(choice.previewBox.x, choice.previewBox.y),
+        anchor: ex.vec(0, 0),
+        z: 33,
+      });
+      this.add(preview);
+      this.overlay.push(preview);
+      if (choice.preview === 'face') {
+        this.previewFront = preview;
+      } else if (choice.preview === 'back') {
+        this.previewBack = preview;
+      } else if (choice.preview === 'table') {
+        this.previewTable = preview;
+      } else {
+        this.previewBackground = preview;
+      }
+    }
 
-    this.overlayText(
-      CARD_STYLE.backRow.x,
-      CARD_STYLE.backRow.labelY,
-      8,
-      DIM,
-      () => 'Card Back',
-    );
-    this.backValueText = this.styleArrowRow(
-      CARD_STYLE.backRow.x,
-      CARD_STYLE.backRow.y,
-      () => {
-        const next = nextCardBackStyle(getCardAppearance().back);
-        setCardBackStyle(next);
-        this.refreshCardStyle();
-      },
-    );
-
-    const preview = CARD_STYLE.preview;
-    const previewFront = new ex.Actor({
-      pos: ex.vec(preview.frontX, preview.y),
-      anchor: ex.vec(0, 0),
-      z: 33,
-    });
-    this.add(previewFront);
-    this.overlay.push(previewFront);
-    this.previewFront = previewFront;
-
-    const previewBack = new ex.Actor({
-      pos: ex.vec(preview.backX, preview.y),
-      anchor: ex.vec(0, 0),
-      z: 33,
-    });
-    this.add(previewBack);
-    this.overlay.push(previewBack);
-    this.previewBack = previewBack;
-
-    const close = CARD_STYLE.close;
+    const close = THEME_PANEL.close;
     this.overlay.push(
       this.button(
         close.x,
@@ -1335,27 +1280,54 @@ export class MenuScene extends ex.Scene {
       ),
     );
 
-    this.refreshCardStyle();
+    this.refreshTheme();
+  }
+
+  private stepTheme(id: ThemeChoiceId, delta: number): void {
+    if (id === 'front') {
+      const front = stepCardFrontStyle(this.look.front, delta);
+      setCardFrontStyle(front);
+      this.look = { ...this.look, front };
+    } else if (id === 'back') {
+      const back = stepCardBackStyle(this.look.back, delta);
+      setCardBackStyle(back);
+      this.look = { ...this.look, back };
+    } else if (id === 'table') {
+      const table = stepTableStyle(this.look.table, delta);
+      saveTheme(this.clientId, table);
+      this.look = { ...this.look, table };
+    } else {
+      const background = stepTableStyle(this.look.background, delta);
+      saveBackground(this.clientId, background);
+      this.look = { ...this.look, background };
+    }
+    this.paintLook();
+    this.refreshTheme();
+    this.onLookChange(this.look);
   }
 
   /**
-   * One row with a left arrow, the current style name, and a right arrow.
-   * Returns the text actor so `refreshCardStyle` can update it.
+   * One row with a left arrow, the current name, and a right arrow.
+   * Returns the text so `refreshTheme` can update it.
    */
-  private styleArrowRow(x: number, y: number, onCycle: () => void): ex.Text {
-    const arrow = CARD_STYLE.arrow;
+  private styleArrowRow(
+    x: number,
+    y: number,
+    onCycle: (delta: number) => void,
+  ): ex.Text {
+    const arrow = THEME_PANEL.arrow;
     this.overlay.push(
-      this.button(x, y, arrow.w, arrow.h, '<', 16, onCycle, 32, true),
+      this.button(x, y, arrow.w, arrow.h, '<', 16, () => onCycle(-1), 32, true),
     );
     this.overlay.push(
       this.button(
-        x + CARD_STYLE.arrowGap,
+        x + THEME_PANEL.arrowGap,
         y,
         arrow.w,
         arrow.h,
         '>',
         16,
-        onCycle,
+        () => onCycle(1),
         32,
         true,
       ),
@@ -1372,19 +1344,40 @@ export class MenuScene extends ex.Scene {
     return text;
   }
 
-  private refreshCardStyle(): void {
-    const appearance = getCardAppearance();
+  private refreshTheme(): void {
     if (this.frontValueText) {
-      this.frontValueText.text = CARD_FRONT_LABELS[appearance.front];
+      this.frontValueText.text = CARD_FRONT_LABELS[this.look.front];
     }
     if (this.backValueText) {
-      this.backValueText.text = CARD_BACK_LABELS[appearance.back];
+      this.backValueText.text = CARD_BACK_LABELS[this.look.back];
+    }
+    if (this.tableValueText) {
+      this.tableValueText.text = styleName(this.look.table);
+    }
+    if (this.backgroundValueText) {
+      this.backgroundValueText.text = styleName(this.look.background);
     }
     const mine = personalCardAtlas();
     this.previewFront?.graphics.use(
       scaled(mine.sprite({ rank: 'A', suit: 'spades' }), 1),
     );
     this.previewBack?.graphics.use(scaled(mine.back(), 1));
+    this.previewTable?.graphics.use(
+      scaled(tableSprites[this.look.table].clone(), 1),
+    );
+    const background = THEME_PANEL.choices.find(
+      (choice) => choice.id === 'background',
+    );
+    if (background) {
+      this.previewBackground?.graphics.use(
+        rect(
+          background.previewBox.w,
+          background.previewBox.h,
+          ex.Color.fromHex(backgroundHex(this.look.background)),
+          STROKE,
+        ),
+      );
+    }
   }
 
   private onKey(key: ex.Keys, value: string): void {
@@ -1403,7 +1396,7 @@ export class MenuScene extends ex.Scene {
       }
       return;
     }
-    if (this.mode === 'cards') {
+    if (this.mode === 'theme') {
       return;
     }
     if (this.mode === 'solo') {

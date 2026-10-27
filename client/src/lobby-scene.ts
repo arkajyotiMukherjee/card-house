@@ -4,7 +4,7 @@ import {
   BUTTON_PRESS_SHIFT,
   buttonCaptionPos,
 } from './button-style';
-import { cardAtlas, pixelFont } from './boot-scene';
+import { personalCardAtlas, pixelFont } from './boot-scene';
 import { statsCaption } from './client-stats';
 import { subscribeLobbyTables } from './connect';
 import { joinFailureMessage, wrapTableError } from './join-errors';
@@ -192,6 +192,7 @@ export class LobbyScene {
   private readonly leaveConfirmButtons: ex.Actor[] = [];
   private leavingRoom = false;
   private returnedToMenu = false;
+  private readonly idleCards: Array<{ actor: ex.Actor; idle: IdleCard }> = [];
 
   constructor(
     private readonly engine: ex.Engine,
@@ -289,6 +290,7 @@ export class LobbyScene {
     this.lobbyCode = code;
     this.closeLeaveConfirm();
     this.ensurePanel();
+    this.refreshCards();
     this.paintCode();
     this.paintDiscordBadge();
     this.chatBody = '';
@@ -868,16 +870,31 @@ export class LobbyScene {
     this.discordBadge = badge;
   }
 
-  private buildIdleCards(): void {
-    for (const idle of IDLE_CARDS) {
-      this.scene.add(this.idleCardActor(idle));
+  /** Repaints idle cards after a Theme change or when the lobby is shown again. */
+  refreshCards(): void {
+    for (const row of this.idleCards) {
+      row.actor.graphics.use(this.idleSprite(row.idle));
+      row.actor.graphics.opacity = IDLE_OPACITY;
     }
   }
 
-  private idleCardActor(idle: IdleCard): ex.Actor {
-    const sprite =
-      idle.card === 'back' ? cardAtlas.back() : cardAtlas.sprite(idle.card);
+  private buildIdleCards(): void {
+    for (const idle of IDLE_CARDS) {
+      const actor = this.idleCardActor(idle);
+      this.idleCards.push({ actor, idle });
+      this.scene.add(actor);
+    }
+  }
+
+  private idleSprite(idle: IdleCard): ex.Sprite {
+    const mine = personalCardAtlas();
+    const sprite = idle.card === 'back' ? mine.back() : mine.sprite(idle.card);
     sprite.scale = ex.vec(2, 2);
+    return sprite;
+  }
+
+  private idleCardActor(idle: IdleCard): ex.Actor {
+    const sprite = this.idleSprite(idle);
     const actor = new ex.Actor({
       pos: ex.vec(idle.x, idle.y),
       anchor: ex.vec(0.5, 0.5),

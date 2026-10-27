@@ -2,7 +2,7 @@
 
 ## Visual Style
 
-The whole experience lives inside a single Excalibur.js canvas with a fixed virtual resolution (960×540). The canvas scales to fit inside the browser window, and `image-rendering: pixelated` keeps the pixels crisp. Bars around the frame are black.
+The whole experience lives inside a single Excalibur.js canvas with a fixed virtual resolution (960×540). The canvas scales to fit inside the browser window, and `image-rendering: pixelated` keeps the pixels crisp. Bars around the frame use the saved background color. The default is the green felt `#145c38`.
 
 - Art style is consistent with the Pixel Tabletop Kit:
   - green felt tables,
@@ -393,7 +393,7 @@ If a player disconnects suddenly:
 - Canvas runs at a fixed logical resolution (e.g. 960×540).
 - On resize:
   - fit the whole 960×540 frame inside the visible area, preserving aspect ratio.
-  - center the scaled canvas. A narrower window leaves black bars on the top and bottom. A shorter window leaves them on the left and right.
+  - center the scaled canvas. A narrower window leaves bars on the top and bottom. A shorter window leaves them on the left and right. The bars use the saved background, green by default.
   - the frame is never cropped. Safe-area insets stay inside the fit.
 - Hitboxes and text layout all use logical coordinates; Excalibur’s camera scaling handles physical pixels.
 
@@ -403,7 +403,7 @@ This keeps interactions predictable and the pixel art crisp regardless of displa
 
 A phone or tablet is any device matching `(pointer: coarse) and (hover: none)`. A narrow desktop window does not match and keeps the desktop shell (no rotate panel).
 
-- **Fit, not cover.** Every browser scales the whole 960×540 frame to fit inside the visible area (`visualViewport`), minus the safe-area insets for the notch and home indicator. Nothing is cropped. A narrower window leaves black bars on the top and bottom. A shorter window leaves them on the left and right. The page background is black.
+- **Fit, not cover.** Every browser scales the whole 960×540 frame to fit inside the visible area (`visualViewport`), minus the safe-area insets for the notch and home indicator. Nothing is cropped. A narrower window leaves bars on the top and bottom. A shorter window leaves them on the left and right. Those bars use the saved background color, green (`#145c38`) until the player changes Theme.
 - **Rotate panel.** In portrait the game is covered by a green and gold panel that reads “Rotate the phone to landscape” and has a fullscreen button.
 - **Fullscreen button.** In landscape the game shows, with a small fullscreen button in the top-left corner (clear of the notch) until the browser is actually fullscreen.
   - Where `document.documentElement.requestFullscreen()` works, the button enters fullscreen and then calls `screen.orientation.lock('landscape')`. A refusal leaves the layout as it is.
