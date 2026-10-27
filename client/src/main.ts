@@ -9,7 +9,7 @@ import {
   statsCaptionFor,
   statsForClient,
 } from './client-stats';
-import { connectCardroom } from './connect';
+import { connectCardroom, linkStatusLine } from './connect';
 import {
   clearLastRoom,
   forgetTable,
@@ -136,10 +136,19 @@ void engine.start(loader).then(() => {
   applyContainScale();
   let clientStatsReady = false;
   let publishStats = (): void => {};
+  let lobbyScene: LobbyScene | undefined;
+  let game: GameScene | undefined;
+  let rejoinAfterReconnect = (): void => {};
   connectCardroom(
     {
       onPhase: (phase) => {
         menu.setConnectionPhase(phase);
+        const line = linkStatusLine(phase);
+        lobbyScene?.setLinkStatus(line);
+        game?.setLinkStatus(line);
+      },
+      onReconnected: () => {
+        rejoinAfterReconnect();
       },
       onClientStats: () => {
         clientStatsReady = true;
@@ -153,7 +162,7 @@ void engine.start(loader).then(() => {
           _tableId: string,
           _lobbyMemberId: string,
         ): void => {};
-        const game = new GameScene(
+        const tableScene = new GameScene(
           connection,
           clientId,
           () => {
@@ -170,8 +179,9 @@ void engine.start(loader).then(() => {
           },
           theme.table,
         );
-        engine.add('game', game);
-        const lobbyScene = new LobbyScene(
+        game = tableScene;
+        engine.add('game', tableScene);
+        const roomScene = new LobbyScene(
           engine,
           scene,
           connection,
@@ -186,6 +196,7 @@ void engine.start(loader).then(() => {
             engine.goToScene('menu');
           },
         );
+        lobbyScene = roomScene;
         publishStats = (): void => {
           const lifetime = statsForClient(
             connection.db.clientStats.iter(),
@@ -201,8 +212,8 @@ void engine.start(loader).then(() => {
                 )
               : emptyClientStats();
           menu.setStats(statsCaptionFor('menu', lifetime, session));
-          lobbyScene.setStats(statsCaptionFor('lobby', lifetime, session));
-          game.setStats(statsCaptionFor('table', lifetime, session));
+          roomScene.setStats(statsCaptionFor('lobby', lifetime, session));
+          tableScene.setStats(statsCaptionFor('table', lifetime, session));
         };
         endTableSession = (): void => {
           openTableId = '';
@@ -213,10 +224,10 @@ void engine.start(loader).then(() => {
           rememberTable(tableId);
           openTableId = tableId;
           publishStats();
-          game.open(tableId, lobbyMemberId);
+          tableScene.open(tableId, lobbyMemberId);
           engine.goToScene('game');
         };
-        lobbyScene.mount();
+        roomScene.mount();
         const savedRoom = joinCode ? undefined : readLastRoom();
         let pendingReload: LastRoom | undefined = savedRoom;
         let reloadBusy = false;
@@ -234,11 +245,33 @@ void engine.start(loader).then(() => {
                 return;
               }
               scene.setStatus('');
-              void lobbyScene.openLobby(lobby.id, lobby.code);
+              void roomScene.openLobby(lobby.id, lobby.code);
             },
           },
         );
         joined.panel = panel;
+        rejoinAfterReconnect = () => {
+          const saved = readLastRoom();
+          if (!saved) {
+            return;
+          }
+          void connection.reducers
+            .joinLobby({
+              lobbyCode: saved.lobbyCode,
+              clientId,
+              name: saved.name,
+            })
+            .catch((error: unknown) => {
+              const message = error instanceof Error ? error.message : '';
+              if (!roomGoneMessage(message)) {
+                return;
+              }
+              clearLastRoom();
+              endTableSession();
+              panel.resetAfterLeave();
+              engine.goToScene('menu');
+            });
+        };
         menu.connect(
           (entry) => panel.enter(entry.kind, entry.name, entry.code),
           () => {
@@ -267,7 +300,7 @@ void engine.start(loader).then(() => {
             return 'Could not open the table';
           }
           rememberLobby(seat.code, start.name);
-          const ready = await lobbyScene.openLobby(seat.lobbyId, seat.code);
+          const ready = await roomScene.openLobby(seat.lobbyId, seat.code);
           if (!ready) {
             return 'Could not open the table';
           }
@@ -283,9 +316,9 @@ void engine.start(loader).then(() => {
           scene.setBackground(hex);
           loading.setTableStyle(look.table);
           loading.setBackground(hex);
-          game.setTableStyle(look.table);
-          game.setBackground(hex);
-          lobbyScene.refreshCards();
+          tableScene.setTableStyle(look.table);
+          tableScene.setBackground(hex);
+          roomScene.refreshCards();
         });
         if (joinCode) {
           const joinName = joinNameFromSearch(window.location.search);
@@ -310,11 +343,11 @@ void engine.start(loader).then(() => {
           }
           reloadBusy = true;
           try {
-            const ready = await lobbyScene.openLobby(lobby.id, lobby.code);
+            const ready = await roomScene.openLobby(lobby.id, lobby.code);
             const atTable =
               ready &&
               saved.tableId.length > 0 &&
-              lobbyScene.reopenIfSeated(saved.tableId);
+              roomScene.reopenIfSeated(saved.tableId);
             const landing = reloadLanding({ atTable, inRoom: true });
             pendingReload = undefined;
             if (landing === 'table') {

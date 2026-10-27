@@ -122,6 +122,9 @@ export class GameScene extends ex.Scene {
   private leaving = false;
   private seatActors: ex.Actor[] = [];
   private errorText!: ex.Text;
+  private linkLine = '';
+  private linkText = canvasText('', 8, GOLD);
+  private linkActor: ex.Actor | undefined;
   private waitingText!: ex.Text;
   private spectatingText!: ex.Text;
   private subscription: SubscriptionHandle | undefined;
@@ -164,6 +167,15 @@ export class GameScene extends ex.Scene {
     private style: TableStyle = 'green',
   ) {
     super();
+  }
+
+  /** A short line while the socket is being replaced. Empty once it is up. */
+  setLinkStatus(line: string): void {
+    this.linkLine = line;
+    this.linkText.text = line;
+    if (this.linkActor) {
+      this.linkActor.pos = ex.vec(16, 4);
+    }
   }
 
   setStats(line: string): void {
@@ -260,6 +272,15 @@ export class GameScene extends ex.Scene {
     error.graphics.use(this.errorText);
     this.add(error);
 
+    this.linkText.text = this.linkLine;
+    this.linkActor = new ex.Actor({
+      pos: ex.vec(16, 4),
+      anchor: ex.vec(0, 0),
+      z: 30,
+    });
+    this.linkActor.graphics.use(this.linkText);
+    this.add(this.linkActor);
+
     this.statsText = canvasText(this.statsLine, 8, GOLD);
     const stats = new ex.Actor({
       pos: ex.vec(280, 22),
@@ -354,7 +375,10 @@ export class GameScene extends ex.Scene {
     this.connection.db.voicePresence.onDelete(() => {
       this.paintSeats();
     });
-    this.connection.db.gameEvent.onInsert((_ctx, row) => {
+    this.connection.db.gameEvent.onInsert((ctx, row) => {
+      if (ctx.event.tag === 'SubscribeApplied') {
+        return;
+      }
       this.announce(row);
     });
     this.connection.db.tableChatMessage.onInsert(() => {
