@@ -6,9 +6,12 @@ import {
   POKER_STARTING_CHIPS,
   POKER_SUITS,
   POKER_VARIATIONS,
+  advancePoker,
   bestPokerHand,
   comparePokerScores,
+  pokerAdvanceKind,
   pokerGameDefinition,
+  pokerHoleFaceUp,
   pokerRules,
   potLimitCeiling,
 } from '../../src/shared/games/poker.ts';
@@ -88,6 +91,22 @@ function chipSum(state: PokerState): number {
 
 function holeAt(state: PokerState, seatIndex: number): string[] {
   return state.seats[String(seatIndex)]?.hole ?? [];
+}
+
+function withBusted(state: PokerState): PokerState {
+  const copy = JSON.parse(JSON.stringify(state)) as PokerState;
+  copy.order = [0, 1, 2];
+  copy.seats['2'] = {
+    chips: 0,
+    hole: [],
+    streetBet: 0,
+    committed: 0,
+    folded: true,
+    allIn: false,
+    acted: true,
+    mustDiscard: false,
+  };
+  return copy;
 }
 
 function playChecks(start: PokerState): PokerState {
@@ -632,6 +651,7 @@ const side: PokerState = {
   variation: 'holdem',
   street: 'river',
   step: 'bet',
+  handNumber: 1,
   deck: [],
   board: ['AH', 'AD', 'AC', '7S', '8S'],
   seats: {
@@ -672,6 +692,7 @@ const split: PokerState = {
   variation: 'holdem',
   street: 'river',
   step: 'bet',
+  handNumber: 1,
   deck: [],
   board: ['AS', 'KS', 'QS', 'JS', '10S'],
   seats: {
@@ -735,6 +756,117 @@ rejects(
   () => pokerRules.applyIntent(folded, { type: 'check' }, context(1)),
   'Invalid intent',
 );
+
+assert(!pokerHoleFaceUp(folded, 0), 'a folded hole stays down');
+assert(!pokerHoleFaceUp(folded, 1), 'an uncalled winner stays down');
+assert(
+  pokerHoleFaceUp(holdemShowdown, 0),
+  'showdown shows the first live seat',
+);
+assert(
+  pokerHoleFaceUp(holdemShowdown, 1),
+  'showdown shows the second live seat',
+);
+const foldedShowdown = playChecks(threeFold);
+assert(foldedShowdown.end === 'showdown', 'the remaining seats run it out');
+assert(
+  !pokerHoleFaceUp(foldedShowdown, 0),
+  'a folded seat stays down at showdown',
+);
+assert(pokerHoleFaceUp(foldedShowdown, 1), 'a live seat is shown');
+assert(pokerHoleFaceUp(foldedShowdown, 2), 'the other live seat is shown');
+
+assert(
+  pokerAdvanceKind(folded, [0, 1]) === 'hand',
+  'a finished hand deals again',
+);
+const nextHand = advancePoker(folded, table(), [0, 1]);
+assert(nextHand.phase === 'play', 'the next hand is in play');
+assert(nextHand.handNumber === 2, 'the next hand is numbered');
+assert(nextHand.end === null, 'the next hand has not ended');
+assert(nextHand.board.length === 0, 'the next hand has no board yet');
+assert(nextHand.street === 'preflop', 'the next hand starts preflop');
+assert(nextHand.dealerSeatIndex === 1, 'the button moves');
+assert(holeAt(nextHand, 0).length === 2, 'the next hand deals two cards');
+assert(holeAt(nextHand, 1).length === 2, 'both seats are dealt again');
+assert(
+  nextHand.seats['1']?.chips === POKER_STARTING_CHIPS,
+  'the previous winner posts the small blind',
+);
+assert(
+  nextHand.seats['0']?.chips ===
+    POKER_STARTING_CHIPS - POKER_BIG_BLIND - POKER_SMALL_BLIND,
+  'the previous folder posts the big blind',
+);
+assert(
+  chipSum(nextHand) + nextHand.pot === POKER_STARTING_CHIPS * 2,
+  'the next hand keeps every chip',
+);
+assert(
+  [...holeAt(nextHand, 0), ...holeAt(nextHand, 1), ...nextHand.deck].join() !==
+    [...holeAt(dealt, 0), ...holeAt(dealt, 1), ...dealt.deck].join(),
+  'the next hand shuffles again',
+);
+
+const broke = withBusted(folded);
+assert(
+  pokerAdvanceKind(broke, [0, 1, 2]) === 'hand',
+  'one busted seat still deals',
+);
+const skipped = advancePoker(broke, table(), [0, 1, 2]);
+assert(skipped.phase === 'play', 'the funded seats play on');
+assert(skipped.order.join() === '0,1', 'a busted seat is skipped');
+assert(skipped.seats['2']?.chips === 0, 'a busted seat keeps zero');
+assert(skipped.seats['2']?.hole.length === 0, 'a busted seat is not dealt');
+assert(holeAt(skipped, 0).length === 2, 'the other seats are dealt');
+
+const soloStack = withBusted(folded);
+const busted = soloStack.seats['0'];
+if (busted) {
+  busted.chips = 0;
+}
+assert(
+  pokerAdvanceKind(soloStack, [0, 1]) === null,
+  'one funded seat does not deal',
+);
+const held = advancePoker(soloStack, table(), [0, 1]);
+assert(held.phase === 'finished', 'the table waits without wiping chips');
+assert(
+  held.seats['1']?.chips === folded.seats['1']?.chips,
+  'the winner keeps the pot',
+);
+assert(
+  pokerAdvanceKind(folded, [1]) === null,
+  'one seated player does not deal',
+);
+
+const shoved = pokerRules.applyIntent(
+  dealt,
+  { type: 'raise', amount: POKER_STARTING_CHIPS },
+  context(0),
+);
+const calledOff = pokerRules.applyIntent(
+  shoved,
+  { type: 'call' },
+  context(shoved.turnSeatIndex ?? 1),
+);
+assert(calledOff.phase === 'play', 'an all-in call does not finish the hand');
+assert(calledOff.street === 'flop', 'an all-in call deals the flop');
+assert(calledOff.board.length === 3, 'the flop is three cards');
+assert(calledOff.step === 'runout', 'the rest of the board waits');
+const turnStreet = advancePoker(calledOff, table(), [0, 1]);
+assert(turnStreet.street === 'turn', 'the next beat deals the turn');
+assert(turnStreet.board.length === 4, 'the turn adds one card');
+assert(turnStreet.step === 'runout', 'the river still waits');
+const riverStreet = advancePoker(turnStreet, table(), [0, 1]);
+assert(riverStreet.street === 'river', 'the next beat deals the river');
+assert(riverStreet.board.length === 5, 'the river adds one card');
+assert(riverStreet.phase === 'play', 'the river is up before showdown');
+const runoutShowdown = advancePoker(riverStreet, table(), [0, 1]);
+assert(runoutShowdown.phase === 'finished', 'showdown follows the river');
+assert(runoutShowdown.end === 'showdown', 'an all-in runout shows down');
+assert(pokerHoleFaceUp(runoutShowdown, 0), 'both all-in seats are shown');
+assert(pokerHoleFaceUp(runoutShowdown, 1), 'the caller is shown');
 
 console.log(
   JSON.stringify({

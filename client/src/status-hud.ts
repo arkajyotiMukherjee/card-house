@@ -358,11 +358,11 @@ export function pokerStatusHud(
     const seatIndex = state.turnSeatIndex;
     const seat = seats.find((row) => row.seatIndex === seatIndex);
     const name = seat?.name ?? '';
-    turn = name.length > 0 ? shortName(name) : `Seat ${seatIndex}`;
+    turn = name.length > 0 ? shortName(name) : 'Player';
   }
   let phase = 'Waiting';
   if (state.phase === 'finished') {
-    phase = 'Finished';
+    phase = state.end === 'showdown' ? 'Showdown' : 'Hand';
   } else if (state.phase === 'play' && state.step === 'discard') {
     phase = 'Discard';
   } else if (state.phase === 'play') {

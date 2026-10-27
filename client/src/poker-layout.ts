@@ -5,6 +5,9 @@ import { FELT_BOTTOM, actionBox, seatFan } from './table-presentation';
 
 export const BOARD_Y = 188;
 export const BOARD_STEP = 70;
+export const BOARD_SLOTS = 5;
+/** Half the card closes, then the face opens. Short enough to finish before the next street. */
+export const BOARD_FLIP_MS = 280;
 export const POT_X = 480;
 export const POT_Y = 272;
 export const CARD_DRAW = 64;
@@ -20,6 +23,25 @@ export const CHECK_BUTTON = actionBox(1);
 export const CALL_BUTTON = actionBox(2);
 export const BET_BUTTON = actionBox(3);
 export const RAISE_BUTTON = actionBox(4);
+
+/**
+ * Scale of a community card while it flips.
+ * The face swaps at the edge-on frame. `done` is the face resting open.
+ */
+export function boardFlip(elapsedMs: number): {
+  scaleX: number;
+  face: boolean;
+  done: boolean;
+} {
+  const t = Math.max(0, elapsedMs) / BOARD_FLIP_MS;
+  if (t >= 1) {
+    return { scaleX: 1, face: true, done: true };
+  }
+  if (t < 0.5) {
+    return { scaleX: 1 - t * 2, face: false, done: false };
+  }
+  return { scaleX: (t - 0.5) * 2, face: true, done: false };
+}
 
 /** Community cards in a row across the middle of the shared table. */
 export function boardPositions(count: number): { x: number; y: number }[] {
@@ -70,28 +92,30 @@ export function faceForPokerCard(cardId: string): CardFace | null {
 
 /**
  * End-of-hand line from the subscribed state.
- * A fold names the only remaining seat. Showdown names every seat paid a pot.
+ * One winner reads `Winner is Ada`. A split reads `Winners are Ada and Bea`.
  */
 export function finishedLine(
   state: PokerState,
   seats: readonly { seatIndex: number; name: string }[],
 ): string | null {
-  if (state.phase !== 'finished') {
+  if (state.phase !== 'finished' || state.winnerSeatIndexes.length === 0) {
     return null;
   }
-  if (state.winnerSeatIndexes.length === 0) {
-    return null;
-  }
-  const parts: string[] = [];
+  const names: string[] = [];
   for (const seatIndex of state.winnerSeatIndexes) {
-    const seat = seats.find((row) => row.seatIndex === seatIndex);
-    const name = seat?.name ?? '';
-    parts.push(
-      name.length > 0 ? `seat ${seatIndex} ${name}` : `seat ${seatIndex}`,
-    );
+    const name = seats.find((row) => row.seatIndex === seatIndex)?.name ?? '';
+    if (name.length > 0) {
+      names.push(name);
+    }
   }
-  const label = state.winnerSeatIndexes.length === 1 ? 'Winner' : 'Winners';
-  return `${label} ${parts.join(', ')}`;
+  if (names.length === 0) {
+    return state.winnerSeatIndexes.length === 1 ? 'Winner' : 'Winners';
+  }
+  if (names.length === 1) {
+    return `Winner is ${names[0]}`;
+  }
+  const last = names[names.length - 1] ?? '';
+  return `Winners are ${names.slice(0, -1).join(', ')} and ${last}`;
 }
 
 /** Second line in the fan gap: folded, all-in, street bet, or showdown hand. */
@@ -101,6 +125,9 @@ export function seatNote(state: PokerState, seatIndex: number): string | null {
     return null;
   }
   if (row.folded) {
+    if (state.phase === 'play' && row.chips <= 0 && row.hole.length === 0) {
+      return 'Out';
+    }
     return 'Fold';
   }
   const hand = state.hands[String(seatIndex)];

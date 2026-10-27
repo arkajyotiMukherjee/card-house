@@ -31,7 +31,7 @@ export const POKER_SUITS = ['S', 'H', 'D', 'C'] as const;
 
 const POKER_PHASES = ['lobby', 'play', 'finished'] as const;
 const POKER_STREETS = ['preflop', 'flop', 'turn', 'river'] as const;
-const POKER_STEPS = ['discard', 'bet'] as const;
+const POKER_STEPS = ['discard', 'bet', 'runout'] as const;
 const POKER_LIMITS = ['no-limit', 'pot-limit'] as const;
 const POKER_ENDS = ['fold', 'showdown'] as const;
 
@@ -108,8 +108,10 @@ export interface PokerState {
   phase: PokerPhase;
   variation: PokerVariation;
   street: PokerStreet;
-  /** `discard` is Oklahoma's mandatory drop before bets on the flop and turn. */
+  /** `discard` is Oklahoma's mandatory drop. `runout` deals one street with no bet. */
   step: PokerStep;
+  /** Hands dealt at this table. The first deal is 1. */
+  handNumber: number;
   deck: string[];
   board: string[];
   seats: Record<string, PokerSeatState>;
@@ -153,7 +155,7 @@ export const pokerGameDefinition = {
   minPlayers: 2,
   maxPlayers: 8,
   howToPlay:
-    "# Poker\n\nTexas Hold'em, Omaha, and Oklahoma share one table. Choose the variation when you create the table. Blinds are 10 and 20. Each player starts with 1000 chips.\n\n## Texas Hold'em\n\nTwo hole cards. The board is a flop of three, then the turn, then the river. At showdown you may use any mix of hole cards and community cards. Betting is no-limit.\n\n## Omaha\n\nFour hole cards. The board and the betting rounds match Hold'em. At showdown you must use exactly two hole cards and three community cards. Betting is pot-limit.\n\n## Oklahoma\n\nThe deal starts like Omaha, with four hole cards. Before betting on the flop, each player still in discards one hole card. Before betting on the turn, each player still in discards one more. Showdown uses the two remaining hole cards and exactly three community cards. Betting is pot-limit.\n\n## Betting\n\nThe button posts the small blind and the next seat posts the big blind. On your turn you may fold, check, call, bet, or raise. A pot-limit bet or raise cannot exceed the pot. The hand ends when everyone else folds, or at showdown. The best hand wins. Side pots pay players who were all-in for less.",
+    "# Poker\n\nTexas Hold'em, Omaha, and Oklahoma share one table. Choose the variation when you create the table. Blinds are 10 and 20. Each player starts with 1000 chips.\n\n## Texas Hold'em\n\nTwo hole cards. The board is a flop of three, then the turn, then the river. At showdown you may use any mix of hole cards and community cards. Betting is no-limit.\n\n## Omaha\n\nFour hole cards. The board and the betting rounds match Hold'em. At showdown you must use exactly two hole cards and three community cards. Betting is pot-limit.\n\n## Oklahoma\n\nThe deal starts like Omaha, with four hole cards. Before betting on the flop, each player still in discards one hole card. Before betting on the turn, each player still in discards one more. Showdown uses the two remaining hole cards and exactly three community cards. Betting is pot-limit.\n\n## Betting\n\nThe button posts the small blind and the next seat posts the big blind. On your turn you may fold, check, call, bet, or raise. A pot-limit bet or raise cannot exceed the pot. The hand ends when everyone else folds, or at showdown. The best hand wins. Side pots pay players who were all-in for less. The next hand deals on its own while two or more players are still seated. A player with no chips sits out and can stay or leave.",
 } satisfies GameDefinition;
 
 function asRecord(value: unknown, message: string): Record<string, unknown> {
@@ -396,6 +398,7 @@ export function readPokerState(value: unknown): PokerState {
     variation: record.variation,
     street: record.street,
     step: record.step,
+    handNumber: isCount(record.handNumber) ? record.handNumber : 1,
     deck: record.deck.slice(),
     board: record.board.slice(),
     seats,
@@ -513,8 +516,13 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-function shuffleDeck(deck: string[], tableId: string): string[] {
-  const random = mulberry32(seedFromTableId(tableId));
+function shuffleDeck(
+  deck: string[],
+  tableId: string,
+  handNumber = 1,
+): string[] {
+  const seedKey = handNumber <= 1 ? tableId : `${tableId}#${handNumber}`;
+  const random = mulberry32(seedFromTableId(seedKey));
   const cards = deck.slice();
   for (let i = cards.length - 1; i > 0; i -= 1) {
     const j = Math.floor(random() * (i + 1));
@@ -562,6 +570,7 @@ function lobbyState(variation: PokerVariation): PokerState {
     variation,
     street: 'preflop',
     step: 'bet',
+    handNumber: 0,
     deck: [],
     board: [],
     seats: {},
@@ -701,9 +710,10 @@ function openingDeal(players: GameSeat[], table: GameTable): PokerState {
   const dealer = order[0] ?? 0;
   const state = lobbyState(variation);
   state.phase = 'play';
+  state.handNumber = 1;
   state.order = order;
   state.dealerSeatIndex = dealer;
-  state.deck = shuffleDeck(freshDeck(), table.id);
+  state.deck = shuffleDeck(freshDeck(), table.id, 1);
   for (const seat of ordered) {
     state.seats[seatKey(seat.seatIndex)] = emptySeat();
   }
@@ -720,6 +730,12 @@ function openingDeal(players: GameSeat[], table: GameTable): PokerState {
   state.minRaise = state.bigBlind;
   const turn = firstToAct(state, (index) => needsAction(state, index));
   state.turnSeatIndex = turn;
+  if (turn === null) {
+    state.step = aliveCount(state) <= 1 ? 'bet' : 'runout';
+    if (aliveCount(state) <= 1) {
+      return awardFold(state);
+    }
+  }
   return state;
 }
 
@@ -1228,7 +1244,9 @@ function openBetting(state: PokerState): PokerState {
   }
   const turn = firstToAct(state, (index) => needsAction(state, index));
   if (turn === null) {
-    return dealNext(state);
+    state.turnSeatIndex = null;
+    state.step = 'runout';
+    return state;
   }
   state.turnSeatIndex = turn;
   return state;
@@ -1424,6 +1442,155 @@ function applyDiscard(
   seat.hole = seat.hole.filter((_, index) => index !== at);
   seat.mustDiscard = false;
   return continueAction(state, seatIndex);
+}
+
+/**
+ * Hole cards the table may see.
+ * A fold keeps every hole down. Showdown shows only the seats still in.
+ */
+export function pokerHoleFaceUp(state: PokerState, seatIndex: number): boolean {
+  if (state.phase !== 'finished' || state.end !== 'showdown') {
+    return false;
+  }
+  const seat = state.seats[seatKey(seatIndex)];
+  return Boolean(seat && !seat.folded);
+}
+
+function fundedSeats(state: PokerState, seated: readonly number[]): number[] {
+  const live: number[] = [];
+  for (const index of seated) {
+    const known = state.seats[seatKey(index)];
+    const chips = known ? known.chips : POKER_STARTING_CHIPS;
+    if (chips > 0) {
+      live.push(index);
+    }
+  }
+  return live;
+}
+
+/** What the table should publish next, without applying it. */
+export function pokerAdvanceKind(
+  state: PokerState,
+  seated: readonly number[],
+): 'street' | 'hand' | null {
+  if (state.phase === 'play' && state.step === 'runout') {
+    return 'street';
+  }
+  if (state.phase !== 'finished' || seated.length < 2) {
+    return null;
+  }
+  if (fundedSeats(state, seated).length < 2) {
+    return null;
+  }
+  return 'hand';
+}
+
+function nextButton(
+  previousOrder: readonly number[],
+  dealer: number | null,
+  live: readonly number[],
+): number {
+  const liveSet = new Set(live);
+  if (dealer !== null) {
+    const start = previousOrder.indexOf(dealer);
+    if (start >= 0) {
+      for (let step = 1; step <= previousOrder.length; step += 1) {
+        const index = previousOrder[(start + step) % previousOrder.length];
+        if (index !== undefined && liveSet.has(index)) {
+          return index;
+        }
+      }
+    }
+  }
+  return live[0] ?? 0;
+}
+
+function dealNextHand(
+  prev: PokerState,
+  table: GameTable,
+  seated: readonly number[],
+): PokerState {
+  const live = fundedSeats(prev, seated);
+  if (seated.length < 2 || live.length < 2) {
+    return prev;
+  }
+  const handNumber = (prev.handNumber || 1) + 1;
+  const dealer = nextButton(prev.order, prev.dealerSeatIndex, live);
+  const state = lobbyState(prev.variation);
+  state.phase = 'play';
+  state.handNumber = handNumber;
+  state.order = live.slice();
+  state.dealerSeatIndex = dealer;
+  state.deck = shuffleDeck(freshDeck(), table.id, handNumber);
+  for (const index of seated) {
+    const previous = prev.seats[seatKey(index)];
+    const chips = previous ? previous.chips : POKER_STARTING_CHIPS;
+    const row = emptySeat();
+    row.chips = chips;
+    if (chips <= 0) {
+      row.folded = true;
+    }
+    state.seats[seatKey(index)] = row;
+  }
+  dealHole(state, holeCount(state.variation));
+  const blinds = blindSeats(live, dealer);
+  const small = state.seats[seatKey(blinds.small)];
+  const big = state.seats[seatKey(blinds.big)];
+  if (!small || !big) {
+    throw new Error('Invalid table state');
+  }
+  postChips(small, state.smallBlind, state);
+  postChips(big, state.bigBlind, state);
+  state.currentBet = big.streetBet;
+  state.minRaise = state.bigBlind;
+  const turn = firstToAct(state, (index) => needsAction(state, index));
+  state.turnSeatIndex = turn;
+  if (turn === null) {
+    if (aliveCount(state) <= 1) {
+      return awardFold(state);
+    }
+    state.step = 'runout';
+  }
+  return state;
+}
+
+/**
+ * One automatic step. A runout deals a single street. A finished hand
+ * deals the next hand for everyone still seated who can post.
+ */
+export function advancePoker(
+  prev: PokerState,
+  table: GameTable,
+  seated: readonly number[],
+): PokerState {
+  const state = readPokerState(prev);
+  const kind = pokerAdvanceKind(state, seated);
+  if (kind === 'street') {
+    return dealNext(state);
+  }
+  if (kind === 'hand') {
+    return dealNextHand(state, table, seated);
+  }
+  return state;
+}
+
+/** A seat that left folds out of the current hand and keeps their chips. */
+export function pokerSeatLeft(prev: PokerState, seatIndex: number): PokerState {
+  const state = readPokerState(prev);
+  const seat = state.seats[seatKey(seatIndex)];
+  if (!seat || state.phase !== 'play' || seat.folded || seat.allIn) {
+    return state;
+  }
+  seat.folded = true;
+  seat.acted = true;
+  seat.mustDiscard = false;
+  if (state.turnSeatIndex === seatIndex) {
+    return continueAction(state, seatIndex);
+  }
+  if (aliveCount(state) <= 1) {
+    return awardFold(state);
+  }
+  return state;
 }
 
 /**
