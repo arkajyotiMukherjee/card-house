@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import type { PokerState } from '../../src/shared/games/poker';
 import { HAND_Y } from './bluff-layout';
 import {
+  BET_BUTTON,
   BOARD_Y,
+  CALL_BUTTON,
+  CHECK_BUTTON,
+  FOLD_BUTTON,
+  RAISE_BUTTON,
   bannerX,
   boardFlip,
   boardPositions,
@@ -10,9 +15,16 @@ import {
   faceForPokerCard,
   finishedLine,
   holePositions,
-  seatLabelOrigin,
   seatNote,
 } from './poker-layout';
+import {
+  belowFelt,
+  fanCardRect,
+  fanGapLine,
+  insideCluster,
+  opponentNameAnchor,
+  seatPlateWidth,
+} from './table-presentation';
 
 function finished(winners: number[]): PokerState {
   return {
@@ -54,8 +66,10 @@ describe('poker layout', () => {
     const mine = holePositions(true, 480, 456, 2);
     expect(mine).toHaveLength(2);
     expect(mine.every((slot) => slot.y === HAND_Y)).toBe(true);
-    const theirs = holePositions(false, 180, 310, 4);
-    expect(theirs.length).toBeGreaterThan(0);
+    const theirs = holePositions(false, 180, 310, 4, 'Ada');
+    expect(theirs).toHaveLength(4);
+    expect(theirs.every((slot) => slot.rotation !== 0)).toBe(true);
+    expect(mine.every((slot) => slot.rotation === 0)).toBe(true);
   });
 
   it('maps a card id onto the shared suit sheet', () => {
@@ -80,21 +94,55 @@ describe('poker layout', () => {
     );
   });
 
-  it('keeps the chip label right of the seat plate and the banner clear of side seats', () => {
-    const label = seatLabelOrigin(480, 456, 'Ada');
-    expect(label).toEqual({ x: 510, y: 462 });
-    expect(label.x).toBeGreaterThan(
-      (holePositions(true, 480, 456, 4).at(-1)?.x ?? 0) + 32,
-    );
+  it('puts chips and the bet in the fan gap, clear of the hole cards', () => {
+    const name = 'Ada';
+    const slots = holePositions(false, 780, 310, 2, name);
+    const plate = opponentNameAnchor(780, 310, name);
+    const chips = fanGapLine(780, 310, name, '100', 0);
+    const bet = fanGapLine(780, 310, name, 'Bet 40', 1);
+    expect(chips.y).toBeGreaterThan(plate.y);
+    expect(bet.y).toBeGreaterThan(chips.y);
+    const lines = [
+      { x: chips.x, y: chips.y, w: '100'.length * 8, h: 8 },
+      { x: bet.x, y: bet.y, w: 'Bet 40'.length * 8, h: 8 },
+    ];
+    for (const slot of slots) {
+      const card = fanCardRect(slot);
+      for (const line of lines) {
+        const hit =
+          line.x < card.x + card.w &&
+          line.x + line.w > card.x &&
+          line.y < card.y + card.h &&
+          line.y + line.h > card.y;
+        expect(hit).toBe(false);
+      }
+    }
+    expect(seatPlateWidth(name)).toBeGreaterThan(0);
     expect(bannerX('Winner is Ada')).toBeGreaterThanOrEqual(280);
     expect(bannerX('x'.repeat(200))).toBe(280);
   });
 
-  it('puts dropped cards beside the hand, below the action buttons', () => {
+  it('puts dropped cards below the felt and clear of the cluster', () => {
     const slots = droppedPositions(3);
     expect(slots).toHaveLength(2);
-    expect(slots.every((slot) => slot.y > 476)).toBe(true);
-    expect(slots[0]?.x).toBeGreaterThan(736);
+    expect(slots.every((slot) => belowFelt(slot))).toBe(true);
+    for (const slot of slots) {
+      expect(insideCluster({ x: slot.x, y: slot.y, w: 48, h: 48 })).toBe(false);
+    }
+    expect(slots[0]?.x).toBeLessThan(200);
+  });
+
+  it('keeps Fold, Check, Call, Bet, and Raise in the cluster', () => {
+    for (const button of [
+      FOLD_BUTTON,
+      CHECK_BUTTON,
+      CALL_BUTTON,
+      BET_BUTTON,
+      RAISE_BUTTON,
+    ]) {
+      expect(belowFelt(button)).toBe(true);
+      expect(insideCluster(button)).toBe(true);
+    }
   });
 
   it('notes folds, bets, all-ins, and showdown hands', () => {

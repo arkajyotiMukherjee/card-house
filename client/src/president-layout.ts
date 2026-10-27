@@ -3,11 +3,11 @@ import {
   type PresidentRank,
   type PresidentState,
 } from '../../src/shared/games/president';
-import { BUTTON_HEIGHT } from './button-style';
+import { actionBox } from './table-presentation';
 
-/** Bottom-right actions, same boxes as the shared table controls. */
-export const PLAY_BUTTON = { x: 748, y: 448, w: 96, h: BUTTON_HEIGHT } as const;
-export const PASS_BUTTON = { x: 852, y: 448, w: 96, h: BUTTON_HEIGHT } as const;
+/** Play and Pass in the shared cluster. */
+export const PLAY_BUTTON = actionBox(0);
+export const PASS_BUTTON = actionBox(1);
 
 /** Finish order sits under Leave Table, clear of the hand and the status HUD. */
 export const RANK_X = 16;

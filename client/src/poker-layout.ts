@@ -1,7 +1,7 @@
-import { BUTTON_HEIGHT } from './button-style';
 import type { CardFace } from './card-atlas';
 import { rankOfPokerCard, type PokerState } from '../../src/shared/games/poker';
-import { handPositions, opponentBackPositions } from './bluff-layout';
+import { handPositions } from './bluff-layout';
+import { FELT_BOTTOM, actionBox, seatFan } from './table-presentation';
 
 export const BOARD_Y = 188;
 export const BOARD_STEP = 70;
@@ -12,27 +12,17 @@ export const POT_X = 480;
 export const POT_Y = 272;
 export const CARD_DRAW = 64;
 export const DROPPED_SCALE = 0.75;
-export const DROPPED_Y = 516;
-export const DROPPED_LABEL = { x: 772, y: 482 } as const;
-const DROPPED_X = [800, 852] as const;
-export const DISCARD_PROMPT = { x: 16, y: 452 } as const;
+export const DROPPED_Y = FELT_BOTTOM + 28;
+export const DROPPED_LABEL = { x: 16, y: FELT_BOTTOM + 8 } as const;
+const DROPPED_X = [48, 108] as const;
+export const DISCARD_PROMPT = { x: 16, y: FELT_BOTTOM } as const;
 export const BANNER_Y = 312;
 
-export const FOLD_BUTTON = { x: 612, y: 448, w: 64, h: BUTTON_HEIGHT } as const;
-export const CHECK_BUTTON = {
-  x: 682,
-  y: 448,
-  w: 72,
-  h: BUTTON_HEIGHT,
-} as const;
-export const CALL_BUTTON = { x: 760, y: 448, w: 64, h: BUTTON_HEIGHT } as const;
-export const BET_BUTTON = { x: 830, y: 448, w: 56, h: BUTTON_HEIGHT } as const;
-export const RAISE_BUTTON = {
-  x: 892,
-  y: 448,
-  w: 60,
-  h: BUTTON_HEIGHT,
-} as const;
+export const FOLD_BUTTON = actionBox(0);
+export const CHECK_BUTTON = actionBox(1);
+export const CALL_BUTTON = actionBox(2);
+export const BET_BUTTON = actionBox(3);
+export const RAISE_BUTTON = actionBox(4);
 
 /**
  * Scale of a community card while it flips.
@@ -67,17 +57,18 @@ export function boardPositions(count: number): { x: number; y: number }[] {
   return positions;
 }
 
-/** Your hole cards use the shared bottom-hand row. Other seats fan card backs inward. */
+/** Your hole cards use the shared bottom-hand row. Other seats use the rail fan. */
 export function holePositions(
   self: boolean,
   seatX: number,
   seatY: number,
   count: number,
-): { x: number; y: number }[] {
+  name = 'Seat',
+): { x: number; y: number; rotation: number }[] {
   if (self) {
-    return handPositions(count);
+    return handPositions(count).map((slot) => ({ ...slot, rotation: 0 }));
   }
-  return opponentBackPositions(seatX, seatY, count);
+  return seatFan(seatX, seatY, count, name);
 }
 
 export function faceForPokerCard(cardId: string): CardFace | null {
@@ -127,17 +118,7 @@ export function finishedLine(
   return `Winners are ${names.slice(0, -1).join(', ')} and ${last}`;
 }
 
-/** Chip count sits right of the shared seat plate so it never covers a hand. */
-export function seatLabelOrigin(
-  seatX: number,
-  seatY: number,
-  name: string,
-): { x: number; y: number } {
-  const width = Math.max(48, name.length * 8 + 16);
-  return { x: seatX + width / 2 + 6, y: seatY + 6 };
-}
-
-/** Second line under the chip count: folded, all-in, street bet, or showdown hand. */
+/** Second line in the fan gap: folded, all-in, street bet, or showdown hand. */
 export function seatNote(state: PokerState, seatIndex: number): string | null {
   const row = state.seats[String(seatIndex)];
   if (!row) {

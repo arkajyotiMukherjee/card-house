@@ -1,6 +1,14 @@
-import { HAND_Y, PILE_X, PILE_Y, TABLE_CENTER } from './bluff-layout';
+import { HAND_Y, PILE_X, PILE_Y } from './bluff-layout';
 import type { GoFishState } from '../../src/shared/games/go-fish';
 import { LOGICAL_WIDTH } from './sheets';
+import {
+  askChipBox,
+  fanCardRect,
+  fanEdge,
+  opponentNameAnchor,
+  seatFan,
+  seatPlateWidth,
+} from './table-presentation';
 
 /** Face-down stock, left of the table center. */
 export const STOCK_X = PILE_X - 96;
@@ -12,8 +20,6 @@ export const BOOK_STEP = 22;
 export const BOOK_ART_W = 24;
 export const BOOK_Y = HAND_Y - 96;
 export const BOOK_LEFT = 216;
-/** Opponent card backs start this far past the usual spot so the Ask button stays clear. */
-export const BACK_PUSH = 30;
 
 const SCREEN_MARGIN = 8;
 const PLATE_MIN_WIDTH = 48;
@@ -57,54 +63,54 @@ export function plateWidth(name: string): number {
 }
 
 /**
- * Other books sit beside the seat plate, on the side away from the table
- * center, so they never cover the name or the card backs.
+ * Other books sit just inward of the rail fan, toward the table center,
+ * so they stay off the cards and the name.
  */
 export function opponentBookOrigin(
   seatX: number,
   seatY: number,
   count: number,
-  width = PLATE_MIN_WIDTH,
+  name = 'Seat',
 ): { x: number; y: number } {
   const span = bookSpan(count);
-  const half = width / 2;
-  const away = seatX < TABLE_CENTER.x ? -1 : 1;
-  const left =
-    away > 0 ? seatX + half + BOOK_GAP : seatX - half - BOOK_GAP - span;
+  const label = opponentNameAnchor(seatX, seatY, name);
+  const width = seatPlateWidth(name);
+  const edge = fanEdge(seatX, seatY);
+  const fan = seatFan(seatX, seatY, 13, name).map((slot) => fanCardRect(slot));
+  let left = label.x + width / 2 - span / 2;
+  let y = label.y + 36;
+  if (edge === 'right') {
+    const inward = Math.min(...fan.map((rect) => rect.x));
+    left = inward - BOOK_GAP - span;
+    y = label.y;
+  } else if (edge === 'left') {
+    const inward = Math.max(...fan.map((rect) => rect.x + rect.w));
+    left = inward + BOOK_GAP;
+    y = label.y;
+  } else if (edge === 'top') {
+    const inward = Math.max(...fan.map((rect) => rect.y + rect.h));
+    y = inward + BOOK_GAP + 16;
+  } else if (fan.length > 0) {
+    const inward = Math.min(...fan.map((rect) => rect.y));
+    y = inward - BOOK_GAP - 16;
+  }
   const clamped = Math.min(
     Math.max(left, SCREEN_MARGIN),
     LOGICAL_WIDTH - SCREEN_MARGIN - span,
   );
   return {
     x: Math.round(clamped + BOOK_ART_W / 2),
-    y: seatY + 8,
+    y: Math.round(y),
   };
 }
 
-/** Pushes the spot the backs fan from toward the table center. */
-export function opponentBackAnchor(
-  seatX: number,
-  seatY: number,
-): { x: number; y: number } {
-  const dx = TABLE_CENTER.x - seatX;
-  const dy = TABLE_CENTER.y - seatY;
-  const len = Math.hypot(dx, dy) || 1;
-  return {
-    x: Math.round(seatX + (dx / len) * BACK_PUSH),
-    y: Math.round(seatY + (dy / len) * BACK_PUSH),
-  };
-}
-
+/** Ask chip in the fan gap, under the name and clear of the cards. */
 export function askButtonBox(
   seatX: number,
   seatY: number,
+  name = 'Seat',
 ): { x: number; y: number; w: number; h: number } {
-  return {
-    x: Math.round(seatX - ASK_BUTTON.w / 2),
-    y: seatY + 24,
-    w: ASK_BUTTON.w,
-    h: ASK_BUTTON.h,
-  };
+  return askChipBox(seatX, seatY, name, ASK_BUTTON.w, ASK_BUTTON.h);
 }
 
 export function legalCard(

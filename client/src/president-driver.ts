@@ -10,10 +10,16 @@ import {
   cardLift,
   faceForCard,
   handPositions,
-  opponentBackPositions,
   pilePositions,
   selectedPlayCards,
 } from './bluff-layout';
+import {
+  OPPONENT_FAN_CARD,
+  OPPONENT_FAN_SCALE,
+  TURN_LINE,
+  opponentCountAnchor,
+  seatFan,
+} from './table-presentation';
 import {
   BUTTON_FONT_SIZE,
   BUTTON_PRESS_SHIFT,
@@ -357,7 +363,7 @@ export class PresidentDriver implements GameDriver<PresidentState> {
     const mine =
       ctx.meSeatIndex !== null && state.turnSeatIndex === ctx.meSeatIndex;
     const turn = mine ? 'Your turn' : 'Wait';
-    this.labels.push(this.textActor(ctx, 748, 428, turn, GOLD));
+    this.labels.push(this.textActor(ctx, TURN_LINE.x, TURN_LINE.y, turn, GOLD));
     const requirement = requirementLine(state);
     if (requirement.length > 0) {
       this.labels.push(this.textActor(ctx, 390, 196, requirement, GOLD));
@@ -379,9 +385,16 @@ export class PresidentDriver implements GameDriver<PresidentState> {
         continue;
       }
       const count = state.hands[String(seat.seatIndex)]?.length ?? 0;
-      this.labels.push(
-        this.textActor(ctx, seat.x - 16, seat.y - 16, `x${count}`, DIM),
+      const countAt = opponentCountAnchor(seat.x, seat.y, count, seat.name);
+      const countLabel = this.textActor(
+        ctx,
+        countAt.x,
+        countAt.y,
+        `x${count}`,
+        DIM,
       );
+      countLabel.z = 80;
+      this.labels.push(countLabel);
     }
   }
 
@@ -706,13 +719,16 @@ export class PresidentDriver implements GameDriver<PresidentState> {
   }
 
   private syncBacks(state: PresidentState, ctx: RenderContext): void {
-    const desired = new Map<string, { x: number; y: number; z: number }>();
+    const desired = new Map<
+      string,
+      { x: number; y: number; z: number; rotation: number }
+    >();
     for (const seat of ctx.seats) {
       if (seat.self) {
         continue;
       }
       const count = state.hands[String(seat.seatIndex)]?.length ?? 0;
-      const slots = opponentBackPositions(seat.x, seat.y, count);
+      const slots = seatFan(seat.x, seat.y, count, seat.name);
       for (let index = 0; index < slots.length; index += 1) {
         const slot = slots[index];
         if (!slot) {
@@ -722,6 +738,7 @@ export class PresidentDriver implements GameDriver<PresidentState> {
           x: slot.x,
           y: slot.y,
           z: 4 + index,
+          rotation: slot.rotation,
         });
       }
     }
@@ -733,17 +750,20 @@ export class PresidentDriver implements GameDriver<PresidentState> {
       }
     }
     for (const [key, place] of desired) {
-      const target = `${place.x}:${place.y}`;
+      const target = `${place.x}:${place.y}:${place.rotation}`;
       let actor = this.backs.get(key);
       if (!actor) {
         actor = new ex.Actor({
           pos: ex.vec(PILE_X, PILE_Y),
           anchor: ex.vec(0.5, 0.5),
-          width: CARD_DRAW,
-          height: CARD_DRAW,
+          width: OPPONENT_FAN_CARD,
+          height: OPPONENT_FAN_CARD,
           z: place.z,
+          rotation: place.rotation,
         });
-        actor.graphics.use(ctx.cards.back());
+        const back = ctx.cards.back();
+        back.scale = ex.vec(OPPONENT_FAN_SCALE, OPPONENT_FAN_SCALE);
+        actor.graphics.use(back);
         ctx.scene.add(actor);
         this.backs.set(key, actor);
         this.backTargets.set(key, target);
@@ -755,6 +775,7 @@ export class PresidentDriver implements GameDriver<PresidentState> {
         continue;
       }
       actor.z = place.z;
+      actor.rotation = place.rotation;
       if (this.backTargets.get(key) === target) {
         continue;
       }

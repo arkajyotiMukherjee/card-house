@@ -9,9 +9,15 @@ import {
   cardLift,
   faceForCard,
   handPositions,
-  opponentBackPositions,
   selectedPlayCards,
 } from './bluff-layout';
+import {
+  OPPONENT_FAN_CARD,
+  OPPONENT_FAN_SCALE,
+  fanGapLine,
+  opponentCountAnchor,
+  seatFan,
+} from './table-presentation';
 import {
   BUTTON_FONT_SIZE,
   BUTTON_PRESS_SHIFT,
@@ -402,13 +408,7 @@ export class RummyDriver implements GameDriver<RummyState> {
         : (state.hands[String(ctx.meSeatIndex)] ?? []);
     if (state.phase === 'play' && ctx.meSeatIndex !== null) {
       this.labels.push(
-        this.textActor(
-          ctx,
-          HINT_X,
-          HINT_Y + 14,
-          `Pts ${deadwoodPoints(hand)}`,
-          DIM,
-        ),
+        this.textActor(ctx, 16, HINT_Y, `Pts ${deadwoodPoints(hand)}`, DIM),
       );
     }
     for (const seat of ctx.seats) {
@@ -416,15 +416,30 @@ export class RummyDriver implements GameDriver<RummyState> {
         continue;
       }
       const count = state.hands[String(seat.seatIndex)]?.length ?? 0;
-      this.labels.push(
-        this.textActor(ctx, seat.x - 16, seat.y - 16, `x${count}`, DIM),
+      const countAt = opponentCountAnchor(seat.x, seat.y, count, seat.name);
+      const countLabel = this.textActor(
+        ctx,
+        countAt.x,
+        countAt.y,
+        `x${count}`,
+        DIM,
       );
+      countLabel.z = 80;
+      this.labels.push(countLabel);
       if (state.phase === 'finished') {
         const score = state.scores[String(seat.seatIndex)];
         if (score !== undefined) {
-          this.labels.push(
-            this.textActor(ctx, seat.x - 16, seat.y + 24, `p${score}`, GOLD),
+          const scoreText = `p${score}`;
+          const scoreAt = fanGapLine(seat.x, seat.y, seat.name, scoreText, 1);
+          const scoreLabel = this.textActor(
+            ctx,
+            scoreAt.x,
+            scoreAt.y,
+            scoreText,
+            GOLD,
           );
+          scoreLabel.z = 80;
+          this.labels.push(scoreLabel);
         }
       }
     }
@@ -782,13 +797,16 @@ export class RummyDriver implements GameDriver<RummyState> {
   }
 
   private syncBacks(state: RummyState, ctx: RenderContext): void {
-    const desired = new Map<string, { x: number; y: number; z: number }>();
+    const desired = new Map<
+      string,
+      { x: number; y: number; z: number; rotation: number }
+    >();
     for (const seat of ctx.seats) {
       if (seat.self) {
         continue;
       }
       const count = state.hands[String(seat.seatIndex)]?.length ?? 0;
-      const slots = opponentBackPositions(seat.x, seat.y, count);
+      const slots = seatFan(seat.x, seat.y, count, seat.name);
       for (let index = 0; index < slots.length; index += 1) {
         const slot = slots[index];
         if (!slot) {
@@ -798,6 +816,7 @@ export class RummyDriver implements GameDriver<RummyState> {
           x: slot.x,
           y: slot.y,
           z: 4 + index,
+          rotation: slot.rotation,
         });
       }
     }
@@ -809,17 +828,20 @@ export class RummyDriver implements GameDriver<RummyState> {
       }
     }
     for (const [key, place] of desired) {
-      const target = `${place.x}:${place.y}`;
+      const target = `${place.x}:${place.y}:${place.rotation}`;
       let actor = this.backs.get(key);
       if (!actor) {
         actor = new ex.Actor({
           pos: ex.vec(STOCK_X, STOCK_Y),
           anchor: ex.vec(0.5, 0.5),
-          width: CARD_DRAW,
-          height: CARD_DRAW,
+          width: OPPONENT_FAN_CARD,
+          height: OPPONENT_FAN_CARD,
           z: place.z,
+          rotation: place.rotation,
         });
-        actor.graphics.use(ctx.cards.back());
+        const back = ctx.cards.back();
+        back.scale = ex.vec(OPPONENT_FAN_SCALE, OPPONENT_FAN_SCALE);
+        actor.graphics.use(back);
         ctx.scene.add(actor);
         this.backs.set(key, actor);
         this.backTargets.set(key, target);
@@ -831,6 +853,7 @@ export class RummyDriver implements GameDriver<RummyState> {
         continue;
       }
       actor.z = place.z;
+      actor.rotation = place.rotation;
       if (this.backTargets.get(key) === target) {
         continue;
       }

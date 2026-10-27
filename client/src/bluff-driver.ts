@@ -13,14 +13,10 @@ import {
   BLUFF_TURN_LABEL,
   CARD_DRAW,
   HOVER_LIFT,
-  OPPONENT_FAN_CARD,
-  OPPONENT_FAN_SCALE,
   PILE_NOTICE_Y,
   PILE_X,
   PILE_Y,
   PROMPT_Y,
-  bluffSeatFan,
-  opponentCountAnchor,
   canChallenge,
   canPass,
   canPlay,
@@ -41,6 +37,12 @@ import {
   tablePrompt,
   turnLine,
 } from './bluff-layout';
+import {
+  OPPONENT_FAN_CARD,
+  OPPONENT_FAN_SCALE,
+  opponentCountAnchor,
+  seatFan,
+} from './table-presentation';
 import {
   BUTTON_FONT_SIZE,
   BUTTON_PRESS_SHIFT,
@@ -967,7 +969,7 @@ export class BluffDriver implements GameDriver<BluffState> {
       ) {
         count = Math.max(0, count - arrival.cards.length);
       }
-      const slots = bluffSeatFan(seat.x, seat.y, count, seat.name);
+      const slots = seatFan(seat.x, seat.y, count, seat.name);
       for (let index = 0; index < slots.length; index += 1) {
         const slot = slots[index];
         if (!slot) {

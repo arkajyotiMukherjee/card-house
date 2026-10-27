@@ -22,12 +22,18 @@ import {
   finishedLine,
   handPositions,
   legalCard,
-  opponentBackPositions,
   passInsteadOfDraw,
   discardPositions,
   stockPositions,
   suitBadge,
 } from './crazy-eights-layout';
+import {
+  OPPONENT_FAN_CARD,
+  OPPONENT_FAN_SCALE,
+  TURN_LINE,
+  opponentCountAnchor,
+  seatFan,
+} from './table-presentation';
 import {
   BUTTON_FONT_SIZE,
   BUTTON_PRESS_SHIFT,
@@ -420,7 +426,13 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
       ctx.meSeatIndex !== null && state.turnSeatIndex === ctx.meSeatIndex;
     this.labels.push(this.suitBadgeActor(ctx, state));
     this.labels.push(
-      this.textActor(ctx, 748, 428, mine ? 'Your turn' : 'Wait', GOLD),
+      this.textActor(
+        ctx,
+        TURN_LINE.x,
+        TURN_LINE.y,
+        mine ? 'Your turn' : 'Wait',
+        GOLD,
+      ),
     );
     if (state.stock.length > 0) {
       this.labels.push(
@@ -438,9 +450,16 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
         continue;
       }
       const count = state.hands[String(seat.seatIndex)]?.length ?? 0;
-      this.labels.push(
-        this.textActor(ctx, seat.x - 16, seat.y - 16, `x${count}`, DIM),
+      const countAt = opponentCountAnchor(seat.x, seat.y, count, seat.name);
+      const countLabel = this.textActor(
+        ctx,
+        countAt.x,
+        countAt.y,
+        `x${count}`,
+        DIM,
       );
+      countLabel.z = 80;
+      this.labels.push(countLabel);
     }
   }
 
@@ -728,13 +747,16 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
   }
 
   private syncBacks(state: CrazyEightsState, ctx: RenderContext): void {
-    const desired = new Map<string, { x: number; y: number; z: number }>();
+    const desired = new Map<
+      string,
+      { x: number; y: number; z: number; rotation: number }
+    >();
     for (const seat of ctx.seats) {
       if (seat.self) {
         continue;
       }
       const count = state.hands[String(seat.seatIndex)]?.length ?? 0;
-      const slots = opponentBackPositions(seat.x, seat.y, count);
+      const slots = seatFan(seat.x, seat.y, count, seat.name);
       for (let index = 0; index < slots.length; index += 1) {
         const slot = slots[index];
         if (!slot) {
@@ -744,6 +766,7 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
           x: slot.x,
           y: slot.y,
           z: 4 + index,
+          rotation: slot.rotation,
         });
       }
     }
@@ -766,7 +789,10 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
   private placeBacks(
     backs: Map<string, ex.Actor>,
     targets: Map<string, string>,
-    desired: Map<string, { x: number; y: number; z: number }>,
+    desired: ReadonlyMap<
+      string,
+      { x: number; y: number; z: number; rotation?: number }
+    >,
     ctx: RenderContext,
   ): void {
     for (const [key, actor] of backs) {
@@ -777,17 +803,26 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
       }
     }
     for (const [key, place] of desired) {
-      const target = `${place.x}:${place.y}`;
+      const fan = place.rotation !== undefined;
+      const target = fan
+        ? `${place.x}:${place.y}:${place.rotation}`
+        : `${place.x}:${place.y}`;
       let actor = backs.get(key);
       if (!actor) {
+        const size = fan ? OPPONENT_FAN_CARD : CARD_DRAW;
         actor = new ex.Actor({
           pos: ex.vec(PILE_X, PILE_Y),
           anchor: ex.vec(0.5, 0.5),
-          width: CARD_DRAW,
-          height: CARD_DRAW,
+          width: size,
+          height: size,
           z: place.z,
+          rotation: place.rotation ?? 0,
         });
-        actor.graphics.use(ctx.cards.back());
+        const back = ctx.cards.back();
+        if (fan) {
+          back.scale = ex.vec(OPPONENT_FAN_SCALE, OPPONENT_FAN_SCALE);
+        }
+        actor.graphics.use(back);
         ctx.scene.add(actor);
         backs.set(key, actor);
         targets.set(key, target);
@@ -799,6 +834,9 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
         continue;
       }
       actor.z = place.z;
+      if (fan) {
+        actor.rotation = place.rotation ?? 0;
+      }
       if (targets.get(key) === target) {
         continue;
       }

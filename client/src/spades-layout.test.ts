@@ -3,6 +3,7 @@ import type { SpadesState } from '../../src/shared/games/spades';
 import { TABLE_CENTER } from './bluff-layout';
 import {
   PARTNERSHIP_BOARD,
+  PLAY_BUTTON,
   bidButtonBox,
   bidButtonLabel,
   finishedLine,
@@ -13,6 +14,14 @@ import {
   trickPosition,
   wonTrickPosition,
 } from './spades-layout';
+import {
+  ACTION_CLUSTER,
+  PICKER_Y,
+  belowFelt,
+  fanGapLine,
+  insideCluster,
+  opponentNameAnchor,
+} from './table-presentation';
 
 function state(overrides: Partial<SpadesState> = {}): SpadesState {
   return {
@@ -41,12 +50,23 @@ function state(overrides: Partial<SpadesState> = {}): SpadesState {
 }
 
 describe('spades layout', () => {
-  it('places bid buttons in one row and tricks toward each seat', () => {
+  it('wraps bid buttons in the green band and tricks toward each seat', () => {
     const nil = bidButtonBox(0);
+    const six = bidButtonBox(6);
+    const seven = bidButtonBox(7);
     const last = bidButtonBox(13);
+    expect(nil.y).toBe(PICKER_Y);
     expect(nil.y).toBe(last.y);
-    expect(nil.x).toBeLessThan(last.x);
-    expect(last.x + last.w).toBeLessThan(960);
+    expect(nil.y).not.toBe(416);
+    expect(belowFelt(nil)).toBe(true);
+    expect(nil.x).toBeLessThan(six.x);
+    expect(seven.x).toBeGreaterThan(six.x + six.w + 8);
+    expect(last.x + last.w).toBeLessThan(ACTION_CLUSTER.x);
+    expect(belowFelt(PLAY_BUTTON)).toBe(true);
+    expect(insideCluster(PLAY_BUTTON)).toBe(true);
+    const name = opponentNameAnchor(780, 310, 'Ada');
+    const bid = fanGapLine(780, 310, 'Ada', 'Bid 3 took 1', 0);
+    expect(bid.y).toBeGreaterThan(name.y);
     const trick = trickPosition(780, 310);
     expect(trick.x).toBeGreaterThan(TABLE_CENTER.x);
     expect(trick.x).toBeLessThan(780);

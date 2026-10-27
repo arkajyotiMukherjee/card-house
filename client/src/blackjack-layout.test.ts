@@ -9,6 +9,13 @@ import {
   CARD_DRAW,
   DEALER_Y,
   BANNER_Y,
+  BET_10_BUTTON,
+  BET_25_BUTTON,
+  BET_50_BUTTON,
+  DOUBLE_BUTTON,
+  HIT_BUTTON,
+  SPLIT_BUTTON,
+  STAND_BUTTON,
   betAnchor,
   dealerLabelPosition,
   dealerPositions,
@@ -18,6 +25,14 @@ import {
   plateWidth,
   totalLabelPosition,
 } from './blackjack-layout';
+import {
+  belowFelt,
+  coversCluster,
+  fanCardRect,
+  fanGapLine,
+  insideCluster,
+  rectsOverlap,
+} from './table-presentation';
 
 function finished(
   winnerSeatIndexes: number[],
@@ -68,14 +83,23 @@ describe('blackjack layout', () => {
     expect(total.x + 16).toBeLessThan(480 - plateWidth('Ada') / 2);
   });
 
-  it('keeps other seats clear of the dealer row and the banner', () => {
+  it('fans other seats on the rail, clear of the dealer row', () => {
     const topSeat = { x: 480, y: 72 };
-    const cards = playerCardSlots(false, topSeat.x, topSeat.y, 1, 0, 5);
-    const lowest = Math.max(...cards.map((slot) => slot.y)) + CARD_DRAW / 2;
+    const cards = playerCardSlots(false, topSeat.x, topSeat.y, 1, 0, 5, 'Ada');
+    expect(cards.every((slot) => slot.rotation !== 0)).toBe(true);
+    const lowest = Math.max(
+      ...cards.map((slot) => fanCardRect(slot).y + fanCardRect(slot).h),
+    );
     expect(lowest).toBeLessThan(DEALER_Y - CARD_DRAW / 2);
     expect(BANNER_Y).toBeGreaterThan(DEALER_Y + CARD_DRAW / 2);
     const label = dealerLabelPosition(2);
     expect(label.x).toBeGreaterThan(dealerPositions(2)[1]?.x ?? 0);
+    const total = fanGapLine(780, 310, 'Ada', '19', 1);
+    const hand = playerCardSlots(false, 780, 310, 1, 0, 2, 'Ada');
+    const totalRect = { x: total.x, y: total.y, w: 16, h: 8 };
+    for (const slot of hand) {
+      expect(rectsOverlap(totalRect, fanCardRect(slot))).toBe(false);
+    }
   });
 
   it('sets split hands apart', () => {
@@ -86,9 +110,26 @@ describe('blackjack layout', () => {
     );
     const seatLeft = playerCardSlots(false, 780, 310, 2, 0, 2);
     const seatRight = playerCardSlots(false, 780, 310, 2, 1, 2);
-    expect(Math.max(...seatLeft.map((slot) => slot.x))).toBeLessThan(
-      Math.min(...seatRight.map((slot) => slot.x)),
+    expect(Math.max(...seatRight.map((slot) => slot.x))).toBeLessThan(
+      Math.min(...seatLeft.map((slot) => slot.x)),
     );
+    expect(seatLeft.every((slot) => !coversCluster(slot))).toBe(true);
+    expect(seatRight.every((slot) => !coversCluster(slot))).toBe(true);
+  });
+
+  it('keeps hit, stand, double, split, and bets in the cluster', () => {
+    for (const button of [
+      HIT_BUTTON,
+      STAND_BUTTON,
+      DOUBLE_BUTTON,
+      SPLIT_BUTTON,
+      BET_10_BUTTON,
+      BET_25_BUTTON,
+      BET_50_BUTTON,
+    ]) {
+      expect(belowFelt(button)).toBe(true);
+      expect(insideCluster(button)).toBe(true);
+    }
   });
 
   it('names the winner and a push', () => {
