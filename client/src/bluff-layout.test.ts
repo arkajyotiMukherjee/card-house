@@ -103,24 +103,24 @@ describe('bluff layout', () => {
       }
       const slots = seatFan(row.seat.x, row.seat.y, 17, 'Ada');
       expect(slots).toHaveLength(17);
-      let along = 0;
+      let alongX = 0;
+      let alongY = 0;
       let inward = 0;
       for (const slot of slots) {
         const bottom = fanCardBottom(slot);
+        alongX += slot.x;
+        alongY += slot.y;
         if (row.edge === 'left') {
           expect(bottom.x).toBeLessThan(28);
           expect(slot.x).toBeGreaterThan(bottom.x + 8);
-          along += slot.y;
           inward += slot.x;
         } else if (row.edge === 'right') {
           expect(bottom.x).toBeGreaterThan(960 - 28);
           expect(slot.x).toBeLessThan(bottom.x - 8);
-          along += slot.y;
           inward += 960 - slot.x;
         } else {
           expect(bottom.y).toBeLessThan(96);
           expect(slot.y).toBeGreaterThan(bottom.y + 8);
-          along += slot.x;
           inward += slot.y;
         }
       }
@@ -133,21 +133,25 @@ describe('bluff layout', () => {
         h: 20,
       };
       const countRect = { x: count.x, y: count.y, w: 'x17'.length * 8, h: 8 };
-      const labelCenter = {
-        x: (nameRect.x + countRect.x) / 2,
-        y: (name.y + count.y + 8) / 2,
+      const fanCenter = {
+        x: alongX / slots.length,
+        y: alongY / slots.length,
       };
-      const fanAlong = along / slots.length;
-      const labelAlong = row.edge === 'top' ? labelCenter.x : labelCenter.y;
+      const plateCenter = {
+        x: name.x + nameRect.w / 2,
+        y: name.y + nameRect.h / 2,
+      };
       if (row.edge === 'right') {
         const alongs = slots.map((slot) => slot.y);
         const low = Math.min(...alongs);
         const high = Math.max(...alongs);
-        expect(labelAlong).toBeGreaterThan(low);
-        expect(labelAlong).toBeLessThan(high);
+        expect(plateCenter.y).toBeGreaterThan(low);
+        expect(plateCenter.y).toBeLessThan(high);
         expect(slots.every((slot) => !coversCluster(slot))).toBe(true);
+      } else if (row.edge === 'top') {
+        expect(Math.abs(plateCenter.x - fanCenter.x)).toBeLessThan(12);
       } else {
-        expect(Math.abs(labelAlong - fanAlong)).toBeLessThan(12);
+        expect(Math.abs(plateCenter.y - fanCenter.y)).toBeLessThan(12);
       }
       for (const slot of slots) {
         const rect = fanCardRect(slot);

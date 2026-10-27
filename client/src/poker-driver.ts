@@ -73,7 +73,6 @@ import {
 } from './poker-layout';
 import {
   OPPONENT_FAN_CARD,
-  OPPONENT_FAN_SCALE,
   TURN_LINE,
   fanGapLine,
   isGiveUpControl,
@@ -189,13 +188,9 @@ function cardSprite(
   atlas: CardAtlas,
   cardId: string,
   faceUp: boolean,
-  fan: boolean,
+  _fan: boolean,
 ): ex.Sprite {
-  const sprite = faceSprite(atlas, cardId, faceUp);
-  if (fan) {
-    sprite.scale = ex.vec(OPPONENT_FAN_SCALE, OPPONENT_FAN_SCALE);
-  }
-  return sprite;
+  return faceSprite(atlas, cardId, faceUp);
 }
 
 function faceSprite(
@@ -844,6 +839,7 @@ export class PokerDriver implements GameDriver<PokerState> {
         personal: boolean;
         rotation: number;
         fan: boolean;
+        scale: number;
       }
     >();
     this.syncBoard(state, ctx);
@@ -888,6 +884,7 @@ export class PokerDriver implements GameDriver<PokerState> {
           personal: seat.self,
           rotation: slot.rotation,
           fan: !seat.self,
+          scale: slot.scale,
         });
       }
     }
@@ -982,6 +979,7 @@ export class PokerDriver implements GameDriver<PokerState> {
       personal: boolean;
       rotation: number;
       fan: boolean;
+      scale: number;
     },
     ctx: RenderContext,
   ): void {
@@ -1048,7 +1046,7 @@ export class PokerDriver implements GameDriver<PokerState> {
     record.home = { x: place.x, y: place.y };
     record.restZ = place.z;
     record.actor.graphics.opacity = place.opacity;
-    record.actor.scale = ex.vec(1, 1);
+    record.actor.scale = ex.vec(place.scale, place.scale);
     record.actor.rotation = place.rotation;
     const lift = this.droppable.has(cardId)
       ? this.handHover.current(cardId)

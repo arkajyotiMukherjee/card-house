@@ -145,9 +145,13 @@ export function holePositions(
   seatY: number,
   count: number,
   name = 'Seat',
-): { x: number; y: number; rotation: number }[] {
+): { x: number; y: number; rotation: number; scale: number }[] {
   if (self) {
-    return handPositions(count).map((slot) => ({ ...slot, rotation: 0 }));
+    return handPositions(count).map((slot) => ({
+      ...slot,
+      rotation: 0,
+      scale: 1,
+    }));
   }
   return seatFan(seatX, seatY, count, name);
 }

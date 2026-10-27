@@ -29,7 +29,6 @@ import {
 } from './crazy-eights-layout';
 import {
   OPPONENT_FAN_CARD,
-  OPPONENT_FAN_SCALE,
   TURN_LINE,
   opponentCountAnchor,
   seatFan,
@@ -749,7 +748,7 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
   private syncBacks(state: CrazyEightsState, ctx: RenderContext): void {
     const desired = new Map<
       string,
-      { x: number; y: number; z: number; rotation: number }
+      { x: number; y: number; z: number; rotation: number; scale: number }
     >();
     for (const seat of ctx.seats) {
       if (seat.self) {
@@ -767,6 +766,7 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
           y: slot.y,
           z: 4 + index,
           rotation: slot.rotation,
+          scale: slot.scale,
         });
       }
     }
@@ -791,7 +791,7 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
     targets: Map<string, string>,
     desired: ReadonlyMap<
       string,
-      { x: number; y: number; z: number; rotation?: number }
+      { x: number; y: number; z: number; rotation?: number; scale?: number }
     >,
     ctx: RenderContext,
   ): void {
@@ -805,7 +805,7 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
     for (const [key, place] of desired) {
       const fan = place.rotation !== undefined;
       const target = fan
-        ? `${place.x}:${place.y}:${place.rotation}`
+        ? `${place.x}:${place.y}:${place.rotation}:${place.scale ?? 1}`
         : `${place.x}:${place.y}`;
       let actor = backs.get(key);
       if (!actor) {
@@ -818,10 +818,10 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
           z: place.z,
           rotation: place.rotation ?? 0,
         });
-        const back = ctx.cards.back();
         if (fan) {
-          back.scale = ex.vec(OPPONENT_FAN_SCALE, OPPONENT_FAN_SCALE);
+          actor.scale = ex.vec(place.scale ?? 1, place.scale ?? 1);
         }
+        const back = ctx.cards.back();
         actor.graphics.use(back);
         ctx.scene.add(actor);
         backs.set(key, actor);
@@ -836,6 +836,7 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
       actor.z = place.z;
       if (fan) {
         actor.rotation = place.rotation ?? 0;
+        actor.scale = ex.vec(place.scale ?? 1, place.scale ?? 1);
       }
       if (targets.get(key) === target) {
         continue;

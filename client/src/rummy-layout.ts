@@ -96,6 +96,20 @@ const MELD_ZONES: readonly MeldZone[] = [
   { seatX: 480, seatY: 72, left: 300, right: 540, y: 180, dir: 1, flow: true },
   { seatX: 260, seatY: 128, left: 96, right: 280, y: 180, dir: 1, flow: true },
   { seatX: 180, seatY: 310, left: 220, right: 460, y: 330, dir: 1, flow: true },
+  // Six-player ring. One row stays above the piles and off the side fans.
+  {
+    seatX: 868,
+    seatY: 268,
+    left: 500,
+    right: 760,
+    y: 312,
+    dir: -1,
+    flow: true,
+  },
+  { seatX: 636, seatY: 104, left: 620, right: 880, y: 172, dir: 1, flow: true },
+  { seatX: 480, seatY: 104, left: 376, right: 616, y: 168, dir: 1, flow: true },
+  { seatX: 324, seatY: 104, left: 120, right: 360, y: 172, dir: 1, flow: true },
+  { seatX: 92, seatY: 268, left: 150, right: 400, y: 312, dir: 1, flow: true },
 ];
 
 function zoneFor(seatX: number, seatY: number, self: boolean): MeldZone {

@@ -71,12 +71,16 @@ export function playerCardSlots(
   handIndex: number,
   cardCount: number,
   name = 'Seat',
-): { x: number; y: number; rotation: number }[] {
+): { x: number; y: number; rotation: number; scale: number }[] {
   const split = handCount > 1;
   const sign = handIndex === 0 ? -1 : 1;
   if (self) {
     if (!split) {
-      return handPositions(cardCount).map((slot) => ({ ...slot, rotation: 0 }));
+      return handPositions(cardCount).map((slot) => ({
+        ...slot,
+        rotation: 0,
+        scale: 1,
+      }));
     }
     const slots = handPositions(1);
     return row(
@@ -84,7 +88,7 @@ export function playerCardSlots(
       slots[0]?.y ?? seatY + 52,
       cardCount,
       SPLIT_SELF_STEP,
-    ).map((slot) => ({ ...slot, rotation: 0 }));
+    ).map((slot) => ({ ...slot, rotation: 0, scale: 1 }));
   }
   const edge = fanEdge(seatX, seatY);
   const along =

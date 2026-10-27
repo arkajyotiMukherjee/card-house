@@ -73,59 +73,143 @@ export const HOW_TO_PLAY_TEXT = {
 /** Click target on a dummy table. The number painted here is the subscribed count. */
 export const COUNTER_BUTTON = { x: 392, y: 220, w: 176, h: 72 } as const;
 
+export type SeatEdge = 'left' | 'right' | 'top' | 'bottom';
+
 /**
- * Points around the felt. Index 0 is bottom center. `seatAnchorsFor` picks
- * a subset so a short table does not stack every opponent on one side.
+ * One point on the felt. `edgeSeats` is how many seats share that edge in
+ * the plan that uses this point, and `edgeIndex` counts left-to-right on
+ * the top or top-to-bottom on a side.
+ */
+export interface SeatAnchor {
+  x: number;
+  y: number;
+  edge: SeatEdge;
+  edgeSeats: number;
+  edgeIndex: number;
+}
+
+/** Top rail, left to right. Outer seats stay classified as top. */
+const TOP_RAIL = { start: 246, end: 714 } as const;
+/** Side rail, top to bottom, clear of the local hand and the action cluster. */
+const SIDE_RAIL = { start: 136, end: 400, leftX: 92, rightX: 868 } as const;
+
+/**
+ * A seat on `edge` when `count` seats share it.
+ * The same edge, index, and count always land on the same pixel.
+ */
+export function seatPoint(
+  edge: SeatEdge,
+  index: number,
+  count: number,
+): SeatAnchor {
+  if (edge === 'bottom') {
+    return { x: 480, y: 456, edge, edgeSeats: 1, edgeIndex: 0 };
+  }
+  if (edge === 'top') {
+    const span = TOP_RAIL.end - TOP_RAIL.start;
+    const x = Math.round(TOP_RAIL.start + (span / count) * (index + 0.5));
+    return {
+      x,
+      y: count === 1 ? 96 : 104,
+      edge,
+      edgeSeats: count,
+      edgeIndex: index,
+    };
+  }
+  const span = SIDE_RAIL.end - SIDE_RAIL.start;
+  const y = Math.round(SIDE_RAIL.start + (span / count) * (index + 0.5));
+  return {
+    x: edge === 'right' ? SIDE_RAIL.rightX : SIDE_RAIL.leftX,
+    y,
+    edge,
+    edgeSeats: count,
+    edgeIndex: index,
+  };
+}
+
+const BOTTOM = seatPoint('bottom', 0, 1);
+const RIGHT = seatPoint('right', 0, 1);
+const LEFT = seatPoint('left', 0, 1);
+const TOP = seatPoint('top', 0, 1);
+const TOP_LEFT_2 = seatPoint('top', 0, 2);
+const TOP_RIGHT_2 = seatPoint('top', 1, 2);
+const TOP_LEFT_3 = seatPoint('top', 0, 3);
+const TOP_MID_3 = seatPoint('top', 1, 3);
+const TOP_RIGHT_3 = seatPoint('top', 2, 3);
+const LEFT_UPPER = seatPoint('left', 0, 2);
+const LEFT_LOWER = seatPoint('left', 1, 2);
+const RIGHT_UPPER = seatPoint('right', 0, 2);
+const RIGHT_LOWER = seatPoint('right', 1, 2);
+
+/**
+ * Points the older tests name by index. Index 0 is bottom, 1 is the lone
+ * right seat, 3 is the lone top seat, and 5 is the lone left seat.
+ * Full tables use the side pairs and the shared top seats as well.
  */
 export const SEAT_ANCHORS = [
-  { x: 480, y: 456 },
-  { x: 780, y: 310 },
-  { x: 700, y: 128 },
-  { x: 480, y: 72 },
-  { x: 260, y: 128 },
-  { x: 180, y: 310 },
-  { x: 280, y: 456 },
-  { x: 680, y: 456 },
+  BOTTOM,
+  RIGHT,
+  TOP_RIGHT_2,
+  TOP,
+  TOP_LEFT_2,
+  LEFT,
+  LEFT_LOWER,
+  RIGHT_LOWER,
 ] as const;
+
+const SEAT_PLANS: Readonly<Record<number, readonly SeatAnchor[]>> = {
+  1: [BOTTOM],
+  2: [BOTTOM, TOP],
+  3: [BOTTOM, RIGHT, LEFT],
+  4: [BOTTOM, RIGHT, LEFT, TOP],
+  5: [BOTTOM, RIGHT, TOP_RIGHT_2, TOP_LEFT_2, LEFT],
+  6: [BOTTOM, RIGHT, TOP_RIGHT_3, TOP_MID_3, TOP_LEFT_3, LEFT],
+  7: [
+    BOTTOM,
+    RIGHT_LOWER,
+    RIGHT_UPPER,
+    TOP_RIGHT_2,
+    TOP_LEFT_2,
+    LEFT_UPPER,
+    LEFT_LOWER,
+  ],
+  8: [
+    BOTTOM,
+    RIGHT_LOWER,
+    RIGHT_UPPER,
+    TOP_RIGHT_3,
+    TOP_MID_3,
+    TOP_LEFT_3,
+    LEFT_UPPER,
+    LEFT_LOWER,
+  ],
+};
+
+const ANCHORS_BY_PIXEL = new Map<string, SeatAnchor>();
+for (const plan of Object.values(SEAT_PLANS)) {
+  for (const anchor of plan) {
+    ANCHORS_BY_PIXEL.set(`${anchor.x},${anchor.y}`, anchor);
+  }
+}
+
+/** The registered seat at this pixel, when the plans use it. */
+export function anchorAt(x: number, y: number): SeatAnchor | undefined {
+  return ANCHORS_BY_PIXEL.get(`${x},${y}`);
+}
 
 /**
  * Seats for this many players. The local player is first (bottom).
- * Three players use the left and right and leave the top empty.
- * The fourth player sits at the top. Larger tables spread around the felt.
+ * Two sit across the top. Three use the left and right and leave the top
+ * empty. Four adds that top seat. Five and six fill the top. Seven and
+ * eight put two seats on each side, with two or three across the top.
+ * The order is clockwise from the local player, screen-right first, and
+ * it does not change between reconnects.
  */
-export function seatAnchorsFor(
-  count: number,
-): readonly { x: number; y: number }[] {
-  const bottom = SEAT_ANCHORS[0];
-  const right = SEAT_ANCHORS[1];
-  const topRight = SEAT_ANCHORS[2];
-  const top = SEAT_ANCHORS[3];
-  const topLeft = SEAT_ANCHORS[4];
-  const left = SEAT_ANCHORS[5];
-  const bottomLeft = SEAT_ANCHORS[6];
-  const bottomRight = SEAT_ANCHORS[7];
+export function seatAnchorsFor(count: number): readonly SeatAnchor[] {
   if (count <= 1) {
-    return [bottom];
+    return SEAT_PLANS[1];
   }
-  if (count === 2) {
-    return [bottom, top];
-  }
-  if (count === 3) {
-    return [bottom, right, left];
-  }
-  if (count === 4) {
-    return [bottom, right, left, top];
-  }
-  if (count === 5) {
-    return [bottom, right, topRight, topLeft, left];
-  }
-  if (count === 6) {
-    return [bottom, right, topRight, top, topLeft, left];
-  }
-  if (count === 7) {
-    return [bottom, bottomRight, right, topRight, topLeft, left, bottomLeft];
-  }
-  return [bottom, bottomRight, right, topRight, top, topLeft, left, bottomLeft];
+  return SEAT_PLANS[Math.min(8, count)] ?? SEAT_PLANS[8];
 }
 
 export interface TableRef {

@@ -45,11 +45,7 @@ import type { CardAtlas } from './card-atlas';
 import { ChipAtlas, type ChipDenomination } from './chip-atlas';
 import type { GameDriver, InputEvent, RenderContext } from './game-driver';
 import { LOGICAL_WIDTH } from './sheets';
-import {
-  OPPONENT_FAN_CARD,
-  OPPONENT_FAN_SCALE,
-  TURN_LINE,
-} from './table-presentation';
+import { OPPONENT_FAN_CARD, TURN_LINE } from './table-presentation';
 
 const BUTTON = ex.Color.fromHex('#1b5c38');
 const BUTTON_DOWN = ex.Color.fromHex('#0e3d24');
@@ -150,13 +146,9 @@ function cardSprite(
   atlas: CardAtlas,
   cardId: string,
   faceUp: boolean,
-  fan: boolean,
+  _fan: boolean,
 ): ex.Sprite {
-  const sprite = faceSprite(atlas, cardId, faceUp);
-  if (fan) {
-    sprite.scale = ex.vec(OPPONENT_FAN_SCALE, OPPONENT_FAN_SCALE);
-  }
-  return sprite;
+  return faceSprite(atlas, cardId, faceUp);
 }
 
 function faceSprite(
@@ -393,6 +385,7 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
         personal: boolean;
         rotation: number;
         fan: boolean;
+        scale: number;
       }
     >();
     const dealerSlots = dealerPositions(state.dealer.length);
@@ -411,6 +404,7 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
         personal: false,
         rotation: 0,
         fan: false,
+        scale: 1,
       });
     }
     for (const seat of ctx.seats) {
@@ -447,6 +441,7 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
             personal: seat.self,
             rotation: slot.rotation,
             fan: !seat.self,
+            scale: slot.scale,
           });
         }
       }
@@ -473,6 +468,7 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
       personal: boolean;
       rotation: number;
       fan: boolean;
+      scale: number;
     },
     ctx: RenderContext,
   ): void {
@@ -505,6 +501,7 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
     }
     record.actor.z = place.z;
     record.actor.rotation = place.rotation;
+    record.actor.scale = ex.vec(place.scale, place.scale);
     if (
       record.faceUp !== place.faceUp ||
       record.personal !== place.personal ||

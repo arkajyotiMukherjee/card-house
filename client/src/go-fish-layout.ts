@@ -77,18 +77,22 @@ export function opponentBookOrigin(
   const width = seatPlateWidth(name);
   const edge = fanEdge(seatX, seatY);
   const fan = seatFan(seatX, seatY, 13, name).map((slot) => fanCardRect(slot));
+  const plateBottom = label.y + 20;
   let left = label.x + width / 2 - span / 2;
-  let y = label.y + 36;
+  let y = plateBottom + BOOK_GAP + 16;
   if (edge === 'right') {
-    const inward = Math.min(...fan.map((rect) => rect.x));
+    const inward = Math.min(label.x, ...fan.map((rect) => rect.x));
     left = inward - BOOK_GAP - span;
     y = label.y;
   } else if (edge === 'left') {
-    const inward = Math.max(...fan.map((rect) => rect.x + rect.w));
+    const inward = Math.max(
+      label.x + width,
+      ...fan.map((rect) => rect.x + rect.w),
+    );
     left = inward + BOOK_GAP;
     y = label.y;
   } else if (edge === 'top') {
-    const inward = Math.max(...fan.map((rect) => rect.y + rect.h));
+    const inward = Math.max(plateBottom, ...fan.map((rect) => rect.y + rect.h));
     y = inward + BOOK_GAP + 16;
   } else if (fan.length > 0) {
     const inward = Math.min(...fan.map((rect) => rect.y));

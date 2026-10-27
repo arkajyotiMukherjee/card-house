@@ -13,7 +13,6 @@ import {
 } from './bluff-layout';
 import {
   OPPONENT_FAN_CARD,
-  OPPONENT_FAN_SCALE,
   fanGapLine,
   opponentCountAnchor,
   seatFan,
@@ -799,7 +798,7 @@ export class RummyDriver implements GameDriver<RummyState> {
   private syncBacks(state: RummyState, ctx: RenderContext): void {
     const desired = new Map<
       string,
-      { x: number; y: number; z: number; rotation: number }
+      { x: number; y: number; z: number; rotation: number; scale: number }
     >();
     for (const seat of ctx.seats) {
       if (seat.self) {
@@ -817,6 +816,7 @@ export class RummyDriver implements GameDriver<RummyState> {
           y: slot.y,
           z: 4 + index,
           rotation: slot.rotation,
+          scale: slot.scale,
         });
       }
     }
@@ -828,7 +828,7 @@ export class RummyDriver implements GameDriver<RummyState> {
       }
     }
     for (const [key, place] of desired) {
-      const target = `${place.x}:${place.y}:${place.rotation}`;
+      const target = `${place.x}:${place.y}:${place.rotation}:${place.scale}`;
       let actor = this.backs.get(key);
       if (!actor) {
         actor = new ex.Actor({
@@ -839,8 +839,8 @@ export class RummyDriver implements GameDriver<RummyState> {
           z: place.z,
           rotation: place.rotation,
         });
+        actor.scale = ex.vec(place.scale, place.scale);
         const back = ctx.cards.back();
-        back.scale = ex.vec(OPPONENT_FAN_SCALE, OPPONENT_FAN_SCALE);
         actor.graphics.use(back);
         ctx.scene.add(actor);
         this.backs.set(key, actor);
@@ -854,6 +854,7 @@ export class RummyDriver implements GameDriver<RummyState> {
       }
       actor.z = place.z;
       actor.rotation = place.rotation;
+      actor.scale = ex.vec(place.scale, place.scale);
       if (this.backTargets.get(key) === target) {
         continue;
       }
