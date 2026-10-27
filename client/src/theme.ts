@@ -8,9 +8,10 @@ const DEFAULT_STYLE: TableStyle = 'green';
 /**
  * Page and felt-margin colors. Green is the previous felt (`#145c38`).
  * Purple and red are the felt pixels of `table-purple.png` and `table-red.png`.
+ * Black (`#000000`) is a background only. It is not a table felt.
  */
-export const BACKGROUND_STYLES = TABLE_STYLES;
-export type BackgroundStyle = TableStyle;
+export const BACKGROUND_STYLES = ['green', 'purple', 'red', 'black'] as const;
+export type BackgroundStyle = (typeof BACKGROUND_STYLES)[number];
 
 export const DEFAULT_BACKGROUND: BackgroundStyle = 'green';
 
@@ -18,6 +19,7 @@ export const BACKGROUND_HEX: Record<BackgroundStyle, string> = {
   green: '#145c38',
   purple: '#422490',
   red: '#81173f',
+  black: '#000000',
 };
 
 type ThemeStorage = Pick<Storage, 'getItem' | 'setItem'>;
@@ -26,6 +28,13 @@ function isTableStyle(value: unknown): value is TableStyle {
   return (
     typeof value === 'string' &&
     (TABLE_STYLES as readonly string[]).includes(value)
+  );
+}
+
+function isBackgroundStyle(value: unknown): value is BackgroundStyle {
+  return (
+    typeof value === 'string' &&
+    (BACKGROUND_STYLES as readonly string[]).includes(value)
   );
 }
 
@@ -58,7 +67,7 @@ function readTheme(clientId: string, storage: ThemeStorage): StoredTheme {
   }
   return {
     style: isTableStyle(record.style) ? record.style : DEFAULT_STYLE,
-    background: isTableStyle(record.background)
+    background: isBackgroundStyle(record.background)
       ? record.background
       : DEFAULT_BACKGROUND,
   };
@@ -126,4 +135,15 @@ export function stepTableStyle(current: TableStyle, delta: number): TableStyle {
   const index = TABLE_STYLES.indexOf(current);
   const next = ((((index < 0 ? 0 : index) + delta) % count) + count) % count;
   return TABLE_STYLES[next] ?? DEFAULT_STYLE;
+}
+
+/** Steps through green, purple, red, and black. `delta` may be negative. */
+export function stepBackgroundStyle(
+  current: BackgroundStyle,
+  delta: number,
+): BackgroundStyle {
+  const count = BACKGROUND_STYLES.length;
+  const index = BACKGROUND_STYLES.indexOf(current);
+  const next = ((((index < 0 ? 0 : index) + delta) % count) + count) % count;
+  return BACKGROUND_STYLES[next] ?? DEFAULT_BACKGROUND;
 }

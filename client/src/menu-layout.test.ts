@@ -110,6 +110,9 @@ describe('theme panel', () => {
       expect(preview.x + preview.w).toBeLessThanOrEqual(panel.x + panel.w);
       expect(preview.y + preview.h).toBeLessThanOrEqual(panel.y + panel.h);
       expect(preview.x).toBeGreaterThan(choice.x);
+      const arrowCenter = choice.y + THEME_PANEL.arrow.h / 2;
+      const previewCenter = preview.y + preview.h / 2;
+      expect(previewCenter).toBe(arrowCenter);
     }
     for (let index = 0; index < THEME_PANEL.choices.length; index += 1) {
       const box = THEME_PANEL.choices[index]?.previewBox;

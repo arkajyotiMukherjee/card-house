@@ -162,7 +162,7 @@ export const THEME_PANEL = {
       x: 168,
       y: 372,
       labelY: 352,
-      previewBox: { x: 400, y: 360, w: 48, h: 32 },
+      previewBox: { x: 400, y: 368, w: 48, h: 32 },
     },
   ] as const satisfies readonly ThemeChoiceSpec[],
 } as const;

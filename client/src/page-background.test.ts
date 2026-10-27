@@ -18,4 +18,14 @@ describe('applyPageBackground', () => {
       BACKGROUND_HEX.purple,
     );
   });
+
+  it('paints a saved black background behind the canvas', () => {
+    document.body.innerHTML = '<div id="app"></div>';
+    applyPageBackground(BACKGROUND_HEX.black, document);
+    expect(document.documentElement.style.background).toBe('#000000');
+    expect(document.body.style.background).toBe('#000000');
+    expect(document.querySelector('#app')?.getAttribute('style')).toContain(
+      '#000000',
+    );
+  });
 });

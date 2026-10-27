@@ -88,6 +88,7 @@ import {
   backgroundHex,
   saveBackground,
   saveTheme,
+  stepBackgroundStyle,
   stepTableStyle,
 } from './theme';
 
@@ -1297,7 +1298,7 @@ export class MenuScene extends ex.Scene {
       saveTheme(this.clientId, table);
       this.look = { ...this.look, table };
     } else {
-      const background = stepTableStyle(this.look.background, delta);
+      const background = stepBackgroundStyle(this.look.background, delta);
       saveBackground(this.clientId, background);
       this.look = { ...this.look, background };
     }

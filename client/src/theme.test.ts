@@ -5,6 +5,8 @@ import {
   getTheme,
   saveBackground,
   saveTheme,
+  stepBackgroundStyle,
+  stepTableStyle,
   THEME_STORAGE_KEY,
 } from './theme';
 
@@ -81,6 +83,39 @@ describe('getBackground', () => {
     saveBackground('client-1', 'red', storage);
     expect(getTheme('client-1', storage)).toBe('purple');
     expect(getBackground('client-1', storage)).toBe('red');
+  });
+
+  it('round-trips black in the same theme key and leaves the table green', () => {
+    const storage = memoryStorage();
+    saveBackground('client-1', 'black', storage);
+    expect(getBackground('client-1', storage)).toBe('black');
+    expect(getTheme('client-1', storage)).toBe('green');
+    expect(BACKGROUND_HEX.black).toBe('#000000');
+    const raw = storage.getItem(THEME_STORAGE_KEY);
+    expect(raw).toBeTruthy();
+    expect(JSON.parse(raw ?? '')).toEqual({
+      clientId: 'client-1',
+      style: 'green',
+      background: 'black',
+    });
+  });
+
+  it('cycles background through black and keeps black off the table colors', () => {
+    expect(stepBackgroundStyle('red', 1)).toBe('black');
+    expect(stepBackgroundStyle('black', 1)).toBe('green');
+    expect(stepBackgroundStyle('black', -1)).toBe('red');
+    expect(stepTableStyle('red', 1)).toBe('green');
+    const storage = memoryStorage();
+    storage.setItem(
+      THEME_STORAGE_KEY,
+      JSON.stringify({
+        clientId: 'client-1',
+        style: 'black',
+        background: 'black',
+      }),
+    );
+    expect(getTheme('client-1', storage)).toBe('green');
+    expect(getBackground('client-1', storage)).toBe('black');
   });
 
   it('falls back to green for another client, bad JSON, or an unknown color', () => {
