@@ -9,8 +9,14 @@ import {
   cardLift,
   faceForCard,
   handPositions,
-  opponentBackPositions,
 } from './bluff-layout';
+import {
+  OPPONENT_FAN_CARD,
+  OPPONENT_FAN_SCALE,
+  TURN_LINE,
+  fanGapLine,
+  seatFan,
+} from './table-presentation';
 import {
   BUTTON_FONT_SIZE,
   BUTTON_PRESS_SHIFT,
@@ -32,9 +38,7 @@ import {
   bookSlots,
   finishedLine,
   legalCard,
-  opponentBackAnchor,
   opponentBookOrigin,
-  plateWidth,
   selfBookOrigin,
   stockPosition,
 } from './go-fish-layout';
@@ -298,7 +302,13 @@ export class GoFishDriver implements GameDriver<GoFishState> {
     const mine =
       ctx.meSeatIndex !== null && state.turnSeatIndex === ctx.meSeatIndex;
     this.labels.push(
-      this.textActor(ctx, 748, 428, mine ? 'Your turn' : 'Wait', GOLD),
+      this.textActor(
+        ctx,
+        TURN_LINE.x,
+        TURN_LINE.y,
+        mine ? 'Your turn' : 'Wait',
+        GOLD,
+      ),
     );
     const stock = stockPosition();
     const stockLine = `Stock ${state.stock.length}`;
@@ -342,9 +352,10 @@ export class GoFishDriver implements GameDriver<GoFishState> {
       }
       const count = state.hands[String(seat.seatIndex)]?.length ?? 0;
       const line = booked > 0 ? `x${count} Books ${booked}` : `x${count}`;
-      this.labels.push(
-        this.textActor(ctx, seat.x - line.length * 4, seat.y - 16, line, DIM),
-      );
+      const countAt = fanGapLine(seat.x, seat.y, seat.name, line, 0);
+      const countLabel = this.textActor(ctx, countAt.x, countAt.y, line, DIM);
+      countLabel.z = 80;
+      this.labels.push(countLabel);
     }
   }
 
@@ -601,14 +612,16 @@ export class GoFishDriver implements GameDriver<GoFishState> {
   }
 
   private syncBacks(state: GoFishState, ctx: RenderContext): void {
-    const desired = new Map<string, { x: number; y: number; z: number }>();
+    const desired = new Map<
+      string,
+      { x: number; y: number; z: number; rotation: number }
+    >();
     for (const seat of ctx.seats) {
       if (seat.self) {
         continue;
       }
       const count = state.hands[String(seat.seatIndex)]?.length ?? 0;
-      const anchor = opponentBackAnchor(seat.x, seat.y);
-      const slots = opponentBackPositions(anchor.x, anchor.y, count);
+      const slots = seatFan(seat.x, seat.y, count, seat.name);
       for (let index = 0; index < slots.length; index += 1) {
         const slot = slots[index];
         if (!slot) {
@@ -618,6 +631,7 @@ export class GoFishDriver implements GameDriver<GoFishState> {
           x: slot.x,
           y: slot.y,
           z: 4 + index,
+          rotation: slot.rotation,
         });
       }
     }
@@ -630,17 +644,20 @@ export class GoFishDriver implements GameDriver<GoFishState> {
     }
     const spawn = stockPosition();
     for (const [key, place] of desired) {
-      const target = `${place.x}:${place.y}`;
+      const target = `${place.x}:${place.y}:${place.rotation}`;
       let actor = this.backs.get(key);
       if (!actor) {
         actor = new ex.Actor({
           pos: ex.vec(spawn.x, spawn.y),
           anchor: ex.vec(0.5, 0.5),
-          width: CARD_DRAW,
-          height: CARD_DRAW,
+          width: OPPONENT_FAN_CARD,
+          height: OPPONENT_FAN_CARD,
           z: place.z,
+          rotation: place.rotation,
         });
-        actor.graphics.use(ctx.cards.back());
+        const back = ctx.cards.back();
+        back.scale = ex.vec(OPPONENT_FAN_SCALE, OPPONENT_FAN_SCALE);
+        actor.graphics.use(back);
         ctx.scene.add(actor);
         this.backs.set(key, actor);
         this.backTargets.set(key, target);
@@ -652,6 +669,7 @@ export class GoFishDriver implements GameDriver<GoFishState> {
         continue;
       }
       actor.z = place.z;
+      actor.rotation = place.rotation;
       if (this.backTargets.get(key) === target) {
         continue;
       }
@@ -700,12 +718,7 @@ export class GoFishDriver implements GameDriver<GoFishState> {
       const list = state.books[String(seat.seatIndex)] ?? [];
       const origin = seat.self
         ? selfBookOrigin()
-        : opponentBookOrigin(
-            seat.x,
-            seat.y,
-            list.length,
-            plateWidth(seat.name),
-          );
+        : opponentBookOrigin(seat.x, seat.y, list.length, seat.name);
       const slots = bookSlots(origin.x, origin.y, list.length);
       for (let index = 0; index < list.length; index += 1) {
         const book = list[index];
@@ -782,7 +795,7 @@ export class GoFishDriver implements GameDriver<GoFishState> {
     this.askBoxes.clear();
     this.askKey = key;
     for (const seat of others) {
-      const box = askButtonBox(seat.x, seat.y);
+      const box = askButtonBox(seat.x, seat.y, seat.name);
       this.askBoxes.set(seat.seatIndex, box);
       this.addButton(ctx, box, 'Ask', `ask:${seat.seatIndex}`);
     }

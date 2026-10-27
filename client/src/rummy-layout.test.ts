@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { RummyState } from '../../src/shared/games/rummy';
-import { CARD_DRAW, HAND_Y, opponentBackPositions } from './bluff-layout';
+import { CARD_DRAW, HAND_Y } from './bluff-layout';
 import { SEAT_ANCHORS } from './game-scene';
+import {
+  belowFelt,
+  fanCardRect,
+  insideCluster,
+  seatFan,
+} from './table-presentation';
 import {
   DISCARD_BUTTON,
   DISCARD_X,
@@ -94,8 +100,15 @@ describe('rummy layout', () => {
           h: 20,
         });
         if (index > 0) {
-          opponentBackPositions(seat.x, seat.y, 4).forEach((slot, back) => {
-            fixed.push(card(`back${index}.${back}`, slot.x, slot.y));
+          seatFan(seat.x, seat.y, 7, 'Seat').forEach((slot, back) => {
+            const rect = fanCardRect(slot);
+            fixed.push({
+              name: `back${index}.${back}`,
+              x: rect.x,
+              y: rect.y,
+              w: rect.w,
+              h: rect.h,
+            });
           });
         }
       });
@@ -160,6 +173,18 @@ describe('rummy layout', () => {
     expect(first).toHaveLength(4);
     expect(first?.[0]?.x).toBeLessThan(first?.[1]?.x ?? 0);
     expect(first?.[0]?.z).toBeLessThan(first?.[1]?.z ?? 0);
+  });
+
+  it('keeps draw, meld, and discard in the cluster', () => {
+    for (const button of [
+      DRAW_STOCK_BUTTON,
+      DRAW_DISCARD_BUTTON,
+      MELD_BUTTON,
+      DISCARD_BUTTON,
+    ]) {
+      expect(belowFelt(button)).toBe(true);
+      expect(insideCluster(button)).toBe(true);
+    }
   });
 
   it('lifts a card only when it is in your hand on your turn', () => {

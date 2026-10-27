@@ -27,7 +27,6 @@ import {
   finishedLine,
   handPositions,
   legalCard,
-  opponentBackPositions,
   passLabel,
   penaltyPositions,
   pointCards,
@@ -35,6 +34,13 @@ import {
   trickPosition,
 } from './hearts-layout';
 import { LOGICAL_WIDTH } from './sheets';
+import {
+  OPPONENT_FAN_CARD,
+  OPPONENT_FAN_SCALE,
+  TURN_LINE,
+  fanGapLine,
+  seatFan,
+} from './table-presentation';
 
 const GOLD = ex.Color.fromHex('#f4e4b3');
 const DIM = ex.Color.fromHex('#d7c08a');
@@ -362,14 +368,26 @@ export class HeartsDriver implements GameDriver<HeartsState> {
         ctx.meSeatIndex !== null &&
         state.passes[String(ctx.meSeatIndex)] !== undefined;
       this.labels.push(
-        this.textActor(ctx, 748, 428, passed ? 'Passed' : 'Pass 3', GOLD),
+        this.textActor(
+          ctx,
+          TURN_LINE.x,
+          TURN_LINE.y,
+          passed ? 'Passed' : 'Pass 3',
+          GOLD,
+        ),
       );
       this.labels.push(this.textActor(ctx, 430, 196, passLabel(state), GOLD));
     } else {
       const mine =
         ctx.meSeatIndex !== null && state.turnSeatIndex === ctx.meSeatIndex;
       this.labels.push(
-        this.textActor(ctx, 748, 428, mine ? 'Your turn' : 'Wait', GOLD),
+        this.textActor(
+          ctx,
+          TURN_LINE.x,
+          TURN_LINE.y,
+          mine ? 'Your turn' : 'Wait',
+          GOLD,
+        ),
       );
       if (state.heartsBroken) {
         this.labels.push(this.textActor(ctx, 216, 196, 'Hearts broken', GOLD));
@@ -377,15 +395,17 @@ export class HeartsDriver implements GameDriver<HeartsState> {
     }
     for (const seat of ctx.seats) {
       const text = `${state.scores[String(seat.seatIndex)] ?? 0} pts`;
-      this.labels.push(
-        this.textActor(
-          ctx,
-          Math.round(seat.x - (text.length * 8) / 2),
-          seat.y - 16,
-          text,
-          DIM,
-        ),
-      );
+      const at = seat.self
+        ? {
+            x: Math.round(seat.x - (text.length * 8) / 2),
+            y: seat.y - 16,
+          }
+        : fanGapLine(seat.x, seat.y, seat.name, text, 0);
+      const label = this.textActor(ctx, at.x, at.y, text, DIM);
+      if (!seat.self) {
+        label.z = 80;
+      }
+      this.labels.push(label);
     }
   }
 
@@ -696,13 +716,16 @@ export class HeartsDriver implements GameDriver<HeartsState> {
   }
 
   private syncBacks(state: HeartsState, ctx: RenderContext): void {
-    const desired = new Map<string, { x: number; y: number; z: number }>();
+    const desired = new Map<
+      string,
+      { x: number; y: number; z: number; rotation: number }
+    >();
     for (const seat of ctx.seats) {
       if (seat.self) {
         continue;
       }
       const count = state.hands[String(seat.seatIndex)]?.length ?? 0;
-      const slots = opponentBackPositions(seat.x, seat.y, count);
+      const slots = seatFan(seat.x, seat.y, count, seat.name);
       for (let index = 0; index < slots.length; index += 1) {
         const slot = slots[index];
         if (!slot) {
@@ -712,6 +735,7 @@ export class HeartsDriver implements GameDriver<HeartsState> {
           x: slot.x,
           y: slot.y,
           z: 4 + index,
+          rotation: slot.rotation,
         });
       }
     }
@@ -723,17 +747,20 @@ export class HeartsDriver implements GameDriver<HeartsState> {
       }
     }
     for (const [key, place] of desired) {
-      const target = `${place.x}:${place.y}`;
+      const target = `${place.x}:${place.y}:${place.rotation}`;
       let actor = this.backs.get(key);
       if (!actor) {
         actor = new ex.Actor({
           pos: ex.vec(PILE_X, PILE_Y),
           anchor: ex.vec(0.5, 0.5),
-          width: CARD_DRAW,
-          height: CARD_DRAW,
+          width: OPPONENT_FAN_CARD,
+          height: OPPONENT_FAN_CARD,
           z: place.z,
+          rotation: place.rotation,
         });
-        actor.graphics.use(ctx.cards.back());
+        const back = ctx.cards.back();
+        back.scale = ex.vec(OPPONENT_FAN_SCALE, OPPONENT_FAN_SCALE);
+        actor.graphics.use(back);
         ctx.scene.add(actor);
         this.backs.set(key, actor);
         this.backTargets.set(key, target);
@@ -745,6 +772,7 @@ export class HeartsDriver implements GameDriver<HeartsState> {
         continue;
       }
       actor.z = place.z;
+      actor.rotation = place.rotation;
       if (this.backTargets.get(key) === target) {
         continue;
       }

@@ -1,7 +1,16 @@
 import type { SpadesState, SpadesTeam } from '../../src/shared/games/spades';
 import { TABLE_CENTER } from './bluff-layout';
 import { BUTTON_HEIGHT } from './button-style';
-import { LOGICAL_WIDTH } from './sheets';
+import {
+  PICKER_LEFT,
+  PICKER_RIGHT,
+  PICKER_Y,
+  TURN_LINE,
+  actionBox,
+} from './table-presentation';
+
+/** Play sits in the shared cluster. Bids use the green band while it is hidden. */
+export const PLAY_BUTTON = actionBox(0);
 
 /**
  * Left of the felt. Each team gets a header row, a bid row and a score row,
@@ -15,12 +24,12 @@ export const PARTNERSHIP_BOARD = {
   chipRows: [18, 74],
 } as const;
 
-export const BID_PROMPT = { x: 228, y: 396 } as const;
+export const BID_PROMPT = TURN_LINE;
 
 const BID_W = 32;
 const BID_H = BUTTON_HEIGHT;
-const BID_GAP = 36;
-const BID_Y = 416;
+const BID_GAP = 4;
+const BIDS_PER_GROUP = 7;
 const TRICK_PULL = 0.32;
 const WON_PULL = 0.62;
 
@@ -44,17 +53,24 @@ export function seatTeam(seatIndex: number): SpadesTeam {
   return seatIndex % 2 === 0 ? 'ns' : 'ew';
 }
 
+/**
+ * Bids wrap into two groups on the green band: nil through 6 on the left,
+ * 7 through 13 on the right. One line at the old y would cross the cards.
+ */
 export function bidButtonBox(tricks: number): {
   x: number;
   y: number;
   w: number;
   h: number;
 } {
-  const span = 14 * BID_GAP;
-  const start = Math.floor((LOGICAL_WIDTH - span) / 2);
+  const group = tricks < BIDS_PER_GROUP ? 0 : 1;
+  const index = group === 0 ? tricks : tricks - BIDS_PER_GROUP;
+  const count = BIDS_PER_GROUP;
+  const span = count * BID_W + (count - 1) * BID_GAP;
+  const start = group === 0 ? PICKER_LEFT : PICKER_RIGHT - span;
   return {
-    x: start + tricks * BID_GAP,
-    y: BID_Y,
+    x: start + index * (BID_W + BID_GAP),
+    y: PICKER_Y,
     w: BID_W,
     h: BID_H,
   };

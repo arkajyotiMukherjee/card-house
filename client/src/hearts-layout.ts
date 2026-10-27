@@ -1,4 +1,3 @@
-import { BUTTON_HEIGHT } from './button-style';
 import {
   canPassCard,
   canPlayCard,
@@ -15,9 +14,15 @@ import {
   cardLift,
   faceForCard,
   handPositions,
-  opponentBackPositions,
 } from './bluff-layout';
 import { LOGICAL_WIDTH } from './sheets';
+import {
+  actionBox,
+  fanCardRect,
+  fanEdge,
+  rectsOverlap,
+  seatFan,
+} from './table-presentation';
 
 export {
   CARD_DRAW,
@@ -26,18 +31,17 @@ export {
   cardLift,
   faceForCard,
   handPositions,
-  opponentBackPositions,
 };
 
-export const PASS_BUTTON = { x: 748, y: 448, w: 96, h: BUTTON_HEIGHT } as const;
-export const PLAY_BUTTON = { x: 852, y: 448, w: 96, h: BUTTON_HEIGHT } as const;
+export const PASS_BUTTON = actionBox(0);
+export const PLAY_BUTTON = actionBox(1);
 
 const PENALTY_STEP = 18;
 const PENALTY_LANE = 66;
 const PENALTY_SIDE_GAP = 84;
 const PENALTY_EDGE = 32;
-const TRICK_REACH = 0.78;
 const BACKS_FULL_HAND = 13;
+const TRICK_PULL = 0.46;
 
 /**
  * Hearts in the order they were taken, then the queen of spades last.
@@ -59,10 +63,34 @@ export function pointCards(cards: readonly string[]): string[] {
   return points;
 }
 
+function cardBox(x: number, y: number): CardRect {
+  return {
+    x: x - CARD_DRAW / 2,
+    y: y - CARD_DRAW / 2,
+    w: CARD_DRAW,
+    h: CARD_DRAW,
+  };
+}
+
+interface CardRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+function missesFan(seatX: number, seatY: number, rect: CardRect): boolean {
+  if (fanEdge(seatX, seatY) === 'bottom') {
+    return true;
+  }
+  const fan = seatFan(seatX, seatY, BACKS_FULL_HAND, 'Seat');
+  return fan.every((card) => !rectsOverlap(rect, fanCardRect(card)));
+}
+
 /**
  * A played card, in from the seat toward the middle of the table.
- * It sits past the fanned card backs of that seat, so a played card
- * never lands on the hand it came from.
+ * It sits past that seat's rail fan, so a played card never lands on
+ * the hand it came from. The local seat uses a shorter pull.
  */
 export function trickPosition(
   seatX: number,
@@ -71,13 +99,18 @@ export function trickPosition(
   const dx = TABLE_CENTER.x - seatX;
   const dy = TABLE_CENTER.y - seatY;
   const len = Math.hypot(dx, dy) || 1;
-  const lastBack = opponentBackPositions(seatX, seatY, BACKS_FULL_HAND).at(-1);
-  const backsReach = lastBack
-    ? Math.hypot(lastBack.x - seatX, lastBack.y - seatY)
-    : 0;
-  const along = Math.max(Math.abs(dx), Math.abs(dy)) / len;
-  const clear = backsReach + CARD_DRAW / along;
-  const dist = Math.round(Math.min(clear, len * TRICK_REACH));
+  const local = fanEdge(seatX, seatY) === 'bottom';
+  let dist = Math.round(len * (local ? 0.42 : TRICK_PULL));
+  if (!local) {
+    for (let step = dist; step <= len * 0.7; step += 4) {
+      const x = Math.round(seatX + (dx / len) * step);
+      const y = Math.round(seatY + (dy / len) * step);
+      if (missesFan(seatX, seatY, cardBox(x, y))) {
+        dist = step;
+        break;
+      }
+    }
+  }
   return {
     x: Math.round(seatX + (dx / len) * dist),
     y: Math.round(seatY + (dy / len) * dist),
@@ -109,23 +142,49 @@ export function penaltyPositions(
   }
   const centerIsBelow = TABLE_CENTER.y > seatY;
   const laneY = seatY + (centerIsBelow ? -PENALTY_LANE : PENALTY_LANE);
-  if (laneY >= PENALTY_EDGE) {
-    const half = ((Math.max(count, 1) - 1) * PENALTY_STEP) / 2;
-    const limit = LOGICAL_WIDTH - PENALTY_EDGE - half;
-    const origin = Math.min(Math.max(seatX, PENALTY_EDGE + half), limit) - half;
-    for (let index = 0; index < count; index += 1) {
-      positions.push({
-        x: Math.round(origin + index * PENALTY_STEP),
-        y: laneY,
-      });
+  const beside = laneY < PENALTY_EDGE;
+  const half = ((Math.max(count, 1) - 1) * PENALTY_STEP) / 2;
+  const dx = TABLE_CENTER.x - seatX;
+  const dy = TABLE_CENTER.y - seatY;
+  const len = Math.hypot(dx, dy) || 1;
+  for (let step = 0; step <= 220; step += 10) {
+    const shiftX = (dx / len) * step;
+    const shiftY = (dy / len) * step;
+    const row: { x: number; y: number }[] = [];
+    if (!beside) {
+      const limit = LOGICAL_WIDTH - PENALTY_EDGE - half;
+      const origin =
+        Math.min(Math.max(seatX + shiftX, PENALTY_EDGE + half), limit) - half;
+      const y = laneY + shiftY;
+      for (let index = 0; index < count; index += 1) {
+        row.push({
+          x: Math.round(origin + index * PENALTY_STEP),
+          y: Math.round(y),
+        });
+      }
+    } else {
+      for (let index = 0; index < count; index += 1) {
+        row.push({
+          x: Math.round(
+            seatX - PENALTY_SIDE_GAP - index * PENALTY_STEP + shiftX,
+          ),
+          y: Math.round(seatY + 10 + shiftY),
+        });
+      }
     }
-    return positions;
-  }
-  for (let index = 0; index < count; index += 1) {
-    positions.push({
-      x: Math.round(seatX - PENALTY_SIDE_GAP - index * PENALTY_STEP),
-      y: seatY + 10,
-    });
+    const onScreen = row.every(
+      (slot) =>
+        slot.x - CARD_DRAW / 2 >= 0 &&
+        slot.x + CARD_DRAW / 2 <= LOGICAL_WIDTH &&
+        slot.y - CARD_DRAW / 2 >= 0 &&
+        slot.y + CARD_DRAW / 2 <= 540,
+    );
+    const clear =
+      onScreen &&
+      row.every((slot) => missesFan(seatX, seatY, cardBox(slot.x, slot.y)));
+    if (clear) {
+      return row;
+    }
   }
   return positions;
 }

@@ -6,15 +6,23 @@ import {
 import { HAND_Y, TABLE_CENTER } from './bluff-layout';
 import {
   CARD_DRAW,
+  PASS_BUTTON,
+  PLAY_BUTTON,
   cardLift,
   faceForCard,
   finishedLine,
   legalCard,
-  opponentBackPositions,
   penaltyPositions,
   pointCards,
   trickPosition,
 } from './hearts-layout';
+import {
+  belowFelt,
+  fanCardRect,
+  insideCluster,
+  rectsOverlap,
+  seatFan,
+} from './table-presentation';
 
 function playState(): HeartsState {
   return {
@@ -52,20 +60,25 @@ describe('hearts layout', () => {
     expect(row[0]?.x).toBeLessThan(row[1]?.x ?? 0);
   });
 
-  it('keeps a played card off the card backs of the seat it came from', () => {
+  it('keeps a played card off the fan of the seat it came from', () => {
     for (const seat of [
       { x: 780, y: 310 },
       { x: 700, y: 128 },
       { x: 480, y: 72 },
     ]) {
       const slot = trickPosition(seat.x, seat.y);
-      const lastBack = opponentBackPositions(seat.x, seat.y, 4).at(-1);
-      expect(lastBack).toBeDefined();
-      const apart = Math.max(
-        Math.abs(slot.x - (lastBack?.x ?? 0)),
-        Math.abs(slot.y - (lastBack?.y ?? 0)),
-      );
-      expect(apart).toBeGreaterThanOrEqual(CARD_DRAW - 2);
+      const trick = {
+        x: slot.x - CARD_DRAW / 2,
+        y: slot.y - CARD_DRAW / 2,
+        w: CARD_DRAW,
+        h: CARD_DRAW,
+      };
+      const fan = seatFan(seat.x, seat.y, 13, 'Seat');
+      expect(fan.length).toBeGreaterThan(0);
+      expect(fan.every((card) => card.rotation !== 0)).toBe(true);
+      for (const card of fan) {
+        expect(rectsOverlap(trick, fanCardRect(card))).toBe(false);
+      }
     }
   });
 
@@ -94,20 +107,22 @@ describe('hearts layout', () => {
       { x: 480, y: 72 },
     ]) {
       const row = penaltyPositions(14, seat.x, seat.y, false);
-      const backs = opponentBackPositions(seat.x, seat.y, 4);
+      const backs = seatFan(seat.x, seat.y, 13, 'Seat');
       expect(row).toHaveLength(14);
       for (const slot of row) {
         expect(slot.x - CARD_DRAW / 2).toBeGreaterThanOrEqual(0);
         expect(slot.x + CARD_DRAW / 2).toBeLessThanOrEqual(960);
         expect(slot.y - CARD_DRAW / 2).toBeGreaterThanOrEqual(0);
         expect(slot.y + CARD_DRAW / 2).toBeLessThanOrEqual(540);
-      }
-      const first = row[0];
-      for (const back of backs) {
-        const clear =
-          Math.abs((first?.x ?? 0) - back.x) >= CARD_DRAW ||
-          Math.abs((first?.y ?? 0) - back.y) >= CARD_DRAW;
-        expect(clear).toBe(true);
+        const penalty = {
+          x: slot.x - CARD_DRAW / 2,
+          y: slot.y - CARD_DRAW / 2,
+          w: CARD_DRAW,
+          h: CARD_DRAW,
+        };
+        for (const back of backs) {
+          expect(rectsOverlap(penalty, fanCardRect(back))).toBe(false);
+        }
       }
     }
   });
@@ -135,6 +150,13 @@ describe('hearts layout', () => {
       cardLift({ legal: true, hovered: true, selected: false }),
     ).toBeGreaterThan(0);
     expect(cardLift({ legal: false, hovered: true, selected: true })).toBe(0);
+  });
+
+  it('keeps Pass and Play in the cluster', () => {
+    for (const button of [PASS_BUTTON, PLAY_BUTTON]) {
+      expect(belowFelt(button)).toBe(true);
+      expect(insideCluster(button)).toBe(true);
+    }
   });
 
   it('names the subscribed winner seat when the rules finish', () => {

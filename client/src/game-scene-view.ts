@@ -31,7 +31,7 @@ import {
   DUMMY_INCREMENT,
   type DummyIntent,
 } from '../../src/shared/games/dummy-counter';
-import { opponentNameAnchor, seatPlateWidth } from './bluff-layout';
+import { opponentNameAnchor, seatPlateWidth } from './table-presentation';
 import { BluffDriver } from './bluff-driver';
 import { CrazyEightsDriver } from './crazy-eights-driver';
 import { GoFishDriver } from './go-fish-driver';
@@ -456,9 +456,8 @@ export class GameScene extends ex.Scene {
     inVoice: boolean,
   ): void {
     const width = seatPlateWidth(name);
-    const bluffSeat =
-      !self && this.gameTypeOfTable() === this.bluffDriver.gameType;
-    const origin = bluffSeat
+    const opponent = !self;
+    const origin = opponent
       ? opponentNameAnchor(x, y, name)
       : { x: x - width / 2, y };
     const plate = new ex.Actor({
@@ -466,7 +465,7 @@ export class GameScene extends ex.Scene {
       anchor: ex.vec(0, 0),
       width,
       height: 20,
-      z: bluffSeat ? 80 : 6,
+      z: opponent ? 80 : 6,
     });
     plate.graphics.use(panelRect(width, 20, PLATE, self ? STROKE_HOT : STROKE));
     const text = canvasText(name, 8, self ? SELF : GOLD);

@@ -14,33 +14,41 @@ import {
   PILE_Y,
   RANK_FILL,
   RANK_FILL_CHOSEN,
-  bluffSeatFan,
-  fanCardBottom,
-  fanEdge,
   canChallenge,
   canPass,
   canPlay,
   cardLift,
   faceForCard,
-  fanCardRect,
   finishedLine,
   handPositions,
   leadRankHint,
   legalCard,
-  opponentCountAnchor,
-  opponentNameAnchor,
   pileFaceUp,
   pileNotice,
   pilePositions,
   rankButtonColors,
+  rankCallButtons,
   rankHintPos,
-  seatPlateWidth,
   selectedPlayCards,
   showRankPicker,
   tablePrompt,
   turnLine,
-  type CardRect,
 } from './bluff-layout';
+import {
+  PICKER_RIGHT,
+  PICKER_Y,
+  belowFelt,
+  coversCluster,
+  fanCardBottom,
+  fanCardRect,
+  fanEdge,
+  insideCluster,
+  opponentCountAnchor,
+  opponentNameAnchor,
+  seatFan,
+  seatPlateWidth,
+  type CardRect,
+} from './table-presentation';
 
 function overlaps(a: CardRect, b: CardRect): boolean {
   return (
@@ -93,7 +101,7 @@ describe('bluff layout', () => {
       if (!row.seat) {
         continue;
       }
-      const slots = bluffSeatFan(row.seat.x, row.seat.y, 17, 'Ada');
+      const slots = seatFan(row.seat.x, row.seat.y, 17, 'Ada');
       expect(slots).toHaveLength(17);
       let along = 0;
       let inward = 0;
@@ -131,7 +139,16 @@ describe('bluff layout', () => {
       };
       const fanAlong = along / slots.length;
       const labelAlong = row.edge === 'top' ? labelCenter.x : labelCenter.y;
-      expect(Math.abs(labelAlong - fanAlong)).toBeLessThan(12);
+      if (row.edge === 'right') {
+        const alongs = slots.map((slot) => slot.y);
+        const low = Math.min(...alongs);
+        const high = Math.max(...alongs);
+        expect(labelAlong).toBeGreaterThan(low);
+        expect(labelAlong).toBeLessThan(high);
+        expect(slots.every((slot) => !coversCluster(slot))).toBe(true);
+      } else {
+        expect(Math.abs(labelAlong - fanAlong)).toBeLessThan(12);
+      }
       for (const slot of slots) {
         const rect = fanCardRect(slot);
         expect(overlaps(nameRect, rect)).toBe(false);
@@ -232,13 +249,31 @@ describe('bluff layout', () => {
     expect(rankButtonColors(true).fill).not.toBe(rankButtonColors(false).fill);
     const hint = rankHintPos();
     expect(hint.x + BLUFF_RANK_HINT.length * 8).toBeLessThanOrEqual(
-      BLUFF_PLAY_BUTTON.x,
+      PICKER_RIGHT,
     );
-    expect(hint.y).toBeGreaterThanOrEqual(BLUFF_PLAY_BUTTON.y);
-    expect(hint.y).toBeLessThan(BLUFF_PLAY_BUTTON.y + BLUFF_PLAY_BUTTON.h);
+    expect(hint.y).toBeGreaterThanOrEqual(PICKER_Y);
+    expect(hint.y).toBeLessThan(PICKER_Y + BUTTON_HEIGHT);
+    const ranks = rankCallButtons();
+    expect(ranks.every((button) => button.y === PICKER_Y)).toBe(true);
+    expect(ranks[0]?.x).toBeLessThan(ranks.at(-1)?.x ?? 0);
+    const hintRect = {
+      x: hint.x,
+      y: hint.y,
+      w: BLUFF_RANK_HINT.length * 8,
+      h: 8,
+    };
+    for (const button of ranks) {
+      const rect = { x: button.x, y: button.y, w: button.w, h: button.h };
+      const overlapsHint =
+        hintRect.x < rect.x + rect.w &&
+        hintRect.x + hintRect.w > rect.x &&
+        hintRect.y < rect.y + rect.h &&
+        hintRect.y + hintRect.h > rect.y;
+      expect(overlapsHint).toBe(false);
+    }
   });
 
-  it('keeps turn controls low and clear of the hand', () => {
+  it('keeps turn controls in the cluster, below the felt and clear of the hand', () => {
     const hand = handPositions(26);
     const handRight = Math.max(...hand.map((slot) => slot.x)) + CARD_DRAW / 2;
     for (const button of [
@@ -247,12 +282,13 @@ describe('bluff layout', () => {
       BLUFF_CHALLENGE_BUTTON,
     ]) {
       expect(button.x).toBeGreaterThanOrEqual(handRight);
+      expect(belowFelt(button)).toBe(true);
+      expect(insideCluster(button)).toBe(true);
       expect(button.h).toBe(BUTTON_HEIGHT);
     }
+    expect(BLUFF_PASS_BUTTON.y).toBe(BLUFF_PLAY_BUTTON.y);
+    expect(BLUFF_PASS_BUTTON.x).toBeGreaterThan(BLUFF_PLAY_BUTTON.x);
     expect(BLUFF_CHALLENGE_BUTTON.y).toBeGreaterThan(BLUFF_PLAY_BUTTON.y);
-    expect(BLUFF_CHALLENGE_BUTTON.y + BLUFF_CHALLENGE_BUTTON.h).toBeGreaterThan(
-      500,
-    );
   });
 
   it('shows a full action only while that action is legal', () => {

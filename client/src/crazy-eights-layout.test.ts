@@ -4,6 +4,9 @@ import { CARD_DRAW, HAND_Y, PILE_X, PILE_Y } from './bluff-layout';
 import {
   DRAW_BUTTON,
   PLAY_BUTTON,
+  SUIT_BUTTON_H,
+  SUIT_BUTTON_Y,
+  SUIT_BUTTONS,
   finishedLine,
   handPositions,
   legalCard,
@@ -14,6 +17,12 @@ import {
   discardPositions,
   topIsWildEight,
 } from './crazy-eights-layout';
+import {
+  ACTION_CLUSTER,
+  PICKER_Y,
+  belowFelt,
+  insideCluster,
+} from './table-presentation';
 
 function state(overrides: Partial<CrazyEightsState> = {}): CrazyEightsState {
   return {
@@ -37,6 +46,17 @@ describe('crazy eights layout', () => {
     expect(pilePositions(1)).toEqual([{ x: PILE_X, y: PILE_Y }]);
     expect(stockPositions(10)).toHaveLength(3);
     expect(PLAY_BUTTON.y).toBe(DRAW_BUTTON.y);
+    expect(belowFelt(PLAY_BUTTON)).toBe(true);
+    expect(insideCluster(PLAY_BUTTON)).toBe(true);
+    expect(insideCluster(DRAW_BUTTON)).toBe(true);
+    expect(SUIT_BUTTON_Y).toBe(PICKER_Y);
+    expect(SUIT_BUTTONS[0]?.x).toBeLessThan(SUIT_BUTTONS[3]?.x ?? 0);
+    const lastSuit = SUIT_BUTTONS[3];
+    expect(lastSuit).toBeDefined();
+    if (lastSuit) {
+      expect(lastSuit.x + 64).toBeLessThanOrEqual(ACTION_CLUSTER.x);
+      expect(SUIT_BUTTON_H).toBe(PLAY_BUTTON.h);
+    }
   });
 
   it('lifts a match or an eight, and not a miss', () => {

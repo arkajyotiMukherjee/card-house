@@ -1,35 +1,20 @@
 import type { RummyState } from '../../src/shared/games/rummy';
-import { BUTTON_HEIGHT } from './button-style';
 import { CARD_DRAW, TABLE_CENTER } from './bluff-layout';
+import { TURN_LINE, actionBox } from './table-presentation';
 
 export const DISCARD_X = 400;
 export const DISCARD_Y = 248;
 export const STOCK_X = 580;
 export const STOCK_Y = 248;
 
-export const DRAW_STOCK_BUTTON = {
-  x: 748,
-  y: 400,
-  w: 96,
-  h: BUTTON_HEIGHT,
-} as const;
-export const DRAW_DISCARD_BUTTON = {
-  x: 852,
-  y: 400,
-  w: 96,
-  h: BUTTON_HEIGHT,
-} as const;
-export const MELD_BUTTON = { x: 748, y: 436, w: 96, h: BUTTON_HEIGHT } as const;
-export const DISCARD_BUTTON = {
-  x: 852,
-  y: 436,
-  w: 96,
-  h: BUTTON_HEIGHT,
-} as const;
+export const DRAW_STOCK_BUTTON = actionBox(0);
+export const DRAW_DISCARD_BUTTON = actionBox(1);
+export const MELD_BUTTON = actionBox(2);
+export const DISCARD_BUTTON = actionBox(3);
 
-/** Turn hint and deadwood points sit above the action buttons. */
-export const HINT_X = 748;
-export const HINT_Y = 362;
+/** Turn hint sits above the shared cluster. */
+export const HINT_X = TURN_LINE.x;
+export const HINT_Y = TURN_LINE.y;
 
 const DISCARD_SHOWN = 5;
 const DISCARD_STEP = 20;
@@ -93,24 +78,24 @@ const MELD_ZONES: readonly MeldZone[] = [
   {
     seatX: 780,
     seatY: 310,
-    left: 810,
-    right: 952,
-    y: 296,
+    left: 500,
+    right: 760,
+    y: 330,
     dir: -1,
-    flow: false,
+    flow: true,
   },
   {
     seatX: 700,
     seatY: 128,
-    left: 744,
-    right: 952,
-    y: 116,
+    left: 620,
+    right: 860,
+    y: 180,
     dir: 1,
-    flow: false,
+    flow: true,
   },
-  { seatX: 480, seatY: 72, left: 520, right: 664, y: 88, dir: 1, flow: true },
-  { seatX: 260, seatY: 128, left: 16, right: 220, y: 116, dir: 1, flow: false },
-  { seatX: 180, seatY: 310, left: 16, right: 140, y: 360, dir: 1, flow: false },
+  { seatX: 480, seatY: 72, left: 300, right: 540, y: 180, dir: 1, flow: true },
+  { seatX: 260, seatY: 128, left: 96, right: 280, y: 180, dir: 1, flow: true },
+  { seatX: 180, seatY: 310, left: 220, right: 460, y: 330, dir: 1, flow: true },
 ];
 
 function zoneFor(seatX: number, seatY: number, self: boolean): MeldZone {

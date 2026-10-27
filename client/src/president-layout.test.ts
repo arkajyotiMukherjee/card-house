@@ -5,6 +5,8 @@ import {
 } from '../../src/shared/games/president';
 import { PILE_X, PILE_Y, pilePositions } from './bluff-layout';
 import {
+  PASS_BUTTON,
+  PLAY_BUTTON,
   RANK_X,
   finishedLine,
   legalCard,
@@ -12,6 +14,7 @@ import {
   requirementLine,
   strengthSlots,
 } from './president-layout';
+import { belowFelt, insideCluster } from './table-presentation';
 
 const seats = [
   { seatIndex: 0, name: 'Ada' },
@@ -38,6 +41,13 @@ function playState(patch: Partial<PresidentState> = {}): PresidentState {
 }
 
 describe('president layout', () => {
+  it('keeps Play and Pass in the cluster', () => {
+    for (const button of [PLAY_BUTTON, PASS_BUTTON]) {
+      expect(belowFelt(button)).toBe(true);
+      expect(insideCluster(button)).toBe(true);
+    }
+  });
+
   it('draws the play pile in the center of the shared table', () => {
     expect(pilePositions(1)).toEqual([{ x: PILE_X, y: PILE_Y }]);
     expect(pilePositions(3)).toHaveLength(3);

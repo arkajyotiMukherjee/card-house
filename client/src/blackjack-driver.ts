@@ -45,6 +45,11 @@ import type { CardAtlas } from './card-atlas';
 import { ChipAtlas, type ChipDenomination } from './chip-atlas';
 import type { GameDriver, InputEvent, RenderContext } from './game-driver';
 import { LOGICAL_WIDTH } from './sheets';
+import {
+  OPPONENT_FAN_CARD,
+  OPPONENT_FAN_SCALE,
+  TURN_LINE,
+} from './table-presentation';
 
 const BUTTON = ex.Color.fromHex('#1b5c38');
 const BUTTON_DOWN = ex.Color.fromHex('#0e3d24');
@@ -122,9 +127,12 @@ interface CardRecord {
   actor: ex.Actor;
   restX: number;
   restY: number;
+  restRotation: number;
   faceUp: boolean;
   /** True for a card in the local player's own seat. */
   personal: boolean;
+  /** Other players' hands stay on the rail fan. The dealer row does not. */
+  fan: boolean;
   moving: boolean;
   placed: boolean;
 }
@@ -139,6 +147,19 @@ interface ButtonRecord {
 }
 
 function cardSprite(
+  atlas: CardAtlas,
+  cardId: string,
+  faceUp: boolean,
+  fan: boolean,
+): ex.Sprite {
+  const sprite = faceSprite(atlas, cardId, faceUp);
+  if (fan) {
+    sprite.scale = ex.vec(OPPONENT_FAN_SCALE, OPPONENT_FAN_SCALE);
+  }
+  return sprite;
+}
+
+function faceSprite(
   atlas: CardAtlas,
   cardId: string,
   faceUp: boolean,
@@ -330,7 +351,9 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
           : mine
             ? 'Your turn'
             : 'Wait';
-      this.labels.push(this.textActor(ctx, 700, 428, turn, GOLD));
+      this.labels.push(
+        this.textActor(ctx, TURN_LINE.x, TURN_LINE.y, turn, GOLD),
+      );
     }
     const dealerText = state.holeHidden
       ? 'Dealer'
@@ -350,9 +373,11 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
       const outcome = resultLabel(row.results);
       const text = outcome.length > 0 ? `${totals} ${outcome}` : totals;
       const at = totalLabelPosition(seat.x, seat.y, seat.name, text);
-      this.labels.push(
-        this.textActor(ctx, at.x, at.y, text, outcome ? GOLD : DIM),
-      );
+      const label = this.textActor(ctx, at.x, at.y, text, outcome ? GOLD : DIM);
+      if (!seat.self) {
+        label.z = 80;
+      }
+      this.labels.push(label);
     }
   }
 
@@ -366,6 +391,8 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
         delay: number;
         z: number;
         personal: boolean;
+        rotation: number;
+        fan: boolean;
       }
     >();
     const dealerSlots = dealerPositions(state.dealer.length);
@@ -382,6 +409,8 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
         delay: index * 16,
         z: 8 + index,
         personal: false,
+        rotation: 0,
+        fan: false,
       });
     }
     for (const seat of ctx.seats) {
@@ -401,6 +430,7 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
           row.hands.length,
           handIndex,
           hand.cards.length,
+          seat.name,
         );
         for (let index = 0; index < hand.cards.length; index += 1) {
           const cardId = hand.cards[index];
@@ -415,6 +445,8 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
             delay: index * 16,
             z: (seat.self ? 12 : 6) + index,
             personal: seat.self,
+            rotation: slot.rotation,
+            fan: !seat.self,
           });
         }
       }
@@ -439,41 +471,59 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
       delay: number;
       z: number;
       personal: boolean;
+      rotation: number;
+      fan: boolean;
     },
     ctx: RenderContext,
   ): void {
     const atlas = place.personal ? ctx.myCards : ctx.cards;
+    const size = place.fan ? OPPONENT_FAN_CARD : CARD_DRAW;
     let record = this.cards.get(cardId);
     if (!record) {
       const actor = new ex.Actor({
         pos: ex.vec(DEALER_X, DEALER_Y),
         anchor: ex.vec(0.5, 0.5),
-        width: CARD_DRAW,
-        height: CARD_DRAW,
+        width: size,
+        height: size,
+        rotation: place.rotation,
         z: place.z,
       });
-      actor.graphics.use(cardSprite(atlas, cardId, place.faceUp));
+      actor.graphics.use(cardSprite(atlas, cardId, place.faceUp, place.fan));
       ctx.scene.add(actor);
       record = {
         actor,
         restX: place.x,
         restY: place.y,
+        restRotation: place.rotation,
         faceUp: place.faceUp,
         personal: place.personal,
+        fan: place.fan,
         moving: false,
         placed: false,
       };
       this.cards.set(cardId, record);
     }
     record.actor.z = place.z;
-    if (record.faceUp !== place.faceUp || record.personal !== place.personal) {
+    record.actor.rotation = place.rotation;
+    if (
+      record.faceUp !== place.faceUp ||
+      record.personal !== place.personal ||
+      record.fan !== place.fan
+    ) {
       record.faceUp = place.faceUp;
       record.personal = place.personal;
-      record.actor.graphics.use(cardSprite(atlas, cardId, place.faceUp));
+      record.fan = place.fan;
+      record.actor.graphics.use(
+        cardSprite(atlas, cardId, place.faceUp, place.fan),
+      );
     }
-    const moved = record.restX !== place.x || record.restY !== place.y;
+    const moved =
+      record.restX !== place.x ||
+      record.restY !== place.y ||
+      record.restRotation !== place.rotation;
     record.restX = place.x;
     record.restY = place.y;
+    record.restRotation = place.rotation;
     if (!record.placed || moved) {
       const fromDeal = !record.placed;
       record.placed = true;

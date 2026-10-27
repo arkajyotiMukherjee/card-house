@@ -1,17 +1,15 @@
 import { BUTTON_HEIGHT } from './button-style';
 import {
   CARD_DRAW,
-  CHALLENGE_BUTTON,
   HAND_Y,
   PILE_X,
   PILE_Y,
-  PLAY_BUTTON,
   cardLift,
   faceForCard,
   handPositions,
-  opponentBackPositions,
   pilePositions,
 } from './bluff-layout';
+import { PICKER_RIGHT, PICKER_Y, actionBox } from './table-presentation';
 import {
   CRAZY_EIGHTS_SUIT_NAMES,
   cardIsPlayable,
@@ -26,26 +24,38 @@ export {
   HAND_Y,
   PILE_X,
   PILE_Y,
-  PLAY_BUTTON,
   cardLift,
   faceForCard,
   handPositions,
-  opponentBackPositions,
   pilePositions,
 };
 
-/** Draw sits in the same action slot Bluff uses for Challenge. */
-export const DRAW_BUTTON = CHALLENGE_BUTTON;
+/** Play and Draw sit in the shared cluster, two across. */
+export const PLAY_BUTTON = actionBox(0);
+export const DRAW_BUTTON = actionBox(1);
 
-export const SUIT_BUTTON_Y = 412;
+export const SUIT_BUTTON_Y = PICKER_Y;
 export const SUIT_BUTTON_W = 64;
 export const SUIT_BUTTON_H = BUTTON_HEIGHT;
 
+const SUIT_GAP = 4;
+const SUIT_SPAN = 4 * SUIT_BUTTON_W + 3 * SUIT_GAP;
+const SUIT_START = PICKER_RIGHT - SUIT_SPAN;
+
+/** Suit picker in the green band, left of the cluster. */
 export const SUIT_BUTTONS = [
-  { suit: 'S', label: 'Spade', x: 688 },
-  { suit: 'H', label: 'Heart', x: 756 },
-  { suit: 'D', label: 'Diam', x: 824 },
-  { suit: 'C', label: 'Club', x: 892 },
+  { suit: 'S', label: 'Spade', x: SUIT_START },
+  { suit: 'H', label: 'Heart', x: SUIT_START + (SUIT_BUTTON_W + SUIT_GAP) },
+  {
+    suit: 'D',
+    label: 'Diam',
+    x: SUIT_START + 2 * (SUIT_BUTTON_W + SUIT_GAP),
+  },
+  {
+    suit: 'C',
+    label: 'Club',
+    x: SUIT_START + 3 * (SUIT_BUTTON_W + SUIT_GAP),
+  },
 ] as const satisfies readonly {
   suit: CrazyEightsSuit;
   label: string;

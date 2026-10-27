@@ -7,12 +7,17 @@ import {
   CARD_DRAW,
   PILE_X,
   PILE_Y,
-  PLAY_BUTTON,
   cardLift,
   faceForCard,
   handPositions,
-  opponentBackPositions,
 } from './bluff-layout';
+import {
+  OPPONENT_FAN_CARD,
+  OPPONENT_FAN_SCALE,
+  TURN_LINE,
+  fanGapLine,
+  seatFan,
+} from './table-presentation';
 import {
   BUTTON_FONT_SIZE,
   BUTTON_PRESS_SHIFT,
@@ -38,6 +43,7 @@ import {
   partnershipBoard,
   seatBidText,
   seatTeam,
+  PLAY_BUTTON,
   trickPosition,
   wonTrickPosition,
 } from './spades-layout';
@@ -436,7 +442,9 @@ export class SpadesDriver implements GameDriver<SpadesState> {
         );
       } else {
         const turn = mine ? 'Your play' : 'Wait';
-        this.labels.push(this.textActor(ctx, 748, 428, turn, GOLD));
+        this.labels.push(
+          this.textActor(ctx, TURN_LINE.x, TURN_LINE.y, turn, GOLD),
+        );
       }
     }
     for (const seat of ctx.seats) {
@@ -444,17 +452,18 @@ export class SpadesDriver implements GameDriver<SpadesState> {
       if (text.length === 0) {
         continue;
       }
-      const plateWidth = Math.max(48, seat.name.length * 8 + 16);
       const color = seatTeam(seat.seatIndex) === 'ns' ? NS_TEXT : EW_TEXT;
-      this.labels.push(
-        this.textActor(
-          ctx,
-          seat.x + plateWidth / 2 + 6,
-          seat.y + 6,
-          text,
-          color,
-        ),
-      );
+      const at = seat.self
+        ? {
+            x: Math.round(seat.x - (text.length * 8) / 2),
+            y: seat.y - 14,
+          }
+        : fanGapLine(seat.x, seat.y, seat.name, text, 0);
+      const label = this.textActor(ctx, at.x, at.y, text, color);
+      if (!seat.self) {
+        label.z = 80;
+      }
+      this.labels.push(label);
     }
   }
 
@@ -816,13 +825,16 @@ export class SpadesDriver implements GameDriver<SpadesState> {
   }
 
   private syncBacks(state: SpadesState, ctx: RenderContext): void {
-    const desired = new Map<string, { x: number; y: number; z: number }>();
+    const desired = new Map<
+      string,
+      { x: number; y: number; z: number; rotation: number }
+    >();
     for (const seat of ctx.seats) {
       if (seat.self) {
         continue;
       }
       const count = state.hands[String(seat.seatIndex)]?.length ?? 0;
-      const slots = opponentBackPositions(seat.x, seat.y, count);
+      const slots = seatFan(seat.x, seat.y, count, seat.name);
       for (let index = 0; index < slots.length; index += 1) {
         const slot = slots[index];
         if (!slot) {
@@ -832,6 +844,7 @@ export class SpadesDriver implements GameDriver<SpadesState> {
           x: slot.x,
           y: slot.y,
           z: 4 + index,
+          rotation: slot.rotation,
         });
       }
     }
@@ -843,17 +856,20 @@ export class SpadesDriver implements GameDriver<SpadesState> {
       }
     }
     for (const [key, place] of desired) {
-      const target = `${place.x}:${place.y}`;
+      const target = `${place.x}:${place.y}:${place.rotation}`;
       let actor = this.backs.get(key);
       if (!actor) {
         actor = new ex.Actor({
           pos: ex.vec(PILE_X, PILE_Y),
           anchor: ex.vec(0.5, 0.5),
-          width: CARD_DRAW,
-          height: CARD_DRAW,
+          width: OPPONENT_FAN_CARD,
+          height: OPPONENT_FAN_CARD,
           z: place.z,
+          rotation: place.rotation,
         });
-        actor.graphics.use(ctx.cards.back());
+        const back = ctx.cards.back();
+        back.scale = ex.vec(OPPONENT_FAN_SCALE, OPPONENT_FAN_SCALE);
+        actor.graphics.use(back);
         ctx.scene.add(actor);
         this.backs.set(key, actor);
         this.backTargets.set(key, target);
@@ -865,6 +881,7 @@ export class SpadesDriver implements GameDriver<SpadesState> {
         continue;
       }
       actor.z = place.z;
+      actor.rotation = place.rotation;
       if (this.backTargets.get(key) === target) {
         continue;
       }

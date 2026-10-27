@@ -18,6 +18,8 @@ import {
 } from './button-style';
 import { chipsImage } from './boot-scene';
 import {
+  BUTTON as GIVE_UP,
+  BUTTON_DOWN as GIVE_UP_DOWN,
   DIM,
   GOLD,
   STROKE,
@@ -53,9 +55,16 @@ import {
   faceForPokerCard,
   finishedLine,
   holePositions,
-  seatLabelOrigin,
   seatNote,
 } from './poker-layout';
+import {
+  OPPONENT_FAN_CARD,
+  OPPONENT_FAN_SCALE,
+  TURN_LINE,
+  fanGapLine,
+  isGiveUpControl,
+  seatPlateWidth,
+} from './table-presentation';
 
 const BUTTON = ex.Color.fromHex('#1b5c38');
 const BUTTON_DOWN = ex.Color.fromHex('#0e3d24');
@@ -130,6 +139,8 @@ interface CardRecord {
   faceUp: boolean;
   /** True for a card in the local player's own hole cards. */
   personal: boolean;
+  /** Opponent hole cards stay on the rail fan, even at showdown. */
+  fan: boolean;
   home: { x: number; y: number };
   restZ: number;
 }
@@ -143,6 +154,19 @@ interface ButtonRecord {
 }
 
 function cardSprite(
+  atlas: CardAtlas,
+  cardId: string,
+  faceUp: boolean,
+  fan: boolean,
+): ex.Sprite {
+  const sprite = faceSprite(atlas, cardId, faceUp);
+  if (fan) {
+    sprite.scale = ex.vec(OPPONENT_FAN_SCALE, OPPONENT_FAN_SCALE);
+  }
+  return sprite;
+}
+
+function faceSprite(
   atlas: CardAtlas,
   cardId: string,
   faceUp: boolean,
@@ -349,7 +373,10 @@ export class PokerDriver implements GameDriver<PokerState> {
 
   private addButtons(ctx: RenderContext): void {
     for (const spec of ACTION_BUTTONS) {
-      const face = panelRect(spec.box.w, spec.box.h, BUTTON, STROKE);
+      const giveUp = isGiveUpControl(spec.label);
+      const fill = giveUp ? GIVE_UP : BUTTON;
+      const down = giveUp ? GIVE_UP_DOWN : BUTTON_DOWN;
+      const face = panelRect(spec.box.w, spec.box.h, fill, STROKE);
       const actor = new ex.Actor({
         pos: ex.vec(spec.box.x, spec.box.y),
         anchor: ex.vec(0, 0),
@@ -371,15 +398,15 @@ export class PokerDriver implements GameDriver<PokerState> {
       });
       actor.on('pointerleave', () => {
         face.strokeColor = STROKE;
-        face.color = BUTTON;
+        face.color = fill;
         caption.pos = ex.vec(rest.x, rest.y);
       });
       actor.on('pointerdown', () => {
-        face.color = BUTTON_DOWN;
+        face.color = down;
         caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
       });
       actor.on('pointerup', () => {
-        face.color = BUTTON;
+        face.color = fill;
         caption.pos = ex.vec(rest.x, rest.y);
         const current = this.state;
         const context = this.ctx;
@@ -440,7 +467,9 @@ export class PokerDriver implements GameDriver<PokerState> {
       ) {
         hint = `Call ${pokerCallAmount(state, ctx.meSeatIndex)}`;
       }
-      this.labels.push(this.textActor(ctx, 612, 428, hint, GOLD));
+      this.labels.push(
+        this.textActor(ctx, TURN_LINE.x, TURN_LINE.y, hint, GOLD),
+      );
     }
     this.labels.push(
       this.textActor(ctx, POT_X - 32, POT_Y - 28, `Pot ${state.pot}`, GOLD),
@@ -451,15 +480,28 @@ export class PokerDriver implements GameDriver<PokerState> {
         continue;
       }
       const marker = state.dealerSeatIndex === seat.seatIndex ? ' D' : '';
-      const origin = seatLabelOrigin(seat.x, seat.y, seat.name);
-      this.labels.push(
-        this.textActor(ctx, origin.x, origin.y, `${row.chips}${marker}`, DIM),
-      );
+      const chips = `${row.chips}${marker}`;
       const note = seatNote(state, seat.seatIndex);
+      const origin = seat.self
+        ? {
+            x: seat.x + seatPlateWidth(seat.name) / 2 + 6,
+            y: seat.y + 6,
+          }
+        : fanGapLine(seat.x, seat.y, seat.name, chips, 0);
+      const chipLabel = this.textActor(ctx, origin.x, origin.y, chips, DIM);
+      if (!seat.self) {
+        chipLabel.z = 80;
+      }
+      this.labels.push(chipLabel);
       if (note) {
-        this.labels.push(
-          this.textActor(ctx, origin.x, origin.y + 12, note, GOLD),
-        );
+        const noteAt = seat.self
+          ? { x: origin.x, y: origin.y + 12 }
+          : fanGapLine(seat.x, seat.y, seat.name, note, 1);
+        const noteLabel = this.textActor(ctx, noteAt.x, noteAt.y, note, GOLD);
+        if (!seat.self) {
+          noteLabel.z = 80;
+        }
+        this.labels.push(noteLabel);
       }
     }
   }
@@ -474,6 +516,8 @@ export class PokerDriver implements GameDriver<PokerState> {
         z: number;
         opacity: number;
         personal: boolean;
+        rotation: number;
+        fan: boolean;
       }
     >();
     const board = boardPositions(state.board.length);
@@ -490,6 +534,8 @@ export class PokerDriver implements GameDriver<PokerState> {
         z: 8 + index,
         opacity: 1,
         personal: false,
+        rotation: 0,
+        fan: false,
       });
     }
     const reveal = state.phase === 'finished' && state.end === 'showdown';
@@ -508,7 +554,13 @@ export class PokerDriver implements GameDriver<PokerState> {
       if (!row) {
         continue;
       }
-      const slots = holePositions(seat.self, seat.x, seat.y, row.hole.length);
+      const slots = holePositions(
+        seat.self,
+        seat.x,
+        seat.y,
+        row.hole.length,
+        seat.name,
+      );
       for (let index = 0; index < row.hole.length; index += 1) {
         const cardId = row.hole[index];
         const slot = slots[index];
@@ -526,6 +578,8 @@ export class PokerDriver implements GameDriver<PokerState> {
           z: (seat.self ? 14 : 6) + index,
           opacity: row.folded ? FOLDED_CARD : 1,
           personal: seat.self,
+          rotation: slot.rotation,
+          fan: !seat.self,
         });
       }
     }
@@ -618,21 +672,25 @@ export class PokerDriver implements GameDriver<PokerState> {
       z: number;
       opacity: number;
       personal: boolean;
+      rotation: number;
+      fan: boolean;
     },
     ctx: RenderContext,
   ): void {
     const atlas = place.personal ? ctx.myCards : ctx.cards;
+    const size = place.fan ? OPPONENT_FAN_CARD : CARD_DRAW;
     let record = this.cards.get(cardId);
     if (!record) {
       const actor = new ex.Actor({
         pos: ex.vec(place.x, place.y),
         anchor: ex.vec(0.5, 0.5),
-        width: CARD_DRAW,
-        height: CARD_DRAW,
+        width: size,
+        height: size,
+        rotation: place.rotation,
         z: place.z,
       });
       actor.pointer.useGraphicsBounds = false;
-      actor.graphics.use(cardSprite(atlas, cardId, place.faceUp));
+      actor.graphics.use(cardSprite(atlas, cardId, place.faceUp, place.fan));
       actor.on('pointerenter', (event) => {
         this.followHole(cardId, event.worldPos.x, true);
       });
@@ -673,6 +731,7 @@ export class PokerDriver implements GameDriver<PokerState> {
         actor,
         faceUp: place.faceUp,
         personal: place.personal,
+        fan: place.fan,
         home: place,
         restZ: place.z,
       };
@@ -682,14 +741,22 @@ export class PokerDriver implements GameDriver<PokerState> {
     record.restZ = place.z;
     record.actor.graphics.opacity = place.opacity;
     record.actor.scale = ex.vec(1, 1);
+    record.actor.rotation = place.rotation;
     const lift = this.droppable.has(cardId)
       ? this.handHover.current(cardId)
       : 0;
     placeCardLift(record.actor, place.x, place.y, place.z, lift);
-    if (record.faceUp !== place.faceUp || record.personal !== place.personal) {
+    if (
+      record.faceUp !== place.faceUp ||
+      record.personal !== place.personal ||
+      record.fan !== place.fan
+    ) {
       record.faceUp = place.faceUp;
       record.personal = place.personal;
-      record.actor.graphics.use(cardSprite(atlas, cardId, place.faceUp));
+      record.fan = place.fan;
+      record.actor.graphics.use(
+        cardSprite(atlas, cardId, place.faceUp, place.fan),
+      );
     }
   }
 

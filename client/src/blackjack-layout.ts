@@ -1,10 +1,10 @@
-import { BUTTON_HEIGHT } from './button-style';
 import type { CardFace } from './card-atlas';
 import {
   rankOfBlackjackCard,
   type BlackjackState,
 } from '../../src/shared/games/blackjack';
 import { handPositions } from './bluff-layout';
+import { actionBox, fanEdge, fanGapLine, seatFan } from './table-presentation';
 
 export const DEALER_X = 480;
 export const DEALER_Y = 200;
@@ -13,53 +13,21 @@ export const CARD_DRAW = 64;
 export const BANNER_Y = 248;
 
 const DEALER_STEP = 36;
-const SEAT_HAND_DROP = 56;
-const SEAT_HAND_STEP = 22;
-const SPLIT_HAND_STEP = 12;
-const SPLIT_SEAT_OFFSET = 56;
 const SPLIT_SELF_OFFSET = 170;
 const SPLIT_SELF_STEP = 36;
+/** How far a split hand slides along the rail so the two fans stay apart. */
+const SPLIT_ALONG = 120;
 const PLATE_MIN_WIDTH = 48;
 const CHIP_GAP = 22;
 
-export const HIT_BUTTON = { x: 700, y: 448, w: 56, h: BUTTON_HEIGHT } as const;
-export const STAND_BUTTON = {
-  x: 762,
-  y: 448,
-  w: 64,
-  h: BUTTON_HEIGHT,
-} as const;
-export const DOUBLE_BUTTON = {
-  x: 832,
-  y: 448,
-  w: 64,
-  h: BUTTON_HEIGHT,
-} as const;
-export const SPLIT_BUTTON = {
-  x: 902,
-  y: 448,
-  w: 52,
-  h: BUTTON_HEIGHT,
-} as const;
+export const HIT_BUTTON = actionBox(0);
+export const STAND_BUTTON = actionBox(1);
+export const DOUBLE_BUTTON = actionBox(2);
+export const SPLIT_BUTTON = actionBox(3);
 
-export const BET_10_BUTTON = {
-  x: 748,
-  y: 448,
-  w: 64,
-  h: BUTTON_HEIGHT,
-} as const;
-export const BET_25_BUTTON = {
-  x: 818,
-  y: 448,
-  w: 64,
-  h: BUTTON_HEIGHT,
-} as const;
-export const BET_50_BUTTON = {
-  x: 888,
-  y: 448,
-  w: 64,
-  h: BUTTON_HEIGHT,
-} as const;
+export const BET_10_BUTTON = actionBox(0);
+export const BET_25_BUTTON = actionBox(1);
+export const BET_50_BUTTON = actionBox(2);
 
 function row(
   centerX: number,
@@ -92,8 +60,8 @@ export function plateWidth(name: string): number {
 }
 
 /**
- * Your cards use the shared bottom-hand row. Other seats keep a row just under
- * their name plate, clear of the dealer row. A split sets the two hands apart.
+ * Your cards use the shared bottom-hand row. Other seats fan on the rail,
+ * faces up, clear of the dealer row. A split sets the two hands apart.
  */
 export function playerCardSlots(
   self: boolean,
@@ -102,12 +70,13 @@ export function playerCardSlots(
   handCount: number,
   handIndex: number,
   cardCount: number,
-): { x: number; y: number }[] {
+  name = 'Seat',
+): { x: number; y: number; rotation: number }[] {
   const split = handCount > 1;
   const sign = handIndex === 0 ? -1 : 1;
   if (self) {
     if (!split) {
-      return handPositions(cardCount);
+      return handPositions(cardCount).map((slot) => ({ ...slot, rotation: 0 }));
     }
     const slots = handPositions(1);
     return row(
@@ -115,38 +84,48 @@ export function playerCardSlots(
       slots[0]?.y ?? seatY + 52,
       cardCount,
       SPLIT_SELF_STEP,
-    );
+    ).map((slot) => ({ ...slot, rotation: 0 }));
   }
-  if (!split) {
-    return row(seatX, seatY + SEAT_HAND_DROP, cardCount, SEAT_HAND_STEP);
+  const edge = fanEdge(seatX, seatY);
+  const along =
+    split && (edge === 'top' || edge === 'bottom') ? sign * SPLIT_ALONG : 0;
+  const slots = seatFan(seatX + along, seatY, cardCount, name);
+  if (!split || edge === 'top' || edge === 'bottom') {
+    return slots;
   }
-  return row(
-    seatX + sign * SPLIT_SEAT_OFFSET,
-    seatY + SEAT_HAND_DROP,
-    cardCount,
-    SPLIT_HAND_STEP,
-  );
+  const inward = edge === 'right' ? -1 : 1;
+  const shift = handIndex === 0 ? 0 : 72;
+  return slots.map((slot) => ({
+    ...slot,
+    x: slot.x + inward * shift,
+  }));
 }
 
-/** Stake chips, just right of the seat name plate. */
+/** Stake chips. Opponents keep them in the fan gap. Yours sit beside the plate. */
 export function betAnchor(
   seatX: number,
   seatY: number,
   name: string,
 ): { x: number; y: number } {
+  if (fanEdge(seatX, seatY) !== 'bottom') {
+    return fanGapLine(seatX, seatY, name, `${name}`, 0);
+  }
   return {
     x: Math.round(seatX + plateWidth(name) / 2 + CHIP_GAP),
     y: seatY + 2,
   };
 }
 
-/** Totals and result, written just left of the seat name plate. */
+/** Totals sit in the fan gap for an opponent, and left of your own plate. */
 export function totalLabelPosition(
   seatX: number,
   seatY: number,
   name: string,
   text: string,
 ): { x: number; y: number } {
+  if (fanEdge(seatX, seatY) !== 'bottom') {
+    return fanGapLine(seatX, seatY, name, text, 1);
+  }
   return {
     x: Math.round(seatX - plateWidth(name) / 2 - 8 - text.length * 8),
     y: seatY + 6,

@@ -1,14 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { GoFishState } from '../../src/shared/games/go-fish';
+import { HAND_Y, PILE_X, PILE_Y } from './bluff-layout';
 import {
-  CARD_DRAW,
-  HAND_Y,
-  PILE_X,
-  PILE_Y,
-  opponentBackPositions,
-} from './bluff-layout';
-import {
-  BACK_PUSH,
   BOOK_ART_W,
   BOOK_STEP,
   BOOK_Y,
@@ -18,12 +11,17 @@ import {
   bookSlots,
   finishedLine,
   legalCard,
-  opponentBackAnchor,
   opponentBookOrigin,
-  plateWidth,
   selfBookOrigin,
   stockPosition,
 } from './go-fish-layout';
+import {
+  fanCardRect,
+  opponentNameAnchor,
+  rectsOverlap,
+  seatFan,
+  seatPlateWidth,
+} from './table-presentation';
 
 function playState(turnSeatIndex: number | null): GoFishState {
   return {
@@ -50,41 +48,61 @@ describe('go fish layout', () => {
     expect(books.every((slot) => slot.y === BOOK_Y)).toBe(true);
   });
 
-  it('keeps other books and ask buttons off the bottom hand', () => {
-    const origin = opponentBookOrigin(780, 310, 2);
+  it('keeps other books and ask chips off the bottom hand', () => {
+    const origin = opponentBookOrigin(780, 310, 2, 'Bea');
     const books = bookSlots(origin.x, origin.y, 2);
     expect(books.every((slot) => slot.y < HAND_Y - 40)).toBe(true);
-    const ask = askButtonBox(780, 310);
+    const ask = askButtonBox(780, 310, 'Bea');
     expect(ask.y + ask.h).toBeLessThan(HAND_Y - 40);
     expect(askSeat('ask:1')).toBe(1);
     expect(askSeat('AS')).toBeNull();
   });
 
-  it('puts other books beside the plate, away from the table center', () => {
-    const width = plateWidth('Bea');
-    const right = opponentBookOrigin(780, 310, 3, width);
-    expect(right.x - BOOK_ART_W / 2).toBeGreaterThanOrEqual(780 + width / 2);
-    const left = opponentBookOrigin(180, 310, 3, width);
-    const span = BOOK_ART_W + BOOK_STEP * 2;
-    expect(left.x - BOOK_ART_W / 2 + span).toBeLessThanOrEqual(180 - width / 2);
-    const top = opponentBookOrigin(480, 72, 2, width);
-    expect(top.x - BOOK_ART_W / 2).toBeGreaterThanOrEqual(480 + width / 2);
+  it('puts books inward of the fan label and the ask chip in the gap', () => {
+    for (const seat of [
+      { x: 780, y: 310, name: 'Bea' },
+      { x: 180, y: 310, name: 'Bea' },
+      { x: 480, y: 72, name: 'Bea' },
+    ]) {
+      const label = opponentNameAnchor(seat.x, seat.y, seat.name);
+      const plate = {
+        x: label.x,
+        y: label.y,
+        w: seatPlateWidth(seat.name),
+        h: 20,
+      };
+      const origin = opponentBookOrigin(seat.x, seat.y, 3, seat.name);
+      const books = bookSlots(origin.x, origin.y, 3);
+      const fan = seatFan(seat.x, seat.y, 7, seat.name);
+      const ask = askButtonBox(seat.x, seat.y, seat.name);
+      expect(rectsOverlap(ask, plate)).toBe(false);
+      for (const slot of books) {
+        const book = {
+          x: slot.x - BOOK_ART_W / 2,
+          y: slot.y - 16,
+          w: BOOK_ART_W,
+          h: 32,
+        };
+        expect(rectsOverlap(book, plate)).toBe(false);
+        for (const card of fan) {
+          expect(rectsOverlap(book, fanCardRect(card))).toBe(false);
+        }
+      }
+      for (const card of fan) {
+        expect(rectsOverlap(ask, fanCardRect(card))).toBe(false);
+      }
+      expect(ask.y).toBeGreaterThan(label.y);
+    }
+    expect(BOOK_STEP).toBeGreaterThan(0);
   });
 
   it('keeps a long row of books on the screen', () => {
-    const origin = opponentBookOrigin(780, 310, 13, plateWidth('Bea'));
+    const origin = opponentBookOrigin(780, 310, 13, 'Bea');
     const last = bookSlots(origin.x, origin.y, 13).at(-1);
     expect((last?.x ?? 0) + BOOK_ART_W / 2).toBeLessThanOrEqual(960);
-  });
-
-  it('fans other card backs past the ask button', () => {
-    const ask = askButtonBox(480, 72);
-    const anchor = opponentBackAnchor(480, 72);
-    expect(anchor.y - 72).toBe(BACK_PUSH);
-    const first = opponentBackPositions(anchor.x, anchor.y, 1)[0];
-    expect((first?.y ?? 0) - CARD_DRAW / 2).toBeGreaterThanOrEqual(
-      ask.y + ask.h,
-    );
+    expect(
+      (bookSlots(origin.x, origin.y, 13)[0]?.x ?? 0) - BOOK_ART_W / 2,
+    ).toBeGreaterThanOrEqual(0);
   });
 
   it('lifts a card only on your turn when it is in your hand', () => {
