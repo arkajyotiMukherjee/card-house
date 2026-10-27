@@ -26,6 +26,7 @@ import {
 import { presidentRules } from '../../src/shared/games/president.ts';
 import { rummyRules } from '../../src/shared/games/rummy.ts';
 import { spadesRules } from '../../src/shared/games/spades.ts';
+import { pokerStrategy } from '../../src/shared/games/bots/poker.ts';
 import { strategyFor } from '../../src/shared/games/bots/registry.ts';
 import type {
   GameSeat,
@@ -37,6 +38,7 @@ import {
   POKER_HAND_PAUSE_MICROS,
   botIsNext,
   playBotTurns,
+  tableBeatDelay,
 } from './bot-runner.ts';
 
 function assert(condition: boolean, message: string): asserts condition {
@@ -212,8 +214,24 @@ assert(
 );
 assert(BOT_BEAT_MICROS === 800_000n, 'bot beats are 800ms apart');
 assert(
-  POKER_HAND_PAUSE_MICROS === BOT_BEAT_MICROS * 3n,
-  'a finished poker hand stays up for three beats',
+  tableBeatDelay('bot') === BOT_BEAT_MICROS,
+  'a bot turn still waits 800ms',
+);
+assert(
+  tableBeatDelay('street') === BOT_BEAT_MICROS,
+  'a poker street still waits 800ms',
+);
+assert(
+  POKER_HAND_PAUSE_MICROS === 5_000_000n,
+  'a finished poker hand stays up for 5 seconds',
+);
+assert(
+  tableBeatDelay('hand') === 5_000_000n,
+  'the next hand is not dealt before 5 seconds',
+);
+assert(
+  tableBeatDelay('hand') > BOT_BEAT_MICROS * 3n,
+  'the hand pause is longer than the old three beats',
 );
 const oneBeat = playBotTurns('bluff', bluffOpening, bothBots, applyBluff, 1);
 assert(oneBeat.applied.length === 1, 'one reducer publishes one bot play');
@@ -263,10 +281,14 @@ const pokerBeat = playBotTurns(
     if (!who) {
       throw new Error('poker missing seat');
     }
-    return pokerRules.applyIntent(current as PokerState, intent as PokerIntent, {
-      seat: who,
-      now: 1,
-    });
+    return pokerRules.applyIntent(
+      current as PokerState,
+      intent as PokerIntent,
+      {
+        seat: who,
+        now: 1,
+      },
+    );
   },
   1,
 );
@@ -275,8 +297,191 @@ assert(
   pokerBeat.pending === true,
   'the next poker seat waits for the next beat',
 );
-assert(phaseOf(pokerBeat.state) === 'play', 'one beat does not finish the flop');
+assert(
+  phaseOf(pokerBeat.state) === 'play',
+  'one beat does not finish the flop',
+);
 
+for (const variation of ['holdem', 'omaha', 'oklahoma'] as const) {
+  const stateJson = JSON.stringify({ variation });
+  const intent = openingIntent('poker', loose(pokerRules), 2, stateJson);
+  assert(intent !== undefined, `${variation} opening intent`);
+  const done = runBots('poker', loose(pokerRules), 2, stateJson);
+  assert(
+    phaseOf(done.state) === 'finished',
+    `${variation} bot hand finished, saw ${phaseOf(done.state)}`,
+  );
+  if (variation === 'holdem') {
+    assert(
+      done.intents.some(
+        (intent) =>
+          !!intent &&
+          typeof intent === 'object' &&
+          'type' in intent &&
+          (intent.type === 'bet' || intent.type === 'raise'),
+      ),
+      'holdem bots bet or raise from a strong hand',
+    );
+  }
+  if (variation === 'oklahoma') {
+    assert(
+      done.intents.some(
+        (intent) =>
+          !!intent &&
+          typeof intent === 'object' &&
+          'type' in intent &&
+          intent.type === 'discard',
+      ),
+      'oklahoma bots discard',
+    );
+  }
+}
+
+function pokerRow(
+  chips: number,
+  hole: string[],
+  streetBet: number,
+  folded = false,
+): PokerState['seats'][string] {
+  return {
+    chips,
+    hole,
+    streetBet,
+    committed: streetBet,
+    folded,
+    allIn: false,
+    acted: folded,
+    mustDiscard: false,
+  };
+}
+
+function pokerSpot(overrides: Partial<PokerState> = {}): PokerState {
+  return {
+    phase: 'play',
+    variation: 'holdem',
+    street: 'preflop',
+    step: 'bet',
+    handNumber: 1,
+    deck: [],
+    board: [],
+    seats: {},
+    order: [0, 1, 2],
+    dealerSeatIndex: 0,
+    turnSeatIndex: 1,
+    currentBet: 20,
+    minRaise: 20,
+    pot: 30,
+    pots: [],
+    winnerSeatIndexes: [],
+    hands: {},
+    end: null,
+    smallBlind: 10,
+    bigBlind: 20,
+    limit: 'no-limit',
+    ...overrides,
+  };
+}
+
+const afterHumanFold = pokerSpot({
+  seats: {
+    '0': pokerRow(990, ['2C', '7D'], 0, true),
+    '1': pokerRow(990, ['AH', 'KH'], 10),
+    '2': pokerRow(980, ['7C', '2D'], 20),
+  },
+});
+const made = pokerStrategy.choose(afterHumanFold, 1);
+assert(made.type !== 'fold', 'a made hand continues after the human folds');
+assert(
+  JSON.stringify(pokerStrategy.choose(afterHumanFold, 1)) ===
+    JSON.stringify(made),
+  'the same cards choose the same action',
+);
+pokerRules.applyIntent(afterHumanFold, made, { seat: seat(1), now: 1 });
+const drawSpot = pokerSpot({
+  street: 'flop',
+  board: ['2H', '9H', '4C'],
+  currentBet: 40,
+  minRaise: 20,
+  pot: 90,
+  turnSeatIndex: 1,
+  seats: {
+    '0': pokerRow(900, ['AS', 'KD'], 0, true),
+    '1': pokerRow(960, ['QH', 'JH'], 0),
+    '2': pokerRow(920, ['8C', '3D'], 40),
+  },
+});
+const draw = pokerStrategy.choose(drawSpot, 1);
+assert(draw.type !== 'fold', 'a drawing hand continues after the human folds');
+pokerRules.applyIntent(drawSpot, draw, { seat: seat(1), now: 1 });
+const keptPlaying = playBotTurns(
+  'poker',
+  afterHumanFold,
+  [
+    { seatIndex: 0, isBot: false },
+    { seatIndex: 1, isBot: true },
+    { seatIndex: 2, isBot: true },
+  ],
+  (current, intent, seatIndex) =>
+    pokerRules.applyIntent(current as PokerState, intent as PokerIntent, {
+      seat: seat(seatIndex),
+      now: 1,
+    }),
+  4,
+);
+assert(keptPlaying.error === undefined, 'a bot amount stays inside the rules');
+assert(keptPlaying.applied[0]?.seatIndex === 1, 'the made hand acts next');
+assert(
+  keptPlaying.applied[0] !== undefined &&
+    typeof keptPlaying.applied[0].intent === 'object' &&
+    keptPlaying.applied[0].intent !== null &&
+    'type' in keptPlaying.applied[0].intent &&
+    keptPlaying.applied[0].intent.type !== 'fold',
+  'the made hand does not fold because the human folded',
+);
+const freeCheck = pokerSpot({
+  street: 'flop',
+  board: ['AH', 'KD', '9S'],
+  currentBet: 0,
+  pot: 40,
+  turnSeatIndex: 1,
+  seats: {
+    '0': pokerRow(980, ['QC', 'JS'], 0, true),
+    '1': pokerRow(980, ['7C', '2D'], 0),
+    '2': pokerRow(980, ['8S', '3H'], 0),
+  },
+});
+assert(
+  pokerStrategy.choose(freeCheck, 1).type === 'check',
+  'a bot does not fold a free check',
+);
+const weakBet = pokerSpot({
+  street: 'flop',
+  board: ['AH', 'KD', '9S'],
+  currentBet: 40,
+  pot: 80,
+  turnSeatIndex: 1,
+  seats: {
+    '0': pokerRow(940, ['QC', 'JS'], 40),
+    '1': pokerRow(980, ['7C', '2D'], 0),
+    '2': pokerRow(980, ['8S', '3H'], 0),
+  },
+});
+const weakAfterFold = pokerSpot({
+  ...weakBet,
+  seats: {
+    ...weakBet.seats,
+    '0': pokerRow(940, ['QC', 'JS'], 40, true),
+  },
+});
+assert(
+  JSON.stringify(pokerStrategy.choose(weakBet, 1)) ===
+    JSON.stringify(pokerStrategy.choose(weakAfterFold, 1)),
+  'another seat folding does not change the decision',
+);
+assert(
+  pokerStrategy.choose(weakBet, 1).type === 'fold',
+  'a weak hand folds when the bet is not free',
+);
 const games: ReadonlyArray<{
   gameType: string;
   rules: LooseRules;
@@ -307,29 +512,6 @@ for (const game of games) {
     assert(
       phaseOf(done.state) === 'finished',
       `${game.gameType} bot hand finished, saw ${phaseOf(done.state)}`,
-    );
-  }
-}
-
-for (const variation of ['holdem', 'omaha', 'oklahoma'] as const) {
-  const stateJson = JSON.stringify({ variation });
-  const intent = openingIntent('poker', loose(pokerRules), 2, stateJson);
-  assert(intent !== undefined, `${variation} opening intent`);
-  const done = runBots('poker', loose(pokerRules), 2, stateJson);
-  assert(
-    phaseOf(done.state) === 'finished',
-    `${variation} bot hand finished, saw ${phaseOf(done.state)}`,
-  );
-  if (variation === 'oklahoma') {
-    assert(
-      done.intents.some(
-        (intent) =>
-          !!intent &&
-          typeof intent === 'object' &&
-          'type' in intent &&
-          intent.type === 'discard',
-      ),
-      'oklahoma bots discard',
     );
   }
 }

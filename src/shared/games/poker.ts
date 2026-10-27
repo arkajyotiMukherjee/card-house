@@ -155,7 +155,7 @@ export const pokerGameDefinition = {
   minPlayers: 2,
   maxPlayers: 8,
   howToPlay:
-    "# Poker\n\nTexas Hold'em, Omaha, and Oklahoma share one table. Choose the variation when you create the table. Blinds are 10 and 20. Each player starts with 1000 chips.\n\n## Texas Hold'em\n\nTwo hole cards. The board is a flop of three, then the turn, then the river. At showdown you may use any mix of hole cards and community cards. Betting is no-limit.\n\n## Omaha\n\nFour hole cards. The board and the betting rounds match Hold'em. At showdown you must use exactly two hole cards and three community cards. Betting is pot-limit.\n\n## Oklahoma\n\nThe deal starts like Omaha, with four hole cards. Before betting on the flop, each player still in discards one hole card. Before betting on the turn, each player still in discards one more. Showdown uses the two remaining hole cards and exactly three community cards. Betting is pot-limit.\n\n## Betting\n\nThe button posts the small blind and the next seat posts the big blind. On your turn you may fold, check, call, bet, or raise. A pot-limit bet or raise cannot exceed the pot. The hand ends when everyone else folds, or at showdown. The best hand wins. Side pots pay players who were all-in for less. The next hand deals on its own while two or more players are still seated. A player with no chips sits out and can stay or leave.",
+    "# Poker\n\nTexas Hold'em, Omaha, and Oklahoma share one table. Choose the variation when you create the table. Blinds are 10 and 20. Each player starts with 1000 chips.\n\n## Texas Hold'em\n\nTwo hole cards. The board is a flop of three, then the turn, then the river. At showdown you may use any mix of hole cards and community cards. Betting is no-limit.\n\n## Omaha\n\nFour hole cards. The board and the betting rounds match Hold'em. At showdown you must use exactly two hole cards and three community cards. Betting is pot-limit.\n\n## Oklahoma\n\nThe deal starts like Omaha, with four hole cards. Before betting on the flop, each player still in discards one hole card. Before betting on the turn, each player still in discards one more. Showdown uses the two remaining hole cards and exactly three community cards. Betting is pot-limit.\n\n## Betting\n\nThe button posts the small blind and the next seat posts the big blind. Those seats are marked SB and BB for the whole hand, including after a fold. On your turn you may fold, check, call, bet, or raise. Bet and Raise ask for an amount from the minimum through all-in. Call matches the current bet. A pot-limit bet or raise cannot exceed the pot. The hand ends when everyone else folds, or at showdown. The best hand wins. Side pots pay players who were all-in for less. The finished hand stays up so the winner and any showdown cards can be read, then the next hand deals while two or more players are still seated. A player with no chips sits out and can stay or leave.",
 } satisfies GameDefinition;
 
 function asRecord(value: unknown, message: string): Record<string, unknown> {
@@ -623,6 +623,38 @@ function blindSeats(
   return { small, big };
 }
 
+/** Seats that posted the blinds for this hand. Null before the deal. */
+export function pokerBlindSeats(
+  state: PokerState,
+): { small: number; big: number } | null {
+  if (
+    state.phase === 'lobby' ||
+    state.dealerSeatIndex === null ||
+    state.order.length < 2
+  ) {
+    return null;
+  }
+  return blindSeats(state.order, state.dealerSeatIndex);
+}
+
+/** `SB` or `BB` for the current hand. A fold does not clear it. */
+export function pokerBlindMark(
+  state: PokerState,
+  seatIndex: number,
+): 'SB' | 'BB' | null {
+  const blinds = pokerBlindSeats(state);
+  if (!blinds) {
+    return null;
+  }
+  if (seatIndex === blinds.small) {
+    return 'SB';
+  }
+  if (seatIndex === blinds.big) {
+    return 'BB';
+  }
+  return null;
+}
+
 function aliveCount(state: PokerState): number {
   let count = 0;
   for (const index of state.order) {
@@ -1054,6 +1086,65 @@ export function pokerRaiseTo(
     return null;
   }
   return target;
+}
+
+export interface PokerStakeRange {
+  min: number;
+  max: number;
+}
+
+function cappedStreetTotal(
+  state: PokerState,
+  seatIndex: number,
+): number | null {
+  const seat = state.seats[seatKey(seatIndex)];
+  if (!seat) {
+    return null;
+  }
+  let max = seat.streetBet + seat.chips;
+  if (state.limit === 'pot-limit') {
+    max = Math.min(max, potLimitCeiling(state, seatIndex));
+  }
+  return max;
+}
+
+/**
+ * Legal opening bets, as street totals.
+ * The minimum is the big blind, or all-in when the stack is shorter.
+ * The maximum is all-in, capped by the pot in a pot-limit game.
+ */
+export function pokerBetRange(
+  state: PokerState,
+  seatIndex: number,
+): PokerStakeRange | null {
+  const min = pokerBetTo(state, seatIndex);
+  const seat = state.seats[seatKey(seatIndex)];
+  const max = cappedStreetTotal(state, seatIndex);
+  if (min === null || !seat || max === null || max < min) {
+    return null;
+  }
+  const allIn = seat.streetBet + seat.chips;
+  if (min < state.bigBlind && min !== allIn) {
+    return null;
+  }
+  return { min, max };
+}
+
+/**
+ * Legal raises, as the new street total.
+ * The minimum is a full min-raise, or a short all-in when that is all the stack can post.
+ * The maximum is all-in, capped by the pot in a pot-limit game.
+ */
+export function pokerRaiseRange(
+  state: PokerState,
+  seatIndex: number,
+): PokerStakeRange | null {
+  const min = pokerRaiseTo(state, seatIndex);
+  const max = cappedStreetTotal(state, seatIndex);
+  if (min === null || max === null || max < min) {
+    return null;
+  }
+  return { min, max };
 }
 
 export function pokerCanDiscard(state: PokerState, seatIndex: number): boolean {

@@ -1,7 +1,14 @@
 import type { CardFace } from './card-atlas';
 import { rankOfPokerCard, type PokerState } from '../../src/shared/games/poker';
 import { handPositions } from './bluff-layout';
-import { FELT_BOTTOM, actionBox, seatFan } from './table-presentation';
+import {
+  FELT_BOTTOM,
+  actionBox,
+  fanGapLine,
+  opponentNameAnchor,
+  seatFan,
+  seatPlateWidth,
+} from './table-presentation';
 
 export const BOARD_Y = 188;
 export const BOARD_STEP = 70;
@@ -23,6 +30,80 @@ export const CHECK_BUTTON = actionBox(1);
 export const CALL_BUTTON = actionBox(2);
 export const BET_BUTTON = actionBox(3);
 export const RAISE_BUTTON = actionBox(4);
+
+/** Amount stepper that replaces the action buttons while a bet or raise is open. */
+export const STAKE_DOWN = actionBox(0);
+export const STAKE_UP = actionBox(1);
+export const STAKE_AMOUNT = actionBox(2);
+export const STAKE_MAX = actionBox(3);
+export const STAKE_CONFIRM = actionBox(4);
+export const STAKE_CANCEL = actionBox(5);
+
+/** Chip step for the amount control. Raises move by the current min-raise. */
+export function stakeStep(state: PokerState, kind: 'bet' | 'raise'): number {
+  const raw = kind === 'raise' ? state.minRaise : state.bigBlind;
+  return raw > 0 ? raw : 1;
+}
+
+/** Move a stake and keep it inside the legal range. The ends are reachable. */
+export function moveStake(
+  amount: number,
+  delta: number,
+  min: number,
+  max: number,
+): number {
+  const next = amount + delta;
+  if (next > max) {
+    return max;
+  }
+  if (next < min) {
+    return min;
+  }
+  return next;
+}
+
+/**
+ * Chip line in the fan gap, with SB or BB on that same line beside the name.
+ * A blind mark shares the row with the stack so it stays off the cards.
+ */
+export function blindChipLine(
+  self: boolean,
+  seatX: number,
+  seatY: number,
+  name: string,
+  chips: string,
+  mark: 'SB' | 'BB' | null,
+): {
+  mark: { x: number; y: number } | null;
+  chips: { x: number; y: number };
+} {
+  if (self) {
+    const base = {
+      x: Math.round(seatX + seatPlateWidth(name) / 2 + 6),
+      y: seatY + 6,
+    };
+    if (!mark) {
+      return { mark: null, chips: base };
+    }
+    return {
+      mark: base,
+      chips: { x: base.x + mark.length * 8 + 4, y: base.y },
+    };
+  }
+  const chipsAt = fanGapLine(seatX, seatY, name, chips, 0);
+  if (!mark) {
+    return { mark: null, chips: chipsAt };
+  }
+  const plate = opponentNameAnchor(seatX, seatY, name);
+  const text = `${mark} ${chips}`;
+  const start = Math.round(
+    plate.x + (seatPlateWidth(name) - text.length * 8) / 2,
+  );
+  return {
+    mark: { x: start, y: chipsAt.y },
+    chips: { x: start + (mark.length + 1) * 8, y: chipsAt.y },
+  };
+}
 
 /**
  * Scale of a community card while it flips.
