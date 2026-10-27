@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   applyChatKey,
   applyChatText,
+  showTableChatButton,
+  tableChatButtonVisible,
   tableChatLine,
   tableChatMessagesForTable,
+  tableIsSolo,
   type TableChatRow,
 } from './table-chat';
 
@@ -68,6 +71,29 @@ describe('tableChatMessagesForTable', () => {
   it('does not leak a message from a different table', () => {
     const messages = tableChatMessagesForTable(rows, 'table_a');
     expect(messages.some((row) => row.tableId === 'table_b')).toBe(false);
+  });
+});
+
+describe('table chat button', () => {
+  const tables = [
+    { id: 'table_solo', lobbyId: 'lobby_solo' },
+    { id: 'table_open', lobbyId: 'lobby_open' },
+  ];
+  const lobbies = [
+    { id: 'lobby_solo', solo: true },
+    { id: 'lobby_open', solo: false },
+  ];
+
+  it('hides Chat on a solo table', () => {
+    expect(tableIsSolo('table_solo', tables, lobbies)).toBe(true);
+    expect(showTableChatButton(true)).toBe(false);
+    expect(tableChatButtonVisible('table_solo', tables, lobbies)).toBe(false);
+  });
+
+  it('keeps Chat on a multiplayer table', () => {
+    expect(tableIsSolo('table_open', tables, lobbies)).toBe(false);
+    expect(showTableChatButton(false)).toBe(true);
+    expect(tableChatButtonVisible('table_open', tables, lobbies)).toBe(true);
   });
 });
 
