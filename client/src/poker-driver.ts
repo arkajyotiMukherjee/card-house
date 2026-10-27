@@ -8,6 +8,7 @@ import {
   pokerCanCheck,
   pokerCanDiscard,
   pokerCanFold,
+  pokerHoleFaceUp,
   pokerRaiseTo,
   type PokerState,
 } from '../../src/shared/games/poker';
@@ -47,7 +48,9 @@ import {
   POT_Y,
   RAISE_BUTTON,
   BANNER_Y,
+  BOARD_SLOTS,
   bannerX,
+  boardFlip,
   boardPositions,
   droppedPositions,
   faceForPokerCard,
@@ -125,6 +128,15 @@ class FlashActor extends ex.Actor {
   }
 }
 
+interface BoardSlot {
+  actor: ex.Actor;
+  cardId: string | null;
+  faceUp: boolean;
+  /** Elapsed flip time. Null when the card is resting. */
+  flipMs: number | null;
+  showingFace: boolean;
+}
+
 interface CardRecord {
   actor: ex.Actor;
   faceUp: boolean;
@@ -197,14 +209,16 @@ function actionEnabled(
 
 /**
  * Poker table on the shared seat layout.
- * Your hole cards are face up, other hole cards are backs until showdown,
- * the board and pot sit in the center, and the action buttons sit at the bottom.
+ * Your hole cards are face up. Other hole cards stay down unless that seat
+ * reached showdown. Five community cards sit face down and flip in place.
+ * The board and pot sit in the center, and the action buttons sit at the bottom.
  */
 export class PokerDriver implements GameDriver<PokerState> {
   readonly name = 'Poker';
   readonly gameType = POKER_GAME_TYPE;
 
   private cards = new Map<string, CardRecord>();
+  private board: BoardSlot[] = [];
   private chipActors: ex.Actor[] = [];
   private labels: ex.Actor[] = [];
   private buttons: ButtonRecord[] = [];
@@ -414,7 +428,7 @@ export class PokerDriver implements GameDriver<PokerState> {
     const variation = POKER_VARIATION_LABELS[state.variation];
     this.labels.push(this.textActor(ctx, 16, 56, variation, GOLD));
     if (state.phase === 'finished') {
-      const line = finishedLine(state, ctx.seats) ?? 'Finished';
+      const line = finishedLine(state, ctx.seats) ?? 'Hand over';
       this.labels.push(
         this.textActor(ctx, bannerX(line), BANNER_Y, line, GOLD),
       );
@@ -476,23 +490,7 @@ export class PokerDriver implements GameDriver<PokerState> {
         personal: boolean;
       }
     >();
-    const board = boardPositions(state.board.length);
-    for (let index = 0; index < state.board.length; index += 1) {
-      const cardId = state.board[index];
-      const slot = board[index];
-      if (!cardId || !slot) {
-        continue;
-      }
-      desired.set(cardId, {
-        x: slot.x,
-        y: slot.y,
-        faceUp: true,
-        z: 8 + index,
-        opacity: 1,
-        personal: false,
-      });
-    }
-    const reveal = state.phase === 'finished' && state.end === 'showdown';
+    this.syncBoard(state, ctx);
     const mine =
       ctx.meSeatIndex !== null && state.turnSeatIndex === ctx.meSeatIndex;
     const canDrop =
@@ -522,7 +520,7 @@ export class PokerDriver implements GameDriver<PokerState> {
         desired.set(cardId, {
           x: slot.x,
           y: slot.y,
-          faceUp: seat.self || reveal,
+          faceUp: seat.self || pokerHoleFaceUp(state, seat.seatIndex),
           z: (seat.self ? 14 : 6) + index,
           opacity: row.folded ? FOLDED_CARD : 1,
           personal: seat.self,
@@ -729,6 +727,7 @@ export class PokerDriver implements GameDriver<PokerState> {
     }
     this.hoverClock = startHandHoverClock(ctx.scene, (elapsedMs) => {
       this.easeHand(elapsedMs);
+      this.easeBoard(elapsedMs);
     });
   }
 
@@ -866,11 +865,102 @@ export class PokerDriver implements GameDriver<PokerState> {
     return actor;
   }
 
+  /** Five backs stay in the flop, turn, and river slots, then flip in place. */
+  private syncBoard(state: PokerState, ctx: RenderContext): void {
+    const slots = boardPositions(BOARD_SLOTS);
+    for (let index = 0; index < slots.length; index += 1) {
+      const place = slots[index];
+      const cardId = state.board[index] ?? null;
+      if (!place) {
+        continue;
+      }
+      let slot = this.board[index];
+      if (!slot) {
+        const actor = new ex.Actor({
+          pos: ex.vec(place.x, place.y),
+          anchor: ex.vec(0.5, 0.5),
+          width: CARD_DRAW,
+          height: CARD_DRAW,
+          z: 8 + index,
+        });
+        const faceUp = cardId !== null;
+        actor.graphics.use(cardSprite(ctx.cards, cardId ?? '', faceUp));
+        ctx.scene.add(actor);
+        slot = {
+          actor,
+          cardId,
+          faceUp,
+          flipMs: null,
+          showingFace: faceUp,
+        };
+        this.board[index] = slot;
+        continue;
+      }
+      slot.actor.pos = ex.vec(place.x, place.y);
+      slot.actor.z = 8 + index;
+      if (cardId === null) {
+        slot.flipMs = null;
+        slot.faceUp = false;
+        slot.cardId = null;
+        slot.showingFace = false;
+        slot.actor.scale = ex.vec(1, 1);
+        slot.actor.graphics.use(ctx.cards.back());
+        continue;
+      }
+      if (slot.cardId === cardId) {
+        continue;
+      }
+      if (slot.faceUp || slot.showingFace) {
+        slot.cardId = cardId;
+        slot.faceUp = true;
+        slot.showingFace = true;
+        slot.flipMs = null;
+        slot.actor.scale = ex.vec(1, 1);
+        slot.actor.graphics.use(cardSprite(ctx.cards, cardId, true));
+        continue;
+      }
+      slot.cardId = cardId;
+      slot.flipMs = 0;
+      slot.faceUp = false;
+      slot.showingFace = false;
+      slot.actor.scale = ex.vec(1, 1);
+      slot.actor.graphics.use(ctx.cards.back());
+    }
+  }
+
+  private easeBoard(elapsedMs: number): void {
+    const ctx = this.ctx;
+    if (!ctx) {
+      return;
+    }
+    for (const slot of this.board) {
+      if (!slot || slot.flipMs === null || slot.cardId === null) {
+        continue;
+      }
+      slot.flipMs += elapsedMs;
+      const frame = boardFlip(slot.flipMs);
+      if (frame.face && !slot.showingFace) {
+        slot.actor.graphics.use(cardSprite(ctx.cards, slot.cardId, true));
+        slot.showingFace = true;
+      }
+      slot.actor.scale = ex.vec(frame.scaleX, 1);
+      if (frame.done) {
+        slot.flipMs = null;
+        slot.faceUp = true;
+        slot.actor.scale = ex.vec(1, 1);
+      }
+    }
+  }
+
   private clearCards(): void {
     for (const record of this.cards.values()) {
       record.actor.kill();
     }
     this.cards.clear();
+    for (const slot of this.board) {
+      slot?.actor.kill();
+    }
+    this.board = [];
     this.hovered = null;
     this.droppable = new Set();
     this.handHover.clear();

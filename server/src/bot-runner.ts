@@ -6,6 +6,9 @@ export const BOT_TURN_CAP = 32;
 /** Gap between bot plays, so each one arrives as its own update. */
 export const BOT_BEAT_MICROS = 800_000n;
 
+/** How long a finished poker hand stays up before the next deal. */
+export const POKER_HAND_PAUSE_MICROS = BOT_BEAT_MICROS * 3n;
+
 export interface BotActor {
   seatIndex: number;
   isBot: boolean;

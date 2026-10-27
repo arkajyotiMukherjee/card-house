@@ -28,6 +28,7 @@ function state(overrides: Partial<PokerState> = {}): PokerState {
     variation: 'holdem',
     street: 'flop',
     step: 'bet',
+    handNumber: 1,
     deck: [],
     board: ['2C', '3D', '4H'],
     seats: {

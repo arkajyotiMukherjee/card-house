@@ -4,6 +4,7 @@ import { HAND_Y } from './bluff-layout';
 import {
   BOARD_Y,
   bannerX,
+  boardFlip,
   boardPositions,
   droppedPositions,
   faceForPokerCard,
@@ -19,6 +20,7 @@ function finished(winners: number[]): PokerState {
     variation: 'holdem',
     street: 'river',
     step: 'bet',
+    handNumber: 1,
     deck: [],
     board: ['AS', 'KS', 'QS', 'JS', '10S'],
     seats: {},
@@ -45,6 +47,10 @@ describe('poker layout', () => {
     expect(board.every((slot) => slot.y === BOARD_Y)).toBe(true);
     expect(board[0]?.x).toBeLessThan(board[2]?.x ?? 0);
     expect(board[2]?.x).toBe(480);
+    expect(boardFlip(0)).toEqual({ scaleX: 1, face: false, done: false });
+    expect(boardFlip(140).face).toBe(true);
+    expect(boardFlip(140).scaleX).toBe(0);
+    expect(boardFlip(280)).toEqual({ scaleX: 1, face: true, done: true });
     const mine = holePositions(true, 480, 456, 2);
     expect(mine).toHaveLength(2);
     expect(mine.every((slot) => slot.y === HAND_Y)).toBe(true);
@@ -63,11 +69,15 @@ describe('poker layout', () => {
       { seatIndex: 0, name: 'Ada' },
       { seatIndex: 1, name: 'Bea' },
     ];
-    expect(finishedLine(finished([0]), seats)).toBe('Winner seat 0 Ada');
+    expect(finishedLine(finished([0]), seats)).toBe('Winner is Ada');
     expect(finishedLine(finished([0, 1]), seats)).toBe(
-      'Winners seat 0 Ada, seat 1 Bea',
+      'Winners are Ada and Bea',
     );
+    expect(finishedLine(finished([0]), seats)).not.toMatch(/\d/);
     expect(finishedLine({ ...finished([]), phase: 'play' }, seats)).toBeNull();
+    expect(finishedLine(finished([0]), [{ seatIndex: 0, name: '' }])).toBe(
+      'Winner',
+    );
   });
 
   it('keeps the chip label right of the seat plate and the banner clear of side seats', () => {
@@ -76,7 +86,7 @@ describe('poker layout', () => {
     expect(label.x).toBeGreaterThan(
       (holePositions(true, 480, 456, 4).at(-1)?.x ?? 0) + 32,
     );
-    expect(bannerX('Winner seat 0 Ada')).toBeGreaterThanOrEqual(280);
+    expect(bannerX('Winner is Ada')).toBeGreaterThanOrEqual(280);
     expect(bannerX('x'.repeat(200))).toBe(280);
   });
 
