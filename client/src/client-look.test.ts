@@ -27,6 +27,15 @@ describe('table scene look', () => {
     expect(paint.background).toBe('#145c38');
   });
 
+  it('paints a saved black background as the felt margin', () => {
+    const storage = memoryStorage();
+    saveBackground('client-1', 'black', storage);
+    const paint = tableScenePaint('client-1', storage);
+    expect(paint.table).toBe('green');
+    expect(paint.background).toBe('#000000');
+    expect(paint.background).toBe(BACKGROUND_HEX.black);
+  });
+
   it('survives a reload and is what the table scene paints', () => {
     const storage = memoryStorage();
     saveTheme('client-1', 'purple', storage);
