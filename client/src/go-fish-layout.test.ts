@@ -84,6 +84,7 @@ describe('go fish layout', () => {
           h: 32,
         };
         expect(rectsOverlap(book, plate)).toBe(false);
+        expect(rectsOverlap(book, ask)).toBe(false);
         for (const card of fan) {
           expect(rectsOverlap(book, fanCardRect(card))).toBe(false);
         }
@@ -120,7 +121,7 @@ describe('go fish layout', () => {
         { ...playState(null), phase: 'finished', winnerSeatIndex: 0 },
         seats,
       ),
-    ).toBe('Winner seat 0 Ada');
+    ).toBe('Ada wins - 0 books');
     expect(
       finishedLine(
         { ...playState(null), phase: 'finished', winnerSeatIndex: null },

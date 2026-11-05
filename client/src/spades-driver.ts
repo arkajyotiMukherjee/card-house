@@ -1,3 +1,5 @@
+import { bindButtonPress } from './button-press';
+import { isMobileDevice } from './mobile-shell';
 import * as ex from 'excalibur';
 import {
   SPADES_GAME_TYPE,
@@ -18,9 +20,9 @@ import {
   seatFan,
 } from './table-presentation';
 import {
-  BUTTON_FONT_SIZE,
   BUTTON_PRESS_SHIFT,
   buttonCaptionPos,
+  buttonFontSize,
 } from './button-style';
 import { chipAtlas, pixelFont } from './boot-scene';
 import type { CardAtlas } from './card-atlas';
@@ -30,16 +32,23 @@ import {
   localHandHitBoxes,
   type CardHitBox,
 } from './card-hit';
-import { HandHover, placeCardLift, startHandHoverClock } from './hand-hover';
+import {
+  HandHover,
+  canInspectPointer,
+  placeCardLift,
+  resetCardLift,
+  startHandHoverClock,
+} from './hand-hover';
 import { LOGICAL_WIDTH } from './sheets';
 import {
   BID_PROMPT,
-  PARTNERSHIP_BOARD,
   bidButtonBox,
   bidButtonLabel,
   finishedLine,
   legalCard,
   partnershipBoard,
+  partnershipLinePosition,
+  handResultLine,
   seatBidText,
   seatTeam,
   PLAY_BUTTON,
@@ -209,8 +218,18 @@ export class SpadesDriver implements GameDriver<SpadesState> {
   private sweptKey: string | null = null;
   private state: SpadesState | null = null;
   private ctx: RenderContext | null = null;
+  private handResult: string | null = null;
 
   render(state: SpadesState, ctx: RenderContext): void {
+    if (
+      this.state?.tableId !== state.tableId ||
+      this.state?.handNumber !== state.handNumber
+    ) {
+      this.handResult = handResultLine(this.state, state);
+      this.selected = null;
+      this.hover = null;
+      this.handHover.clear();
+    }
     this.state = state;
     this.ctx = ctx;
     this.ensureHoverClock(ctx);
@@ -221,7 +240,7 @@ export class SpadesDriver implements GameDriver<SpadesState> {
       }
       this.buttonsReady = true;
     }
-    this.placeControls(state);
+    this.placeControls(state, ctx);
     this.syncLabels(state, ctx);
     this.syncChips(state, ctx);
     if (state.phase === 'lobby') {
@@ -239,6 +258,9 @@ export class SpadesDriver implements GameDriver<SpadesState> {
       return;
     }
     if (ctx.inputBlocked() && event.type !== 'pointerleave') {
+      return;
+    }
+    if (ctx.meSeatIndex === null || state.turnSeatIndex !== ctx.meSeatIndex) {
       return;
     }
     if (event.target.startsWith('bid:') && event.type === 'pointerup') {
@@ -365,6 +387,7 @@ export class SpadesDriver implements GameDriver<SpadesState> {
     this.stopHoverClock();
     this.state = null;
     this.ctx = null;
+    this.handResult = null;
   }
 
   private sendPlay(state: SpadesState, ctx: RenderContext): void {
@@ -379,9 +402,13 @@ export class SpadesDriver implements GameDriver<SpadesState> {
     ctx.sendIntent({ type: 'play', card });
   }
 
-  private placeControls(state: SpadesState): void {
-    const bidding = state.phase === 'play' && state.stage === 'bid';
-    const playing = state.phase === 'play' && state.stage === 'trick';
+  private placeControls(state: SpadesState, ctx: RenderContext): void {
+    const acting =
+      state.phase === 'play' &&
+      ctx.meSeatIndex !== null &&
+      state.turnSeatIndex === ctx.meSeatIndex;
+    const bidding = acting && state.stage === 'bid';
+    const playing = acting && state.stage === 'trick';
     for (const button of this.bidButtons) {
       const box = bidButtonBox(button.tricks);
       button.actor.pos = bidding ? ex.vec(box.x, box.y) : ex.vec(box.x, -300);
@@ -417,17 +444,18 @@ export class SpadesDriver implements GameDriver<SpadesState> {
     ];
     for (let index = 0; index < lines.length; index += 1) {
       const line = lines[index];
-      const row = PARTNERSHIP_BOARD.rows[index];
-      if (!line || row === undefined || !line.text) {
+      if (!line || !line.text) {
         continue;
       }
+      const position = partnershipLinePosition(index);
       this.labels.push(
         this.textActor(
           ctx,
-          PARTNERSHIP_BOARD.x,
-          PARTNERSHIP_BOARD.y + row,
+          position.x,
+          position.y,
           line.text,
           line.color,
+          position.size,
         ),
       );
     }
@@ -435,6 +463,19 @@ export class SpadesDriver implements GameDriver<SpadesState> {
       const mine =
         ctx.meSeatIndex !== null && state.turnSeatIndex === ctx.meSeatIndex;
       if (state.stage === 'bid') {
+        if (this.handResult) {
+          const size = isMobileDevice() ? 12 : 8;
+          this.labels.push(
+            this.textActor(
+              ctx,
+              Math.round((LOGICAL_WIDTH - this.handResult.length * size) / 2),
+              isMobileDevice() ? 396 : 350,
+              this.handResult,
+              GOLD,
+              size,
+            ),
+          );
+        }
         const turn = mine ? 'Your bid' : 'Wait';
         this.labels.push(
           this.textActor(ctx, BID_PROMPT.x, BID_PROMPT.y, turn, GOLD),
@@ -467,7 +508,7 @@ export class SpadesDriver implements GameDriver<SpadesState> {
   }
 
   private syncChips(state: SpadesState, ctx: RenderContext): void {
-    if (state.phase === 'lobby') {
+    if (state.phase === 'lobby' || isMobileDevice()) {
       for (const chip of this.chips) {
         chip.kill();
       }
@@ -477,22 +518,10 @@ export class SpadesDriver implements GameDriver<SpadesState> {
     if (this.chips.length > 0) {
       return;
     }
-    this.chips.push(
-      this.chipActor(
-        ctx,
-        'green',
-        PARTNERSHIP_BOARD.chipX,
-        PARTNERSHIP_BOARD.y + PARTNERSHIP_BOARD.chipRows[0],
-      ),
-    );
-    this.chips.push(
-      this.chipActor(
-        ctx,
-        'blue',
-        PARTNERSHIP_BOARD.chipX,
-        PARTNERSHIP_BOARD.y + PARTNERSHIP_BOARD.chipRows[1],
-      ),
-    );
+    const ns = partnershipLinePosition(1);
+    const ew = partnershipLinePosition(4);
+    this.chips.push(this.chipActor(ctx, 'green', ns.x - 40, ns.y));
+    this.chips.push(this.chipActor(ctx, 'blue', ew.x + 180, ew.y));
   }
 
   private chipActor(
@@ -616,17 +645,32 @@ export class SpadesDriver implements GameDriver<SpadesState> {
       actor.pointer.useGraphicsBounds = false;
       actor.graphics.use(cardSprite(atlas, cardId, place.faceUp));
       actor.on('pointerenter', (event) => {
+        if (!canInspectPointer(event, ctx.scene.engine.input.pointers)) return;
         this.followHand(cardId, event.worldPos.x, true);
         this.onCard('pointerenter', cardId);
       });
       actor.on('pointermove', (event) => {
+        if (!canInspectPointer(event, ctx.scene.engine.input.pointers)) return;
+        this.handHover.touch.move(event);
         this.followHand(cardId, event.worldPos.x, false);
+      });
+      actor.on('pointerdown', (event) => {
+        this.handHover.touch.start(event);
+        this.followHand(cardId, event.worldPos.x, true);
+      });
+      actor.on('pointercancel', () => {
+        this.handHover.touch.cancel();
+        this.handHover.release();
       });
       actor.on('pointerleave', () => {
         this.handHover.leave(cardId);
         this.onCard('pointerleave', cardId);
       });
       actor.on('pointerup', (event) => {
+        if (event.pointerType === ex.PointerType.Touch) {
+          this.handHover.release();
+          if (!this.handHover.touch.isTap(event)) return;
+        }
         if (
           !isFrontHandCard(
             cardId,
@@ -680,7 +724,7 @@ export class SpadesDriver implements GameDriver<SpadesState> {
     delay: number,
   ): void {
     record.moving = true;
-    record.actor.graphics.offset = ex.vec(0, 0);
+    resetCardLift(record.actor);
     record.actor.z = record.restZ;
     record.actor.actions.clearActions();
     const motion = record.actor.actions;
@@ -729,7 +773,7 @@ export class SpadesDriver implements GameDriver<SpadesState> {
       selected: this.selected === cardId,
     });
     const hover =
-      record.personal && legal && held === 0
+      record.personal && !ctx.inputBlocked() && held === 0
         ? this.handHover.current(cardId)
         : 0;
     placeCardLift(
@@ -738,6 +782,8 @@ export class SpadesDriver implements GameDriver<SpadesState> {
       record.restY,
       record.restZ,
       held > 0 ? held : hover,
+      legal && this.selected === cardId,
+      record.personal,
     );
   }
 
@@ -749,7 +795,9 @@ export class SpadesDriver implements GameDriver<SpadesState> {
       !record?.personal ||
       !state ||
       !ctx ||
-      !legalCard(state, ctx.meSeatIndex, cardId)
+      ctx.inputBlocked() ||
+      ctx.meSeatIndex === null ||
+      !state.hands[String(ctx.meSeatIndex)]?.includes(cardId)
     ) {
       this.handHover.leave(cardId);
       return;
@@ -912,20 +960,23 @@ export class SpadesDriver implements GameDriver<SpadesState> {
   }
 
   private banner(ctx: RenderContext, text: string): ex.Actor {
-    const width = text.length * 8 + 16;
+    const size = isMobileDevice()
+      ? Math.max(8, Math.min(16, Math.floor(700 / Math.max(1, text.length))))
+      : 8;
+    const width = text.length * size + 16;
     const actor = new ex.Actor({
       pos: ex.vec(Math.floor((LOGICAL_WIDTH - width) / 2), 112),
       anchor: ex.vec(0, 0),
       width,
-      height: 24,
+      height: size + 16,
       z: 16,
     });
-    actor.graphics.use(panelRect(width, 24, BUTTON, STROKE));
+    actor.graphics.use(panelRect(width, size + 16, BUTTON, STROKE));
     const caption = new ex.Actor({
       pos: ex.vec(8, 8),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText(text, 8, GOLD));
+    caption.graphics.use(canvasText(text, size, GOLD));
     actor.addChild(caption);
     ctx.scene.add(actor);
     return actor;
@@ -937,13 +988,14 @@ export class SpadesDriver implements GameDriver<SpadesState> {
     y: number,
     text: string,
     color: ex.Color,
+    size = 8,
   ): ex.Actor {
     const actor = new ex.Actor({
       pos: ex.vec(x, y),
       anchor: ex.vec(0, 0),
       z: 14,
     });
-    actor.graphics.use(canvasText(text, 8, color));
+    actor.graphics.use(canvasText(text, size, color));
     ctx.scene.add(actor);
     return actor;
   }
@@ -973,12 +1025,13 @@ export class SpadesDriver implements GameDriver<SpadesState> {
     });
     const face = panelRect(box.w, box.h, BUTTON, STROKE);
     actor.graphics.use(face);
-    const rest = buttonCaptionPos('Play', box.w, box.h);
+    const size = buttonFontSize('Play', box.w, box.h);
+    const rest = buttonCaptionPos('Play', box.w, box.h, size);
     const caption = new ex.Actor({
       pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText('Play', BUTTON_FONT_SIZE, GOLD));
+    caption.graphics.use(canvasText('Play', size, GOLD));
     actor.addChild(caption);
     this.bindButton(actor, face, caption, rest, 'play');
     ctx.scene.add(actor);
@@ -997,12 +1050,13 @@ export class SpadesDriver implements GameDriver<SpadesState> {
     const face = panelRect(box.w, box.h, BUTTON, STROKE);
     actor.graphics.use(face);
     const label = bidButtonLabel(tricks);
-    const rest = buttonCaptionPos(label, box.w, box.h);
+    const size = buttonFontSize(label, box.w, box.h);
+    const rest = buttonCaptionPos(label, box.w, box.h, size);
     const caption = new ex.Actor({
       pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText(label, BUTTON_FONT_SIZE, GOLD));
+    caption.graphics.use(canvasText(label, size, GOLD));
     actor.addChild(caption);
     this.bindButton(actor, face, caption, rest, `bid:${tricks}`);
     ctx.scene.add(actor);
@@ -1019,24 +1073,25 @@ export class SpadesDriver implements GameDriver<SpadesState> {
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;
     });
-    actor.on('pointerleave', () => {
-      face.strokeColor = STROKE;
-      face.color = BUTTON;
-      caption.pos = ex.vec(rest.x, rest.y);
-    });
-    actor.on('pointerdown', () => {
-      face.color = BUTTON_DOWN;
-      caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
-    });
-    actor.on('pointerup', () => {
-      face.color = BUTTON;
-      caption.pos = ex.vec(rest.x, rest.y);
-      const state = this.state;
-      const current = this.ctx;
-      if (!state || !current) {
-        return;
-      }
-      this.handleInput({ type: 'pointerup', target }, state, current);
-    });
+    bindButtonPress(
+      actor,
+      () => {
+        face.color = BUTTON_DOWN;
+        caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
+      },
+      () => {
+        face.strokeColor = STROKE;
+        face.color = BUTTON;
+        caption.pos = ex.vec(rest.x, rest.y);
+      },
+      () => {
+        const state = this.state;
+        const current = this.ctx;
+        if (!state || !current) {
+          return;
+        }
+        this.handleInput({ type: 'pointerup', target }, state, current);
+      },
+    );
   }
 }

@@ -1,9 +1,10 @@
+import { bindButtonPress } from './button-press';
 import * as ex from 'excalibur';
 import {
   BUTTON_FONT_SIZE,
-  BUTTON_HEIGHT,
   BUTTON_PRESS_SHIFT,
   buttonCaptionPos,
+  buttonFontSize,
 } from './button-style';
 import {
   BUTTON,
@@ -60,11 +61,12 @@ const CHAT_TEXT_PAD = 6;
 
 function tableChatLabel(): FieldLabel {
   const box = TABLE_CHAT_INPUT;
+  const size = box.h >= 60 ? 16 : BUTTON_FONT_SIZE;
   return {
-    size: BUTTON_FONT_SIZE,
+    size,
     x: box.x + CHAT_TEXT_PAD,
-    y: box.y + Math.round((box.h - BUTTON_FONT_SIZE) / 2),
-    columns: fieldLabelColumns(box.w, CHAT_TEXT_PAD, BUTTON_FONT_SIZE),
+    y: box.y + Math.round((box.h - size) / 2),
+    columns: fieldLabelColumns(box.w, CHAT_TEXT_PAD, size),
   };
 }
 
@@ -317,12 +319,13 @@ export class TableChatOverlay {
     });
     const face = panelRect(box.w, box.h, PLATE, STROKE);
     actor.graphics.use(face);
-    const rest = buttonCaptionPos('Chat', box.w, box.h);
+    const size = buttonFontSize('Chat', box.w, box.h);
+    const rest = buttonCaptionPos('Chat', box.w, box.h, size);
     const caption = new ex.Actor({
       pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText('Chat', BUTTON_FONT_SIZE, GOLD));
+    caption.graphics.use(canvasText('Chat', size, GOLD));
     actor.addChild(caption);
     actor.on('pointerenter', () => {
       if (!this.chatAvailable) {
@@ -330,28 +333,27 @@ export class TableChatOverlay {
       }
       face.strokeColor = STROKE_HOT;
     });
-    actor.on('pointerleave', () => {
-      if (!this.chatAvailable) {
-        return;
-      }
-      face.strokeColor = STROKE;
-      face.color = PLATE;
-    });
-    actor.on('pointerdown', () => {
-      if (!this.chatAvailable) {
-        return;
-      }
-      face.color = BUTTON_DOWN;
-      caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
-    });
-    actor.on('pointerup', () => {
-      if (!this.chatAvailable) {
-        return;
-      }
-      face.color = PLATE;
-      caption.pos = ex.vec(rest.x, rest.y);
-      this.toggle();
-    });
+    bindButtonPress(
+      actor,
+      () => {
+        if (!this.chatAvailable) {
+          return;
+        }
+        face.color = BUTTON_DOWN;
+        caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
+      },
+      () => {
+        if (!this.chatAvailable) {
+          return;
+        }
+        face.strokeColor = STROKE;
+        face.color = PLATE;
+        caption.pos = ex.vec(rest.x, rest.y);
+      },
+      () => {
+        if (this.chatAvailable) this.toggle();
+      },
+    );
     this.button = actor;
     this.chatCaption = caption;
     this.scene.add(actor);
@@ -414,7 +416,7 @@ export class TableChatOverlay {
     this.track(title);
 
     for (let row = 0; row < text.rows; row += 1) {
-      const lineText = canvasText('', 8, SELF);
+      const lineText = canvasText('', text.size, SELF);
       const actor = new ex.Actor({
         pos: ex.vec(
           panel.x + text.padding,
@@ -482,36 +484,37 @@ export class TableChatOverlay {
     });
     const face = panelRect(box.w, box.h, BUTTON, STROKE);
     actor.graphics.use(face);
-    const rest = buttonCaptionPos('Send', box.w, box.h);
+    const size = buttonFontSize('Send', box.w, box.h);
+    const rest = buttonCaptionPos('Send', box.w, box.h, size);
     const caption = new ex.Actor({
       pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText('Send', BUTTON_FONT_SIZE, GOLD));
+    caption.graphics.use(canvasText('Send', size, GOLD));
     actor.addChild(caption);
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;
     });
-    actor.on('pointerleave', () => {
-      face.strokeColor = STROKE;
-      face.color = BUTTON;
-    });
-    actor.on('pointerdown', () => {
-      face.color = BUTTON_DOWN;
-      caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
-    });
-    actor.on('pointerup', () => {
-      face.color = BUTTON;
-      caption.pos = ex.vec(rest.x, rest.y);
-      this.send();
-    });
+    bindButtonPress(
+      actor,
+      () => {
+        face.color = BUTTON_DOWN;
+        caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
+      },
+      () => {
+        face.strokeColor = STROKE;
+        face.color = BUTTON;
+        caption.pos = ex.vec(rest.x, rest.y);
+      },
+      () => this.send(),
+    );
     return actor;
   }
 
   private buildCloseButton(): ex.Actor {
     const panel = TABLE_CHAT_PANEL;
     const w = 120;
-    const h = BUTTON_HEIGHT;
+    const h = TABLE_CHAT_INPUT.h;
     const actor = new ex.Actor({
       pos: ex.vec(
         panel.x + panel.w - w - TABLE_CHAT_TEXT.padding,
@@ -524,29 +527,30 @@ export class TableChatOverlay {
     });
     const face = panelRect(w, h, BUTTON, STROKE);
     actor.graphics.use(face);
-    const rest = buttonCaptionPos('Close', w, h);
+    const size = buttonFontSize('Close', w, h);
+    const rest = buttonCaptionPos('Close', w, h, size);
     const caption = new ex.Actor({
       pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText('Close', BUTTON_FONT_SIZE, GOLD));
+    caption.graphics.use(canvasText('Close', size, GOLD));
     actor.addChild(caption);
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;
     });
-    actor.on('pointerleave', () => {
-      face.strokeColor = STROKE;
-      face.color = BUTTON;
-    });
-    actor.on('pointerdown', () => {
-      face.color = BUTTON_DOWN;
-      caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
-    });
-    actor.on('pointerup', () => {
-      face.color = BUTTON;
-      caption.pos = ex.vec(rest.x, rest.y);
-      this.close();
-    });
+    bindButtonPress(
+      actor,
+      () => {
+        face.color = BUTTON_DOWN;
+        caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
+      },
+      () => {
+        face.strokeColor = STROKE;
+        face.color = BUTTON;
+        caption.pos = ex.vec(rest.x, rest.y);
+      },
+      () => this.close(),
+    );
     return actor;
   }
 }

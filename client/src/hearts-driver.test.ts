@@ -80,7 +80,27 @@ describe('HeartsDriver input', () => {
     const ctx = context(sent, 0);
     driver.handleInput({ type: 'pointerup', target: '2C' }, table, ctx);
     driver.handleInput({ type: 'pointerup', target: 'play' }, table, ctx);
-    expect(sent).toEqual([{ type: 'play', card: '' }]);
+    expect(sent).toEqual([]);
+  });
+
+  it('ignores the wrong phase action and an already submitted pass', () => {
+    const driver = new HeartsDriver();
+    const sent: unknown[] = [];
+    const ctx = context(sent, 0);
+    driver.handleInput(
+      { type: 'pointerup', target: 'play' },
+      state('pass'),
+      ctx,
+    );
+    driver.handleInput(
+      { type: 'pointerup', target: 'pass' },
+      state('play'),
+      ctx,
+    );
+    const passed = state('pass');
+    passed.passes['0'] = ['2C', 'AH', '3H'];
+    driver.handleInput({ type: 'pointerup', target: 'pass' }, passed, ctx);
+    expect(sent).toEqual([]);
   });
 
   it('sends an empty play for the module to reject', () => {

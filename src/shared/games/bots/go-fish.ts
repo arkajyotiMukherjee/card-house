@@ -9,14 +9,6 @@ import {
 import { seatIndexes } from './order.ts';
 import type { BotStrategy } from './types.ts';
 
-function rankIndex(rank: GoFishRank): number {
-  if (rank === 'A') {
-    return GO_FISH_RANKS.length;
-  }
-  const index = GO_FISH_RANKS.indexOf(rank);
-  return index < 0 ? GO_FISH_RANKS.length : index;
-}
-
 export const goFishStrategy: BotStrategy<GoFishState, GoFishIntent> = {
   gameType: GO_FISH_GAME_TYPE,
   actingSeats(state) {
@@ -26,26 +18,27 @@ export const goFishStrategy: BotStrategy<GoFishState, GoFishIntent> = {
     return [state.turnSeatIndex];
   },
   choose(state, seatIndex) {
-    const seats = seatIndexes(state.hands);
-    const at = seats.indexOf(seatIndex);
-    const target = seats[(at + 1) % seats.length];
-    if (target === undefined || target === seatIndex) {
+    const opponents = seatIndexes(state.hands).filter(
+      (seat) => seat !== seatIndex,
+    );
+    const holding = opponents.filter(
+      (seat) => state.hands[String(seat)]?.length,
+    );
+    const targets = holding.length > 0 ? holding : opponents;
+    if (targets.length === 0) {
       throw new Error('No seat to ask');
     }
-    const hand = state.hands[String(seatIndex)] ?? [];
-    let rank: GoFishRank | null = null;
-    for (const card of hand) {
-      const held = rankOfCard(card);
-      if (held === null) {
-        continue;
-      }
-      if (rank === null || rankIndex(held) < rankIndex(rank)) {
-        rank = held;
-      }
-    }
-    if (rank === null) {
+    const key = String(seatIndex);
+    const held = new Set((state.hands[key] ?? []).map(rankOfCard));
+    const ranks = GO_FISH_RANKS.filter((rank) => held.has(rank));
+    if (ranks.length === 0) {
       throw new Error('No card');
     }
-    return { type: 'ask', targetSeat: target, rank };
+    // Cover every rank/target pair if hands stop changing after the stock empties.
+    const count = state.askCounts?.[key] ?? 0;
+    const targetSeat = targets[count % targets.length]!;
+    const rank: GoFishRank =
+      ranks[Math.floor(count / targets.length) % ranks.length]!;
+    return { type: 'ask', targetSeat, rank };
   },
 };

@@ -5,57 +5,65 @@ import {
   type DummyState,
 } from '../../src/shared/games/dummy-counter';
 import { BUTTON_HEIGHT } from './button-style';
+import { isMobileDevice } from './mobile-shell';
+const PHONE_LAYOUT = typeof window !== 'undefined' && isMobileDevice();
 
 export const LEAVE_TABLE_BUTTON = {
   x: 16,
   y: 16,
   w: 168,
-  h: BUTTON_HEIGHT,
+  h: PHONE_LAYOUT ? 64 : BUTTON_HEIGHT,
 } as const;
 
 /** The `?` control, top right. Opens the per-game How to Play overlay. */
 export const HOW_TO_PLAY_BUTTON = {
-  x: 916,
+  x: PHONE_LAYOUT ? 888 : 916,
   y: 16,
-  w: BUTTON_HEIGHT,
-  h: BUTTON_HEIGHT,
+  w: PHONE_LAYOUT ? 64 : BUTTON_HEIGHT,
+  h: PHONE_LAYOUT ? 64 : BUTTON_HEIGHT,
 } as const;
 
 /** The `Chat` control, top center. Opens the per-table chat overlay. */
 export const TABLE_CHAT_BUTTON = {
   x: 200,
   y: 16,
-  w: 64,
-  h: BUTTON_HEIGHT,
+  w: PHONE_LAYOUT ? 96 : 64,
+  h: PHONE_LAYOUT ? 64 : BUTTON_HEIGHT,
 } as const;
 
 /** How to Play window, centered on the 960×540 canvas. */
-export const HOW_TO_PLAY_PANEL = { x: 120, y: 50, w: 720, h: 440 } as const;
+export const HOW_TO_PLAY_PANEL = {
+  x: 120,
+  y: PHONE_LAYOUT ? 88 : 50,
+  w: 720,
+  h: 440,
+} as const;
 
 /** Table chat window. Same box as How to Play; only one overlay is open at a time. */
-export const TABLE_CHAT_PANEL = { x: 120, y: 50, w: 720, h: 440 } as const;
+export const TABLE_CHAT_PANEL = HOW_TO_PLAY_PANEL;
 
 /** Message history grid inside the chat window. */
 export const TABLE_CHAT_TEXT = {
   padding: 24,
-  top: 64,
-  lineHeight: 16,
-  rows: 15,
-  columns: 84,
+  top: PHONE_LAYOUT ? 88 : 64,
+  size: PHONE_LAYOUT ? 12 : 8,
+  lineHeight: PHONE_LAYOUT ? 22 : 16,
+  rows: PHONE_LAYOUT ? 11 : 15,
+  columns: PHONE_LAYOUT ? 56 : 84,
 } as const;
 
 /** Text field and Send button along the bottom of the chat window. */
 export const TABLE_CHAT_INPUT = {
   x: 144,
-  y: 442,
+  y: PHONE_LAYOUT ? 448 : 442,
   w: 544,
-  h: BUTTON_HEIGHT,
+  h: PHONE_LAYOUT ? 64 : BUTTON_HEIGHT,
 } as const;
 export const TABLE_CHAT_SEND_BUTTON = {
   x: 700,
-  y: 442,
-  w: 80,
-  h: BUTTON_HEIGHT,
+  y: PHONE_LAYOUT ? 448 : 442,
+  w: PHONE_LAYOUT ? 116 : 80,
+  h: PHONE_LAYOUT ? 64 : BUTTON_HEIGHT,
 } as const;
 
 /**
@@ -65,9 +73,10 @@ export const TABLE_CHAT_SEND_BUTTON = {
 export const HOW_TO_PLAY_TEXT = {
   padding: 24,
   top: 64,
-  lineHeight: 16,
-  rows: 19,
-  columns: 84,
+  size: PHONE_LAYOUT ? 14 : 8,
+  lineHeight: PHONE_LAYOUT ? 24 : 16,
+  rows: PHONE_LAYOUT ? 11 : 19,
+  columns: PHONE_LAYOUT ? 48 : 84,
 } as const;
 
 /** Click target on a dummy table. The number painted here is the subscribed count. */
@@ -92,6 +101,7 @@ export interface SeatAnchor {
 const TOP_RAIL = { start: 246, end: 714 } as const;
 /** Side rail, top to bottom, clear of the local hand and the action cluster. */
 const SIDE_RAIL = { start: 136, end: 400, leftX: 92, rightX: 868 } as const;
+export const PHONE_RIGHT_PAIR_RAIL = { start: 108, end: 300 } as const;
 
 /**
  * A seat on `edge` when `count` seats share it.
@@ -103,7 +113,13 @@ export function seatPoint(
   count: number,
 ): SeatAnchor {
   if (edge === 'bottom') {
-    return { x: 480, y: 456, edge, edgeSeats: 1, edgeIndex: 0 };
+    return {
+      x: 480,
+      y: typeof window !== 'undefined' && isMobileDevice() ? 432 : 456,
+      edge,
+      edgeSeats: 1,
+      edgeIndex: 0,
+    };
   }
   if (edge === 'top') {
     const span = TOP_RAIL.end - TOP_RAIL.start;
@@ -116,8 +132,16 @@ export function seatPoint(
       edgeIndex: index,
     };
   }
-  const span = SIDE_RAIL.end - SIDE_RAIL.start;
-  const y = Math.round(SIDE_RAIL.start + (span / count) * (index + 0.5));
+  // Phone action buttons occupy the lower right; keep right-hand seats above them.
+  const phoneRight =
+    edge === 'right' && typeof window !== 'undefined' && isMobileDevice();
+  const rail = phoneRight
+    ? count === 2
+      ? PHONE_RIGHT_PAIR_RAIL
+      : { start: SIDE_RAIL.start, end: 270 }
+    : SIDE_RAIL;
+  const span = rail.end - rail.start;
+  const y = Math.round(rail.start + (span / count) * (index + 0.5));
   return {
     x: edge === 'right' ? SIDE_RAIL.rightX : SIDE_RAIL.leftX,
     y,

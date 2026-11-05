@@ -14,6 +14,7 @@ import {
   legalCard,
   penaltyPositions,
   pointCards,
+  playHint,
   trickPosition,
 } from './hearts-layout';
 import {
@@ -46,6 +47,18 @@ function playState(): HeartsState {
 }
 
 describe('hearts layout', () => {
+  it('explains follow-suit and opening-lead restrictions', () => {
+    const state = playState();
+    state.currentTrick = [{ seat: 1, card: '5H' }];
+    expect(playHint(state, 0)).toBe('Follow hearts');
+    expect(playHint(state, 1)).toBe('Wait');
+    state.hands['0'] = ['2C', '3D'];
+    expect(playHint(state, 0)).toBe('Your play');
+    state.currentTrick = [];
+    state.tricksTaken = { '0': [], '1': [], '2': [], '3': [] };
+    state.heartsBroken = false;
+    expect(playHint(state, 0)).toBe('Play 2C');
+  });
   it('places a trick between the seat and the center', () => {
     const slot = trickPosition(480, 456);
     expect(slot.y).toBeLessThan(456);

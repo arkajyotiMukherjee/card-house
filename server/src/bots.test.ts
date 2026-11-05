@@ -15,7 +15,7 @@ import {
   type CrazyEightsIntent,
   type CrazyEightsState,
 } from '../../src/shared/games/crazy-eights.ts';
-import { goFishRules } from '../../src/shared/games/go-fish.ts';
+import { goFishRules, readGoFishState } from '../../src/shared/games/go-fish.ts';
 import { heartsRules } from '../../src/shared/games/hearts.ts';
 import {
   pokerRules,
@@ -25,7 +25,11 @@ import {
 } from '../../src/shared/games/poker.ts';
 import { presidentRules } from '../../src/shared/games/president.ts';
 import { rummyRules } from '../../src/shared/games/rummy.ts';
-import { spadesRules } from '../../src/shared/games/spades.ts';
+import {
+  spadesRules,
+  readSpadesState,
+  SPADES_TARGET,
+} from '../../src/shared/games/spades.ts';
 import { pokerStrategy } from '../../src/shared/games/bots/poker.ts';
 import { strategyFor } from '../../src/shared/games/bots/registry.ts';
 import type {
@@ -94,32 +98,19 @@ function phaseOf(state: unknown): string {
   return typeof phase === 'string' ? phase : '';
 }
 
-function handNumberOf(state: unknown): number {
-  if (!state || typeof state !== 'object' || !('handNumber' in state)) {
-    return 0;
-  }
-  const handNumber = state.handNumber;
-  return typeof handNumber === 'number' ? handNumber : 0;
-}
-
-/**
- * Spades ends at 500. This policy bids every spade plus side aces and kings,
- * then plays low, so both sides undertrick and the match stays below 500.
- * A scored hand is that game's finish: the hand number moves on.
- */
-function spadesHandScored(state: unknown): boolean {
-  return phaseOf(state) === 'finished' || handNumberOf(state) >= 2;
-}
-
 function runBots(
   gameType: string,
   rules: LooseRules,
   count: number,
   stateJson = '{}',
   done: (state: unknown) => boolean = (state) => phaseOf(state) === 'finished',
+  tableId = 'table-1',
 ): { state: unknown; intents: unknown[] } {
   const players = seats(count);
-  let state = rules.initialState(players, table(gameType, stateJson));
+  let state = rules.initialState(players, {
+    ...table(gameType, stateJson),
+    id: tableId,
+  });
   const actors = players.map((row) => ({
     seatIndex: row.seatIndex,
     isBot: true,
@@ -501,19 +492,66 @@ const games: ReadonlyArray<{
 for (const game of games) {
   const intent = openingIntent(game.gameType, game.rules, game.seats);
   assert(intent !== undefined, `${game.gameType} opening intent`);
-  const finished = game.gameType === 'spades' ? spadesHandScored : undefined;
-  const done = runBots(game.gameType, game.rules, game.seats, '{}', finished);
-  if (game.gameType === 'spades') {
-    assert(
-      spadesHandScored(done.state),
-      'spades bots scored a hand without a rejected intent',
+  const done = runBots(game.gameType, game.rules, game.seats);
+  assert(
+    phaseOf(done.state) === 'finished',
+    `${game.gameType} completes, saw ${phaseOf(done.state)}`,
+  );
+}
+
+// Distinct table ids produce distinct deals. Exercise complete games rather
+// than just checking that the strategy's first move is accepted.
+for (const count of [2, 3, 4, 6]) {
+  for (let deal = 0; deal < 12; deal += 1) {
+    const result = runBots(
+      'bluff',
+      loose(bluffRules),
+      count,
+      '{}',
+      undefined,
+      `mobile-bluff-${count}-${deal}`,
     );
-  } else {
     assert(
-      phaseOf(done.state) === 'finished',
-      `${game.gameType} bot hand finished, saw ${phaseOf(done.state)}`,
+      phaseOf(result.state) === 'finished',
+      `Bluff ${count} seats, deal ${deal} finishes`,
     );
   }
+}
+
+// Six seats can exhaust the stock with books still split across hands.
+for (let deal = 0; deal < 12; deal += 1) {
+  const result = runBots(
+    'go_fish',
+    loose(goFishRules),
+    6,
+    '{}',
+    undefined,
+    `qa-go_fish-6-${deal}`,
+  );
+  const state = readGoFishState(result.state);
+  assert(state.phase === 'finished', `Go Fish deal ${deal} finishes`);
+  const books = Object.values(state.books).flat();
+  assert(books.length === 13, `Go Fish deal ${deal} completes all books`);
+}
+
+for (let deal = 0; deal < 24; deal += 1) {
+  const result = runBots(
+    'spades',
+    loose(spadesRules),
+    4,
+    '{}',
+    undefined,
+    `mobile-spades-${deal}`,
+  );
+  const state = readSpadesState(result.state);
+  assert(
+    state.phase === 'finished' && state.winnerTeam !== null,
+    `Spades deal ${deal} has a winner`,
+  );
+  assert(
+    state.scores[state.winnerTeam!] >= SPADES_TARGET,
+    'Spades winner reaches the target',
+  );
 }
 
 const crazy: CrazyEightsState = {
@@ -691,12 +729,12 @@ const onlyLie = bluffPlaying({
   playCounts: { '0': 1 },
   turnSeatIndex: 0,
 });
-const lieFallback = playedCard(sameChoice(onlyLie));
+const cautiousPass = sameChoice(onlyLie) as BluffIntent;
 assert(
-  !cardIsTrue(lieFallback, '4'),
-  'the truth falls back to a card of another rank',
+  cautiousPass.type === 'pass',
+  'a cautious turn without an honest card passes instead of recycling the pile',
 );
-assert(lieFallback === '2C', 'the fallback lie is the same low card');
+bluffRules.applyIntent(onlyLie, cautiousPass, { seat: seat(0), now: 1 });
 
 const jokersOnly = bluffPlaying({
   hands: { '0': ['JR', 'JB'], '1': ['KH'] },

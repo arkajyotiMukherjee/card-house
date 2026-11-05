@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Scene } from 'excalibur';
 import type { BluffState } from '../../src/shared/games/bluff';
 import { BluffDriver } from './bluff-driver';
@@ -41,6 +41,40 @@ function context(
 }
 
 describe('BluffDriver input', () => {
+  it('keeps selected cards from other hand pages in the same play', () => {
+    const driver = new BluffDriver();
+    const table = state();
+    table.hands['0'] = ['AS', '2S', '3S', '4S', '5S', '6S', '7S', '8S', '9S'];
+    const sent: unknown[] = [];
+    const ctx = context(sent, 0);
+    const view = driver as unknown as {
+      nextHandControl: object;
+      visibleHand: string[];
+      cards: Map<string, { actor: { kill: () => void }; moving: boolean }>;
+      syncCards: (state: BluffState, ctx: RenderContext) => void;
+      placeCard: (id: string) => void;
+      setShown: () => void;
+    };
+    view.nextHandControl = {};
+    vi.spyOn(view, 'placeCard').mockImplementation((id) => {
+      view.cards.set(id, { actor: { kill: vi.fn() }, moving: true });
+    });
+    vi.spyOn(view, 'setShown').mockImplementation(() => {});
+    view.syncCards(table, ctx);
+    expect(view.visibleHand).toEqual(table.hands['0'].slice(0, 8));
+
+    driver.handleInput({ type: 'pointerup', target: 'AS' }, table, ctx);
+    driver.handleInput({ type: 'pointerup', target: 'hand-next' }, table, ctx);
+    expect(view.visibleHand).toEqual(['9S']);
+    driver.handleInput({ type: 'pointerup', target: '9S' }, table, ctx);
+    driver.handleInput({ type: 'pointerup', target: 'hand-prev' }, table, ctx);
+    driver.handleInput({ type: 'pointerup', target: 'play' }, table, ctx);
+
+    expect(sent).toEqual([{ type: 'play', cards: ['AS', '9S'] }]);
+    table.hands['0'] = ['2S', '3S', '4S'];
+    view.syncCards(table, ctx);
+    expect(view.visibleHand).toEqual(table.hands['0']);
+  });
   it('sends a play intent for the selected card and a challenge intent', () => {
     const driver = new BluffDriver();
     const sent: unknown[] = [];

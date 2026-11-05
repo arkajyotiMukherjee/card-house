@@ -22,7 +22,16 @@ import {
   type PokerState,
 } from '../../src/shared/games/poker';
 
-export const STATUS_HUD = { x: 668, y: 16, w: 240, h: 52 } as const;
+import { isMobileDevice } from './mobile-shell';
+const PHONE_LAYOUT = typeof window !== 'undefined' && isMobileDevice();
+export const STATUS_HUD = {
+  x: PHONE_LAYOUT ? 620 : 668,
+  y: PHONE_LAYOUT ? 12 : 16,
+  w: PHONE_LAYOUT ? 260 : 240,
+  h: PHONE_LAYOUT ? 56 : 52,
+} as const;
+export const STATUS_FONT_SIZE = PHONE_LAYOUT ? 12 : 8;
+export const STATUS_LINE_HEIGHT = PHONE_LAYOUT ? 16 : 12;
 
 const NAME_MAX = 14;
 
@@ -140,7 +149,7 @@ export function goFishStatusHud(
   return {
     turn: `Turn: ${turn}`,
     phase: `Phase: ${GO_FISH_PHASE_LABELS[state.phase]}`,
-    round: `Books: ${books}`,
+    round: `${state.phase === 'finished' && state.winnerSeatIndex !== null ? 'Winning books' : 'Books'}: ${books}`,
   };
 }
 
@@ -211,7 +220,7 @@ export function rummyStatusHud(
     const winner = state.winnerSeatIndex;
     const score = winner === null ? undefined : state.scores[String(winner)];
     if (score !== undefined) {
-      round = `Score ${score}`;
+      round = `Deadwood ${score}`;
     }
   }
   return {

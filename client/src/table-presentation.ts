@@ -1,7 +1,12 @@
 import { BUTTON_HEIGHT } from './button-style';
+import { isMobileDevice } from './mobile-shell';
+
+const PHONE_LAYOUT = typeof window !== 'undefined' && isMobileDevice();
+const ACTION_HEIGHT = PHONE_LAYOUT ? 64 : BUTTON_HEIGHT;
 import {
   HOW_TO_PLAY_BUTTON,
   LEAVE_TABLE_BUTTON,
+  PHONE_RIGHT_PAIR_RAIL,
   TABLE_CHAT_BUTTON,
   anchorAt,
 } from './game-scene';
@@ -40,9 +45,9 @@ const CLUSTER_WIDTH =
 /** Top-left of the two-across action grid, below the felt and at the right. */
 export const ACTION_CLUSTER = {
   x: LOGICAL_WIDTH - CLUSTER_MARGIN - CLUSTER_WIDTH,
-  y: FELT_BOTTOM,
+  y: PHONE_LAYOUT ? 332 : FELT_BOTTOM,
   w: CLUSTER_WIDTH,
-  h: LOGICAL_HEIGHT - FELT_BOTTOM,
+  h: LOGICAL_HEIGHT - (PHONE_LAYOUT ? 332 : FELT_BOTTOM),
 } as const;
 
 /** Short turn line just above the cluster. */
@@ -51,11 +56,8 @@ export const TURN_LINE = {
   y: ACTION_CLUSTER.y - 12,
 } as const;
 
-/**
- * One row of the green band, between the playing surface and the local hand.
- * Pickers use this row and stay left of the cluster.
- */
-export const PICKER_Y = FELT_BOTTOM;
+/** Desktop pickers stay above the local nameplate and left of the cluster. */
+export const PICKER_Y = 410;
 export const PICKER_LEFT = 16;
 export const PICKER_RIGHT = ACTION_CLUSTER.x - 8;
 
@@ -72,9 +74,9 @@ export function actionBox(index: number): ActionBox {
   const row = Math.floor(index / CLUSTER_COLUMNS);
   return {
     x: ACTION_CLUSTER.x + col * (CLUSTER_BUTTON_W + CLUSTER_GAP),
-    y: ACTION_CLUSTER.y + row * (BUTTON_HEIGHT + CLUSTER_GAP),
+    y: ACTION_CLUSTER.y + row * (ACTION_HEIGHT + CLUSTER_GAP),
     w: CLUSTER_BUTTON_W,
-    h: BUTTON_HEIGHT,
+    h: ACTION_HEIGHT,
   };
 }
 
@@ -134,7 +136,7 @@ const TOP_CARD_LIMIT = TOP_LABEL_Y - 4;
 const SIDE_POCKET = 108;
 /** Side fans stay below the header row and above the hand and cluster. */
 const LEFT_SAFE = { start: 46, end: 470 } as const;
-const RIGHT_SAFE = { start: 70, end: 440 } as const;
+const RIGHT_SAFE = { start: 70, end: PHONE_LAYOUT ? 300 : 440 } as const;
 /** Same rails `seatPoint` divides, so a fan stays inside its seat's slice. */
 const TOP_SPAN = 714 - 246;
 const SIDE_SPAN = 400 - 136;
@@ -256,7 +258,10 @@ function fanFrame(seatX: number, seatY: number): FanFrame {
   const edgeSeats = known?.edgeSeats ?? 1;
   const edgeIndex = known?.edgeIndex ?? 0;
   const corner = known ? cornerBias(edge, edgeIndex, edgeSeats) : 0;
-  const span = edge === 'top' || edge === 'bottom' ? TOP_SPAN : SIDE_SPAN;
+  let span = edge === 'top' || edge === 'bottom' ? TOP_SPAN : SIDE_SPAN;
+  if (PHONE_LAYOUT && edge === 'right' && edgeSeats === 2) {
+    span = PHONE_RIGHT_PAIR_RAIL.end - PHONE_RIGHT_PAIR_RAIL.start;
+  }
   const sliced = Math.max(40, span / edgeSeats / 2 - 10);
   if (edge === 'left' || edge === 'right') {
     const rawAlong = known ? known.y : clamp(seatY, 168, 380);
@@ -300,7 +305,7 @@ function fanFrame(seatX: number, seatY: number): FanFrame {
   return {
     edge,
     edgeX: along,
-    edgeY: 392,
+    edgeY: 536,
     along,
     half: known ? sliced : 90,
     horizontal: true,
@@ -355,7 +360,7 @@ function labelOrigin(frame: FanFrame, name: string): FanLabel {
   }
   return {
     x: Math.round(frame.along - box.w / 2),
-    y: Math.round(frame.edgeY - box.h - 4),
+    y: 428,
     w: box.w,
     h: box.h,
   };
@@ -400,6 +405,8 @@ function tiltSpan(handCount: number, edge: FanEdge): number {
   return top ? 0.06 : 0.12;
 }
 
+const PERSONAL_HAND_CLEAR = { x: 16, y: 476, w: 720, h: 64 } as const;
+
 /** Header, hand, and the hands-and-wins line. Fans stay off these. */
 const FAN_CLEAR: readonly CardRect[] = [
   LEAVE_TABLE_BUTTON,
@@ -407,7 +414,7 @@ const FAN_CLEAR: readonly CardRect[] = [
   HOW_TO_PLAY_BUTTON,
   STATUS_HUD,
   { x: 280, y: 16, w: 176, h: 20 },
-  { x: 16, y: 476, w: 720, h: 64 },
+  PERSONAL_HAND_CLEAR,
 ];
 
 function placeArc(
@@ -416,7 +423,8 @@ function placeArc(
   tiltMax: number,
   stepCap: number,
 ): FanSlot[] {
-  const half = OPPONENT_FAN_CARD / 2;
+  const size = frame.edge === 'bottom' ? 48 : OPPONENT_FAN_CARD;
+  const half = size / 2;
   const bleed =
     half * (Math.abs(Math.cos(tiltMax)) + Math.abs(Math.sin(tiltMax)));
   const usable = Math.max(0, frame.half * 2 - bleed * 2);
@@ -437,7 +445,7 @@ function placeArc(
       x: Math.round(bottomX + frame.inwardX * bow - dir.x * reach),
       y: Math.round(bottomY + frame.inwardY * bow - dir.y * reach),
       rotation: Math.atan2(dir.x, dir.y),
-      scale: OPPONENT_FAN_SCALE,
+      scale: frame.edge === 'bottom' ? size / CARD_SIZE : OPPONENT_FAN_SCALE,
     });
   }
   return slots;
@@ -446,6 +454,12 @@ function placeArc(
 function arcFits(frame: FanFrame, slots: readonly FanSlot[]): boolean {
   for (const slot of slots) {
     const rect = fanCardRect(slot);
+    if (
+      frame.edge === 'bottom' &&
+      (rect.y < 484 || rect.y + rect.h > LOGICAL_HEIGHT)
+    ) {
+      return false;
+    }
     if (frame.edge === 'top') {
       if (rect.y + rect.h > TOP_CARD_LIMIT) {
         return false;
@@ -481,6 +495,8 @@ function arcFits(frame: FanFrame, slots: readonly FanSlot[]): boolean {
       return false;
     }
     for (const block of FAN_CLEAR) {
+      // A spectator has no personal hand; the bottom opponent uses that space.
+      if (frame.edge === 'bottom' && block === PERSONAL_HAND_CLEAR) continue;
       if (rectsOverlap(rect, block)) {
         return false;
       }
@@ -508,7 +524,7 @@ export function seatFan(
   let tilt = tiltSpan(count, frame.edge);
   let stepCap = count <= 4 ? 28 : 12;
   let slots = placeArc(frame, count, tilt, stepCap);
-  const tiltFloor = frame.edge === 'top' ? 0.04 : 0.1;
+  const tiltFloor = frame.horizontal ? 0.04 : 0.1;
   while (!arcFits(frame, slots) && (tilt > tiltFloor || stepCap > 6)) {
     if (tilt > tiltFloor) {
       tilt = Math.max(tiltFloor, +(tilt - 0.02).toFixed(2));
@@ -540,12 +556,13 @@ export function fanGapLine(
   name: string,
   text: string,
   line = 0,
+  fontSize = 8,
 ): { x: number; y: number } {
   const label = labelOrigin(fanFrame(seatX, seatY), name);
-  const textW = text.length * 8;
+  const textW = text.length * fontSize;
   return {
     x: Math.round(label.x + (label.w - textW) / 2),
-    y: label.y + PLATE_HEIGHT + 2 + line * 12,
+    y: label.y + PLATE_HEIGHT + 2 + line * (fontSize + 4),
   };
 }
 

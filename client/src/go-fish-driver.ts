@@ -1,3 +1,5 @@
+import { bindButtonPress } from './button-press';
+import { isMobileDevice } from './mobile-shell';
 import * as ex from 'excalibur';
 import {
   GO_FISH_GAME_TYPE,
@@ -17,9 +19,9 @@ import {
   seatFan,
 } from './table-presentation';
 import {
-  BUTTON_FONT_SIZE,
   BUTTON_PRESS_SHIFT,
   buttonCaptionPos,
+  buttonFontSize,
 } from './button-style';
 import { canvasText, panelRect } from './canvas-ui';
 import type { CardAtlas } from './card-atlas';
@@ -29,7 +31,13 @@ import {
   localHandHitBoxes,
   type CardHitBox,
 } from './card-hit';
-import { HandHover, placeCardLift, startHandHoverClock } from './hand-hover';
+import {
+  HandHover,
+  canInspectPointer,
+  placeCardLift,
+  resetCardLift,
+  startHandHoverClock,
+} from './hand-hover';
 import {
   STOCK_LABEL_DY,
   askButtonBox,
@@ -60,7 +68,8 @@ const BOOK_SCALE = 0.5;
 const BOOK_ART_HALF = 12;
 const BOOK_LABEL_DY = 34;
 const BOOK_CAPTION_DY = 16;
-const LAST_ASK_Y = 236;
+const LAST_ASK_Y =
+  typeof window !== 'undefined' && isMobileDevice() ? 370 : 264;
 const STOCK_SHOWN = 3;
 
 /** A red box that blinks a few times over a control, then removes itself. */
@@ -170,13 +179,15 @@ export class GoFishDriver implements GameDriver<GoFishState> {
     this.state = state;
     this.ctx = ctx;
     this.ensureHoverClock(ctx);
-    this.syncAskButtons(ctx);
-    this.syncLabels(state, ctx);
     if (state.phase === 'lobby') {
       this.clearTableCards();
+      this.syncAskButtons(state, ctx);
+      this.syncLabels(state, ctx);
       return;
     }
     this.syncCards(state, ctx);
+    this.syncAskButtons(state, ctx);
+    this.syncLabels(state, ctx);
     this.syncBacks(state, ctx);
     this.syncStock(state, ctx);
     this.syncBooks(state, ctx);
@@ -193,10 +204,19 @@ export class GoFishDriver implements GameDriver<GoFishState> {
     }
     const targetSeat = askSeat(event.target);
     if (targetSeat !== null && event.type === 'pointerup') {
+      const rank = this.selectedRank;
+      if (
+        rank === null ||
+        ctx.meSeatIndex === null ||
+        state.turnSeatIndex !== ctx.meSeatIndex ||
+        !ctx.seats.some((seat) => seat.seatIndex === targetSeat && !seat.self)
+      ) {
+        return;
+      }
       ctx.sendIntent({
         type: 'ask',
         targetSeat,
-        rank: this.selectedRank ?? '',
+        rank,
       });
       return;
     }
@@ -222,6 +242,8 @@ export class GoFishDriver implements GameDriver<GoFishState> {
       }
       this.selectedRank = this.selectedRank === rank ? null : rank;
       this.refreshLifts(state, ctx);
+      this.syncAskButtons(state, ctx);
+      this.syncLabels(state, ctx);
     }
   }
 
@@ -296,41 +318,45 @@ export class GoFishDriver implements GameDriver<GoFishState> {
     if (state.phase === 'finished') {
       const line = finishedLine(state, ctx.seats) ?? 'Finished';
       this.labels.push(this.banner(ctx, line));
-      return;
-    }
-    const mine =
-      ctx.meSeatIndex !== null && state.turnSeatIndex === ctx.meSeatIndex;
-    this.labels.push(
-      this.textActor(
-        ctx,
-        TURN_LINE.x,
-        TURN_LINE.y,
-        mine ? 'Your turn' : 'Wait',
-        GOLD,
-      ),
-    );
-    const stock = stockPosition();
-    const stockLine = `Stock ${state.stock.length}`;
-    this.labels.push(
-      this.textActor(
-        ctx,
-        stock.x - stockLine.length * 4,
-        stock.y + STOCK_LABEL_DY,
-        stockLine,
-        GOLD,
-      ),
-    );
-    if (state.lastAsk) {
-      const ask = state.lastAsk;
-      const line =
-        ask.given > 0
-          ? `Got ${ask.given} ${ask.rank}`
-          : ask.drawn
-            ? 'Go fish'
-            : `No ${ask.rank}`;
+    } else {
+      const mine =
+        ctx.meSeatIndex !== null && state.turnSeatIndex === ctx.meSeatIndex;
       this.labels.push(
-        this.textActor(ctx, 480 - line.length * 4, LAST_ASK_Y, line, DIM),
+        this.textActor(
+          ctx,
+          TURN_LINE.x,
+          TURN_LINE.y,
+          mine
+            ? this.selectedRank === null
+              ? 'Pick a rank'
+              : 'Your turn'
+            : 'Wait',
+          GOLD,
+        ),
       );
+      const stock = stockPosition();
+      const stockLine = `Stock ${state.stock.length}`;
+      this.labels.push(
+        this.textActor(
+          ctx,
+          stock.x - stockLine.length * 4,
+          stock.y + STOCK_LABEL_DY,
+          stockLine,
+          GOLD,
+        ),
+      );
+      if (state.lastAsk) {
+        const ask = state.lastAsk;
+        const line =
+          ask.given > 0
+            ? `Got ${ask.given} ${ask.rank}`
+            : ask.drawn
+              ? 'Go fish'
+              : `No ${ask.rank}`;
+        this.labels.push(
+          this.textActor(ctx, 480 - line.length * 4, LAST_ASK_Y, line, DIM),
+        );
+      }
     }
     for (const seat of ctx.seats) {
       const booked = state.books[String(seat.seatIndex)]?.length ?? 0;
@@ -350,7 +376,12 @@ export class GoFishDriver implements GameDriver<GoFishState> {
         continue;
       }
       const count = state.hands[String(seat.seatIndex)]?.length ?? 0;
-      const line = booked > 0 ? `x${count} Books ${booked}` : `x${count}`;
+      const line =
+        state.phase === 'finished'
+          ? `Books ${booked}`
+          : booked > 0
+            ? `x${count} Books ${booked}`
+            : `x${count}`;
       const countAt = fanGapLine(seat.x, seat.y, seat.name, line, 0);
       const countLabel = this.textActor(ctx, countAt.x, countAt.y, line, DIM);
       countLabel.z = 80;
@@ -418,17 +449,32 @@ export class GoFishDriver implements GameDriver<GoFishState> {
       actor.pointer.useGraphicsBounds = false;
       actor.graphics.use(cardSprite(ctx.myCards, cardId, place.faceUp));
       actor.on('pointerenter', (event) => {
+        if (!canInspectPointer(event, ctx.scene.engine.input.pointers)) return;
         this.followHand(cardId, event.worldPos.x, true);
         this.onCard('pointerenter', cardId);
       });
       actor.on('pointermove', (event) => {
+        if (!canInspectPointer(event, ctx.scene.engine.input.pointers)) return;
+        this.handHover.touch.move(event);
         this.followHand(cardId, event.worldPos.x, false);
+      });
+      actor.on('pointerdown', (event) => {
+        this.handHover.touch.start(event);
+        this.followHand(cardId, event.worldPos.x, true);
+      });
+      actor.on('pointercancel', () => {
+        this.handHover.touch.cancel();
+        this.handHover.release();
       });
       actor.on('pointerleave', () => {
         this.handHover.leave(cardId);
         this.onCard('pointerleave', cardId);
       });
       actor.on('pointerup', (event) => {
+        if (event.pointerType === ex.PointerType.Touch) {
+          this.handHover.release();
+          if (!this.handHover.touch.isTap(event)) return;
+        }
         if (
           !isFrontHandCard(
             cardId,
@@ -478,7 +524,7 @@ export class GoFishDriver implements GameDriver<GoFishState> {
     delay: number,
   ): void {
     record.moving = true;
-    record.actor.graphics.offset = ex.vec(0, 0);
+    resetCardLift(record.actor);
     record.actor.z = record.restZ;
     record.actor.actions.clearActions();
     const motion = record.actor.actions;
@@ -512,13 +558,17 @@ export class GoFishDriver implements GameDriver<GoFishState> {
       hovered: false,
       selected: this.rankSelected(cardId),
     });
-    const hover = legal && held === 0 ? this.handHover.current(cardId) : 0;
+    const hover =
+      !ctx.inputBlocked() && held === 0 ? this.handHover.current(cardId) : 0;
     placeCardLift(
       record.actor,
       record.restX,
       record.restY,
       record.restZ,
       held > 0 ? held : hover,
+      legal && this.rankSelected(cardId),
+      ctx.meSeatIndex !== null &&
+        state.hands[String(ctx.meSeatIndex)]?.includes(cardId) === true,
     );
   }
 
@@ -531,7 +581,13 @@ export class GoFishDriver implements GameDriver<GoFishState> {
   private followHand(cardId: string, pointerX: number, entered: boolean): void {
     const state = this.state;
     const ctx = this.ctx;
-    if (!state || !ctx || !legalCard(state, ctx.meSeatIndex, cardId)) {
+    if (
+      !state ||
+      !ctx ||
+      ctx.inputBlocked() ||
+      ctx.meSeatIndex === null ||
+      !state.hands[String(ctx.meSeatIndex)]?.includes(cardId)
+    ) {
       this.handHover.leave(cardId);
       return;
     }
@@ -781,8 +837,14 @@ export class GoFishDriver implements GameDriver<GoFishState> {
     }
   }
 
-  private syncAskButtons(ctx: RenderContext): void {
-    const others = ctx.seats.filter((seat) => !seat.self);
+  private syncAskButtons(state: GoFishState, ctx: RenderContext): void {
+    const others =
+      state.phase === 'play' &&
+      ctx.meSeatIndex !== null &&
+      state.turnSeatIndex === ctx.meSeatIndex &&
+      this.selectedRank !== null
+        ? ctx.seats.filter((seat) => !seat.self)
+        : [];
     const key = others
       .map((seat) => `${seat.seatIndex}:${seat.x}:${seat.y}`)
       .join('|');
@@ -828,20 +890,23 @@ export class GoFishDriver implements GameDriver<GoFishState> {
   }
 
   private banner(ctx: RenderContext, text: string): ex.Actor {
-    const width = text.length * 8 + 16;
+    const size = isMobileDevice()
+      ? Math.max(8, Math.min(16, Math.floor(700 / Math.max(1, text.length))))
+      : 8;
+    const width = text.length * size + 16;
     const actor = new ex.Actor({
       pos: ex.vec(Math.floor((LOGICAL_WIDTH - width) / 2), 112),
       anchor: ex.vec(0, 0),
       width,
-      height: 24,
+      height: size + 16,
       z: 16,
     });
-    actor.graphics.use(panelRect(width, 24, BUTTON, STROKE));
+    actor.graphics.use(panelRect(width, size + 16, BUTTON, STROKE));
     const caption = new ex.Actor({
       pos: ex.vec(8, 8),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText(text, 8, GOLD));
+    caption.graphics.use(canvasText(text, size, GOLD));
     actor.addChild(caption);
     ctx.scene.add(actor);
     return actor;
@@ -879,35 +944,37 @@ export class GoFishDriver implements GameDriver<GoFishState> {
     });
     const face = panelRect(box.w, box.h, BUTTON, STROKE);
     actor.graphics.use(face);
-    const rest = buttonCaptionPos(label, box.w, box.h);
+    const size = buttonFontSize(label, box.w, box.h);
+    const rest = buttonCaptionPos(label, box.w, box.h, size);
     const caption = new ex.Actor({
       pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText(label, BUTTON_FONT_SIZE, GOLD));
+    caption.graphics.use(canvasText(label, size, GOLD));
     actor.addChild(caption);
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;
     });
-    actor.on('pointerleave', () => {
-      face.strokeColor = STROKE;
-      face.color = BUTTON;
-      caption.pos = ex.vec(rest.x, rest.y);
-    });
-    actor.on('pointerdown', () => {
-      face.color = BUTTON_DOWN;
-      caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
-    });
-    actor.on('pointerup', () => {
-      face.color = BUTTON;
-      caption.pos = ex.vec(rest.x, rest.y);
-      const currentState = this.state;
-      const current = this.ctx;
-      if (!currentState || !current) {
-        return;
-      }
-      this.handleInput({ type: 'pointerup', target }, currentState, current);
-    });
+    bindButtonPress(
+      actor,
+      () => {
+        face.color = BUTTON_DOWN;
+        caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
+      },
+      () => {
+        face.strokeColor = STROKE;
+        face.color = BUTTON;
+        caption.pos = ex.vec(rest.x, rest.y);
+      },
+      () => {
+        const currentState = this.state;
+        const current = this.ctx;
+        if (!currentState || !current) {
+          return;
+        }
+        this.handleInput({ type: 'pointerup', target }, currentState, current);
+      },
+    );
     ctx.scene.add(actor);
     this.buttons.push(actor);
   }

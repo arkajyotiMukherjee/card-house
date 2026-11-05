@@ -40,13 +40,31 @@ function context(
 }
 
 describe('CrazyEightsDriver input', () => {
-  it('sends a play for the selected match and a draw', () => {
+  it('ignores action taps while waiting and while spectating', () => {
+    const driver = new CrazyEightsDriver();
+    const sent: unknown[] = [];
+    const table = state();
+    table.turnSeatIndex = 1;
+    for (const seat of [0, null]) {
+      for (const target of ['play', 'draw', 'suit:H'])
+        driver.handleInput(
+          { type: 'pointerup', target },
+          table,
+          context(sent, seat),
+        );
+    }
+    expect(sent).toEqual([]);
+  });
+  it('plays the selected match and only draws when no card is playable', () => {
     const driver = new CrazyEightsDriver();
     const sent: unknown[] = [];
     const ctx = context(sent, 0);
     const table = state();
     driver.handleInput({ type: 'pointerup', target: '5H' }, table, ctx);
     driver.handleInput({ type: 'pointerup', target: 'play' }, table, ctx);
+    driver.handleInput({ type: 'pointerup', target: 'draw' }, table, ctx);
+    expect(sent).toEqual([{ type: 'play', card: '5H' }]);
+    table.hands['0'] = ['QH'];
     driver.handleInput({ type: 'pointerup', target: 'draw' }, table, ctx);
     expect(sent).toEqual([{ type: 'play', card: '5H' }, { type: 'draw' }]);
   });
@@ -57,6 +75,8 @@ describe('CrazyEightsDriver input', () => {
     const ctx = context(sent, 0);
     const table = state();
     driver.handleInput({ type: 'pointerup', target: '8C' }, table, ctx);
+    driver.handleInput({ type: 'pointerup', target: 'play' }, table, ctx);
+    expect(sent).toEqual([]);
     driver.handleInput({ type: 'pointerup', target: 'suit:D' }, table, ctx);
     driver.handleInput({ type: 'pointerup', target: 'play' }, table, ctx);
     expect(sent).toEqual([{ type: 'play', card: '8C', suit: 'D' }]);
@@ -69,10 +89,10 @@ describe('CrazyEightsDriver input', () => {
     const ctx = context(sent, 0);
     driver.handleInput({ type: 'pointerup', target: 'QH' }, table, ctx);
     driver.handleInput({ type: 'pointerup', target: 'play' }, table, ctx);
-    expect(sent).toEqual([{ type: 'play', card: '' }]);
+    expect(sent).toEqual([]);
   });
 
-  it('forwards a play with no card for the module to reject', () => {
+  it('ignores Play until a card is selected', () => {
     const driver = new CrazyEightsDriver();
     const sent: unknown[] = [];
     driver.handleInput(
@@ -80,7 +100,7 @@ describe('CrazyEightsDriver input', () => {
       state(),
       context(sent, 0),
     );
-    expect(sent).toEqual([{ type: 'play', card: '' }]);
+    expect(sent).toEqual([]);
   });
 
   it('sends a pass when nothing can be drawn', () => {
@@ -126,6 +146,6 @@ describe('CrazyEightsDriver input', () => {
 
     const closed = context(sent, 0, false);
     driver.handleInput({ type: 'pointerup', target: 'play' }, table, closed);
-    expect(sent).toEqual([{ type: 'play', card: '' }]);
+    expect(sent).toEqual([]);
   });
 });

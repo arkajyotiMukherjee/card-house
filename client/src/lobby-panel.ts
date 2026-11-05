@@ -1,7 +1,9 @@
 import * as ex from 'excalibur';
+import { isMobileDevice } from './mobile-shell';
+
 import {
-  BUTTON_FONT_SIZE,
   BUTTON_PRESS_SHIFT,
+  buttonFontSize,
   buttonCaptionPos,
 } from './button-style';
 import { pixelFont } from './boot-scene';
@@ -51,6 +53,8 @@ import {
   type PresenceRef,
 } from './voice-presence';
 
+const PHONE_LAYOUT = isMobileDevice();
+
 const GOLD = ex.Color.fromHex('#f4e4b3');
 const SELF = ex.Color.fromHex('#fff6d0');
 const DIM = ex.Color.fromHex('#d7c08a');
@@ -61,7 +65,7 @@ const STROKE = ex.Color.fromHex('#e6c27a');
 const STROKE_HOT = ex.Color.fromHex('#fff6d0');
 const DANGER = ex.Color.fromHex('#e85d4c');
 
-const LOBBY_TEXT_SIZE = 8;
+const LOBBY_TEXT_SIZE = PHONE_LAYOUT ? 12 : 8;
 const LOBBY_TEXT_PAD = 6;
 
 function lobbyFieldLabel(box: {
@@ -154,17 +158,23 @@ export function mountLobbyPanel(
   handlers: {
     onJoined?: (lobby: LobbyRow) => void;
     returning?: boolean;
+    inputBlocked?: () => boolean;
   } = {},
 ): LobbyPanel {
   const backdrop = new ex.Actor({
     pos: ex.vec(8, 44),
     anchor: ex.vec(0, 0),
-    width: 144,
+    width: PHONE_LAYOUT ? 204 : 144,
     height: 460,
     z: 15,
   });
   backdrop.graphics.use(
-    panelRect(144, 460, ex.Color.fromHex('#0a2e1c'), STROKE),
+    panelRect(
+      PHONE_LAYOUT ? 204 : 144,
+      460,
+      ex.Color.fromHex('#0a2e1c'),
+      STROKE,
+    ),
   );
   scene.add(backdrop);
 
@@ -201,7 +211,14 @@ export function mountLobbyPanel(
   const codeBox = fieldActor(scene, LOBBY_PANEL.codeField);
   const createButton = buttonActor(scene, LOBBY_PANEL.createButton, 'Create');
   const joinButton = buttonActor(scene, LOBBY_PANEL.joinButton, 'Join');
-  const renameLabel = labelActor(scene, 16, 412, 'Name', 8, DIM);
+  const renameLabel = labelActor(
+    scene,
+    16,
+    PHONE_LAYOUT ? 350 : 412,
+    'Name',
+    PHONE_LAYOUT ? 12 : 8,
+    DIM,
+  );
   const renameMetrics = lobbyFieldLabel(LOBBY_PANEL.renameField);
   const renameText = labelActor(
     scene,
@@ -370,14 +387,19 @@ export function mountLobbyPanel(
     nameActors.length = 0;
     for (let index = 0; index < lines.length; index += 1) {
       const line = lines[index];
-      const y = 118 + index * 16;
+      const y = 118 + index * (PHONE_LAYOUT ? 22 : 16);
       if (!line) {
         continue;
       }
-      if (y >= 400) {
+      if (y >= (PHONE_LAYOUT ? 340 : 400)) {
         break;
       }
-      const graphic = canvasText(line.name, 8, line.self ? SELF : GOLD);
+      const displayName =
+        PHONE_LAYOUT && line.name.length > 13
+          ? `${line.name.slice(0, 12)}…`
+          : line.name;
+      const size = PHONE_LAYOUT ? 12 : 8;
+      const graphic = canvasText(displayName, size, line.self ? SELF : GOLD);
       const actor = new ex.Actor({
         pos: ex.vec(16, y),
         anchor: ex.vec(0, 0),
@@ -386,11 +408,11 @@ export function mountLobbyPanel(
       actor.graphics.use(graphic);
       scene.add(actor);
       nameActors.push(actor);
-      let markerX = 16 + line.name.length * 8 + 4;
+      let markerX = 16 + displayName.length * size + 4;
       if (line.inVoice) {
         const headset = headsetActor(
           markerX,
-          y + Math.floor((8 - HEADSET_HEIGHT) / 2) + 1,
+          y + Math.floor((size - HEADSET_HEIGHT) / 2) + 1,
           21,
         );
         scene.add(headset);
@@ -553,7 +575,8 @@ export function mountLobbyPanel(
     void saveName();
   });
 
-  const sceneActive = (): boolean => engine.currentScene === scene;
+  const sceneActive = (): boolean =>
+    engine.currentScene === scene && !handlers.inputBlocked?.();
   const formInputs: {
     name?: CanvasTextFieldHandle;
     code?: CanvasTextFieldHandle;
@@ -855,8 +878,9 @@ function buttonActor(
   });
   const face = panelRect(box.w, box.h, BUTTON, STROKE);
   actor.graphics.use(face);
-  const captionText = canvasText(caption, BUTTON_FONT_SIZE, GOLD);
-  const rest = buttonCaptionPos(caption, box.w, box.h);
+  const size = PHONE_LAYOUT ? 12 : buttonFontSize(caption, box.w, box.h);
+  const captionText = canvasText(caption, size, GOLD);
+  const rest = buttonCaptionPos(caption, box.w, box.h, size);
   const captionActor = new ex.Actor({
     pos: ex.vec(rest.x, rest.y),
     anchor: ex.vec(0, 0),

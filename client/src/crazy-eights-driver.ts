@@ -1,6 +1,9 @@
+import { bindButtonPress } from './button-press';
+import { isMobileDevice } from './mobile-shell';
 import * as ex from 'excalibur';
 import {
   CRAZY_EIGHTS_GAME_TYPE,
+  handHasPlay,
   isCrazyEightsSuit,
   rankOfCard,
   type CrazyEightsState,
@@ -34,9 +37,9 @@ import {
   seatFan,
 } from './table-presentation';
 import {
-  BUTTON_FONT_SIZE,
   BUTTON_PRESS_SHIFT,
   buttonCaptionPos,
+  buttonFontSize,
 } from './button-style';
 import { canvasText, panelRect } from './canvas-ui';
 import type { CardAtlas } from './card-atlas';
@@ -46,7 +49,13 @@ import {
   localHandHitBoxes,
   type CardHitBox,
 } from './card-hit';
-import { HandHover, placeCardLift, startHandHoverClock } from './hand-hover';
+import {
+  HandHover,
+  canInspectPointer,
+  placeCardLift,
+  resetCardLift,
+  startHandHoverClock,
+} from './hand-hover';
 import { LOGICAL_WIDTH } from './sheets';
 
 const GOLD = ex.Color.fromHex('#f4e4b3');
@@ -149,6 +158,7 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
   private stockTargets = new Map<string, string>();
   private labels: ex.Actor[] = [];
   private buttons: ex.Actor[] = [];
+  private actionButtons = new Map<string, ex.Actor>();
   private flashes: ex.Actor[] = [];
   private suitFaces = new Map<CrazyEightsSuit, ex.Rectangle>();
   private suitActors = new Map<CrazyEightsSuit, ex.Actor>();
@@ -184,6 +194,20 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
       }
       this.buttonsReady = true;
     }
+    const acting =
+      state.phase === 'play' &&
+      ctx.meSeatIndex !== null &&
+      state.turnSeatIndex === ctx.meSeatIndex;
+    const hasMatch = acting && handHasPlay(state, ctx.meSeatIndex!);
+    for (const [target, actor] of this.actionButtons) {
+      const visible = acting && (target === 'play' ? hasMatch : !hasMatch);
+      actor.graphics.isVisible = visible;
+      actor.pointer.useColliderShape = visible;
+      actor.pointer.useGraphicsBounds = visible;
+      for (const child of actor.children) {
+        if (child instanceof ex.Actor) child.graphics.isVisible = visible;
+      }
+    }
     this.paintDrawLabel(state, ctx);
     this.paintSuitButtons();
     this.syncLabels(state, ctx);
@@ -210,11 +234,23 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
     if (ctx.inputBlocked() && event.type !== 'pointerleave') {
       return;
     }
+    const action =
+      event.target === 'play' ||
+      event.target === 'draw' ||
+      event.target.startsWith('suit:');
+    if (
+      action &&
+      (ctx.meSeatIndex === null || state.turnSeatIndex !== ctx.meSeatIndex)
+    )
+      return;
     if (event.target === 'play' && event.type === 'pointerup') {
       this.sendPlay(state, ctx);
       return;
     }
     if (event.target === 'draw' && event.type === 'pointerup') {
+      if (ctx.meSeatIndex === null || handHasPlay(state, ctx.meSeatIndex)) {
+        return;
+      }
       if (passInsteadOfDraw(state, ctx.meSeatIndex)) {
         ctx.sendIntent({ type: 'pass' });
         return;
@@ -324,6 +360,7 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
       actor.kill();
     }
     this.buttons = [];
+    this.actionButtons.clear();
     this.suitFaces.clear();
     this.suitActors.clear();
     this.buttonsReady = false;
@@ -337,23 +374,14 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
   }
 
   private sendPlay(state: CrazyEightsState, ctx: RenderContext): void {
-    if (ctx.meSeatIndex === null) {
+    const card = this.onlySelected();
+    if (!card || !legalCard(state, ctx.meSeatIndex, card)) {
       return;
     }
-    const hand = state.hands[String(ctx.meSeatIndex)] ?? [];
-    let card = '';
-    for (const held of hand) {
-      if (this.selected.has(held)) {
-        card = held;
-        break;
+    if (rankOfCard(card) === '8') {
+      if (this.namedSuit) {
+        ctx.sendIntent({ type: 'play', card, suit: this.namedSuit });
       }
-    }
-    if (card.length === 0) {
-      ctx.sendIntent({ type: 'play', card: '' });
-      return;
-    }
-    if (rankOfCard(card) === '8' && this.namedSuit) {
-      ctx.sendIntent({ type: 'play', card, suit: this.namedSuit });
       return;
     }
     ctx.sendIntent({ type: 'play', card });
@@ -392,7 +420,12 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
 
   private paintSuitButtons(): void {
     const eight = this.onlySelected();
-    const naming = eight !== null && rankOfCard(eight) === '8';
+    const naming =
+      eight !== null &&
+      rankOfCard(eight) === '8' &&
+      this.state?.phase === 'play' &&
+      this.ctx?.meSeatIndex !== null &&
+      this.state?.turnSeatIndex === this.ctx?.meSeatIndex;
     for (const spec of SUIT_BUTTONS) {
       const actor = this.suitActors.get(spec.suit);
       if (actor) {
@@ -554,17 +587,32 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
       actor.pointer.useGraphicsBounds = false;
       actor.graphics.use(cardSprite(atlas, cardId, place.faceUp));
       actor.on('pointerenter', (event) => {
+        if (!canInspectPointer(event, ctx.scene.engine.input.pointers)) return;
         this.followHand(cardId, event.worldPos.x, true);
         this.onCard('pointerenter', cardId);
       });
       actor.on('pointermove', (event) => {
+        if (!canInspectPointer(event, ctx.scene.engine.input.pointers)) return;
+        this.handHover.touch.move(event);
         this.followHand(cardId, event.worldPos.x, false);
+      });
+      actor.on('pointerdown', (event) => {
+        this.handHover.touch.start(event);
+        this.followHand(cardId, event.worldPos.x, true);
+      });
+      actor.on('pointercancel', () => {
+        this.handHover.touch.cancel();
+        this.handHover.release();
       });
       actor.on('pointerleave', () => {
         this.handHover.leave(cardId);
         this.onCard('pointerleave', cardId);
       });
       actor.on('pointerup', (event) => {
+        if (event.pointerType === ex.PointerType.Touch) {
+          this.handHover.release();
+          if (!this.handHover.touch.isTap(event)) return;
+        }
         if (
           !isFrontHandCard(
             cardId,
@@ -616,7 +664,7 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
     delay: number,
   ): void {
     record.moving = true;
-    record.actor.graphics.offset = ex.vec(0, 0);
+    resetCardLift(record.actor);
     record.actor.z = record.restZ;
     record.actor.actions.clearActions();
     const motion = record.actor.actions;
@@ -651,7 +699,7 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
       selected: this.selected.has(cardId),
     });
     const hover =
-      record.personal && legal && held === 0
+      record.personal && !ctx.inputBlocked() && held === 0
         ? this.handHover.current(cardId)
         : 0;
     placeCardLift(
@@ -660,6 +708,8 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
       record.restY,
       record.restZ,
       held > 0 ? held : hover,
+      legal && this.selected.has(cardId),
+      record.personal,
     );
   }
 
@@ -671,7 +721,9 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
       !record?.personal ||
       !state ||
       !ctx ||
-      !legalCard(state, ctx.meSeatIndex, cardId)
+      ctx.inputBlocked() ||
+      ctx.meSeatIndex === null ||
+      !state.hands[String(ctx.meSeatIndex)]?.includes(cardId)
     ) {
       this.handHover.leave(cardId);
       return;
@@ -873,20 +925,23 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
   }
 
   private banner(ctx: RenderContext, text: string): ex.Actor {
-    const width = text.length * 8 + 16;
+    const size = isMobileDevice()
+      ? Math.max(8, Math.min(16, Math.floor(700 / Math.max(1, text.length))))
+      : 8;
+    const width = text.length * size + 16;
     const actor = new ex.Actor({
       pos: ex.vec(Math.floor((LOGICAL_WIDTH - width) / 2), 112),
       anchor: ex.vec(0, 0),
       width,
-      height: 24,
+      height: size + 16,
       z: 16,
     });
-    actor.graphics.use(panelRect(width, 24, BUTTON, STROKE));
+    actor.graphics.use(panelRect(width, size + 16, BUTTON, STROKE));
     const caption = new ex.Actor({
       pos: ex.vec(8, 8),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText(text, 8, GOLD));
+    caption.graphics.use(canvasText(text, size, GOLD));
     actor.addChild(caption);
     ctx.scene.add(actor);
     return actor;
@@ -970,43 +1025,44 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
         this.suitActors.set(suit, actor);
       }
     }
-    const rest = buttonCaptionPos(label, box.w, box.h);
+    const size = buttonFontSize(label, box.w, box.h);
+    const rest = buttonCaptionPos(label, box.w, box.h, size);
     const caption = new ex.Actor({
       pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
-    const text = canvasText(label, BUTTON_FONT_SIZE, GOLD);
+    const text = canvasText(label, size, GOLD);
     caption.graphics.use(text);
     actor.addChild(caption);
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;
     });
-    actor.on('pointerleave', () => {
-      this.paintSuitButtons();
-      if (!target.startsWith('suit:')) {
-        face.strokeColor = STROKE;
-        face.color = BUTTON;
-      }
-      caption.pos = ex.vec(rest.x, rest.y);
-    });
-    actor.on('pointerdown', () => {
-      face.color = BUTTON_DOWN;
-      caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
-    });
-    actor.on('pointerup', () => {
-      if (!target.startsWith('suit:')) {
-        face.color = BUTTON;
-      }
-      caption.pos = ex.vec(rest.x, rest.y);
-      const state = this.state;
-      const current = this.ctx;
-      if (!state || !current) {
-        return;
-      }
-      this.handleInput({ type: 'pointerup', target }, state, current);
-    });
+    bindButtonPress(
+      actor,
+      () => {
+        face.color = BUTTON_DOWN;
+        caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
+      },
+      () => {
+        this.paintSuitButtons();
+        if (!target.startsWith('suit:')) {
+          face.strokeColor = STROKE;
+          face.color = BUTTON;
+        }
+        caption.pos = ex.vec(rest.x, rest.y);
+      },
+      () => {
+        const state = this.state;
+        const current = this.ctx;
+        if (!state || !current) {
+          return;
+        }
+        this.handleInput({ type: 'pointerup', target }, state, current);
+      },
+    );
     ctx.scene.add(actor);
     this.buttons.push(actor);
+    if (!target.startsWith('suit:')) this.actionButtons.set(target, actor);
     return text;
   }
 }

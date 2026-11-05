@@ -9,12 +9,40 @@ import {
   isIphoneAgent,
   isMobileDevice,
   isPortrait,
+  installGameGestureGuard,
   mountMobileShell,
   readShellInputs,
   shellView,
   type MobileShell,
   type ShellInputs,
 } from './mobile-shell';
+
+describe('game gesture guard', () => {
+  it('blocks phone pinch gestures but preserves single-finger input and cleans up', () => {
+    const remove = installGameGestureGuard(document, () => true);
+    const gesture = new Event('gesturestart', { cancelable: true });
+    document.dispatchEvent(gesture);
+    expect(gesture.defaultPrevented).toBe(true);
+    const move = (count: number): Event => {
+      const event = new Event('touchmove', { cancelable: true });
+      Object.defineProperty(event, 'touches', { value: Array(count).fill({}) });
+      document.dispatchEvent(event);
+      return event;
+    };
+    expect(move(1).defaultPrevented).toBe(false);
+    expect(move(2).defaultPrevented).toBe(true);
+    remove();
+    expect(move(2).defaultPrevented).toBe(false);
+  });
+
+  it('leaves desktop browser gestures alone', () => {
+    const remove = installGameGestureGuard(document, () => false);
+    const event = new Event('gesturechange', { cancelable: true });
+    document.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+    remove();
+  });
+});
 
 const PHONE: ShellInputs = {
   mobile: true,

@@ -4,10 +4,13 @@
     <meta charset="UTF-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="manifest" href="/app.webmanifest" />
+    <link rel="apple-touch-icon" href="/app-icon-192.png" />
+    <meta name="theme-color" content="#145c38" />
     <title>Card House</title>
     <style>
       html {
@@ -21,7 +24,7 @@
         height: 100%;
         background: var(--cardhouse-bg);
         overflow: hidden;
-        touch-action: manipulation;
+        touch-action: none;
         overscroll-behavior: none;
         -webkit-text-size-adjust: 100%;
       }
@@ -34,6 +37,8 @@
       }
 
       canvas {
+        /* The canvas owns touch gestures, including sliding along a hand. */
+        touch-action: none;
         image-rendering: pixelated;
         image-rendering: crisp-edges;
       }

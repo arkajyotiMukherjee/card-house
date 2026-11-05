@@ -7,6 +7,9 @@ import {
   type BluffState,
 } from '../../src/shared/games/bluff';
 import { BUTTON_HEIGHT } from './button-style';
+import { isMobileDevice } from './mobile-shell';
+
+const PHONE_LAYOUT = typeof window !== 'undefined' && isMobileDevice();
 import {
   PICKER_LEFT,
   PICKER_RIGHT,
@@ -31,7 +34,8 @@ export const BLUFF_PASS_BUTTON = actionBox(1);
 export const BLUFF_CHALLENGE_BUTTON = actionBox(2);
 export const BLUFF_TURN_LABEL = TURN_LINE;
 export const BLUFF_RANK_HINT = 'Select a rank';
-export const PROMPT_Y = 164;
+// The top opponent's card count occupies y=168 on both input layouts.
+export const PROMPT_Y = 184;
 export const PILE_NOTICE_Y = PILE_Y - CARD_DRAW / 2 - 28;
 
 /** Unchosen rank buttons stay green. The chosen rank is filled gold. */
@@ -51,6 +55,7 @@ export function rankButtonColors(chosen: boolean): {
 }
 
 export function rankHintPos(): { x: number; y: number } {
+  if (PHONE_LAYOUT) return { x: 240, y: 200 };
   const width = BLUFF_RANK_HINT.length * 8;
   return {
     x: PICKER_RIGHT - width,
@@ -69,6 +74,15 @@ export function rankCallButtons(): {
   w: number;
   h: number;
 }[] {
+  if (PHONE_LAYOUT) {
+    return BLUFF_RANKS.map((rank, index) => ({
+      rank,
+      x: 240 + (index % 7) * 70,
+      y: 222 + Math.floor(index / 7) * 70,
+      w: 64,
+      h: 64,
+    }));
+  }
   const span =
     BLUFF_RANKS.length * RANK_BUTTON_W +
     (BLUFF_RANKS.length - 1) * RANK_BUTTON_GAP;
@@ -163,6 +177,19 @@ export function pileNotice(
 
 const PILE_SHOWN = 8;
 const PILE_STEP = 20;
+
+export const HAND_PAGE_SIZE = 8;
+export const HAND_PREV = { x: 12, y: 464, w: 76, h: 64 };
+export const HAND_NEXT = { x: 668, y: 464, w: 76, h: 64 };
+
+export function pagedHandPositions(count: number): { x: number; y: number }[] {
+  const spacing = 64;
+  const center = (HAND_LEFT + HAND_RIGHT) / 2;
+  return Array.from({ length: count }, (_, index) => ({
+    x: center + (index - (count - 1) / 2) * spacing,
+    y: HAND_Y,
+  }));
+}
 
 export function handPositions(count: number): { x: number; y: number }[] {
   if (count <= 0) {
@@ -346,4 +373,15 @@ export function pileFaceUp(
     return false;
   }
   return state.lastPlay.cards.includes(cardId);
+}
+
+/** Keep matching ranks together so a crowded hand can be scanned predictably. */
+export function orderedBluffHand(cards: readonly string[]): string[] {
+  const rankIndex = (card: string): number => {
+    const rank = rankOfCard(card);
+    return rank === null ? BLUFF_RANKS.length : BLUFF_RANKS.indexOf(rank);
+  };
+  return [...cards].sort(
+    (a, b) => rankIndex(a) - rankIndex(b) || a.localeCompare(b),
+  );
 }

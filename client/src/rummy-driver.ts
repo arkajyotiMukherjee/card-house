@@ -1,3 +1,5 @@
+import { bindButtonPress } from './button-press';
+import { isMobileDevice } from './mobile-shell';
 import * as ex from 'excalibur';
 import {
   RUMMY_GAME_TYPE,
@@ -18,19 +20,27 @@ import {
   seatFan,
 } from './table-presentation';
 import {
-  BUTTON_FONT_SIZE,
   BUTTON_PRESS_SHIFT,
   buttonCaptionPos,
+  buttonFontSize,
 } from './button-style';
 import { pixelFont } from './boot-scene';
 import type { CardAtlas } from './card-atlas';
 import type { GameDriver, InputEvent, RenderContext } from './game-driver';
 import {
+  cardHitBox,
+  frontCardAt,
   isFrontHandCard,
   localHandHitBoxes,
   type CardHitBox,
 } from './card-hit';
-import { HandHover, placeCardLift, startHandHoverClock } from './hand-hover';
+import {
+  HandHover,
+  canInspectPointer,
+  placeCardLift,
+  resetCardLift,
+  startHandHoverClock,
+} from './hand-hover';
 import {
   DISCARD_BUTTON,
   DISCARD_X,
@@ -187,6 +197,7 @@ export class RummyDriver implements GameDriver<RummyState> {
   private backTargets = new Map<string, string>();
   private labels: ex.Actor[] = [];
   private buttons: ex.Actor[] = [];
+  private buttonTargets = new Map<RummyButton, ex.Actor>();
   private flashes: ex.Actor[] = [];
   private stockActor: ex.Actor | null = null;
   private selected = new Set<string>();
@@ -201,13 +212,19 @@ export class RummyDriver implements GameDriver<RummyState> {
     this.state = state;
     this.ctx = ctx;
     this.ensureHoverClock(ctx);
-    if (!this.buttonsReady) {
+    if (state.phase !== 'play') {
+      for (const button of this.buttons) button.kill();
+      this.buttons = [];
+      this.buttonTargets.clear();
+      this.buttonsReady = false;
+    } else if (!this.buttonsReady) {
       this.addButton(ctx, DRAW_STOCK_BUTTON, 'Stock', 'draw-stock');
       this.addButton(ctx, DRAW_DISCARD_BUTTON, 'Take', 'draw-discard');
       this.addButton(ctx, MELD_BUTTON, 'Meld', 'meld');
       this.addButton(ctx, DISCARD_BUTTON, 'Discard', 'discard');
       this.buttonsReady = true;
     }
+    this.syncButtonAvailability(state, ctx);
     this.syncLabels(state, ctx);
     if (state.phase === 'lobby') {
       this.clearTableCards();
@@ -227,23 +244,31 @@ export class RummyDriver implements GameDriver<RummyState> {
     if (ctx.inputBlocked() && event.type !== 'pointerleave') {
       return;
     }
+    if (ctx.meSeatIndex === null || state.turnSeatIndex !== ctx.meSeatIndex) {
+      return;
+    }
     if (event.target === 'draw-stock' && event.type === 'pointerup') {
+      if (state.drawn) return;
       ctx.sendIntent({ type: 'draw', source: 'stock' });
       return;
     }
     if (event.target === 'draw-discard' && event.type === 'pointerup') {
+      if (state.drawn) return;
       ctx.sendIntent({ type: 'draw', source: 'discard' });
       return;
     }
     if (event.target === 'meld' && event.type === 'pointerup') {
+      if (!state.drawn) return;
       this.sendMeld(state, ctx);
       return;
     }
     if (event.target === 'discard' && event.type === 'pointerup') {
+      if (!state.drawn) return;
       this.sendDiscard(state, ctx);
       return;
     }
     if (event.target.startsWith('meld:') && event.type === 'pointerup') {
+      if (!state.drawn) return;
       this.sendLayoff(state, ctx, Number(event.target.slice(5)));
       return;
     }
@@ -327,12 +352,30 @@ export class RummyDriver implements GameDriver<RummyState> {
       actor.kill();
     }
     this.buttons = [];
+    this.buttonTargets.clear();
     this.buttonsReady = false;
     this.selected.clear();
     this.hover = null;
     this.stopHoverClock();
     this.state = null;
     this.ctx = null;
+  }
+
+  private syncButtonAvailability(state: RummyState, ctx: RenderContext): void {
+    const acting =
+      state.phase === 'play' &&
+      ctx.meSeatIndex !== null &&
+      state.turnSeatIndex === ctx.meSeatIndex;
+    for (const [target, actor] of this.buttonTargets) {
+      const draw = target === 'draw-stock' || target === 'draw-discard';
+      const visible = acting && (draw ? !state.drawn : state.drawn);
+      actor.graphics.isVisible = visible;
+      actor.pointer.useColliderShape = visible;
+      actor.pointer.useGraphicsBounds = visible;
+      for (const child of actor.children) {
+        if (child instanceof ex.Actor) child.graphics.isVisible = visible;
+      }
+    }
   }
 
   private sendMeld(state: RummyState, ctx: RenderContext): void {
@@ -405,9 +448,16 @@ export class RummyDriver implements GameDriver<RummyState> {
       ctx.meSeatIndex === null
         ? []
         : (state.hands[String(ctx.meSeatIndex)] ?? []);
-    if (state.phase === 'play' && ctx.meSeatIndex !== null) {
+    if (ctx.meSeatIndex !== null) {
       this.labels.push(
-        this.textActor(ctx, 16, HINT_Y, `Pts ${deadwoodPoints(hand)}`, DIM),
+        this.textActor(
+          ctx,
+          16,
+          HINT_Y,
+          `${state.phase === 'finished' ? 'Your deadwood:' : 'Pts'} ${deadwoodPoints(hand)}`,
+          DIM,
+          state.phase === 'finished' && isMobileDevice() ? 12 : 8,
+        ),
       );
     }
     for (const seat of ctx.seats) {
@@ -582,28 +632,33 @@ export class RummyDriver implements GameDriver<RummyState> {
       actor.pointer.useGraphicsBounds = false;
       actor.graphics.use(cardSprite(atlas, cardId, place.faceUp));
       actor.on('pointerenter', (event) => {
+        if (!canInspectPointer(event, ctx.scene.engine.input.pointers)) return;
         this.followHand(cardId, event.worldPos.x, true);
         this.onCard('pointerenter', cardId);
       });
       actor.on('pointermove', (event) => {
+        if (!canInspectPointer(event, ctx.scene.engine.input.pointers)) return;
+        this.handHover.touch.move(event);
         this.followHand(cardId, event.worldPos.x, false);
+      });
+      actor.on('pointerdown', (event) => {
+        this.handHover.touch.start(event);
+        this.followHand(cardId, event.worldPos.x, true);
+      });
+      actor.on('pointercancel', () => {
+        this.handHover.touch.cancel();
+        this.handHover.release();
       });
       actor.on('pointerleave', () => {
         this.handHover.leave(cardId);
         this.onCard('pointerleave', cardId);
       });
       actor.on('pointerup', (event) => {
-        if (
-          !isFrontHandCard(
-            cardId,
-            event.worldPos.x,
-            event.worldPos.y,
-            this.handBoxes(),
-          )
-        ) {
-          return;
+        if (event.pointerType === ex.PointerType.Touch) {
+          this.handHover.release();
+          if (!this.handHover.touch.isTap(event)) return;
         }
-        this.onCardPress(cardId);
+        this.cardPressAt(cardId, event.worldPos.x, event.worldPos.y);
       });
       ctx.scene.add(actor);
       record = {
@@ -644,7 +699,7 @@ export class RummyDriver implements GameDriver<RummyState> {
     delay: number,
   ): void {
     record.moving = true;
-    record.actor.graphics.offset = ex.vec(0, 0);
+    resetCardLift(record.actor);
     record.actor.z = record.restZ;
     record.actor.actions.clearActions();
     const motion = record.actor.actions;
@@ -679,7 +734,7 @@ export class RummyDriver implements GameDriver<RummyState> {
       selected: this.selected.has(cardId),
     });
     const hover =
-      record.personal && legal && held === 0
+      record.personal && !ctx.inputBlocked() && held === 0
         ? this.handHover.current(cardId)
         : 0;
     placeCardLift(
@@ -688,6 +743,8 @@ export class RummyDriver implements GameDriver<RummyState> {
       record.restY,
       record.restZ,
       held > 0 ? held : hover,
+      legal && this.selected.has(cardId),
+      record.personal,
     );
   }
 
@@ -699,7 +756,9 @@ export class RummyDriver implements GameDriver<RummyState> {
       !record?.personal ||
       !state ||
       !ctx ||
-      !legalCard(state, ctx.meSeatIndex, cardId)
+      ctx.inputBlocked() ||
+      ctx.meSeatIndex === null ||
+      !state.hands[String(ctx.meSeatIndex)]?.includes(cardId)
     ) {
       this.handHover.leave(cardId);
       return;
@@ -771,6 +830,36 @@ export class RummyDriver implements GameDriver<RummyState> {
       return;
     }
     this.handleInput({ type, target: cardId }, state, ctx);
+  }
+
+  private cardPressAt(cardId: string, x: number, y: number): void {
+    const role = this.roles.get(cardId);
+    if (role?.kind === 'hand') {
+      if (!isFrontHandCard(cardId, x, y, this.handBoxes())) return;
+    } else {
+      // Excalibur dispatches to every overlapping collider. A meld is a fan:
+      // only its front card may submit the layoff for this pointer release.
+      const tableCards = [...this.cards.entries()]
+        .filter(
+          ([id, record]) =>
+            this.roles.get(id)?.kind !== 'hand' &&
+            record.faceUp &&
+            !record.moving,
+        )
+        .sort((a, b) => a[1].actor.z - b[1].actor.z)
+        .map(([id, record]) =>
+          cardHitBox(
+            id,
+            record.actor.pos.x,
+            record.actor.pos.y,
+            CARD_DRAW,
+            CARD_DRAW,
+            0,
+          ),
+        );
+      if (frontCardAt(tableCards, { x, y }) !== cardId) return;
+    }
+    this.onCardPress(cardId);
   }
 
   private onCardPress(cardId: string): void {
@@ -884,7 +973,7 @@ export class RummyDriver implements GameDriver<RummyState> {
         z: 4,
       });
       actor.graphics.use(ctx.cards.back());
-      actor.on('pointerup', () => {
+      bindButtonPress(actor, undefined, undefined, () => {
         this.onTarget('pointerup', 'draw-stock');
       });
       ctx.scene.add(actor);
@@ -914,20 +1003,23 @@ export class RummyDriver implements GameDriver<RummyState> {
   }
 
   private banner(ctx: RenderContext, text: string): ex.Actor {
-    const width = text.length * 8 + 16;
+    const size = isMobileDevice()
+      ? Math.max(8, Math.min(16, Math.floor(700 / Math.max(1, text.length))))
+      : 8;
+    const width = text.length * size + 16;
     const actor = new ex.Actor({
       pos: ex.vec(Math.floor((LOGICAL_WIDTH - width) / 2), 112),
       anchor: ex.vec(0, 0),
       width,
-      height: 24,
+      height: size + 16,
       z: 16,
     });
-    actor.graphics.use(panelRect(width, 24, BUTTON, STROKE));
+    actor.graphics.use(panelRect(width, size + 16, BUTTON, STROKE));
     const caption = new ex.Actor({
       pos: ex.vec(8, 8),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText(text, 8, GOLD));
+    caption.graphics.use(canvasText(text, size, GOLD));
     actor.addChild(caption);
     ctx.scene.add(actor);
     return actor;
@@ -939,13 +1031,14 @@ export class RummyDriver implements GameDriver<RummyState> {
     y: number,
     text: string,
     color: ex.Color,
+    size = 8,
   ): ex.Actor {
     const actor = new ex.Actor({
       pos: ex.vec(x, y),
       anchor: ex.vec(0, 0),
       z: 14,
     });
-    actor.graphics.use(canvasText(text, 8, color));
+    actor.graphics.use(canvasText(text, size, color));
     ctx.scene.add(actor);
     return actor;
   }
@@ -979,37 +1072,40 @@ export class RummyDriver implements GameDriver<RummyState> {
     });
     const face = panelRect(box.w, box.h, BUTTON, STROKE);
     actor.graphics.use(face);
-    const rest = buttonCaptionPos(label, box.w, box.h);
+    const size = buttonFontSize(label, box.w, box.h);
+    const rest = buttonCaptionPos(label, box.w, box.h, size);
     const caption = new ex.Actor({
       pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText(label, BUTTON_FONT_SIZE, GOLD));
+    caption.graphics.use(canvasText(label, size, GOLD));
     actor.addChild(caption);
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;
     });
-    actor.on('pointerleave', () => {
-      face.strokeColor = STROKE;
-      face.color = BUTTON;
-      caption.pos = ex.vec(rest.x, rest.y);
-    });
-    actor.on('pointerdown', () => {
-      face.color = BUTTON_DOWN;
-      caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
-    });
-    actor.on('pointerup', () => {
-      face.color = BUTTON;
-      caption.pos = ex.vec(rest.x, rest.y);
-      const state = this.state;
-      const current = this.ctx;
-      if (!state || !current) {
-        return;
-      }
-      this.handleInput({ type: 'pointerup', target }, state, current);
-    });
+    bindButtonPress(
+      actor,
+      () => {
+        face.color = BUTTON_DOWN;
+        caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
+      },
+      () => {
+        face.strokeColor = STROKE;
+        face.color = BUTTON;
+        caption.pos = ex.vec(rest.x, rest.y);
+      },
+      () => {
+        const state = this.state;
+        const current = this.ctx;
+        if (!state || !current) {
+          return;
+        }
+        this.handleInput({ type: 'pointerup', target }, state, current);
+      },
+    );
     ctx.scene.add(actor);
     this.buttons.push(actor);
+    this.buttonTargets.set(target, actor);
   }
 }
 

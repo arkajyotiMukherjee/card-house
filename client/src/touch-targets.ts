@@ -15,6 +15,14 @@ import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from './sheets';
 
 export const TOUCH_TARGET = 44;
 
+/** Convert a CSS-pixel finger target into the canvas's logical coordinates. */
+export function logicalTouchTarget(width: number, height: number): number {
+  const scale = Math.min(width / LOGICAL_WIDTH, height / LOGICAL_HEIGHT);
+  return Number.isFinite(scale) && scale > 0
+    ? TOUCH_TARGET / scale
+    : TOUCH_TARGET;
+}
+
 export interface TouchBox {
   x: number;
   y: number;
@@ -144,7 +152,14 @@ function collect(scene: ex.Scene): Tracked[] {
     if (size.w <= 0 || size.h <= 0) {
       continue;
     }
-    if (size.w >= TOUCH_TARGET && size.h >= TOUCH_TARGET) {
+    // Centered card actors own their overlapping hand hit tests. Buttons use
+    // top-left anchors and must be measured in screen pixels even when their
+    // logical dimensions exceed 44 (a 64px button shrinks on short phones).
+    if (
+      actor.anchor.x === 0.5 &&
+      actor.anchor.y === 0.5 &&
+      !actor.pointer.useGraphicsBounds
+    ) {
       continue;
     }
     const pos = actor.globalPos;
@@ -171,8 +186,11 @@ function signature(tracked: readonly Tracked[]): string {
     .join(',');
 }
 
-function apply(tracked: readonly Tracked[]): void {
-  const hits = touchBoxes(tracked.map((entry) => entry.face));
+function apply(tracked: readonly Tracked[], minimum: number): void {
+  const hits = touchBoxes(
+    tracked.map((entry) => entry.face),
+    minimum,
+  );
   tracked.forEach((entry, index) => {
     const hit = hits[index];
     if (!hit) {
@@ -204,12 +222,14 @@ export function installTouchTargets(
     }
     const scene = engine.currentScene;
     const tracked = collect(scene);
-    const next = signature(tracked);
+    const rect = engine.canvas.getBoundingClientRect();
+    const minimum = logicalTouchTarget(rect.width, rect.height);
+    const next = `${minimum}:${signature(tracked)}`;
     if (next === last && scene === lastScene) {
       return;
     }
     last = next;
     lastScene = scene;
-    apply(tracked);
+    apply(tracked, minimum);
   });
 }

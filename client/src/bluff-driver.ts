@@ -1,3 +1,5 @@
+import { bindButtonPress } from './button-press';
+import { isMobileDevice } from './mobile-shell';
 import * as ex from 'excalibur';
 import {
   BLUFF_GAME_TYPE,
@@ -13,6 +15,10 @@ import {
   BLUFF_TURN_LABEL,
   CARD_DRAW,
   HOVER_LIFT,
+  HAND_NEXT,
+  HAND_PREV,
+  HAND_PAGE_SIZE,
+  pagedHandPositions,
   PILE_NOTICE_Y,
   PILE_X,
   PILE_Y,
@@ -24,6 +30,7 @@ import {
   faceForCard,
   finishedLine,
   handPositions,
+  orderedBluffHand,
   leadRankHint,
   legalCard,
   pileFaceUp,
@@ -43,9 +50,9 @@ import {
   seatFan,
 } from './table-presentation';
 import {
-  BUTTON_FONT_SIZE,
   BUTTON_PRESS_SHIFT,
   buttonCaptionPos,
+  buttonFontSize,
 } from './button-style';
 import { pixelFont } from './boot-scene';
 import type { CardAtlas } from './card-atlas';
@@ -62,7 +69,13 @@ import {
   pileAnchors,
   type PileAnchor,
 } from './bluff-challenge';
-import { HandHover, placeCardLift, startHandHoverClock } from './hand-hover';
+import {
+  HandHover,
+  canInspectPointer,
+  placeCardLift,
+  resetCardLift,
+  startHandHoverClock,
+} from './hand-hover';
 import { LOGICAL_WIDTH } from './sheets';
 
 const GOLD = ex.Color.fromHex('#f4e4b3');
@@ -126,6 +139,7 @@ interface ControlFace {
   face: ex.Rectangle;
   caption: ex.Actor;
   text: ex.Text;
+  setLabel?: (label: string) => void;
 }
 
 interface CardRecord {
@@ -219,6 +233,11 @@ export class BluffDriver implements GameDriver<BluffState> {
   private playControl: ControlFace | null = null;
   private passControl: ControlFace | null = null;
   private challengeControl: ControlFace | null = null;
+  private handPage = 0;
+  private handPageCount = 1;
+  private visibleHand: string[] = [];
+  private prevHandControl: ControlFace | null = null;
+  private nextHandControl: ControlFace | null = null;
   private hintActor: ex.Actor | null = null;
   private rankActors: {
     rank: BluffRank;
@@ -263,21 +282,43 @@ export class BluffDriver implements GameDriver<BluffState> {
           text: made.text,
         });
       }
+      if (isMobileDevice()) {
+        this.prevHandControl = this.addButton(ctx, HAND_PREV, '<', 'hand-prev');
+        this.nextHandControl = this.addButton(
+          ctx,
+          HAND_NEXT,
+          '1/1 >',
+          'hand-next',
+        );
+      }
       this.buttonsReady = true;
     }
-    this.syncCalls(state, ctx);
     this.syncLabels(state, ctx);
     if (state.phase === 'lobby') {
       this.clearTableCards();
+      this.syncCalls(state, ctx);
       return;
     }
     this.syncCards(state, ctx);
+    this.syncCalls(state, ctx);
     this.syncBacks(state, ctx);
   }
 
   handleInput(event: InputEvent, state: BluffState, ctx: RenderContext): void {
     this.state = state;
     this.ctx = ctx;
+    if (
+      event.type === 'pointerup' &&
+      (event.target === 'hand-prev' || event.target === 'hand-next')
+    ) {
+      if (ctx.inputBlocked() || this.handPageCount < 2) return;
+      const direction = event.target === 'hand-prev' ? -1 : 1;
+      this.handPage =
+        (this.handPage + direction + this.handPageCount) % this.handPageCount;
+      this.handHover.clear();
+      this.syncCards(state, ctx, true);
+      return;
+    }
     if (state.phase !== 'play') {
       return;
     }
@@ -325,6 +366,9 @@ export class BluffDriver implements GameDriver<BluffState> {
       } else {
         this.selected.add(event.target);
       }
+      this.playControl?.setLabel?.(
+        this.selected.size > 0 ? `Play ${this.selected.size}` : 'Play',
+      );
       for (const cardId of new Set([...previous, event.target])) {
         this.applyLift(cardId, state, ctx);
       }
@@ -419,6 +463,8 @@ export class BluffDriver implements GameDriver<BluffState> {
     this.playControl = null;
     this.passControl = null;
     this.challengeControl = null;
+    this.prevHandControl = null;
+    this.nextHandControl = null;
     this.hintActor?.kill();
     this.hintActor = null;
     this.rankActors = [];
@@ -466,6 +512,9 @@ export class BluffDriver implements GameDriver<BluffState> {
     if (!calling) {
       this.claimTouched = false;
     }
+    this.playControl?.setLabel?.(
+      this.selected.size > 0 ? `Play ${this.selected.size}` : 'Play',
+    );
     this.setShown(this.playControl, canPlay(state, seat));
     this.setShown(this.passControl, canPass(state, seat));
     this.setShown(this.challengeControl, canChallenge(state, seat));
@@ -526,7 +575,13 @@ export class BluffDriver implements GameDriver<BluffState> {
     }
     const arrival = this.arrival;
     if (arrival && challengeFrame(arrival.elapsed).phase !== 'settled') {
-      this.labels.push(this.banner(ctx, arrival.line, PILE_NOTICE_Y));
+      this.labels.push(
+        this.banner(
+          ctx,
+          arrival.line,
+          isMobileDevice() && state.requiredRank === null ? 370 : PILE_NOTICE_Y,
+        ),
+      );
     }
     for (const seat of ctx.seats) {
       if (seat.self) {
@@ -546,7 +601,11 @@ export class BluffDriver implements GameDriver<BluffState> {
     }
   }
 
-  private syncCards(state: BluffState, ctx: RenderContext): void {
+  private syncCards(
+    state: BluffState,
+    ctx: RenderContext,
+    pageChanged = false,
+  ): void {
     const desired = new Map<
       string,
       {
@@ -570,14 +629,27 @@ export class BluffDriver implements GameDriver<BluffState> {
     const owned =
       ctx.meSeatIndex === null
         ? []
-        : (state.hands[String(ctx.meSeatIndex)] ?? []);
+        : orderedBluffHand(state.hands[String(ctx.meSeatIndex)] ?? []);
     const hand =
       holding && this.arrival?.local
         ? owned.filter((cardId) => !holding.has(cardId))
         : owned;
-    const handSlots = handPositions(hand.length);
-    for (let index = 0; index < hand.length; index += 1) {
-      const cardId = hand[index];
+    this.handPageCount = this.nextHandControl
+      ? Math.max(1, Math.ceil(hand.length / HAND_PAGE_SIZE))
+      : 1;
+    this.handPage = Math.min(this.handPage, this.handPageCount - 1);
+    const paged = this.handPageCount > 1;
+    const first = this.handPage * HAND_PAGE_SIZE;
+    this.visibleHand = paged ? hand.slice(first, first + HAND_PAGE_SIZE) : hand;
+    this.setShown(this.prevHandControl, paged);
+    this.setShown(this.nextHandControl, paged);
+    if (paged)
+      this.nextHandControl?.setLabel?.(
+        `${this.handPage + 1}/${this.handPageCount} >`,
+      );
+    const handSlots = this.visibleHandSlots();
+    for (let index = 0; index < this.visibleHand.length; index += 1) {
+      const cardId = this.visibleHand[index];
       const slot = handSlots[index];
       if (!cardId || !slot) {
         continue;
@@ -650,11 +722,10 @@ export class BluffDriver implements GameDriver<BluffState> {
       if (!desired.has(cardId)) {
         record.actor.kill();
         this.cards.delete(cardId);
-        this.selected.delete(cardId);
       }
     }
     for (const [cardId, place] of desired) {
-      this.placeCard(cardId, place, ctx);
+      this.placeCard(cardId, place, ctx, pageChanged && place.personal);
     }
   }
 
@@ -670,6 +741,7 @@ export class BluffDriver implements GameDriver<BluffState> {
       duration?: number;
     },
     ctx: RenderContext,
+    instant: boolean,
   ): void {
     const atlas = place.personal ? ctx.myCards : ctx.cards;
     let record = this.cards.get(cardId);
@@ -684,17 +756,32 @@ export class BluffDriver implements GameDriver<BluffState> {
       actor.pointer.useGraphicsBounds = false;
       actor.graphics.use(cardSprite(atlas, cardId, place.faceUp));
       actor.on('pointerenter', (event) => {
+        if (!canInspectPointer(event, ctx.scene.engine.input.pointers)) return;
         this.followHand(cardId, event.worldPos.x, true);
         this.onCard('pointerenter', cardId);
       });
       actor.on('pointermove', (event) => {
+        if (!canInspectPointer(event, ctx.scene.engine.input.pointers)) return;
+        this.handHover.touch.move(event);
         this.followHand(cardId, event.worldPos.x, false);
+      });
+      actor.on('pointerdown', (event) => {
+        this.handHover.touch.start(event);
+        this.followHand(cardId, event.worldPos.x, true);
+      });
+      actor.on('pointercancel', () => {
+        this.handHover.touch.cancel();
+        this.handHover.release();
       });
       actor.on('pointerleave', () => {
         this.handHover.leave(cardId);
         this.onCard('pointerleave', cardId);
       });
       actor.on('pointerup', (event) => {
+        if (event.pointerType === ex.PointerType.Touch) {
+          this.handHover.release();
+          if (!this.handHover.touch.isTap(event)) return;
+        }
         if (
           !isFrontHandCard(
             cardId,
@@ -729,7 +816,11 @@ export class BluffDriver implements GameDriver<BluffState> {
     record.restX = place.x;
     record.restY = place.y;
     record.restZ = place.z;
-    if (!record.placed || moved) {
+    if (instant) {
+      record.actor.actions.clearActions();
+      record.placed = true;
+      record.moving = false;
+    } else if (!record.placed || moved) {
       const fromDeal = !record.placed;
       record.placed = true;
       this.travel(
@@ -754,7 +845,7 @@ export class BluffDriver implements GameDriver<BluffState> {
     duration: number,
   ): void {
     record.moving = true;
-    record.actor.graphics.offset = ex.vec(0, 0);
+    resetCardLift(record.actor);
     record.actor.z = record.restZ;
     record.actor.actions.clearActions();
     const motion = record.actor.actions;
@@ -792,7 +883,7 @@ export class BluffDriver implements GameDriver<BluffState> {
       this.arrivalRaised.has(cardId) ? HOVER_LIFT : 0,
     );
     const hover =
-      record.personal && legal && held === 0
+      record.personal && !ctx.inputBlocked() && held === 0
         ? this.handHover.current(cardId)
         : 0;
     placeCardLift(
@@ -801,6 +892,8 @@ export class BluffDriver implements GameDriver<BluffState> {
       record.restY,
       record.restZ,
       held > 0 ? held : hover,
+      legal && this.selected.has(cardId),
+      record.personal,
     );
   }
 
@@ -812,7 +905,9 @@ export class BluffDriver implements GameDriver<BluffState> {
       !record?.personal ||
       !state ||
       !ctx ||
-      !legalCard(state, ctx.meSeatIndex, cardId)
+      ctx.inputBlocked() ||
+      ctx.meSeatIndex === null ||
+      !state.hands[String(ctx.meSeatIndex)]?.includes(cardId)
     ) {
       this.handHover.leave(cardId);
       return;
@@ -897,11 +992,8 @@ export class BluffDriver implements GameDriver<BluffState> {
     if (!state || !ctx) {
       return;
     }
-    const hand =
-      ctx.meSeatIndex === null
-        ? []
-        : (state.hands[String(ctx.meSeatIndex)] ?? []);
-    const slots = handPositions(hand.length);
+    const hand = this.visibleHand;
+    const slots = this.visibleHandSlots();
     const centers: number[] = [];
     for (let index = 0; index < slots.length; index += 1) {
       centers.push(slots[index]?.x ?? 0);
@@ -922,8 +1014,13 @@ export class BluffDriver implements GameDriver<BluffState> {
     if (!state || !ctx || ctx.meSeatIndex === null) {
       return [];
     }
-    const hand = state.hands[String(ctx.meSeatIndex)] ?? [];
-    return localHandHitBoxes(hand, this.cards, CARD_DRAW);
+    return localHandHitBoxes(this.visibleHand, this.cards, CARD_DRAW);
+  }
+
+  private visibleHandSlots(): { x: number; y: number }[] {
+    return this.handPageCount > 1
+      ? pagedHandPositions(this.visibleHand.length)
+      : handPositions(this.visibleHand.length);
   }
 
   private onCard(
@@ -1035,6 +1132,11 @@ export class BluffDriver implements GameDriver<BluffState> {
     for (const record of this.cards.values()) {
       record.actor.kill();
     }
+    this.visibleHand = [];
+    this.handPage = 0;
+    this.handPageCount = 1;
+    this.setShown(this.prevHandControl, false);
+    this.setShown(this.nextHandControl, false);
     this.cards.clear();
     for (const actor of this.backs.values()) {
       actor.kill();
@@ -1047,20 +1149,28 @@ export class BluffDriver implements GameDriver<BluffState> {
   }
 
   private banner(ctx: RenderContext, text: string, y = 112): ex.Actor {
-    const width = text.length * 8 + 16;
+    const size = isMobileDevice()
+      ? Math.max(8, Math.min(16, Math.floor(620 / Math.max(1, text.length))))
+      : 8;
+    const width = text.length * size + 16;
     const actor = new ex.Actor({
-      pos: ex.vec(Math.floor((LOGICAL_WIDTH - width) / 2), y),
+      pos: ex.vec(
+        Math.floor(
+          ((isMobileDevice() && y === 370 ? 860 : LOGICAL_WIDTH) - width) / 2,
+        ),
+        y,
+      ),
       anchor: ex.vec(0, 0),
       width,
-      height: 24,
+      height: size + 16,
       z: 16,
     });
-    actor.graphics.use(panelRect(width, 24, BUTTON, STROKE));
+    actor.graphics.use(panelRect(width, size + 16, BUTTON, STROKE));
     const caption = new ex.Actor({
       pos: ex.vec(8, 8),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText(text, 8, GOLD));
+    caption.graphics.use(canvasText(text, size, GOLD));
     actor.addChild(caption);
     ctx.scene.add(actor);
     return actor;
@@ -1097,7 +1207,13 @@ export class BluffDriver implements GameDriver<BluffState> {
     ctx: RenderContext,
     box: { x: number; y: number; w: number; h: number },
     label: string,
-    target: 'play' | 'challenge' | 'pass' | `rank:${BluffRank}`,
+    target:
+      | 'play'
+      | 'challenge'
+      | 'pass'
+      | 'hand-prev'
+      | 'hand-next'
+      | `rank:${BluffRank}`,
   ): ControlFace {
     const actor = new ex.Actor({
       pos: ex.vec(box.x, box.y),
@@ -1108,8 +1224,9 @@ export class BluffDriver implements GameDriver<BluffState> {
     });
     const face = panelRect(box.w, box.h, BUTTON, STROKE);
     actor.graphics.use(face);
-    const rest = buttonCaptionPos(label, box.w, box.h);
-    const text = canvasText(label, BUTTON_FONT_SIZE, GOLD);
+    const size = buttonFontSize(label, box.w, box.h);
+    const rest = buttonCaptionPos(label, box.w, box.h, size);
+    const text = canvasText(label, size, GOLD);
     const caption = new ex.Actor({
       pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
@@ -1122,35 +1239,52 @@ export class BluffDriver implements GameDriver<BluffState> {
     const rank = target.startsWith('rank:')
       ? target.slice('rank:'.length)
       : null;
-    actor.on('pointerleave', () => {
-      caption.pos = ex.vec(rest.x, rest.y);
-      if (rank !== null) {
-        this.paintRanks(this.ranksOpen);
-        return;
-      }
-      face.strokeColor = STROKE;
-      face.color = BUTTON;
-    });
-    actor.on('pointerdown', () => {
-      face.color = BUTTON_DOWN;
-      caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
-    });
-    actor.on('pointerup', () => {
-      caption.pos = ex.vec(rest.x, rest.y);
-      if (rank !== null) {
-        this.paintRanks(this.ranksOpen);
-      } else {
+    bindButtonPress(
+      actor,
+      () => {
+        face.color = BUTTON_DOWN;
+        caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
+      },
+      () => {
+        caption.pos = ex.vec(rest.x, rest.y);
+        if (rank !== null) {
+          this.paintRanks(this.ranksOpen);
+          return;
+        }
+        face.strokeColor = STROKE;
         face.color = BUTTON;
-      }
-      const state = this.state;
-      const current = this.ctx;
-      if (!state || !current) {
-        return;
-      }
-      this.handleInput({ type: 'pointerup', target }, state, current);
-    });
+      },
+      () => {
+        const state = this.state;
+        const current = this.ctx;
+        if (!state || !current) {
+          return;
+        }
+        this.handleInput({ type: 'pointerup', target }, state, current);
+      },
+    );
     ctx.scene.add(actor);
     this.buttons.push(actor);
-    return { actor, face, caption, text };
+    return {
+      actor,
+      face,
+      caption,
+      text,
+      setLabel: (nextLabel) => {
+        text.text = nextLabel;
+        const nextSize = buttonFontSize(nextLabel, box.w, box.h);
+        text.font = pixelFont.toFont({
+          family: '"Press Start 2P"',
+          size: nextSize,
+          color: GOLD,
+          quality: 1,
+          filtering: ex.ImageFiltering.Pixel,
+        });
+        const next = buttonCaptionPos(nextLabel, box.w, box.h, nextSize);
+        rest.x = next.x;
+        rest.y = next.y;
+        caption.pos = ex.vec(rest.x, rest.y);
+      },
+    };
   }
 }

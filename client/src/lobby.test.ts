@@ -505,6 +505,17 @@ describe('grouped table list', () => {
     expect(shown + crowded.hidden).toBe(40);
     expect(crowded.hidden).toBeGreaterThan(0);
   });
+
+  it('fits two large phone rows even when each needs its own game header', () => {
+    const groups = tableGroups(tableLines(rows.slice(0, 2), [], 'lobby_1'));
+    const layout = listLayout(groups, true);
+    const shown = layout.slots.filter((slot) => slot.kind === 'row');
+    expect(layout.hidden).toBe(0);
+    expect(shown).toHaveLength(2);
+    expect(shown.every((slot) => slot.y + 128 <= 464)).toBe(true);
+    expect(watchHit(240, 96, true)).toBe(true);
+    expect(watchHit(240, 40, true)).toBe(false);
+  });
 });
 
 describe('Leave Room confirmation', () => {

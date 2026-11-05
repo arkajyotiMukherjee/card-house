@@ -1,3 +1,5 @@
+import { bindButtonPress } from './button-press';
+import { isMobileDevice } from './mobile-shell';
 import * as ex from 'excalibur';
 import {
   BLACKJACK_BET_AMOUNTS,
@@ -29,9 +31,9 @@ import {
 } from './blackjack-layout';
 import { chipsImage } from './boot-scene';
 import {
-  BUTTON_FONT_SIZE,
   BUTTON_PRESS_SHIFT,
   buttonCaptionPos,
+  buttonFontSize,
 } from './button-style';
 import {
   DIM,
@@ -42,6 +44,13 @@ import {
   panelRect,
 } from './canvas-ui';
 import type { CardAtlas } from './card-atlas';
+import {
+  HandHover,
+  canInspectPointer,
+  placeCardLift,
+  resetCardLift,
+  startHandHoverClock,
+} from './hand-hover';
 import { ChipAtlas, type ChipDenomination } from './chip-atlas';
 import type { GameDriver, InputEvent, RenderContext } from './game-driver';
 import { LOGICAL_WIDTH } from './sheets';
@@ -210,10 +219,15 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
   private buttonsReady = false;
   private state: BlackjackState | null = null;
   private ctx: RenderContext | null = null;
+  private readonly handHover = new HandHover();
+  private hoverClock: ex.Actor | null = null;
 
   render(state: BlackjackState, ctx: RenderContext): void {
     this.state = state;
     this.ctx = ctx;
+    this.hoverClock ??= startHandHoverClock(ctx.scene, (elapsedMs) =>
+      this.easeHand(elapsedMs),
+    );
     if (!this.buttonsReady) {
       this.addButtons(ctx);
       this.buttonsReady = true;
@@ -288,6 +302,9 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
   }
 
   destroy(ctx: RenderContext): void {
+    this.hoverClock?.kill();
+    this.hoverClock = null;
+    this.handHover.clear();
     void ctx;
     for (const actor of this.flashes) {
       actor.kill();
@@ -485,6 +502,24 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
         z: place.z,
       });
       actor.graphics.use(cardSprite(atlas, cardId, place.faceUp, place.fan));
+      actor.pointer.useGraphicsBounds = false;
+      actor.on('pointerenter', (event) => {
+        if (!canInspectPointer(event, ctx.scene.engine.input.pointers)) return;
+        this.inspectCard(cardId, event.worldPos.x);
+      });
+      actor.on('pointerdown', (event) =>
+        this.inspectCard(cardId, event.worldPos.x),
+      );
+      actor.on('pointermove', (event) => {
+        if (!canInspectPointer(event, ctx.scene.engine.input.pointers)) return;
+        this.inspectCard(cardId, event.worldPos.x);
+      });
+      actor.on('pointerleave', () => this.handHover.leave(cardId));
+      actor.on('pointercancel', () => this.handHover.release());
+      actor.on('pointerup', (event) => {
+        if (event.pointerType === ex.PointerType.Touch)
+          this.handHover.release();
+      });
       ctx.scene.add(actor);
       record = {
         actor,
@@ -535,6 +570,7 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
     delay: number,
   ): void {
     record.moving = true;
+    resetCardLift(record.actor);
     record.actor.actions.clearActions();
     const motion = record.actor.actions;
     if (delay > 0) {
@@ -550,6 +586,35 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
         record.moving = false;
         record.actor.pos = ex.vec(record.restX, record.restY);
       });
+  }
+
+  private inspectCard(cardId: string, x: number): void {
+    if (this.cards.get(cardId)?.personal && !this.ctx?.inputBlocked()) {
+      this.handHover.enter(cardId, x);
+    }
+  }
+
+  private easeHand(elapsedMs: number): void {
+    const hand = [...this.cards.entries()]
+      .filter(([, card]) => card.personal && !card.moving)
+      .sort((a, b) => a[1].restX - b[1].restX);
+    if (this.ctx?.inputBlocked()) this.handHover.release();
+    this.handHover.step(
+      hand.map(([id]) => id),
+      hand.map(([, card]) => card.restX),
+      elapsedMs,
+    );
+    for (const [id, card] of hand) {
+      placeCardLift(
+        card.actor,
+        card.restX,
+        card.restY,
+        12,
+        this.handHover.current(id),
+        false,
+        true,
+      );
+    }
   }
 
   private syncBets(state: BlackjackState, ctx: RenderContext): void {
@@ -669,54 +734,59 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
     });
     const face = panelRect(box.w, box.h, BUTTON, STROKE);
     actor.graphics.use(face);
-    const rest = buttonCaptionPos(label, box.w, box.h);
+    const size = buttonFontSize(label, box.w, box.h);
+    const rest = buttonCaptionPos(label, box.w, box.h, size);
     const caption = new ex.Actor({
       pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText(label, BUTTON_FONT_SIZE, GOLD));
+    caption.graphics.use(canvasText(label, size, GOLD));
     actor.addChild(caption);
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;
     });
-    actor.on('pointerleave', () => {
-      face.strokeColor = STROKE;
-      face.color = BUTTON;
-      caption.pos = ex.vec(rest.x, rest.y);
-    });
-    actor.on('pointerdown', () => {
-      face.color = BUTTON_DOWN;
-      caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
-    });
-    actor.on('pointerup', () => {
-      face.color = BUTTON;
-      caption.pos = ex.vec(rest.x, rest.y);
-      const state = this.state;
-      const current = this.ctx;
-      if (!state || !current) {
-        return;
-      }
-      this.handleInput({ type: 'pointerup', target }, state, current);
-    });
+    bindButtonPress(
+      actor,
+      () => {
+        face.color = BUTTON_DOWN;
+        caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
+      },
+      () => {
+        face.strokeColor = STROKE;
+        face.color = BUTTON;
+        caption.pos = ex.vec(rest.x, rest.y);
+      },
+      () => {
+        const state = this.state;
+        const current = this.ctx;
+        if (!state || !current) {
+          return;
+        }
+        this.handleInput({ type: 'pointerup', target }, state, current);
+      },
+    );
     ctx.scene.add(actor);
     this.buttons.push({ actor, box, group, target, face, caption });
   }
 
   private banner(ctx: RenderContext, text: string): ex.Actor {
-    const width = text.length * 8 + 16;
+    const size = isMobileDevice()
+      ? Math.max(8, Math.min(16, Math.floor(700 / Math.max(1, text.length))))
+      : 8;
+    const width = text.length * size + 16;
     const actor = new ex.Actor({
       pos: ex.vec(Math.floor((LOGICAL_WIDTH - width) / 2), BANNER_Y),
       anchor: ex.vec(0, 0),
       width,
-      height: 24,
+      height: size + 16,
       z: 16,
     });
-    actor.graphics.use(panelRect(width, 24, BUTTON, STROKE));
+    actor.graphics.use(panelRect(width, size + 16, BUTTON, STROKE));
     const caption = new ex.Actor({
       pos: ex.vec(8, 8),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText(text, 8, GOLD));
+    caption.graphics.use(canvasText(text, size, GOLD));
     actor.addChild(caption);
     ctx.scene.add(actor);
     return actor;

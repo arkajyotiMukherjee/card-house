@@ -1,3 +1,5 @@
+import { bindButtonPress } from './button-press';
+import { isMobileDevice } from './mobile-shell';
 import * as ex from 'excalibur';
 import {
   HEARTS_GAME_TYPE,
@@ -5,9 +7,9 @@ import {
 } from '../../src/shared/games/hearts';
 import { PILE_X, PILE_Y } from './bluff-layout';
 import {
-  BUTTON_FONT_SIZE,
   BUTTON_PRESS_SHIFT,
   buttonCaptionPos,
+  buttonFontSize,
 } from './button-style';
 import { pixelFont } from './boot-scene';
 import type { CardAtlas } from './card-atlas';
@@ -17,11 +19,19 @@ import {
   localHandHitBoxes,
   type CardHitBox,
 } from './card-hit';
-import { HandHover, placeCardLift, startHandHoverClock } from './hand-hover';
+import {
+  HandHover,
+  canInspectPointer,
+  placeCardLift,
+  resetCardLift,
+  startHandHoverClock,
+} from './hand-hover';
 import {
   CARD_DRAW,
   PASS_BUTTON,
   PLAY_BUTTON,
+  heartsAction,
+  playHint,
   cardLift,
   faceForCard,
   finishedLine,
@@ -186,18 +196,29 @@ export class HeartsDriver implements GameDriver<HeartsState> {
   private hover: string | null = null;
   private readonly handHover = new HandHover();
   private hoverClock: ex.Actor | null = null;
-  private buttonsReady = false;
+  private buttonAction: 'pass' | 'play' | null = null;
   private state: HeartsState | null = null;
   private ctx: RenderContext | null = null;
 
   render(state: HeartsState, ctx: RenderContext): void {
+    if (
+      this.state?.tableId !== state.tableId ||
+      this.state?.handIndex !== state.handIndex
+    ) {
+      this.selected.clear();
+      this.hover = null;
+      this.handHover.clear();
+    }
     this.state = state;
     this.ctx = ctx;
     this.ensureHoverClock(ctx);
-    if (!this.buttonsReady) {
-      this.addButton(ctx, PASS_BUTTON, 'Pass', 'pass');
-      this.addButton(ctx, PLAY_BUTTON, 'Play', 'play');
-      this.buttonsReady = true;
+    const action = heartsAction(state, ctx.meSeatIndex);
+    if (action !== this.buttonAction) {
+      for (const button of this.buttons) button.kill();
+      this.buttons = [];
+      this.buttonAction = action;
+      if (action === 'pass') this.addButton(ctx, PASS_BUTTON, 'Pass', action);
+      if (action === 'play') this.addButton(ctx, PLAY_BUTTON, 'Play', action);
     }
     this.syncLabels(state, ctx);
     if (state.phase === 'lobby') {
@@ -218,10 +239,12 @@ export class HeartsDriver implements GameDriver<HeartsState> {
       return;
     }
     if (event.target === 'pass' && event.type === 'pointerup') {
+      if (heartsAction(state, ctx.meSeatIndex) !== 'pass') return;
       this.sendPass(state, ctx);
       return;
     }
     if (event.target === 'play' && event.type === 'pointerup') {
+      if (heartsAction(state, ctx.meSeatIndex) !== 'play') return;
       this.sendPlay(state, ctx);
       return;
     }
@@ -306,7 +329,7 @@ export class HeartsDriver implements GameDriver<HeartsState> {
       actor.kill();
     }
     this.buttons = [];
-    this.buttonsReady = false;
+    this.buttonAction = null;
     this.selected.clear();
     this.hover = null;
     this.stopHoverClock();
@@ -377,14 +400,12 @@ export class HeartsDriver implements GameDriver<HeartsState> {
       );
       this.labels.push(this.textActor(ctx, 430, 196, passLabel(state), GOLD));
     } else {
-      const mine =
-        ctx.meSeatIndex !== null && state.turnSeatIndex === ctx.meSeatIndex;
       this.labels.push(
         this.textActor(
           ctx,
           TURN_LINE.x,
           TURN_LINE.y,
-          mine ? 'Your turn' : 'Wait',
+          playHint(state, ctx.meSeatIndex),
           GOLD,
         ),
       );
@@ -523,17 +544,32 @@ export class HeartsDriver implements GameDriver<HeartsState> {
       actor.pointer.useGraphicsBounds = false;
       actor.graphics.use(cardSprite(atlas, cardId, place.faceUp));
       actor.on('pointerenter', (event) => {
+        if (!canInspectPointer(event, ctx.scene.engine.input.pointers)) return;
         this.followHand(cardId, event.worldPos.x, true);
         this.onCard('pointerenter', cardId);
       });
       actor.on('pointermove', (event) => {
+        if (!canInspectPointer(event, ctx.scene.engine.input.pointers)) return;
+        this.handHover.touch.move(event);
         this.followHand(cardId, event.worldPos.x, false);
+      });
+      actor.on('pointerdown', (event) => {
+        this.handHover.touch.start(event);
+        this.followHand(cardId, event.worldPos.x, true);
+      });
+      actor.on('pointercancel', () => {
+        this.handHover.touch.cancel();
+        this.handHover.release();
       });
       actor.on('pointerleave', () => {
         this.handHover.leave(cardId);
         this.onCard('pointerleave', cardId);
       });
       actor.on('pointerup', (event) => {
+        if (event.pointerType === ex.PointerType.Touch) {
+          this.handHover.release();
+          if (!this.handHover.touch.isTap(event)) return;
+        }
         if (
           !isFrontHandCard(
             cardId,
@@ -585,7 +621,7 @@ export class HeartsDriver implements GameDriver<HeartsState> {
     delay: number,
   ): void {
     record.moving = true;
-    record.actor.graphics.offset = ex.vec(0, 0);
+    resetCardLift(record.actor);
     record.actor.z = record.restZ;
     record.actor.actions.clearActions();
     const motion = record.actor.actions;
@@ -620,7 +656,7 @@ export class HeartsDriver implements GameDriver<HeartsState> {
       selected: this.selected.has(cardId),
     });
     const hover =
-      record.personal && legal && held === 0
+      record.personal && !ctx.inputBlocked() && held === 0
         ? this.handHover.current(cardId)
         : 0;
     placeCardLift(
@@ -629,6 +665,8 @@ export class HeartsDriver implements GameDriver<HeartsState> {
       record.restY,
       record.restZ,
       held > 0 ? held : hover,
+      legal && this.selected.has(cardId),
+      record.personal,
     );
   }
 
@@ -640,7 +678,9 @@ export class HeartsDriver implements GameDriver<HeartsState> {
       !record?.personal ||
       !state ||
       !ctx ||
-      !legalCard(state, ctx.meSeatIndex, cardId)
+      ctx.inputBlocked() ||
+      ctx.meSeatIndex === null ||
+      !state.hands[String(ctx.meSeatIndex)]?.includes(cardId)
     ) {
       this.handHover.leave(cardId);
       return;
@@ -803,20 +843,23 @@ export class HeartsDriver implements GameDriver<HeartsState> {
   }
 
   private banner(ctx: RenderContext, text: string): ex.Actor {
-    const width = text.length * 8 + 16;
+    const size = isMobileDevice()
+      ? Math.max(8, Math.min(16, Math.floor(700 / Math.max(1, text.length))))
+      : 8;
+    const width = text.length * size + 16;
     const actor = new ex.Actor({
       pos: ex.vec(Math.floor((LOGICAL_WIDTH - width) / 2), 112),
       anchor: ex.vec(0, 0),
       width,
-      height: 24,
+      height: size + 16,
       z: 16,
     });
-    actor.graphics.use(panelRect(width, 24, BUTTON, STROKE));
+    actor.graphics.use(panelRect(width, size + 16, BUTTON, STROKE));
     const caption = new ex.Actor({
       pos: ex.vec(8, 8),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText(text, 8, GOLD));
+    caption.graphics.use(canvasText(text, size, GOLD));
     actor.addChild(caption);
     ctx.scene.add(actor);
     return actor;
@@ -854,35 +897,37 @@ export class HeartsDriver implements GameDriver<HeartsState> {
     });
     const face = panelRect(box.w, box.h, BUTTON, STROKE);
     actor.graphics.use(face);
-    const rest = buttonCaptionPos(label, box.w, box.h);
+    const size = buttonFontSize(label, box.w, box.h);
+    const rest = buttonCaptionPos(label, box.w, box.h, size);
     const caption = new ex.Actor({
       pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText(label, BUTTON_FONT_SIZE, GOLD));
+    caption.graphics.use(canvasText(label, size, GOLD));
     actor.addChild(caption);
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;
     });
-    actor.on('pointerleave', () => {
-      face.strokeColor = STROKE;
-      face.color = BUTTON;
-      caption.pos = ex.vec(rest.x, rest.y);
-    });
-    actor.on('pointerdown', () => {
-      face.color = BUTTON_DOWN;
-      caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
-    });
-    actor.on('pointerup', () => {
-      face.color = BUTTON;
-      caption.pos = ex.vec(rest.x, rest.y);
-      const state = this.state;
-      const current = this.ctx;
-      if (!state || !current) {
-        return;
-      }
-      this.handleInput({ type: 'pointerup', target }, state, current);
-    });
+    bindButtonPress(
+      actor,
+      () => {
+        face.color = BUTTON_DOWN;
+        caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
+      },
+      () => {
+        face.strokeColor = STROKE;
+        face.color = BUTTON;
+        caption.pos = ex.vec(rest.x, rest.y);
+      },
+      () => {
+        const state = this.state;
+        const current = this.ctx;
+        if (!state || !current) {
+          return;
+        }
+        this.handleInput({ type: 'pointerup', target }, state, current);
+      },
+    );
     ctx.scene.add(actor);
     this.buttons.push(actor);
   }

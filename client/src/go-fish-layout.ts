@@ -1,6 +1,7 @@
 import { HAND_Y, PILE_X, PILE_Y } from './bluff-layout';
 import type { GoFishState } from '../../src/shared/games/go-fish';
 import { LOGICAL_WIDTH } from './sheets';
+import { isMobileDevice } from './mobile-shell';
 import {
   askChipBox,
   fanCardRect,
@@ -27,7 +28,11 @@ const PLATE_CHAR_WIDTH = 8;
 const PLATE_PAD = 16;
 const BOOK_GAP = 10;
 
-export const ASK_BUTTON = { w: 56, h: 22 } as const;
+const PHONE_LAYOUT = typeof window !== 'undefined' && isMobileDevice();
+export const ASK_BUTTON = {
+  w: PHONE_LAYOUT ? 96 : 56,
+  h: PHONE_LAYOUT ? 64 : 22,
+} as const;
 
 export function stockPosition(): { x: number; y: number } {
   return { x: STOCK_X, y: STOCK_Y };
@@ -93,7 +98,10 @@ export function opponentBookOrigin(
     y = label.y;
   } else if (edge === 'top') {
     const inward = Math.max(plateBottom, ...fan.map((rect) => rect.y + rect.h));
-    y = inward + BOOK_GAP + 16;
+    // Phone Ask controls fill the space below the name. Books need their own
+    // row below both those controls and the central stock.
+    const ask = askButtonBox(seatX, seatY, name);
+    y = PHONE_LAYOUT ? 340 : Math.max(inward, ask.y + ask.h) + BOOK_GAP + 16;
   } else if (fan.length > 0) {
     const inward = Math.min(...fan.map((rect) => rect.y));
     y = inward - BOOK_GAP - 16;
@@ -160,8 +168,9 @@ export function finishedLine(
   }
   const seat = seats.find((row) => row.seatIndex === seatIndex);
   const name = seat?.name ?? '';
+  const books = state.books[String(seatIndex)]?.length ?? 0;
   if (name.length > 0) {
-    return `Winner seat ${seatIndex} ${name}`;
+    return `${name} wins - ${books} books`;
   }
-  return `Winner seat ${seatIndex}`;
+  return `Seat ${seatIndex} wins - ${books} books`;
 }

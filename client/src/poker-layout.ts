@@ -123,6 +123,7 @@ export function blindChipLine(
   name: string,
   chips: string,
   mark: 'SB' | 'BB' | null,
+  fontSize = 8,
 ): {
   mark: { x: number; y: number } | null;
   chips: { x: number; y: number };
@@ -137,21 +138,21 @@ export function blindChipLine(
     }
     return {
       mark: base,
-      chips: { x: base.x + mark.length * 8 + 4, y: base.y },
+      chips: { x: base.x + mark.length * fontSize + 4, y: base.y },
     };
   }
-  const chipsAt = fanGapLine(seatX, seatY, name, chips, 0);
+  const chipsAt = fanGapLine(seatX, seatY, name, chips, 0, fontSize);
   if (!mark) {
     return { mark: null, chips: chipsAt };
   }
   const plate = opponentNameAnchor(seatX, seatY, name);
   const text = `${mark} ${chips}`;
   const start = Math.round(
-    plate.x + (seatPlateWidth(name) - text.length * 8) / 2,
+    plate.x + (seatPlateWidth(name) - text.length * fontSize) / 2,
   );
   return {
     mark: { x: start, y: chipsAt.y },
-    chips: { x: start + (mark.length + 1) * 8, y: chipsAt.y },
+    chips: { x: start + (mark.length + 1) * fontSize, y: chipsAt.y },
   };
 }
 
@@ -305,6 +306,6 @@ export function droppedPositions(count: number): { x: number; y: number }[] {
 }
 
 /** Banner start x, centered under the pot and kept clear of side seats. */
-export function bannerX(text: string): number {
-  return Math.max(280, Math.round(480 - (text.length * 8) / 2));
+export function bannerX(text: string, fontSize = 8): number {
+  return Math.max(280, Math.round(480 - (text.length * fontSize) / 2));
 }

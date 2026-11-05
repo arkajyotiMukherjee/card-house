@@ -1,4 +1,6 @@
+import { bindButtonPress } from './button-press';
 import * as ex from 'excalibur';
+import { isMobileDevice } from './mobile-shell';
 import { refreshCanvasTextFields } from './html-field';
 import { readBluffState, type BluffState } from '../../src/shared/games/bluff';
 import {
@@ -51,9 +53,9 @@ import { tableScenePaint } from './client-look';
 import { statsCaption } from './client-stats';
 import { type TableStyle } from './table-atlas';
 import {
-  BUTTON_FONT_SIZE,
   BUTTON_PRESS_SHIFT,
   buttonCaptionPos,
+  buttonFontSize,
 } from './button-style';
 import {
   BUTTON,
@@ -100,6 +102,8 @@ import {
   heartsStatusHud,
   pokerStatusHud,
   STATUS_HUD,
+  STATUS_FONT_SIZE,
+  STATUS_LINE_HEIGHT,
   type StatusHudLines,
 } from './status-hud';
 import {
@@ -254,9 +258,9 @@ export class GameScene extends ex.Scene {
     waiting.graphics.use(this.waitingText);
     this.add(waiting);
 
-    this.spectatingText = canvasText('', 8, DIM);
+    this.spectatingText = canvasText('', isMobileDevice() ? 12 : 8, DIM);
     const spectating = new ex.Actor({
-      pos: ex.vec(16, 50),
+      pos: ex.vec(16, isMobileDevice() ? 86 : 50),
       anchor: ex.vec(0, 0),
       z: 8,
     });
@@ -281,9 +285,13 @@ export class GameScene extends ex.Scene {
     this.linkActor.graphics.use(this.linkText);
     this.add(this.linkActor);
 
-    this.statsText = canvasText(this.statsLine, 8, GOLD);
+    this.statsText = canvasText(
+      this.statsLine,
+      isMobileDevice() ? 10 : 8,
+      GOLD,
+    );
     const stats = new ex.Actor({
-      pos: ex.vec(280, 22),
+      pos: ex.vec(isMobileDevice() ? 308 : 280, 22),
       anchor: ex.vec(0, 0),
       z: 21,
     });
@@ -554,30 +562,30 @@ export class GameScene extends ex.Scene {
     });
     const face = panelRect(box.w, box.h, BUTTON, STROKE);
     actor.graphics.use(face);
-    const rest = buttonCaptionPos('Leave Table', box.w, box.h);
+    const size = buttonFontSize('Leave Table', box.w, box.h);
+    const rest = buttonCaptionPos('Leave Table', box.w, box.h, size);
     const caption = new ex.Actor({
       pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText('Leave Table', BUTTON_FONT_SIZE, GOLD));
+    caption.graphics.use(canvasText('Leave Table', size, GOLD));
     actor.addChild(caption);
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;
     });
-    actor.on('pointerleave', () => {
-      face.strokeColor = STROKE;
-      face.color = BUTTON;
-      caption.pos = ex.vec(rest.x, rest.y);
-    });
-    actor.on('pointerdown', () => {
-      face.color = BUTTON_DOWN;
-      caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
-    });
-    actor.on('pointerup', () => {
-      face.color = BUTTON;
-      caption.pos = ex.vec(rest.x, rest.y);
-      this.leave();
-    });
+    bindButtonPress(
+      actor,
+      () => {
+        face.color = BUTTON_DOWN;
+        caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
+      },
+      () => {
+        face.strokeColor = STROKE;
+        face.color = BUTTON;
+        caption.pos = ex.vec(rest.x, rest.y);
+      },
+      () => this.leave(),
+    );
     this.add(actor);
   }
 
@@ -1101,13 +1109,13 @@ export class GameScene extends ex.Scene {
       z: 8,
     });
     plate.graphics.use(panelRect(box.w, box.h, PLATE, STROKE));
-    this.hudTurn = canvasText('', 8, SELF);
-    this.hudPhase = canvasText('', 8, GOLD);
-    this.hudRound = canvasText('', 8, DIM);
+    this.hudTurn = canvasText('', STATUS_FONT_SIZE, SELF);
+    this.hudPhase = canvasText('', STATUS_FONT_SIZE, GOLD);
+    this.hudRound = canvasText('', STATUS_FONT_SIZE, DIM);
     const rows = [this.hudTurn, this.hudPhase, this.hudRound];
     for (let index = 0; index < rows.length; index += 1) {
       const row = new ex.Actor({
-        pos: ex.vec(10, 8 + index * 12),
+        pos: ex.vec(10, 8 + index * STATUS_LINE_HEIGHT),
         anchor: ex.vec(0, 0),
       });
       row.graphics.use(rows[index]);
@@ -1198,17 +1206,17 @@ export class GameScene extends ex.Scene {
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;
     });
-    actor.on('pointerleave', () => {
-      face.strokeColor = STROKE;
-      face.color = PLATE;
-    });
-    actor.on('pointerdown', () => {
-      face.color = BUTTON_DOWN;
-    });
-    actor.on('pointerup', () => {
-      face.color = PLATE;
-      this.sendIntent({ type: DUMMY_INCREMENT });
-    });
+    bindButtonPress(
+      actor,
+      () => {
+        face.color = BUTTON_DOWN;
+      },
+      () => {
+        face.strokeColor = STROKE;
+        face.color = PLATE;
+      },
+      () => this.sendIntent({ type: DUMMY_INCREMENT }),
+    );
     this.add(actor);
     this.counterPlate = actor;
   }

@@ -3,7 +3,6 @@ import { BUTTON_HEIGHT } from './button-style';
 import { seatAnchorsFor } from './game-scene';
 import {
   ACTION_CLUSTER,
-  FELT_BOTTOM,
   PICKER_RIGHT,
   PICKER_Y,
   TURN_LINE,
@@ -112,10 +111,32 @@ describe('table presentation', () => {
     expect(actionBox(2).y).toBeGreaterThan(actionBox(0).y);
     expect(TURN_LINE.y).toBeLessThan(ACTION_CLUSTER.y);
     expect(TURN_LINE.x).toBe(ACTION_CLUSTER.x);
-    expect(PICKER_Y).toBe(FELT_BOTTOM);
+    expect(PICKER_Y + BUTTON_HEIGHT).toBeLessThan(seatAnchorsFor(2)[0]!.y - 6);
     expect(PICKER_RIGHT).toBeLessThan(ACTION_CLUSTER.x);
     expect(isGiveUpControl('Fold')).toBe(true);
     expect(isGiveUpControl('Pass')).toBe(false);
     expect(isGiveUpControl('Check')).toBe(false);
   });
+});
+
+it('keeps spectator bottom cards below the board and clear of their name and notes', () => {
+  for (const count of [1, 2, 3, 4, 5, 6, 7, 8]) {
+    const seat = seatAnchorsFor(count)[0]!;
+    for (const cards of [1, 2, 4, 13, 27, 54]) {
+      const name = 'Second QA';
+      const at = opponentNameAnchor(seat.x, seat.y, name);
+      const label = { ...at, w: seatPlateWidth(name), h: 56 };
+      for (const card of seatFan(seat.x, seat.y, cards, name)) {
+        const bounds = fanCardRect(card);
+        expect(
+          overlaps(bounds, label),
+          JSON.stringify({ count, cards, seat, bounds, label }),
+        ).toBe(false);
+        expect(bounds.y).toBeGreaterThanOrEqual(424);
+        expect(bounds.y + bounds.h).toBeLessThanOrEqual(540);
+        expect(bounds.x).toBeGreaterThanOrEqual(0);
+        expect(bounds.x + bounds.w).toBeLessThanOrEqual(756);
+      }
+    }
+  }
 });

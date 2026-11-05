@@ -284,7 +284,7 @@ describe('rummyStatusHud', () => {
     ).toEqual({
       turn: 'Turn: -',
       phase: 'Phase: Finished',
-      round: 'Round: Score 0',
+      round: 'Round: Deadwood 0',
     });
   });
 });

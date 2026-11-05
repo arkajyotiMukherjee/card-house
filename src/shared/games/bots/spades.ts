@@ -5,7 +5,7 @@ import {
   spadesCardRank,
   spadesCardSuit,
 } from '../spades.ts';
-import { lowestCard, seatIndexes, turnThen } from './order.ts';
+import { lowestCard, rankValue, seatIndexes, turnThen } from './order.ts';
 import type { BotStrategy } from './types.ts';
 
 function handOf(state: SpadesState, seatIndex: number): string[] {
@@ -44,23 +44,21 @@ function legalCard(
 }
 
 function bidOf(state: SpadesState, seatIndex: number): number {
-  let bid = 0;
-  for (const card of handOf(state, seatIndex)) {
+  const hand = handOf(state, seatIndex);
+  const spades = hand.filter((card) => spadesCardSuit(card) === 'S');
+  // Low trump cards are not all guaranteed tricks. Long trump holdings and
+  // protected side honors are more useful than counting every king as a win.
+  let bid = Math.max(0, spades.length - 3);
+  for (const card of hand) {
     const suit = spadesCardSuit(card);
     const rank = spadesCardRank(card);
-    if (suit === 'S') {
-      bid += 1;
-    } else if (rank === 'A' || rank === 'K') {
-      bid += 1;
-    }
+    const length = hand.filter((held) => spadesCardSuit(held) === suit).length;
+    if (rank === 'A') bid += 1;
+    else if (rank === 'K' && length >= 2) bid += suit === 'S' ? 1 : 0.5;
+    else if (rank === 'Q' && length >= 3) bid += 0.5;
   }
-  if (bid < 0) {
-    return 0;
-  }
-  if (bid > 13) {
-    return 13;
-  }
-  return bid;
+  // Nil needs a dedicated avoidance strategy; this policy plays for tricks.
+  return Math.min(13, Math.max(1, Math.floor(bid)));
 }
 
 export const spadesStrategy: BotStrategy<SpadesState, SpadesIntent> = {
@@ -86,22 +84,31 @@ export const spadesStrategy: BotStrategy<SpadesState, SpadesIntent> = {
     }
     const hand = handOf(state, seatIndex);
     const legal = hand.filter((card) => legalCard(state, seatIndex, card));
-    const led =
-      state.trick.length === 0
-        ? null
-        : spadesCardSuit(state.trick[0]?.card ?? '');
-    if (led) {
-      const follow = legal.filter((card) => spadesCardSuit(card) === led);
-      if (follow.length > 0) {
-        return { type: 'play', card: lowestCard(follow) };
-      }
-      const trumps = legal.filter((card) => spadesCardSuit(card) === 'S');
-      if (trumps.length > 0) {
-        return { type: 'play', card: lowestCard(trumps) };
-      }
+    const led = state.trick[0] && spadesCardSuit(state.trick[0].card);
+    if (!led) {
+      const aces = legal.filter((card) => spadesCardRank(card) === 'A');
+      const quiet = legal.filter((card) => spadesCardSuit(card) !== 'S');
+      return {
+        type: 'play',
+        card: lowestCard(aces.length ? aces : quiet.length ? quiet : legal),
+      };
+    }
+    const strength = (card: string): number => {
+      const suit = spadesCardSuit(card);
+      return (suit === 'S' ? 100 : suit === led ? 50 : 0) + rankValue(card);
+    };
+    let winner = state.trick[0]!;
+    for (const played of state.trick) {
+      if (strength(played.card) > strength(winner.card)) winner = played;
+    }
+    // Do not spend a winning card over our partner's winning trick.
+    if (winner.seat % 2 === seatIndex % 2) {
       return { type: 'play', card: lowestCard(legal) };
     }
-    const quiet = legal.filter((card) => spadesCardSuit(card) !== 'S');
-    return { type: 'play', card: lowestCard(quiet.length > 0 ? quiet : legal) };
+    const winners = legal.filter(
+      (card) => strength(card) > strength(winner.card),
+    );
+    winners.sort((a, b) => strength(a) - strength(b));
+    return { type: 'play', card: winners[0] ?? lowestCard(legal) };
   },
 };

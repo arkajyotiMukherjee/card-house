@@ -2,11 +2,12 @@ import { describe, expect, it } from 'vitest';
 import type { SpadesState } from '../../src/shared/games/spades';
 import { TABLE_CENTER } from './bluff-layout';
 import {
-  PARTNERSHIP_BOARD,
+  partnershipLinePosition,
   PLAY_BUTTON,
   bidButtonBox,
   bidButtonLabel,
   finishedLine,
+  handResultLine,
   legalCard,
   partnershipBoard,
   seatBidText,
@@ -16,7 +17,6 @@ import {
 } from './spades-layout';
 import {
   ACTION_CLUSTER,
-  PICKER_Y,
   belowFelt,
   fanGapLine,
   insideCluster,
@@ -50,17 +50,31 @@ function state(overrides: Partial<SpadesState> = {}): SpadesState {
 }
 
 describe('spades layout', () => {
-  it('wraps bid buttons in the green band and tricks toward each seat', () => {
+  it('explains the completed hand score change, including penalties', () => {
+    const before = state({ scores: { ns: 0, ew: 0 } });
+    const after = state({ handNumber: 2, scores: { ns: 24, ew: 52 } });
+    expect(handResultLine(before, after)).toBe('Hand 1: NS +24 / EW +52');
+    expect(
+      handResultLine(
+        before,
+        state({ handNumber: 2, scores: { ns: -80, ew: 0 } }),
+      ),
+    ).toBe('Hand 1: NS -80 / EW +0');
+    expect(handResultLine(null, after)).toBeNull();
+    expect(handResultLine(after, after)).toBeNull();
+    expect(handResultLine(before, { ...after, tableId: 'another' })).toBeNull();
+    expect(handResultLine(before, { ...after, handNumber: 3 })).toBeNull();
+  });
+  it('centers bid buttons clear of the score rows and tricks toward each seat', () => {
     const nil = bidButtonBox(0);
     const six = bidButtonBox(6);
     const seven = bidButtonBox(7);
     const last = bidButtonBox(13);
-    expect(nil.y).toBe(PICKER_Y);
     expect(nil.y).toBe(last.y);
-    expect(nil.y).not.toBe(416);
-    expect(belowFelt(nil)).toBe(true);
+    expect(nil.y).toBeGreaterThan(partnershipLinePosition(3).y + 12);
+    expect(belowFelt(nil)).toBe(false);
     expect(nil.x).toBeLessThan(six.x);
-    expect(seven.x).toBeGreaterThan(six.x + six.w + 8);
+    expect(seven.x).toBeGreaterThan(six.x + six.w);
     expect(last.x + last.w).toBeLessThan(ACTION_CLUSTER.x);
     expect(belowFelt(PLAY_BUTTON)).toBe(true);
     expect(insideCluster(PLAY_BUTTON)).toBe(true);
@@ -109,13 +123,6 @@ describe('spades layout', () => {
     expect(seatBidText(bidding, 1)).toBe('');
     expect(bidButtonLabel(0)).toBe('Nil');
     expect(bidButtonLabel(7)).toBe('7');
-  });
-
-  it('keeps the board rows and chips on the left of the felt', () => {
-    const { rows, chipRows, x, chipX } = PARTNERSHIP_BOARD;
-    expect(chipX + 32).toBeLessThan(x);
-    expect([...rows]).toEqual([...rows].sort((a, b) => a - b));
-    expect(chipRows[1] - chipRows[0]).toBeGreaterThanOrEqual(32);
   });
 
   it('lifts a card only on your turn during the trick', () => {

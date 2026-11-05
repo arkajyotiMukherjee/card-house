@@ -1,9 +1,10 @@
+import { bindButtonPress } from './button-press';
 import * as ex from 'excalibur';
 import {
-  BUTTON_FONT_SIZE,
   BUTTON_HEIGHT,
   BUTTON_PRESS_SHIFT,
   buttonCaptionPos,
+  buttonFontSize,
 } from './button-style';
 import {
   BUTTON,
@@ -23,6 +24,7 @@ import {
 } from './game-scene';
 import { clampScroll, definitionFor, layoutHowToPlay } from './how-to-play';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from './sheets';
+import { isMobileDevice } from './mobile-shell';
 
 const BACKDROP = new ex.Color(0, 0, 0, 0.65);
 const OFFSCREEN_Y = -200;
@@ -113,7 +115,9 @@ export class HowToPlayOverlay {
       return;
     }
     this.scroll = clampScroll(
-      this.scroll + Math.sign(direction) * SCROLL_STEP,
+      this.scroll +
+        Math.sign(direction) *
+          (isMobileDevice() ? HOW_TO_PLAY_TEXT.rows : SCROLL_STEP),
       this.lines.length,
       HOW_TO_PLAY_TEXT.rows,
     );
@@ -136,7 +140,8 @@ export class HowToPlayOverlay {
     });
     const more = this.lines.length > HOW_TO_PLAY_TEXT.rows;
     if (this.hintText) {
-      this.hintText.text = more ? 'Scroll wheel for more' : '';
+      this.hintText.text =
+        more && !isMobileDevice() ? 'Scroll wheel for more' : '';
     }
   }
 
@@ -151,29 +156,30 @@ export class HowToPlayOverlay {
     });
     const face = panelRect(box.w, box.h, PLATE, STROKE);
     actor.graphics.use(face);
-    const rest = buttonCaptionPos('?', box.w, box.h);
+    const size = buttonFontSize('?', box.w, box.h);
+    const rest = buttonCaptionPos('?', box.w, box.h, size);
     const caption = new ex.Actor({
       pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText('?', BUTTON_FONT_SIZE, GOLD));
+    caption.graphics.use(canvasText('?', size, GOLD));
     actor.addChild(caption);
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;
     });
-    actor.on('pointerleave', () => {
-      face.strokeColor = STROKE;
-      face.color = PLATE;
-    });
-    actor.on('pointerdown', () => {
-      face.color = BUTTON_DOWN;
-      caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
-    });
-    actor.on('pointerup', () => {
-      face.color = PLATE;
-      caption.pos = ex.vec(rest.x, rest.y);
-      this.toggle();
-    });
+    bindButtonPress(
+      actor,
+      () => {
+        face.color = BUTTON_DOWN;
+        caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
+      },
+      () => {
+        face.strokeColor = STROKE;
+        face.color = PLATE;
+        caption.pos = ex.vec(rest.x, rest.y);
+      },
+      () => this.toggle(),
+    );
     this.scene.add(actor);
     return actor;
   }
@@ -218,7 +224,7 @@ export class HowToPlayOverlay {
     this.track(title);
 
     for (let row = 0; row < text.rows; row += 1) {
-      const lineText = canvasText('', 8, GOLD);
+      const lineText = canvasText('', text.size, GOLD);
       const actor = new ex.Actor({
         pos: ex.vec(
           panel.x + text.padding,
@@ -241,18 +247,39 @@ export class HowToPlayOverlay {
     hint.graphics.use(this.hintText);
     this.track(hint);
 
-    this.track(this.buildCloseButton());
+    if (isMobileDevice() && this.lines.length > text.rows) {
+      this.track(
+        this.buildFooterButton('Previous', panel.x + text.padding, () => {
+          this.scrollBy(-1);
+        }),
+      );
+      this.track(
+        this.buildFooterButton('Next', panel.x + text.padding + 176, () => {
+          this.scrollBy(1);
+        }),
+      );
+    }
+    this.track(
+      this.buildFooterButton(
+        'Close',
+        panel.x + panel.w - 120 - text.padding,
+        () => {
+          this.close();
+        },
+      ),
+    );
   }
 
-  private buildCloseButton(): ex.Actor {
+  private buildFooterButton(
+    label: string,
+    x: number,
+    press: () => void,
+  ): ex.Actor {
     const panel = HOW_TO_PLAY_PANEL;
-    const w = 120;
-    const h = BUTTON_HEIGHT;
+    const w = label === 'Previous' ? 160 : 120;
+    const h = isMobileDevice() ? 64 : BUTTON_HEIGHT;
     const actor = new ex.Actor({
-      pos: ex.vec(
-        panel.x + panel.w - w - HOW_TO_PLAY_TEXT.padding,
-        panel.y + panel.h - 44,
-      ),
+      pos: ex.vec(x, panel.y + panel.h - h - 16),
       anchor: ex.vec(0, 0),
       width: w,
       height: h,
@@ -260,29 +287,30 @@ export class HowToPlayOverlay {
     });
     const face = panelRect(w, h, BUTTON, STROKE);
     actor.graphics.use(face);
-    const rest = buttonCaptionPos('Close', w, h);
+    const size = buttonFontSize(label, w, h);
+    const rest = buttonCaptionPos(label, w, h, size);
     const caption = new ex.Actor({
       pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText('Close', BUTTON_FONT_SIZE, GOLD));
+    caption.graphics.use(canvasText(label, size, GOLD));
     actor.addChild(caption);
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;
     });
-    actor.on('pointerleave', () => {
-      face.strokeColor = STROKE;
-      face.color = BUTTON;
-    });
-    actor.on('pointerdown', () => {
-      face.color = BUTTON_DOWN;
-      caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
-    });
-    actor.on('pointerup', () => {
-      face.color = BUTTON;
-      caption.pos = ex.vec(rest.x, rest.y);
-      this.close();
-    });
+    bindButtonPress(
+      actor,
+      () => {
+        face.color = BUTTON_DOWN;
+        caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
+      },
+      () => {
+        face.strokeColor = STROKE;
+        face.color = BUTTON;
+        caption.pos = ex.vec(rest.x, rest.y);
+      },
+      () => press(),
+    );
     return actor;
   }
 }

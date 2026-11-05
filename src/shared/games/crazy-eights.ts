@@ -467,7 +467,10 @@ export function cardIsPlayable(state: CrazyEightsState, card: string): boolean {
   return suitOfCard(card) === state.currentSuit || rankOfCard(top) === rank;
 }
 
-function handHasPlay(state: CrazyEightsState, seatIndex: number): boolean {
+export function handHasPlay(
+  state: CrazyEightsState,
+  seatIndex: number,
+): boolean {
   const hand = state.hands[handKey(seatIndex)] ?? [];
   for (const card of hand) {
     if (cardIsPlayable(state, card)) {

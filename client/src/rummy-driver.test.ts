@@ -40,17 +40,42 @@ function context(
 }
 
 describe('RummyDriver input', () => {
+  it('submits one layoff when a tap hits several overlapping meld cards', () => {
+    const driver = new RummyDriver();
+    const sent: unknown[] = [];
+    const ctx = context(sent, 0);
+    const table = state();
+    driver.handleInput({ type: 'pointerup', target: '3H' }, table, ctx);
+    const input = driver as unknown as {
+      cards: Map<string, unknown>;
+      roles: Map<string, { kind: string; meldIndex: number }>;
+      cardPressAt(id: string, x: number, y: number): void;
+    };
+    ['5D', '6D', '7D'].forEach((id, index) => {
+      input.cards.set(id, {
+        actor: { pos: { x: 300 + index * 18, y: 200 }, z: index },
+        faceUp: true,
+        moving: false,
+      });
+      input.roles.set(id, { kind: 'meld', meldIndex: 0 });
+    });
+    for (const id of ['5D', '6D', '7D']) input.cardPressAt(id, 320, 200);
+    expect(sent).toEqual([{ type: 'layoff', meldIndex: 0, cards: ['3H'] }]);
+  });
+
   it('sends draw, meld, discard, and layoff intents', () => {
     const driver = new RummyDriver();
     const sent: unknown[] = [];
     const ctx = context(sent, 0);
     const table = state();
+    table.drawn = false;
     driver.handleInput({ type: 'pointerup', target: 'draw-stock' }, table, ctx);
     driver.handleInput(
       { type: 'pointerup', target: 'draw-discard' },
       table,
       ctx,
     );
+    table.drawn = true;
     driver.handleInput({ type: 'pointerup', target: 'AS' }, table, ctx);
     driver.handleInput({ type: 'pointerup', target: '10H' }, table, ctx);
     driver.handleInput({ type: 'pointerup', target: 'meld' }, table, ctx);
@@ -85,7 +110,27 @@ describe('RummyDriver input', () => {
     const ctx = context(sent, 0);
     driver.handleInput({ type: 'pointerup', target: 'AS' }, table, ctx);
     driver.handleInput({ type: 'pointerup', target: 'meld' }, table, ctx);
-    expect(sent).toEqual([{ type: 'meld', cards: [] }]);
+    expect(sent).toEqual([]);
+  });
+
+  it('ignores actions from the inactive draw stage or a spectator', () => {
+    const driver = new RummyDriver();
+    const sent: unknown[] = [];
+    const table = state();
+    const ctx = context(sent, 0);
+    for (const target of ['draw-stock', 'draw-discard']) {
+      driver.handleInput({ type: 'pointerup', target }, table, ctx);
+    }
+    table.drawn = false;
+    for (const target of ['meld', 'discard', 'meld:0']) {
+      driver.handleInput({ type: 'pointerup', target }, table, ctx);
+    }
+    driver.handleInput(
+      { type: 'pointerup', target: 'draw-stock' },
+      table,
+      context(sent, null),
+    );
+    expect(sent).toEqual([]);
   });
 
   it('does not send a move after the rules finish', () => {

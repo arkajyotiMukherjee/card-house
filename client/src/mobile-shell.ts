@@ -88,6 +88,28 @@ export function isMobileDevice(win: ShellWindow = window): boolean {
   return matches(win, MOBILE_QUERY);
 }
 
+/** Safari's gesture events can zoom even when viewport limits are ignored. */
+export function installGameGestureGuard(
+  doc: Document = document,
+  mobile: () => boolean = isMobileDevice,
+): () => void {
+  const preventGesture = (event: Event): void => {
+    if (mobile()) event.preventDefault();
+  };
+  const preventPinch = (event: TouchEvent): void => {
+    if (mobile() && event.touches.length > 1) event.preventDefault();
+  };
+  const options = { passive: false };
+  doc.addEventListener('gesturestart', preventGesture, options);
+  doc.addEventListener('gesturechange', preventGesture, options);
+  doc.addEventListener('touchmove', preventPinch, options);
+  return () => {
+    doc.removeEventListener('gesturestart', preventGesture);
+    doc.removeEventListener('gesturechange', preventGesture);
+    doc.removeEventListener('touchmove', preventPinch);
+  };
+}
+
 export function visibleSize(win: ShellWindow = window): {
   width: number;
   height: number;
@@ -235,6 +257,10 @@ const SHELL_CSS = `
   left: max(8px, env(safe-area-inset-left));
   top: max(8px, env(safe-area-inset-top));
   opacity: 0.9;
+  width: 44px;
+  padding: 0;
+  font-family: sans-serif;
+  font-size: 24px;
 }
 #cardhouse-shell .ch-toast {
   position: fixed;
@@ -282,7 +308,7 @@ export function mountMobileShell(
         <p class="ch-note" data-cardhouse-shell="gate-note" hidden>${ADD_TO_HOME_NOTE}</p>
       </div>
     </div>
-    <button type="button" class="ch-button ch-fab" data-cardhouse-shell="fab" hidden>${FULLSCREEN_LABEL}</button>
+    <button type="button" class="ch-button ch-fab" data-cardhouse-shell="fab" aria-label="${FULLSCREEN_LABEL}" title="${FULLSCREEN_LABEL}" hidden>⛶</button>
     <p class="ch-note ch-toast" data-cardhouse-shell="toast" hidden>${ADD_TO_HOME_NOTE}</p>
   `;
   doc.body.append(root);

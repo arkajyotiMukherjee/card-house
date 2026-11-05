@@ -1,4 +1,7 @@
 import { BUTTON_HEIGHT } from './button-style';
+import { isMobileDevice } from './mobile-shell';
+
+const PHONE_LAYOUT = typeof window !== 'undefined' && isMobileDevice();
 import {
   CARD_DRAW,
   HAND_Y,
@@ -34,13 +37,13 @@ export {
 export const PLAY_BUTTON = actionBox(0);
 export const DRAW_BUTTON = actionBox(1);
 
-export const SUIT_BUTTON_Y = PICKER_Y;
-export const SUIT_BUTTON_W = 64;
-export const SUIT_BUTTON_H = BUTTON_HEIGHT;
+export const SUIT_BUTTON_Y = PHONE_LAYOUT ? 300 : PICKER_Y;
+export const SUIT_BUTTON_W = PHONE_LAYOUT ? 96 : 64;
+export const SUIT_BUTTON_H = PHONE_LAYOUT ? 64 : BUTTON_HEIGHT;
 
 const SUIT_GAP = 4;
 const SUIT_SPAN = 4 * SUIT_BUTTON_W + 3 * SUIT_GAP;
-const SUIT_START = PICKER_RIGHT - SUIT_SPAN;
+const SUIT_START = PHONE_LAYOUT ? 280 : PICKER_RIGHT - SUIT_SPAN;
 
 /** Suit picker in the green band, left of the cluster. */
 export const SUIT_BUTTONS = [

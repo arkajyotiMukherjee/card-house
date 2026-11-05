@@ -39,6 +39,9 @@ import {
   mountMobileShell,
   readSafeInsets,
   visibleSize,
+  readShellInputs,
+  shellView,
+  installGameGestureGuard,
 } from './mobile-shell';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH, fitViewport } from './sheets';
 import { installTouchTargets } from './touch-targets';
@@ -89,11 +92,13 @@ function applyContainScale(): void {
   if (!isMobileDevice() || !isCanvasFieldFocused() || !sameOrientation) {
     settledSize = size;
   }
-  const fitted = fitViewport(
-    settledSize.width,
-    settledSize.height,
-    readSafeInsets(),
-  );
+  const insets = readSafeInsets();
+  // Reserve a rail for the phone shell so Fullscreen never covers game input.
+  const shell = shellView(readShellInputs());
+  if (shell.button && !shell.gate) {
+    insets.left += 60;
+  }
+  const fitted = fitViewport(settledSize.width, settledSize.height, insets);
   engine.screen.viewport = { width: fitted.width, height: fitted.height };
   engine.screen.applyResolutionAndViewport();
   canvas.style.imageRendering = 'pixelated';
@@ -124,6 +129,7 @@ window.addEventListener('orientationchange', applyContainScale);
 window.visualViewport?.addEventListener('resize', applyContainScale);
 applyContainScale();
 mountMobileShell({ onChange: applyContainScale });
+installGameGestureGuard();
 installTouchTargets(engine);
 
 const loader = new ex.Loader(demoImages);
@@ -239,6 +245,7 @@ void engine.start(loader).then(() => {
           discordIdentity,
           {
             returning: savedRoomAtStart !== undefined,
+            inputBlocked: () => roomScene.dialogOpen,
             onJoined: (lobby) => {
               if (pendingReload) {
                 void finishReload(lobby);

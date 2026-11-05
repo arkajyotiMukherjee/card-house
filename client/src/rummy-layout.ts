@@ -212,8 +212,10 @@ export function finishedLine(
   }
   const seat = seats.find((row) => row.seatIndex === seatIndex);
   const name = seat?.name ?? '';
+  const score = state.scores[String(seatIndex)];
+  const result = score === undefined ? '' : ` - ${score} deadwood`;
   if (name.length > 0) {
-    return `Winner seat ${seatIndex} ${name}`;
+    return `${name} wins${result}`;
   }
-  return `Winner seat ${seatIndex}`;
+  return `Seat ${seatIndex} wins${result}`;
 }

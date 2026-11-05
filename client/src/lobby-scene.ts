@@ -1,8 +1,11 @@
 import * as ex from 'excalibur';
+import { bindButtonPress } from './button-press';
+import { isMobileDevice } from './mobile-shell';
 import {
   BUTTON_FONT_SIZE,
   BUTTON_PRESS_SHIFT,
   buttonCaptionPos,
+  buttonFontSize,
 } from './button-style';
 import { personalCardAtlas, pixelFont } from './boot-scene';
 import { statsCaption } from './client-stats';
@@ -10,6 +13,7 @@ import { subscribeLobbyTables } from './connect';
 import { joinFailureMessage, wrapTableError } from './join-errors';
 import { tableToReopen } from './last-room';
 import { roomComposer } from './room-composer';
+import { wrapText } from './menu-layout';
 import {
   IDLE_CARDS,
   IDLE_OPACITY,
@@ -36,7 +40,8 @@ import {
   leaveConfirmHit,
   chatLines,
   clampPlayerCount,
-  CREATE_TABLE,
+  CREATE_TABLE as DESKTOP_CREATE_TABLE,
+  MOBILE_CREATE_TABLE,
   discordBadgeBox,
   DISCORD_BADGE,
   gameOption,
@@ -55,6 +60,7 @@ import {
   tableSettingsJson,
   TABLE_LIST,
   WATCH_BUTTON,
+  MOBILE_WATCH_BUTTON,
   watchHit,
   watchingTableIds,
   type ChatLine,
@@ -65,6 +71,9 @@ import {
   type TableRow,
 } from './lobby';
 import type { DbConnection } from './module_bindings';
+
+const PHONE_LAYOUT = isMobileDevice();
+const CREATE_TABLE = PHONE_LAYOUT ? MOBILE_CREATE_TABLE : DESKTOP_CREATE_TABLE;
 
 const GOLD = ex.Color.fromHex('#f4e4b3');
 const DIM = ex.Color.fromHex('#d7c08a');
@@ -90,10 +99,14 @@ function chatFieldLabel(box: {
   h: number;
 }): FieldLabel {
   return {
-    size: BUTTON_FONT_SIZE,
+    size: PHONE_LAYOUT ? 12 : BUTTON_FONT_SIZE,
     x: box.x + CHAT_TEXT_PAD,
-    y: box.y + Math.round((box.h - BUTTON_FONT_SIZE) / 2),
-    columns: fieldLabelColumns(box.w, CHAT_TEXT_PAD, BUTTON_FONT_SIZE),
+    y: box.y + Math.round((box.h - (PHONE_LAYOUT ? 12 : BUTTON_FONT_SIZE)) / 2),
+    columns: fieldLabelColumns(
+      box.w,
+      CHAT_TEXT_PAD,
+      PHONE_LAYOUT ? 12 : BUTTON_FONT_SIZE,
+    ),
   };
 }
 
@@ -162,9 +175,12 @@ export class LobbyScene {
   private readonly rowActors: ex.Actor[] = [];
   private emptyText: ex.Text | undefined;
   private moreText: ex.Text | undefined;
+  private tablePage = 0;
+  private tablePages = 1;
   private codeText: ex.Text | undefined;
   private codeActor: ex.Actor | undefined;
   private errorText: ex.Text | undefined;
+  private statsActor: ex.Actor | undefined;
   private linkLine = '';
   private linkText = canvasText('', 8, GOLD);
   private linkActor: ex.Actor | undefined;
@@ -208,6 +224,10 @@ export class LobbyScene {
     ) => void = () => {},
     private readonly onLeftRoom: () => void = () => {},
   ) {}
+
+  get dialogOpen(): boolean {
+    return this.creating || this.leaveConfirm !== undefined;
+  }
 
   setStats(line: string): void {
     this.statsText.text = line;
@@ -388,7 +408,7 @@ export class LobbyScene {
     backdrop.graphics.use(panelRect(box.w, box.h, PANEL, STROKE));
     this.scene.add(backdrop);
 
-    this.addLabel(808, 52, 'Tables', 8, DIM);
+    if (!PHONE_LAYOUT) this.addLabel(TABLE_LIST.list.x, 52, 'Tables', 8, DIM);
     this.emptyText = this.addLabel(
       TABLE_LIST.list.x,
       TABLE_LIST.list.y,
@@ -404,26 +424,37 @@ export class LobbyScene {
       DIM,
     );
     this.errorText = this.addLabel(
-      TABLE_LIST.error.x,
-      TABLE_LIST.error.y,
+      PHONE_LAYOUT ? 16 : TABLE_LIST.error.x,
+      PHONE_LAYOUT ? 510 : TABLE_LIST.error.y,
       '',
-      8,
+      PHONE_LAYOUT ? 10 : 8,
       DANGER,
     );
     this.button(TABLE_LIST.create, 'Create Table', () => {
       this.openCreate();
     });
+    if (isMobileDevice()) {
+      this.button(
+        { x: TABLE_LIST.list.x, y: 464, w: TABLE_LIST.row.w, h: 64 },
+        'Next page',
+        () => {
+          this.tablePage = (this.tablePage + 1) % this.tablePages;
+          this.render();
+        },
+      );
+    }
     this.buildPopup();
     this.buildBanner();
     this.buildIdleCards();
     this.buildChatPanel();
     this.buildLeaveRoom();
     const stats = new ex.Actor({
-      pos: ex.vec(170, 500),
+      pos: ex.vec(PHONE_LAYOUT ? 222 : 170, PHONE_LAYOUT ? 514 : 500),
       anchor: ex.vec(0, 0),
       z: 20,
     });
     stats.graphics.use(this.statsText);
+    this.statsActor = stats;
     this.scene.add(stats);
   }
 
@@ -477,7 +508,8 @@ export class LobbyScene {
       active: () =>
         this.engine.currentScene === this.scene &&
         this.lobbyId.length > 0 &&
-        !this.leaveConfirm,
+        !this.leaveConfirm &&
+        !this.creating,
       read: () => this.chatBody,
       sanitize: (value) => applyChatText(value),
       write: (value) => {
@@ -538,13 +570,21 @@ export class LobbyScene {
     panel.graphics.use(panelRect(box.w, box.h, PANEL, STROKE_HOT));
     this.claimLeavePanel(panel);
     this.scene.add(panel);
-    this.childLabel(panel, 16, 20, 'Leave the room?', GOLD);
     this.childLabel(
       panel,
       16,
-      40,
+      20,
+      'Leave the room?',
+      GOLD,
+      PHONE_LAYOUT ? 18 : 8,
+    );
+    this.childLabel(
+      panel,
+      16,
+      PHONE_LAYOUT ? 66 : 40,
       "You'll lose your seats at all tables.",
       DIM,
+      PHONE_LAYOUT ? 12 : 8,
     );
     this.leaveConfirmButtons.push(
       this.leaveButton(LEAVE_CONFIRM.leave, 'Leave', () => {
@@ -756,7 +796,19 @@ export class LobbyScene {
     );
     const { list } = CHAT_PANEL;
     const capacity = Math.floor((list.bottom - list.y) / list.lineH);
-    const visible = lines.slice(Math.max(0, lines.length - capacity));
+    const wrapped = PHONE_LAYOUT
+      ? lines.flatMap((line) =>
+          wrapText(
+            `${line.name}: ${line.body}`,
+            Math.floor((CHAT_PANEL.panel.w - 16) / 12),
+          ).map((body) => ({
+            ...line,
+            name: '',
+            body,
+          })),
+        )
+      : lines;
+    const visible = wrapped.slice(Math.max(0, wrapped.length - capacity));
     for (let index = 0; index < visible.length; index += 1) {
       const line = visible[index];
       if (!line) {
@@ -774,8 +826,12 @@ export class LobbyScene {
       anchor: ex.vec(0, 0),
       z: 16,
     });
-    const text = `${line.name}: ${line.body}`.slice(0, 76);
-    actor.graphics.use(canvasText(text, 8, line.self ? STROKE_HOT : GOLD));
+    const text = PHONE_LAYOUT
+      ? line.body
+      : `${line.name}: ${line.body}`.slice(0, 76);
+    actor.graphics.use(
+      canvasText(text, PHONE_LAYOUT ? 12 : 8, line.self ? STROKE_HOT : GOLD),
+    );
     this.scene.add(actor);
     return actor;
   }
@@ -944,15 +1000,43 @@ export class LobbyScene {
       z: 40,
     });
     popup.graphics.use(panelRect(box.w, box.h, PANEL, STROKE));
-    this.addLabel(204, 156, 'Create Table', 8, GOLD, popup);
-    this.addLabel(204, 180, 'Game', 8, DIM, popup);
-    this.gameText = this.addLabel(204, 196, gameOption(0).name, 8, GOLD, popup);
-    this.addLabel(420, 180, 'Max', 8, DIM, popup);
+    this.addLabel(
+      PHONE_LAYOUT ? 184 : 204,
+      PHONE_LAYOUT ? 54 : 156,
+      'Create Table',
+      PHONE_LAYOUT ? 18 : 8,
+      GOLD,
+      popup,
+    );
+    this.addLabel(
+      PHONE_LAYOUT ? 288 : 204,
+      PHONE_LAYOUT ? 100 : 180,
+      'Game',
+      PHONE_LAYOUT ? 12 : 8,
+      DIM,
+      popup,
+    );
+    this.gameText = this.addLabel(
+      PHONE_LAYOUT ? 288 : 204,
+      PHONE_LAYOUT ? 132 : 196,
+      gameOption(0).name,
+      PHONE_LAYOUT ? 16 : 8,
+      GOLD,
+      popup,
+    );
+    this.addLabel(
+      PHONE_LAYOUT ? 288 : 420,
+      PHONE_LAYOUT ? 200 : 180,
+      PHONE_LAYOUT ? 'Max players' : 'Max',
+      PHONE_LAYOUT ? 12 : 8,
+      DIM,
+      popup,
+    );
     this.maxText = this.addLabel(
-      420,
-      196,
+      PHONE_LAYOUT ? 288 : 420,
+      PHONE_LAYOUT ? 232 : 196,
       String(this.maxPlayers),
-      8,
+      PHONE_LAYOUT ? 16 : 8,
       GOLD,
       popup,
     );
@@ -988,8 +1072,22 @@ export class LobbyScene {
       },
       popup,
     );
-    this.dealLabel = this.addLabel(420, 252, '', 8, DIM, popup);
-    this.variationText = this.addLabel(420, 276, '', 8, GOLD, popup);
+    this.dealLabel = this.addLabel(
+      PHONE_LAYOUT ? 288 : 420,
+      PHONE_LAYOUT ? 300 : 252,
+      '',
+      PHONE_LAYOUT ? 12 : 8,
+      DIM,
+      popup,
+    );
+    this.variationText = this.addLabel(
+      PHONE_LAYOUT ? 288 : 420,
+      PHONE_LAYOUT ? 332 : 276,
+      '',
+      PHONE_LAYOUT ? 16 : 8,
+      GOLD,
+      popup,
+    );
     this.variationActors = [
       this.button(
         CREATE_TABLE.varPrev,
@@ -1039,11 +1137,14 @@ export class LobbyScene {
     this.variationIndex = 0;
     this.paintChoice();
     this.setPopupOpen(true);
+    roomComposer.clear();
+    refreshCanvasTextFields();
   }
 
   private closeCreate(): void {
     this.creating = false;
     this.setPopupOpen(false);
+    refreshCanvasTextFields();
   }
 
   private setPopupOpen(open: boolean): void {
@@ -1052,7 +1153,7 @@ export class LobbyScene {
     }
     this.popup.pos = open
       ? ex.vec(CREATE_TABLE.panel.x, CREATE_TABLE.panel.y)
-      : ex.vec(CREATE_TABLE.panel.x, -400);
+      : ex.vec(CREATE_TABLE.panel.x, -CREATE_TABLE.panel.h - 64);
   }
 
   private stepGame(delta: number): void {
@@ -1104,7 +1205,9 @@ export class LobbyScene {
       this.variationText.text = poker ? POKER_VARIATION_LABELS[variation] : '';
     }
     for (const actor of this.variationActors) {
-      actor.graphics.isVisible = poker;
+      actor.pos.y = poker
+        ? CREATE_TABLE.varPrev.y - CREATE_TABLE.panel.y
+        : -1000;
     }
   }
 
@@ -1253,12 +1356,23 @@ export class LobbyScene {
       seatedTableIds(seats, member?.id ?? ''),
       watchingTableIds(this.readSpectators(), member?.id ?? ''),
     );
-    const layout = listLayout(tableGroups(lines));
+    const mobile = isMobileDevice();
+    this.tablePages = Math.max(1, Math.ceil(lines.length / 2));
+    this.tablePage = Math.min(this.tablePage, this.tablePages - 1);
+    const ordered = [...lines].sort((a, b) => a.id.localeCompare(b.id));
+    const shown = mobile
+      ? ordered.slice(this.tablePage * 2, this.tablePage * 2 + 2)
+      : lines;
+    const layout = listLayout(tableGroups(shown), mobile);
     if (this.emptyText) {
       this.emptyText.text = lines.length === 0 ? 'No tables' : '';
     }
     if (this.moreText) {
-      this.moreText.text = layout.hidden > 0 ? `+${layout.hidden} more` : '';
+      this.moreText.text = mobile
+        ? ''
+        : layout.hidden > 0
+          ? `+${layout.hidden} more`
+          : '';
     }
     for (const actor of this.rowActors) {
       actor.kill();
@@ -1282,7 +1396,7 @@ export class LobbyScene {
     });
     const name = slot.group.gameName.slice(0, 11).toUpperCase();
     const count = String(slot.group.lines.length);
-    this.childLabel(actor, 0, 2, name, GOLD);
+    this.childLabel(actor, 0, 2, name, GOLD, PHONE_LAYOUT ? 12 : 8);
     this.childLabel(actor, row.w - count.length * 8, 2, count, DIM);
     const rule = new ex.Actor({
       pos: ex.vec(0, header.h - 1),
@@ -1296,7 +1410,9 @@ export class LobbyScene {
 
   private rowActor(slot: Extract<ListSlot, { kind: 'row' }>): ex.Actor {
     const { line } = slot;
-    const row = TABLE_LIST.row;
+    const row = isMobileDevice()
+      ? { ...TABLE_LIST.row, h: 128 }
+      : TABLE_LIST.row;
     const actor = new ex.Actor({
       pos: ex.vec(TABLE_LIST.list.x, slot.y),
       anchor: ex.vec(0, 0),
@@ -1330,40 +1446,65 @@ export class LobbyScene {
     });
     dotActor.graphics.use(dot);
     actor.addChild(dotActor);
-    this.childLabel(actor, 16, 4, line.tableName, GOLD);
+    this.childLabel(actor, 16, 4, line.tableName, GOLD, PHONE_LAYOUT ? 14 : 8);
     this.childLabel(
       actor,
       16,
-      17,
+      PHONE_LAYOUT ? 24 : 17,
       `${line.seatsLabel} ${line.statusLabel}`,
       DIM,
+      PHONE_LAYOUT ? 12 : 8,
     );
     if (line.seated) {
       this.seatBadge(actor, row.w - 33, 3);
     } else {
       this.watchControl(actor, line.watching);
     }
+    if (isMobileDevice()) {
+      this.childLabel(
+        actor,
+        16,
+        42,
+        line.seated ? 'Return' : full ? 'Watch' : 'Join',
+        GOLD,
+        14,
+      );
+    }
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;
     });
-    actor.on('pointerleave', () => {
-      face.strokeColor = restStroke;
-    });
-    actor.on('pointerup', (event) => {
-      const localX = event.worldPos.x - actor.pos.x;
-      const localY = event.worldPos.y - actor.pos.y;
-      if (!line.seated && (full || watchHit(localX, localY))) {
-        void this.spectateTable(line.id);
-        return;
-      }
-      void this.joinTable(line.id);
-    });
+    const isWatch = ({ worldPos }: ex.PointerEvent): boolean =>
+      !line.seated &&
+      (full ||
+        watchHit(
+          worldPos.x - actor.pos.x,
+          worldPos.y - actor.pos.y,
+          isMobileDevice(),
+        ));
+    let watchOnPress = false;
+    bindButtonPress(
+      actor,
+      (event) => {
+        watchOnPress = isWatch(event);
+      },
+      () => {
+        face.strokeColor = restStroke;
+      },
+      (event) => {
+        if (watchOnPress !== isWatch(event)) return;
+        if (watchOnPress) {
+          void this.spectateTable(line.id);
+        } else {
+          void this.joinTable(line.id);
+        }
+      },
+    );
     this.scene.add(actor);
     return actor;
   }
 
   private watchControl(parent: ex.Actor, watching: boolean): void {
-    const box = WATCH_BUTTON;
+    const box = isMobileDevice() ? MOBILE_WATCH_BUTTON : WATCH_BUTTON;
     const button = new ex.Actor({
       pos: ex.vec(box.x, box.y),
       anchor: ex.vec(0, 0),
@@ -1371,7 +1512,11 @@ export class LobbyScene {
     button.pointer.useGraphicsBounds = false;
     button.pointer.useColliderShape = false;
     button.graphics.use(
-      solidRect(box.w, box.h, watching ? STROKE_HOT : BUTTON),
+      solidRect(
+        box.w,
+        PHONE_LAYOUT ? 48 : box.h,
+        watching ? STROKE_HOT : BUTTON,
+      ),
     );
     parent.addChild(button);
     const caption = new ex.Actor({
@@ -1380,11 +1525,15 @@ export class LobbyScene {
     });
     caption.pointer.useGraphicsBounds = false;
     caption.pointer.useColliderShape = false;
-    const watchLabel = buttonCaptionPos('Watch', box.w, box.h);
-    caption.pos = ex.vec(watchLabel.x, watchLabel.y);
-    caption.graphics.use(
-      canvasText('Watch', BUTTON_FONT_SIZE, watching ? INK : GOLD),
+    const size = PHONE_LAYOUT ? 12 : buttonFontSize('Watch', box.w, box.h);
+    const watchLabel = buttonCaptionPos(
+      'Watch',
+      box.w,
+      PHONE_LAYOUT ? 48 : box.h,
+      size,
     );
+    caption.pos = ex.vec(watchLabel.x, watchLabel.y);
+    caption.graphics.use(canvasText('Watch', size, watching ? INK : GOLD));
     button.addChild(caption);
   }
 
@@ -1455,7 +1604,12 @@ export class LobbyScene {
 
   private setError(message: string): void {
     if (this.errorText) {
-      this.errorText.text = wrapTableError(message);
+      this.errorText.text = PHONE_LAYOUT
+        ? wrapText(message, 60).slice(0, 2).join('\n')
+        : wrapTableError(message);
+      if (PHONE_LAYOUT && this.statsActor) {
+        this.statsActor.graphics.isVisible = message.length === 0;
+      }
     }
   }
 
@@ -1489,8 +1643,9 @@ export class LobbyScene {
     y: number,
     text: string,
     color: ex.Color,
+    size = 8,
   ): void {
-    const graphic = canvasText(text, 8, color);
+    const graphic = canvasText(text, size, color);
     const actor = new ex.Actor({
       pos: ex.vec(x, y),
       anchor: ex.vec(0, 0),
@@ -1521,8 +1676,9 @@ export class LobbyScene {
     });
     const face = panelRect(box.w, box.h, BUTTON, STROKE);
     actor.graphics.use(face);
-    const captionText = canvasText(caption, BUTTON_FONT_SIZE, GOLD);
-    const rest = buttonCaptionPos(caption, box.w, box.h);
+    const size = PHONE_LAYOUT ? 12 : buttonFontSize(caption, box.w, box.h);
+    const captionText = canvasText(caption, size, GOLD);
+    const rest = buttonCaptionPos(caption, box.w, box.h, size);
     const captionActor = new ex.Actor({
       pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),

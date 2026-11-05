@@ -70,6 +70,8 @@ export interface GoFishState {
   turnSeatIndex: number | null;
   winnerSeatIndex: number | null;
   lastAsk: GoFishLastAsk | null;
+  /** Per-seat ask counts let bots vary their guesses without seeing hidden cards. */
+  askCounts?: Record<string, number>;
 }
 
 export type GoFishIntent = {
@@ -215,6 +217,21 @@ export function readGoFishState(value: unknown): GoFishState {
     }
     hands[key] = hand.slice();
   }
+  const askCounts: Record<string, number> = {};
+  if (record.askCounts !== undefined) {
+    const counts = asRecord(record.askCounts, 'Invalid table state');
+    for (const [key, count] of Object.entries(counts)) {
+      if (
+        !(key in hands) ||
+        typeof count !== 'number' ||
+        !Number.isSafeInteger(count) ||
+        count < 0
+      ) {
+        throw new Error('Invalid table state');
+      }
+      askCounts[key] = count;
+    }
+  }
   return {
     phase: record.phase,
     hands,
@@ -223,6 +240,7 @@ export function readGoFishState(value: unknown): GoFishState {
     turnSeatIndex: record.turnSeatIndex,
     winnerSeatIndex: record.winnerSeatIndex,
     lastAsk: readLastAsk(record.lastAsk),
+    askCounts,
   };
 }
 
@@ -529,6 +547,7 @@ function winnerOf(
 
 function finish(state: GoFishState): GoFishState {
   return {
+    ...state,
     phase: 'finished',
     hands: copyHands(state.hands),
     stock: state.stock.slice(),
@@ -608,6 +627,7 @@ function passTurn(state: GoFishState, from: number): GoFishState {
       continue;
     }
     const next: GoFishState = {
+      ...state,
       phase: 'play',
       hands,
       stock,
@@ -622,6 +642,7 @@ function passTurn(state: GoFishState, from: number): GoFishState {
     return next;
   }
   return finish({
+    ...state,
     phase: state.phase,
     hands,
     stock,
@@ -707,6 +728,10 @@ function applyAsk(
     turnSeatIndex: actor,
     winnerSeatIndex: null,
     lastAsk,
+    askCounts: {
+      ...state.askCounts,
+      [actorKey]: (state.askCounts?.[actorKey] ?? 0) + 1,
+    },
   };
   if (!keepTurn || (next.hands[actorKey] ?? []).length === 0) {
     next = passTurn(next, actor);
@@ -723,6 +748,7 @@ function leaveSeat(state: GoFishState, seatIndex: number): GoFishState {
   const key = handKey(seatIndex);
   if (!(key in state.hands) && !(key in state.books)) {
     return {
+      ...state,
       phase: state.phase,
       hands: copyHands(state.hands),
       stock: state.stock.slice(),
@@ -754,7 +780,9 @@ function leaveSeat(state: GoFishState, seatIndex: number): GoFishState {
     winnerSeatIndex:
       state.winnerSeatIndex === seatIndex ? null : state.winnerSeatIndex,
     lastAsk: copyLastAsk(state.lastAsk),
+    askCounts: { ...state.askCounts },
   };
+  delete next.askCounts?.[key];
   if (next.phase === 'finished') {
     return {
       ...next,

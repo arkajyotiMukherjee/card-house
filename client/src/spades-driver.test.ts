@@ -63,7 +63,7 @@ describe('SpadesDriver input', () => {
     ]);
   });
 
-  it('does not select a card when it is not your turn', () => {
+  it('ignores play and bid while waiting for another player', () => {
     const driver = new SpadesDriver();
     const sent: unknown[] = [];
     const table = state({ turnSeatIndex: 1 });
@@ -71,7 +71,12 @@ describe('SpadesDriver input', () => {
     driver.handleInput({ type: 'pointerenter', target: 'AS' }, table, ctx);
     driver.handleInput({ type: 'pointerup', target: 'AS' }, table, ctx);
     driver.handleInput({ type: 'pointerup', target: 'play' }, table, ctx);
-    expect(sent).toEqual([{ type: 'play', card: '' }]);
+    driver.handleInput(
+      { type: 'pointerup', target: 'bid:1' },
+      { ...table, stage: 'bid' },
+      ctx,
+    );
+    expect(sent).toEqual([]);
   });
 
   it('forwards a play with no card for the module to reject', () => {

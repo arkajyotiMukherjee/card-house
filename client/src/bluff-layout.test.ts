@@ -36,7 +36,6 @@ import {
 } from './bluff-layout';
 import {
   PICKER_RIGHT,
-  PICKER_Y,
   belowFelt,
   coversCluster,
   fanCardBottom,
@@ -255,10 +254,13 @@ describe('bluff layout', () => {
     expect(hint.x + BLUFF_RANK_HINT.length * 8).toBeLessThanOrEqual(
       PICKER_RIGHT,
     );
-    expect(hint.y).toBeGreaterThanOrEqual(PICKER_Y);
-    expect(hint.y).toBeLessThan(PICKER_Y + BUTTON_HEIGHT);
     const ranks = rankCallButtons();
-    expect(ranks.every((button) => button.y === PICKER_Y)).toBe(true);
+    const localSeat = seatAnchorsFor(2)[0]!;
+    expect(ranks.every((button) => button.y + button.h < localSeat.y - 6)).toBe(
+      true,
+    );
+    expect(hint.y).toBeGreaterThanOrEqual(ranks[0]!.y);
+    expect(hint.y + 8).toBeLessThanOrEqual(ranks[0]!.y + BUTTON_HEIGHT);
     expect(ranks[0]?.x).toBeLessThan(ranks.at(-1)?.x ?? 0);
     const hintRect = {
       x: hint.x,
@@ -337,4 +339,19 @@ describe('bluff layout', () => {
       ),
     ).toBe('Finished');
   });
+});
+
+it('groups matching ranks without mutating the dealt hand or losing jokers', async () => {
+  const { orderedBluffHand } = await import('./bluff-layout');
+  const cards = ['KH', '2S', 'AC', 'JB', '2D', '10H', 'JR'];
+  expect(orderedBluffHand(cards)).toEqual([
+    'AC',
+    '2D',
+    '2S',
+    '10H',
+    'KH',
+    'JB',
+    'JR',
+  ]);
+  expect(cards).toEqual(['KH', '2S', 'AC', 'JB', '2D', '10H', 'JR']);
 });

@@ -5,6 +5,7 @@ import { CHAT_PANEL } from './lobby';
 import {
   TOUCH_TARGET,
   hasPointerHandler,
+  logicalTouchTarget,
   touchBoxes,
   type TouchBox,
 } from './touch-targets';
@@ -16,6 +17,15 @@ function overlaps(a: TouchBox, b: TouchBox): boolean {
 }
 
 describe('touch boxes', () => {
+  it('preserves 44 screen pixels after scaling and recalculates for rotation', () => {
+    expect(logicalTouchTarget(960, 540)).toBe(44);
+    expect(logicalTouchTarget(480, 270)).toBe(88);
+    const phoneScale = 390 / 540;
+    expect(logicalTouchTarget(960 * phoneScale, 390) * phoneScale).toBeCloseTo(
+      44,
+    );
+    expect(logicalTouchTarget(0, 0)).toBe(44);
+  });
   it('grows a 28px button to 44px around the same center', () => {
     const [box] = touchBoxes([{ x: 748, y: 448, w: 96, h: BUTTON_HEIGHT }]);
     expect(box).toEqual({ x: 748, y: 440, w: 96, h: TOUCH_TARGET });

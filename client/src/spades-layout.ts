@@ -1,28 +1,24 @@
 import type { SpadesState, SpadesTeam } from '../../src/shared/games/spades';
 import { TABLE_CENTER } from './bluff-layout';
 import { BUTTON_HEIGHT } from './button-style';
-import {
-  PICKER_LEFT,
-  PICKER_RIGHT,
-  PICKER_Y,
-  TURN_LINE,
-  actionBox,
-} from './table-presentation';
+import { isMobileDevice } from './mobile-shell';
+
+const PHONE_LAYOUT = typeof window !== 'undefined' && isMobileDevice();
+import { TURN_LINE, actionBox } from './table-presentation';
 
 /** Play sits in the shared cluster. Bids use the green band while it is hidden. */
 export const PLAY_BUTTON = actionBox(0);
 
-/**
- * Left of the felt. Each team gets a header row, a bid row and a score row,
- * with a chip beside the header and bid rows. `rows` are y offsets from `y`.
- */
-export const PARTNERSHIP_BOARD = {
-  x: 52,
-  y: 146,
-  chipX: 14,
-  rows: [0, 20, 34, 48, 76, 90, 104],
-  chipRows: [18, 74],
-} as const;
+/** Keep both scores between the top hand and the center of the table. */
+export function partnershipLinePosition(index: number): {
+  x: number;
+  y: number;
+  size: number;
+} {
+  if (index === 0) return { x: 400, y: 376, size: 12 };
+  const team = index < 4 ? 0 : 1;
+  return { x: 240 + team * 312, y: 154 + ((index - 1) % 3) * 20, size: 12 };
+}
 
 export const BID_PROMPT = TURN_LINE;
 
@@ -53,24 +49,41 @@ export function seatTeam(seatIndex: number): SpadesTeam {
   return seatIndex % 2 === 0 ? 'ns' : 'ew';
 }
 
-/**
- * Bids wrap into two groups on the green band: nil through 6 on the left,
- * 7 through 13 on the right. One line at the old y would cross the cards.
- */
+/** Score change from the hand just completed, retained while the next bids. */
+export function handResultLine(
+  before: SpadesState | null,
+  after: SpadesState,
+): string | null {
+  if (
+    !before ||
+    before.tableId !== after.tableId ||
+    after.handNumber !== before.handNumber + 1
+  ) {
+    return null;
+  }
+  const delta = (value: number) => (value >= 0 ? `+${value}` : String(value));
+  return `Hand ${before.handNumber}: NS ${delta(after.scores.ns - before.scores.ns)} / EW ${delta(after.scores.ew - before.scores.ew)}`;
+}
+
+/** Bids stay on the felt while the trick area is empty. */
 export function bidButtonBox(tricks: number): {
   x: number;
   y: number;
   w: number;
   h: number;
 } {
-  const group = tricks < BIDS_PER_GROUP ? 0 : 1;
-  const index = group === 0 ? tricks : tricks - BIDS_PER_GROUP;
-  const count = BIDS_PER_GROUP;
-  const span = count * BID_W + (count - 1) * BID_GAP;
-  const start = group === 0 ? PICKER_LEFT : PICKER_RIGHT - span;
+  if (PHONE_LAYOUT) {
+    return {
+      x: 240 + (tricks % 7) * 70,
+      y: 222 + Math.floor(tricks / 7) * 70,
+      w: 64,
+      h: 64,
+    };
+  }
+  const span = BIDS_PER_GROUP * 2 * (BID_W + BID_GAP) - BID_GAP;
   return {
-    x: start + index * (BID_W + BID_GAP),
-    y: PICKER_Y,
+    x: TABLE_CENTER.x - span / 2 + tricks * (BID_W + BID_GAP),
+    y: 266,
     w: BID_W,
     h: BID_H,
   };

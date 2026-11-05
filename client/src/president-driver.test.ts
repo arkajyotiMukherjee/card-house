@@ -54,7 +54,7 @@ describe('PresidentDriver input', () => {
     expect(sent).toEqual([{ type: 'play', cards: ['3C'] }, { type: 'pass' }]);
   });
 
-  it('does not select a card when it is not your turn', () => {
+  it('ignores play and pass while waiting for another player', () => {
     const driver = new PresidentDriver();
     const sent: unknown[] = [];
     const table = state();
@@ -63,7 +63,8 @@ describe('PresidentDriver input', () => {
     driver.handleInput({ type: 'pointerenter', target: '3C' }, table, ctx);
     driver.handleInput({ type: 'pointerup', target: '3C' }, table, ctx);
     driver.handleInput({ type: 'pointerup', target: 'play' }, table, ctx);
-    expect(sent).toEqual([{ type: 'play', cards: [] }]);
+    driver.handleInput({ type: 'pointerup', target: 'pass' }, table, ctx);
+    expect(sent).toEqual([]);
   });
 
   it('forwards a play with no card for the module to reject', () => {

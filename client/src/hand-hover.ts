@@ -1,11 +1,146 @@
 import * as ex from 'excalibur';
 import { CARD_DRAW, HOVER_LIFT } from './bluff-layout';
+import { isMobileDevice } from './mobile-shell';
 
 /** How fast the drawn lift chases the curve. A short move is not a full pop. */
 export const HOVER_EASE_MS = 110;
 
+type CardPointer = Pick<
+  ex.PointerEvent,
+  'pointerType' | 'pointerId' | 'pagePos' | 'nativeEvent'
+>;
+
+/** Excalibur may emit enter after up in the same frame. Touch has no hover. */
+export function canInspectPointer(
+  event: Pick<CardPointer, 'pointerType' | 'pointerId'>,
+  pointers: { isDown(id: number): boolean },
+): boolean {
+  return (
+    event.pointerType !== ex.PointerType.Touch ||
+    pointers.isDown(event.pointerId)
+  );
+}
+
+/** A short tap selects; sliding or holding is inspection only. */
+export class CardTouchGesture {
+  private startPoint: {
+    x: number;
+    y: number;
+    time: number;
+    id: number;
+  } | null = null;
+  private dragged = false;
+  private detach: (() => void) | undefined;
+
+  constructor(private readonly onEnd: () => void = () => {}) {}
+
+  get active(): boolean {
+    return this.detach !== undefined;
+  }
+
+  start(event: CardPointer): void {
+    if (event.pointerType !== ex.PointerType.Touch) return;
+    this.detach?.();
+    // End inspection even when the finger lifts outside a card or the app loses focus.
+    // Keep the gesture data until Excalibur dispatches up so tap selection still works.
+    const finish = (): void => {
+      this.detach?.();
+      this.onEnd();
+    };
+    const nativeId =
+      (event.nativeEvent as PointerEvent).pointerId ?? event.pointerId;
+    const endPointer = (native: PointerEvent): void => {
+      if (native.pointerId !== nativeId) return;
+      if (native.type === 'pointercancel') this.startPoint = null;
+      finish();
+    };
+    const abandon = (): void => {
+      this.startPoint = null;
+      finish();
+    };
+    window.addEventListener('pointerup', endPointer);
+    window.addEventListener('pointercancel', endPointer);
+    window.addEventListener('blur', abandon);
+    this.detach = () => {
+      window.removeEventListener('pointerup', endPointer);
+      window.removeEventListener('pointercancel', endPointer);
+      window.removeEventListener('blur', abandon);
+      this.detach = undefined;
+    };
+    this.startPoint = {
+      x: event.pagePos.x,
+      y: event.pagePos.y,
+      time: event.nativeEvent.timeStamp,
+      id: event.pointerId,
+    };
+    this.dragged = false;
+  }
+
+  move(event: CardPointer): void {
+    const start = this.startPoint;
+    if (
+      start &&
+      event.pointerId === start.id &&
+      Math.hypot(event.pagePos.x - start.x, event.pagePos.y - start.y) > 10
+    )
+      this.dragged = true;
+  }
+
+  isTap(event: CardPointer): boolean {
+    if (event.pointerType !== ex.PointerType.Touch) return true;
+    this.move(event);
+    const start = this.startPoint;
+    return (
+      !!start &&
+      event.pointerId === start.id &&
+      !this.dragged &&
+      event.nativeEvent.timeStamp - start.time < 350
+    );
+  }
+
+  cancel(): void {
+    this.detach?.();
+    this.startPoint = null;
+  }
+}
+
 const LIFT_Z = 30;
 const WINDOW = 3;
+
+/** Extra space above the finger and a smooth magnification curve on phones. */
+export function inspectionPose(
+  lift: number,
+  mobile: boolean,
+  selected = false,
+  personal = false,
+): {
+  lift: number;
+  scale: number;
+} {
+  const amount = Math.max(0, lift);
+  return {
+    lift: mobile
+      ? amount * 2.4 + (selected ? 12 : 0) + (personal ? 12 : 0)
+      : amount,
+    scale: mobile
+      ? (personal ? 1.25 : 1) + Math.min(1, amount / HOVER_LIFT) * 0.65
+      : 1,
+  };
+}
+
+const graphicScales = new WeakMap<ex.Graphic, ex.Vector>();
+const selectionFrames = new WeakMap<ex.Actor, ex.Actor>();
+const enlargedColliders = new WeakMap<ex.Actor, boolean>();
+
+/** Remove inspection artwork before a card travels to a pile or another seat. */
+export function resetCardLift(actor: ex.Actor): void {
+  actor.graphics.offset = ex.vec(0, 0);
+  const graphic = actor.graphics.current;
+  const base = graphic && graphicScales.get(graphic);
+  if (graphic && base) graphic.scale = base.clone();
+  const frame = selectionFrames.get(actor);
+  if (frame) frame.graphics.isVisible = false;
+}
 
 /**
  * Target lift for each card, in the same order as `centers`.
@@ -93,6 +228,11 @@ export function easeHoverLift(
 
 /** Pointer x over the hand, and the eased lift of each card. */
 export class HandHover {
+  private readonly motionPreference =
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(prefers-reduced-motion: reduce)')
+      : null;
+  readonly touch = new CardTouchGesture(() => this.release());
   private pointerX: number | null = null;
   private readonly over = new Set<string>();
   private readonly drawn = new Map<string, number>();
@@ -117,9 +257,15 @@ export class HandHover {
   }
 
   clear(): void {
+    this.touch.cancel();
+    this.release();
+    this.drawn.clear();
+  }
+
+  /** A lifted finger ends inspection; the next frames ease back to rest. */
+  release(): void {
     this.over.clear();
     this.pointerX = null;
-    this.drawn.clear();
   }
 
   current(cardId: string): number {
@@ -137,6 +283,20 @@ export class HandHover {
     maxLift = HOVER_LIFT,
   ): void {
     const targets = handHoverLifts(centers, this.pointerX, maxLift);
+    if (this.touch.active && this.pointerX !== null) {
+      // A finger inspects one card; mouse hover retains the neighboring dock curve.
+      let nearest = -1;
+      let distance = Infinity;
+      centers.forEach((center, index) => {
+        const gap = Math.abs(center - this.pointerX!);
+        if (gap < distance) {
+          nearest = index;
+          distance = gap;
+        }
+      });
+      targets.fill(0);
+      if (nearest >= 0) targets[nearest] = maxLift;
+    }
     const live = new Set<string>();
     for (let index = 0; index < ids.length; index += 1) {
       const id = ids[index];
@@ -144,11 +304,13 @@ export class HandHover {
         continue;
       }
       live.add(id);
-      const next = easeHoverLift(
-        this.drawn.get(id) ?? 0,
-        targets[index] ?? 0,
-        elapsedMs,
-      );
+      const next = this.motionPreference?.matches
+        ? (targets[index] ?? 0)
+        : easeHoverLift(
+            this.drawn.get(id) ?? 0,
+            targets[index] ?? 0,
+            elapsedMs,
+          );
       if (next === 0) {
         this.drawn.delete(id);
       } else {
@@ -175,13 +337,61 @@ export function placeCardLift(
   restY: number,
   restZ: number,
   lift: number,
+  selected = false,
+  personal = false,
 ): void {
   actor.pointer.useGraphicsBounds = false;
   actor.pos = ex.vec(restX, restY);
-  const pixels = Math.round(lift);
+  const mobile = typeof window !== 'undefined' && isMobileDevice();
+  const enlarged = mobile && personal;
+  if (enlargedColliders.get(actor) !== enlarged) {
+    const resting = inspectionPose(0, mobile, false, personal);
+    actor.collider.useBoxCollider(
+      CARD_DRAW * resting.scale,
+      CARD_DRAW * resting.scale,
+      ex.vec(0.5, 0.5),
+      ex.vec(0, -resting.lift),
+    );
+    enlargedColliders.set(actor, enlarged);
+  }
+  const pose = inspectionPose(lift, mobile, selected, personal);
+  const graphic = actor.graphics.current;
+  if (graphic) {
+    let base = graphicScales.get(graphic);
+    if (!base) {
+      base = graphic.scale.clone();
+      graphicScales.set(graphic, base);
+    }
+    graphic.scale = ex.vec(base.x * pose.scale, base.y * pose.scale);
+  }
+  const pixels = Math.round(pose.lift);
+  let frame = selectionFrames.get(actor);
+  if (selected && !frame) {
+    frame = new ex.Actor({ anchor: ex.vec(0.5, 0.5), z: 1 });
+    frame.pointer.useColliderShape = false;
+    frame.pointer.useGraphicsBounds = false;
+    frame.graphics.use(
+      new ex.Rectangle({
+        width: CARD_DRAW,
+        height: CARD_DRAW,
+        color: ex.Color.Transparent,
+        strokeColor: ex.Color.fromHex('#ffdf54'),
+        lineWidth: 3,
+      }),
+    );
+    actor.addChild(frame);
+    selectionFrames.set(actor, frame);
+  }
+  if (frame) {
+    frame.graphics.isVisible = selected;
+    frame.pos = ex.vec(0, -pixels);
+    frame.scale = ex.vec(pose.scale, pose.scale);
+  }
   if (pixels > 0) {
-    actor.graphics.offset = ex.vec(0, -pixels);
-    actor.z = LIFT_Z + pixels / 100;
+    // Excalibur multiplies a graphics offset by the graphic's own scale.
+    // Keep the lift in actor coordinates so the selection frame stays aligned.
+    actor.graphics.offset = ex.vec(0, -pixels / (graphic?.scale.y || 1));
+    actor.z = lift > 0 ? LIFT_Z + pixels / 100 : restZ;
     return;
   }
   actor.graphics.offset = ex.vec(0, 0);

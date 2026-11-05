@@ -36,6 +36,44 @@ export {
 export const PASS_BUTTON = actionBox(0);
 export const PLAY_BUTTON = actionBox(1);
 
+/** Only expose the action this seat can currently submit. */
+export function heartsAction(
+  state: HeartsState,
+  seat: number | null,
+): 'pass' | 'play' | null {
+  if (seat === null || !state.hands[String(seat)]) return null;
+  if (state.phase === 'pass' && state.passes[String(seat)] === undefined)
+    return 'pass';
+  if (state.phase === 'play' && state.turnSeatIndex === seat) return 'play';
+  return null;
+}
+
+/** Explain the suit restriction that otherwise makes an invalid tap look ignored. */
+export function playHint(state: HeartsState, seat: number | null): string {
+  if (heartsAction(state, seat) !== 'play' || seat === null) return 'Wait';
+  const hand = state.hands[String(seat)] ?? [];
+  const legal = hand.filter((card) => canPlayCard(state, seat, card));
+  if (legal.length === 1 && legal[0] === '2C') return 'Play 2C';
+  const suit = state.currentTrick[0]?.card.slice(-1);
+  const suits: Record<string, string> = {
+    C: 'clubs',
+    D: 'diamonds',
+    H: 'hearts',
+    S: 'spades',
+  };
+  if (suit && hand.some((card) => card.endsWith(suit)))
+    return `Follow ${suits[suit]}`;
+  if (
+    legal.length > 0 &&
+    hand.some(isPointCard) &&
+    legal.every((card) => !isPointCard(card))
+  )
+    return 'No point cards';
+  if (!suit && !state.heartsBroken && hand.some((card) => !card.endsWith('H')))
+    return 'Lead non-heart';
+  return 'Your play';
+}
+
 const PENALTY_STEP = 18;
 const PENALTY_LANE = 66;
 const PENALTY_SIDE_GAP = 84;

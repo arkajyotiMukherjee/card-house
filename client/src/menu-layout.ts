@@ -1,5 +1,8 @@
 import { BUTTON_HEIGHT } from './button-style';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from './sheets';
+import { isMobileDevice } from './mobile-shell';
+
+const PHONE_LAYOUT = typeof window !== 'undefined' && isMobileDevice();
 
 export const MENU_VERSION = 'v0.1';
 
@@ -15,8 +18,8 @@ export interface MenuButtonSpec {
 }
 
 const BUTTON_W = 400;
-const BUTTON_H = 44;
-const BUTTON_GAP = 16;
+const BUTTON_H = PHONE_LAYOUT ? 64 : 44;
+const BUTTON_GAP = PHONE_LAYOUT ? 8 : 16;
 const BUTTON_TOP = 168;
 
 const MENU_ENTRIES: ReadonlyArray<Pick<MenuButtonSpec, 'action' | 'caption'>> =
@@ -38,7 +41,12 @@ export const MENU_BUTTONS: readonly MenuButtonSpec[] = MENU_ENTRIES.map(
   }),
 );
 
-export const MENU_BACKDROP = { x: 200, y: 48, w: 560, h: 420 } as const;
+export const MENU_BACKDROP = {
+  x: 200,
+  y: 48,
+  w: 560,
+  h: PHONE_LAYOUT ? 480 : 420,
+} as const;
 
 export const MENU_TITLE = { text: 'Card House', size: 48, y: 72 } as const;
 export const MENU_TAGLINE = {
@@ -50,14 +58,29 @@ export const MENU_TAGLINE = {
 /** Single Player picker. Five menu buttons already fill the main panel. */
 export const SOLO_PICKER = {
   panel: { x: 180, y: 36, w: 600, h: 468 },
-  gameRow: { x: 220, y: 110 },
-  seatRow: { x: 220, y: 180 },
-  variationRow: { x: 220, y: 250 },
-  nameField: { x: 220, y: 320, w: 520, h: 28 },
-  error: { x: 220, y: 364 },
-  play: { x: 220, y: 400, w: 240, h: BUTTON_HEIGHT },
-  cancel: { x: 500, y: 400, w: 240, h: BUTTON_HEIGHT },
-  arrowGap: 280,
+  gameRow: { x: 220, y: PHONE_LAYOUT ? 100 : 110 },
+  seatRow: { x: 220, y: PHONE_LAYOUT ? 190 : 180 },
+  variationRow: { x: 220, y: PHONE_LAYOUT ? 280 : 250 },
+  nameField: {
+    x: 220,
+    y: PHONE_LAYOUT ? 370 : 320,
+    w: 520,
+    h: PHONE_LAYOUT ? 44 : 28,
+  },
+  error: { x: 220, y: PHONE_LAYOUT ? 416 : 364 },
+  play: {
+    x: 220,
+    y: PHONE_LAYOUT ? 430 : 400,
+    w: 240,
+    h: PHONE_LAYOUT ? 64 : BUTTON_HEIGHT,
+  },
+  cancel: {
+    x: 500,
+    y: PHONE_LAYOUT ? 430 : 400,
+    w: 240,
+    h: PHONE_LAYOUT ? 64 : BUTTON_HEIGHT,
+  },
+  arrowGap: PHONE_LAYOUT ? 456 : 280,
 } as const;
 
 /** Seat count the picker shows. `index` wraps inside min..max. */
@@ -88,14 +111,23 @@ export function soloSettingsJson(
   return JSON.stringify({ variation });
 }
 
-export const PROMPT = {
-  panel: { x: 220, y: 150, w: 520, h: 240 },
-  nameField: { x: 244, y: 214, w: 472, h: 28 },
-  codeField: { x: 244, y: 270, w: 472, h: 28 },
-  submit: { x: 244, y: 336, w: 224, h: BUTTON_HEIGHT },
-  cancel: { x: 492, y: 336, w: 224, h: BUTTON_HEIGHT },
-  error: { x: 244, y: 310 },
-} as const;
+export const PROMPT = PHONE_LAYOUT
+  ? ({
+      panel: { x: 180, y: 48, w: 600, h: 444 },
+      nameField: { x: 220, y: 144, w: 520, h: 64 },
+      codeField: { x: 220, y: 256, w: 520, h: 64 },
+      submit: { x: 220, y: 400, w: 240, h: 64 },
+      cancel: { x: 500, y: 400, w: 240, h: 64 },
+      error: { x: 220, y: 356 },
+    } as const)
+  : ({
+      panel: { x: 220, y: 150, w: 520, h: 240 },
+      nameField: { x: 244, y: 214, w: 472, h: 28 },
+      codeField: { x: 244, y: 270, w: 472, h: 28 },
+      submit: { x: 244, y: 336, w: 224, h: BUTTON_HEIGHT },
+      cancel: { x: 492, y: 336, w: 224, h: BUTTON_HEIGHT },
+      error: { x: 244, y: 310 },
+    } as const);
 
 export const HOW_TO_PLAY = {
   panel: { x: 40, y: 40, w: 880, h: 460 },
@@ -123,10 +155,15 @@ export interface ThemeChoiceSpec {
  * a card face, a card back, a table swatch, and a background swatch.
  */
 export const THEME_PANEL = {
-  panel: { x: 120, y: 24, w: 720, h: 432 },
-  arrow: { w: 24, h: 24 },
-  arrowGap: 200,
-  close: { x: 280, y: 416, w: 160, h: BUTTON_HEIGHT },
+  panel: { x: 120, y: 24, w: 720, h: PHONE_LAYOUT ? 504 : 432 },
+  arrow: { w: PHONE_LAYOUT ? 64 : 24, h: PHONE_LAYOUT ? 64 : 24 },
+  arrowGap: PHONE_LAYOUT ? 400 : 200,
+  close: {
+    x: 280,
+    y: PHONE_LAYOUT ? 448 : 416,
+    w: PHONE_LAYOUT ? 360 : 160,
+    h: PHONE_LAYOUT ? 64 : BUTTON_HEIGHT,
+  },
   choices: [
     {
       id: 'front',
@@ -135,7 +172,7 @@ export const THEME_PANEL = {
       x: 168,
       y: 108,
       labelY: 88,
-      previewBox: { x: 400, y: 88, w: 64, h: 64 },
+      previewBox: { x: PHONE_LAYOUT ? 680 : 400, y: 88, w: 64, h: 64 },
     },
     {
       id: 'back',
@@ -144,7 +181,7 @@ export const THEME_PANEL = {
       x: 168,
       y: 196,
       labelY: 176,
-      previewBox: { x: 400, y: 176, w: 64, h: 64 },
+      previewBox: { x: PHONE_LAYOUT ? 680 : 400, y: 176, w: 64, h: 64 },
     },
     {
       id: 'table',
@@ -153,7 +190,7 @@ export const THEME_PANEL = {
       x: 168,
       y: 284,
       labelY: 264,
-      previewBox: { x: 400, y: 256, w: 129, h: 80 },
+      previewBox: { x: PHONE_LAYOUT ? 680 : 400, y: 256, w: 129, h: 80 },
     },
     {
       id: 'background',
@@ -162,7 +199,7 @@ export const THEME_PANEL = {
       x: 168,
       y: 372,
       labelY: 352,
-      previewBox: { x: 400, y: 368, w: 48, h: 32 },
+      previewBox: { x: PHONE_LAYOUT ? 680 : 400, y: 368, w: 48, h: 32 },
     },
   ] as const satisfies readonly ThemeChoiceSpec[],
 } as const;

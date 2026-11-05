@@ -200,7 +200,7 @@ describe('rummy layout', () => {
     state.phase = 'finished';
     state.winnerSeatIndex = 0;
     expect(finishedLine(state, [{ seatIndex: 0, name: 'Ada' }])).toBe(
-      'Winner seat 0 Ada',
+      'Ada wins',
     );
     expect(finishedLine({ ...state, phase: 'play' }, [])).toBeNull();
   });

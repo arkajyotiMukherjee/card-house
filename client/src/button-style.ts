@@ -7,6 +7,19 @@
 /** Body size for a standard button. Large menu labels pass their own size. */
 export const BUTTON_FONT_SIZE = 8;
 
+/** Taller touch controls can carry larger type, constrained by their caption. */
+export function buttonFontSize(
+  label: string,
+  width: number,
+  height: number,
+): number {
+  if (height < 60) return BUTTON_FONT_SIZE;
+  return Math.max(
+    BUTTON_FONT_SIZE,
+    Math.min(16, Math.floor((width - 12) / Math.max(1, label.length))),
+  );
+}
+
 /**
  * Face height for menu chrome, lobby, create-table, chat, leave, and overlays.
  * A control keeps another height only when it is a different kind of target:

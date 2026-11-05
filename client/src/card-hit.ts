@@ -7,6 +7,9 @@
  * front of the cards it overlaps, including ones drawn after it.
  */
 
+import { inspectionPose } from './hand-hover';
+import { isMobileDevice } from './mobile-shell';
+
 export interface CardHitBox {
   id: string;
   /** Left edge of the drawn card. */
@@ -55,15 +58,19 @@ export function cardHitBox(
 }
 
 /**
- * Hit boxes for `ids` in draw order. `cards` supplies the actor that is
- * on screen now, including the graphic offset from `placeCardLift`.
+ * Hit boxes for `ids` in draw order, at their fixed collider positions.
+ * Inspection and selection animate only the artwork. Using that animation
+ * here would change the winning card halfway through one pointer event,
+ * allowing a second overlapping actor to select itself from the same tap.
  */
 export function localHandHitBoxes<T extends PlacedCard>(
   ids: readonly string[],
   cards: ReadonlyMap<string, T>,
   size: number,
+  mobile = typeof window !== 'undefined' && isMobileDevice(),
 ): CardHitBox[] {
   const boxes: CardHitBox[] = [];
+  const resting = inspectionPose(0, mobile, false, true);
   for (let index = 0; index < ids.length; index += 1) {
     const id = ids[index];
     if (!id) {
@@ -73,12 +80,32 @@ export function localHandHitBoxes<T extends PlacedCard>(
     if (!record) {
       continue;
     }
-    const lift = Math.max(0, -record.actor.graphics.offset.y);
     boxes.push(
-      cardHitBox(id, record.actor.pos.x, record.actor.pos.y, size, size, lift),
+      cardHitBox(
+        id,
+        record.actor.pos.x,
+        record.actor.pos.y - resting.lift,
+        size * resting.scale,
+        size * resting.scale,
+        0,
+      ),
     );
   }
-  return boxes;
+  // Transparent sprite margins must not steal taps from a neighbour's face.
+  // Split a crowded hand at stable center midpoints, matching inspection's
+  // nearest-card behavior, while retaining full-width targets for spaced cards.
+  return boxes.map((box, index) => {
+    const previous = boxes[index - 1];
+    const next = boxes[index + 1];
+    const center = box.x + box.width / 2;
+    const left = previous
+      ? Math.max(box.x, (previous.x + previous.width / 2 + center) / 2)
+      : box.x;
+    const right = next
+      ? Math.min(box.x + box.width, (next.x + next.width / 2 + center) / 2)
+      : box.x + box.width;
+    return { ...box, x: left, width: Math.max(0, right - left) };
+  });
 }
 
 function contains(box: CardHitBox, point: CardPoint): boolean {

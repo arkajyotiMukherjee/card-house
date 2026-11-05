@@ -1,4 +1,5 @@
 import * as ex from 'excalibur';
+import { isMobileDevice } from './mobile-shell';
 import {
   chipsImage,
   personalCardAtlas,
@@ -110,7 +111,7 @@ const TITLE_SHADOW = ex.Color.fromHex('#07140d');
 const FLOATER_COUNT = 14;
 const TITLE_DROP = 4;
 /** Below the Theme button (y 408, h 44) and above the version marker. */
-const STATS_Y = 480;
+const STATS_Y = typeof window !== 'undefined' && isMobileDevice() ? 150 : 480;
 
 export interface MenuEntry {
   kind: PromptKind;
@@ -624,7 +625,13 @@ export class MenuScene extends ex.Scene {
     const fields = promptFields(kind);
     for (const field of fields) {
       const spec = field.id === 'name' ? PROMPT.nameField : PROMPT.codeField;
-      this.overlayText(spec.x, spec.y - 16, 8, DIM, () => field.label);
+      this.overlayText(
+        spec.x,
+        spec.y - (isMobileDevice() ? 24 : 16),
+        isMobileDevice() ? 12 : 8,
+        DIM,
+        () => field.label,
+      );
       const face = rect(spec.w, spec.h, FIELD, STROKE);
       const actor = new ex.Actor({
         pos: ex.vec(spec.x, spec.y),
@@ -687,7 +694,7 @@ export class MenuScene extends ex.Scene {
       PROMPT.submit.w,
       PROMPT.submit.h,
       promptSubmitLabel(kind),
-      BUTTON_FONT_SIZE,
+      isMobileDevice() ? 16 : BUTTON_FONT_SIZE,
       () => {
         void this.submitPrompt();
       },
@@ -700,7 +707,7 @@ export class MenuScene extends ex.Scene {
       PROMPT.cancel.w,
       PROMPT.cancel.h,
       'Cancel',
-      BUTTON_FONT_SIZE,
+      isMobileDevice() ? 16 : BUTTON_FONT_SIZE,
       () => {
         this.closeOverlay();
       },
@@ -956,7 +963,7 @@ export class MenuScene extends ex.Scene {
         SOLO_PICKER.play.w,
         SOLO_PICKER.play.h,
         'Play',
-        BUTTON_FONT_SIZE,
+        isMobileDevice() ? 16 : BUTTON_FONT_SIZE,
         () => {
           void this.submitSolo();
         },
@@ -969,7 +976,7 @@ export class MenuScene extends ex.Scene {
         SOLO_PICKER.cancel.w,
         SOLO_PICKER.cancel.h,
         'Cancel',
-        BUTTON_FONT_SIZE,
+        isMobileDevice() ? 16 : BUTTON_FONT_SIZE,
         () => {
           this.closeOverlay();
         },
@@ -987,7 +994,7 @@ export class MenuScene extends ex.Scene {
     y: number,
     onCycle: (delta: number) => void,
   ): ex.Text {
-    const arrow = THEME_PANEL.arrow;
+    const arrow = isMobileDevice() ? { w: 64, h: 64 } : THEME_PANEL.arrow;
     this.overlay.push(
       this.button(x, y, arrow.w, arrow.h, '<', 16, () => onCycle(-1), 32, true),
     );
@@ -1006,7 +1013,7 @@ export class MenuScene extends ex.Scene {
     );
     const text = canvasText('', 16, GOLD);
     const textActor = new ex.Actor({
-      pos: ex.vec(x + arrow.w + 12, y + 4),
+      pos: ex.vec(x + arrow.w + 12, y + (arrow.h - 16) / 2),
       anchor: ex.vec(0, 0),
       z: 33,
     });
@@ -1262,7 +1269,13 @@ export class MenuScene extends ex.Scene {
     );
 
     for (const choice of THEME_PANEL.choices) {
-      this.overlayText(choice.x, choice.labelY, 8, DIM, () => choice.label);
+      this.overlayText(
+        choice.x,
+        choice.labelY,
+        isMobileDevice() ? 12 : 8,
+        DIM,
+        () => choice.label,
+      );
       const value = this.styleArrowRow(choice.x, choice.y, (delta) => {
         this.stepTheme(choice.id, delta);
       });
@@ -1301,7 +1314,7 @@ export class MenuScene extends ex.Scene {
         close.w,
         close.h,
         'Close',
-        BUTTON_FONT_SIZE,
+        isMobileDevice() ? 16 : BUTTON_FONT_SIZE,
         () => {
           this.closeOverlay();
         },
@@ -1364,7 +1377,7 @@ export class MenuScene extends ex.Scene {
     );
     const text = canvasText('', 16, GOLD);
     const textActor = new ex.Actor({
-      pos: ex.vec(x + arrow.w + 12, y + 4),
+      pos: ex.vec(x + arrow.w + 12, y + (arrow.h - 16) / 2),
       anchor: ex.vec(0, 0),
       z: 33,
     });

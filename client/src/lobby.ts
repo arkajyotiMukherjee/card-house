@@ -16,6 +16,9 @@ import {
 import type { GameDefinition } from '../../src/shared/games/game-definition';
 import { PLAYER_NAME_MAX } from '../../src/shared/discord-player-name';
 import { BUTTON_HEIGHT } from './button-style';
+import { isMobileDevice } from './mobile-shell';
+
+const PHONE_LAYOUT = typeof window !== 'undefined' && isMobileDevice();
 
 export const NAME_MAX = PLAYER_NAME_MAX;
 export const CODE_MAX = 6;
@@ -25,8 +28,18 @@ export const LOBBY_PANEL = {
   codeField: { x: 16, y: 116, w: 128, h: 24 },
   createButton: { x: 16, y: 152, w: 128, h: BUTTON_HEIGHT },
   joinButton: { x: 16, y: 186, w: 128, h: BUTTON_HEIGHT },
-  renameField: { x: 16, y: 428, w: 128, h: 24 },
-  saveButton: { x: 16, y: 458, w: 128, h: BUTTON_HEIGHT },
+  renameField: {
+    x: 16,
+    y: PHONE_LAYOUT ? 370 : 428,
+    w: PHONE_LAYOUT ? 188 : 128,
+    h: PHONE_LAYOUT ? 64 : 24,
+  },
+  saveButton: {
+    x: 16,
+    y: PHONE_LAYOUT ? 438 : 458,
+    w: PHONE_LAYOUT ? 188 : 128,
+    h: PHONE_LAYOUT ? 48 : BUTTON_HEIGHT,
+  },
 } as const;
 
 export interface LobbyRow {
@@ -129,46 +142,81 @@ export interface ListLayout {
   hidden: number;
 }
 
-export const TABLE_LIST = {
-  panel: { x: 800, y: 44, w: 152, h: 460 },
-  create: { x: 808, y: 70, w: 136, h: BUTTON_HEIGHT },
-  list: { x: 808, y: 108, bottom: 468 },
-  header: { h: 14, gap: 4 },
-  row: { w: 136, h: 44, gap: 4 },
-  more: { x: 808, y: 468 },
-  error: { x: 808, y: 480 },
-} as const;
+export const TABLE_LIST = PHONE_LAYOUT
+  ? ({
+      panel: { x: 624, y: 76, w: 328, h: 460 },
+      create: { x: 632, y: 80, w: 312, h: 48 },
+      list: { x: 632, y: 150, bottom: 464 },
+      header: { h: 18, gap: 4 },
+      row: { w: 312, h: 128, gap: 4 },
+      more: { x: 632, y: 468 },
+      error: { x: 632, y: 508 },
+    } as const)
+  : ({
+      panel: { x: 800, y: 44, w: 152, h: 460 },
+      create: { x: 808, y: 70, w: 136, h: BUTTON_HEIGHT },
+      list: { x: 808, y: 108, bottom: 468 },
+      header: { h: 14, gap: 4 },
+      row: { w: 136, h: 44, gap: 4 },
+      more: { x: 808, y: 468 },
+      error: { x: 808, y: 480 },
+    } as const);
 
 /** Watch control on a table row. A spectator does not take a player seat. */
 export const WATCH_BUTTON = { x: 16, y: 30, w: 48, h: 12 } as const;
+export const MOBILE_WATCH_BUTTON = { x: 184, y: 56, w: 112, h: 64 } as const;
 
-export function watchHit(localX: number, localY: number): boolean {
+export function watchHit(
+  localX: number,
+  localY: number,
+  mobile = false,
+): boolean {
+  const box = mobile ? MOBILE_WATCH_BUTTON : WATCH_BUTTON;
   return (
-    localX >= WATCH_BUTTON.x &&
-    localX < WATCH_BUTTON.x + WATCH_BUTTON.w &&
-    localY >= WATCH_BUTTON.y &&
-    localY < WATCH_BUTTON.y + WATCH_BUTTON.h
+    localX >= box.x &&
+    localX < box.x + box.w &&
+    localY >= box.y &&
+    localY < box.y + box.h
   );
 }
 
-export const CHAT_PANEL = {
-  panel: { x: 170, y: 68, w: 620, h: 380 },
-  /** Sits above the first message so the heading glyphs do not cover it. */
-  title: { x: 178, y: 76, size: 8 },
-  list: { x: 178, y: 88, bottom: 436, lineH: 12 },
-  field: { x: 178, y: 440, w: 500, h: BUTTON_HEIGHT },
-  send: { x: 686, y: 440, w: 96, h: BUTTON_HEIGHT },
-} as const;
+export const CHAT_PANEL = PHONE_LAYOUT
+  ? ({
+      panel: { x: 222, y: 68, w: 392, h: 436 },
+      title: { x: 230, y: 76, size: 12 },
+      list: { x: 230, y: 98, bottom: 426, lineH: 18 },
+      field: { x: 230, y: 438, w: 268, h: 64 },
+      send: { x: 506, y: 446, w: 100, h: 48 },
+    } as const)
+  : ({
+      panel: { x: 170, y: 68, w: 620, h: 380 },
+      /** Sits above the first message so the heading glyphs do not cover it. */
+      title: { x: 178, y: 76, size: 8 },
+      list: { x: 178, y: 88, bottom: 436, lineH: 12 },
+      field: { x: 178, y: 440, w: 500, h: BUTTON_HEIGHT },
+      send: { x: 686, y: 440, w: 96, h: BUTTON_HEIGHT },
+    } as const);
 
 export const CHAT_BODY_MAX = 240;
 
-export const LEAVE_ROOM = { x: 800, y: 8, w: 152, h: BUTTON_HEIGHT } as const;
-
-export const LEAVE_CONFIRM = {
-  panel: { x: 230, y: 170, w: 500, h: 150 },
-  leave: { x: 246, y: 268, w: 220, h: BUTTON_HEIGHT },
-  cancel: { x: 486, y: 268, w: 220, h: BUTTON_HEIGHT },
+export const LEAVE_ROOM = {
+  x: PHONE_LAYOUT ? 624 : 800,
+  y: 8,
+  w: PHONE_LAYOUT ? 328 : 152,
+  h: PHONE_LAYOUT ? 48 : BUTTON_HEIGHT,
 } as const;
+
+export const LEAVE_CONFIRM = PHONE_LAYOUT
+  ? ({
+      panel: { x: 180, y: 150, w: 600, h: 240 },
+      leave: { x: 196, y: 300, w: 272, h: 64 },
+      cancel: { x: 492, y: 300, w: 272, h: 64 },
+    } as const)
+  : ({
+      panel: { x: 230, y: 170, w: 500, h: 150 },
+      leave: { x: 246, y: 268, w: 220, h: BUTTON_HEIGHT },
+      cancel: { x: 486, y: 268, w: 220, h: BUTTON_HEIGHT },
+    } as const);
 
 export type LeaveConfirmHit = 'leave' | 'cancel' | 'panel';
 
@@ -323,6 +371,19 @@ export const CREATE_TABLE = {
   varNext: { x: 284, y: 268, w: 72, h: BUTTON_HEIGHT },
   create: { x: 204, y: 328, w: 160, h: BUTTON_HEIGHT },
   cancel: { x: 376, y: 328, w: 160, h: BUTTON_HEIGHT },
+} as const;
+
+/** Wide landscape dialog with separate thumb-sized selectors. */
+export const MOBILE_CREATE_TABLE = {
+  panel: { x: 160, y: 32, w: 640, h: 476 },
+  prev: { x: 184, y: 108, w: 80, h: 64 },
+  next: { x: 696, y: 108, w: 80, h: 64 },
+  minus: { x: 184, y: 208, w: 80, h: 64 },
+  plus: { x: 696, y: 208, w: 80, h: 64 },
+  varPrev: { x: 184, y: 308, w: 80, h: 64 },
+  varNext: { x: 696, y: 308, w: 80, h: 64 },
+  create: { x: 184, y: 416, w: 280, h: 64 },
+  cancel: { x: 496, y: 416, w: 280, h: 64 },
 } as const;
 
 export function normalizePlayerName(raw: string): string {
@@ -652,8 +713,15 @@ export function tableGroups(lines: Iterable<TableLine>): TableGroup[] {
 }
 
 /** Stacks group headers and rows from the list top. Rows that would run past `bottom` are counted in `hidden`. */
-export function listLayout(groups: readonly TableGroup[]): ListLayout {
-  const { list, header, row } = TABLE_LIST;
+export function listLayout(
+  groups: readonly TableGroup[],
+  mobile = false,
+): ListLayout {
+  const { header } = TABLE_LIST;
+  const list = mobile
+    ? { ...TABLE_LIST.list, y: 150, bottom: 464 }
+    : TABLE_LIST.list;
+  const row = mobile ? { ...TABLE_LIST.row, h: 128 } : TABLE_LIST.row;
   const slots: ListSlot[] = [];
   let y: number = list.y;
   let hidden = 0;

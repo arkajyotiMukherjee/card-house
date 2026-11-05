@@ -122,10 +122,12 @@ function followPlay(
   if (truths.length > 0) {
     return playCard(truths[0]);
   }
-  if (lies.length > 0) {
-    return playCard(lies[0]);
+  if (jokers.length > 0) {
+    return playCard(lowestCard(jokers));
   }
-  return playCard(lowestCard(jokers));
+  // A cautious turn with no honest card sits out. Always inventing a lie
+  // here kept two bots recycling the same pile indefinitely on some deals.
+  return { type: 'pass' };
 }
 
 export const bluffStrategy: BotStrategy<BluffState, BluffIntent> = {

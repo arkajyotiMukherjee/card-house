@@ -1,3 +1,4 @@
+import { bindButtonPress } from './button-press';
 import * as ex from 'excalibur';
 import {
   POKER_GAME_TYPE,
@@ -19,6 +20,7 @@ import {
   BUTTON_FONT_SIZE,
   BUTTON_PRESS_SHIFT,
   buttonCaptionPos,
+  buttonFontSize,
 } from './button-style';
 import { chipsImage } from './boot-scene';
 import {
@@ -36,7 +38,12 @@ import {
   localHandHitBoxes,
   type CardHitBox,
 } from './card-hit';
-import { HandHover, placeCardLift, startHandHoverClock } from './hand-hover';
+import {
+  HandHover,
+  canInspectPointer,
+  placeCardLift,
+  startHandHoverClock,
+} from './hand-hover';
 import type { CardAtlas } from './card-atlas';
 import { ChipAtlas, type ChipDenomination } from './chip-atlas';
 import type { GameDriver, InputEvent, RenderContext } from './game-driver';
@@ -83,6 +90,8 @@ import {
   fanGapLine,
   isGiveUpControl,
 } from './table-presentation';
+
+const LABEL_SIZE = FOLD_BUTTON.h >= 60 ? 12 : 8;
 
 const BUTTON = ex.Color.fromHex('#1b5c38');
 const BUTTON_DOWN = ex.Color.fromHex('#0e3d24');
@@ -458,12 +467,13 @@ export class PokerDriver implements GameDriver<PokerState> {
       z: 20,
     });
     actor.graphics.use(face);
-    const rest = buttonCaptionPos(spec.label, spec.box.w, spec.box.h);
+    const size = buttonFontSize(spec.label, spec.box.w, spec.box.h);
+    const rest = buttonCaptionPos(spec.label, spec.box.w, spec.box.h, size);
     const caption = new ex.Actor({
       pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText(spec.label, BUTTON_FONT_SIZE, GOLD));
+    caption.graphics.use(canvasText(spec.label, size, GOLD));
     actor.addChild(caption);
     const record: ButtonRecord = {
       actor,
@@ -477,34 +487,35 @@ export class PokerDriver implements GameDriver<PokerState> {
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;
     });
-    actor.on('pointerleave', () => {
-      face.strokeColor = STROKE;
-      face.color = fill;
-      caption.pos = ex.vec(record.rest.x, record.rest.y);
-    });
-    actor.on('pointerdown', () => {
-      face.color = down;
-      caption.pos = ex.vec(record.rest.x, record.rest.y + BUTTON_PRESS_SHIFT);
-    });
-    actor.on('pointerup', (event) => {
-      face.color = fill;
-      caption.pos = ex.vec(record.rest.x, record.rest.y);
-      const current = this.state;
-      const context = this.ctx;
-      if (!current || !context) {
-        return;
-      }
-      if (
-        !this.ownsStakeClick(spec.target, event.worldPos.x, event.worldPos.y)
-      ) {
-        return;
-      }
-      this.handleInput(
-        { type: 'pointerup', target: spec.target },
-        current,
-        context,
-      );
-    });
+    bindButtonPress(
+      actor,
+      () => {
+        face.color = down;
+        caption.pos = ex.vec(record.rest.x, record.rest.y + BUTTON_PRESS_SHIFT);
+      },
+      () => {
+        face.strokeColor = STROKE;
+        face.color = fill;
+        caption.pos = ex.vec(record.rest.x, record.rest.y);
+      },
+      (event) => {
+        const current = this.state;
+        const context = this.ctx;
+        if (!current || !context) {
+          return;
+        }
+        if (
+          !this.ownsStakeClick(spec.target, event.worldPos.x, event.worldPos.y)
+        ) {
+          return;
+        }
+        this.handleInput(
+          { type: 'pointerup', target: spec.target },
+          current,
+          context,
+        );
+      },
+    );
     ctx.scene.add(actor);
     return record;
   }
@@ -514,8 +525,9 @@ export class PokerDriver implements GameDriver<PokerState> {
       return;
     }
     record.label = label;
-    record.rest = buttonCaptionPos(label, record.box.w, record.box.h);
-    record.caption.graphics.use(canvasText(label, BUTTON_FONT_SIZE, GOLD));
+    const size = buttonFontSize(label, record.box.w, record.box.h);
+    record.rest = buttonCaptionPos(label, record.box.w, record.box.h, size);
+    record.caption.graphics.use(canvasText(label, size, GOLD));
     record.caption.pos = ex.vec(record.rest.x, record.rest.y);
   }
 
@@ -764,18 +776,33 @@ export class PokerDriver implements GameDriver<PokerState> {
       return;
     }
     const valueText = String(this.stake.amount);
-    const rangeText = `${range.min} to ${range.max}`;
+    const touch = STAKE_AMOUNT.h >= 60;
+    const rangeText = touch
+      ? `${range.min}–${range.max}`
+      : `${range.min} to ${range.max}`;
     if (box.valueText !== valueText) {
       box.valueText = valueText;
-      box.value.graphics.use(canvasText(valueText, BUTTON_FONT_SIZE, GOLD));
-      const pos = buttonCaptionPos(valueText, STAKE_AMOUNT.w, STAKE_AMOUNT.h);
-      box.value.pos = ex.vec(pos.x, 1);
+      const size = buttonFontSize(valueText, STAKE_AMOUNT.w, STAKE_AMOUNT.h);
+      box.value.graphics.use(canvasText(valueText, size, GOLD));
+      const pos = buttonCaptionPos(
+        valueText,
+        STAKE_AMOUNT.w,
+        STAKE_AMOUNT.h,
+        size,
+      );
+      box.value.pos = ex.vec(pos.x, touch ? 8 : 1);
     }
     if (box.rangeText !== rangeText) {
       box.rangeText = rangeText;
-      box.range.graphics.use(canvasText(rangeText, BUTTON_FONT_SIZE, DIM));
-      const pos = buttonCaptionPos(rangeText, STAKE_AMOUNT.w, STAKE_AMOUNT.h);
-      box.range.pos = ex.vec(pos.x, 14);
+      const size = buttonFontSize(rangeText, STAKE_AMOUNT.w, STAKE_AMOUNT.h);
+      box.range.graphics.use(canvasText(rangeText, size, DIM));
+      const pos = buttonCaptionPos(
+        rangeText,
+        STAKE_AMOUNT.w,
+        STAKE_AMOUNT.h,
+        size,
+      );
+      box.range.pos = ex.vec(pos.x, touch ? 36 : 14);
     }
   }
 
@@ -793,7 +820,7 @@ export class PokerDriver implements GameDriver<PokerState> {
     if (state.phase === 'finished') {
       const line = finishedLine(state, ctx.seats) ?? 'Hand over';
       this.labels.push(
-        this.textActor(ctx, bannerX(line), BANNER_Y, line, GOLD),
+        this.textActor(ctx, bannerX(line, LABEL_SIZE), BANNER_Y, line, GOLD),
       );
       this.syncCountdown(state, ctx);
     } else {
@@ -823,8 +850,15 @@ export class PokerDriver implements GameDriver<PokerState> {
         this.textActor(ctx, TURN_LINE.x, TURN_LINE.y, hint, GOLD),
       );
     }
+    const potLabel = `Pot ${state.pot}`;
     this.labels.push(
-      this.textActor(ctx, POT_X - 32, POT_Y - 28, `Pot ${state.pot}`, GOLD),
+      this.textActor(
+        ctx,
+        POT_X - 72 - potLabel.length * LABEL_SIZE,
+        POT_Y - LABEL_SIZE / 2,
+        potLabel,
+        GOLD,
+      ),
     );
     for (const seat of ctx.seats) {
       const row = state.seats[String(seat.seatIndex)];
@@ -843,6 +877,7 @@ export class PokerDriver implements GameDriver<PokerState> {
         seat.name,
         chips,
         blind,
+        LABEL_SIZE,
       );
       if (blind && line.mark) {
         const blindLabel = this.textActor(
@@ -870,8 +905,8 @@ export class PokerDriver implements GameDriver<PokerState> {
       this.labels.push(chipLabel);
       if (note) {
         const noteAt = seat.self
-          ? { x: line.chips.x, y: line.chips.y + 12 }
-          : fanGapLine(seat.x, seat.y, seat.name, note, 1);
+          ? { x: line.chips.x, y: line.chips.y + LABEL_SIZE + 4 }
+          : fanGapLine(seat.x, seat.y, seat.name, note, 1, LABEL_SIZE);
         const noteLabel = this.textActor(ctx, noteAt.x, noteAt.y, note, GOLD);
         if (!seat.self) {
           noteLabel.z = 80;
@@ -1052,10 +1087,21 @@ export class PokerDriver implements GameDriver<PokerState> {
       actor.pointer.useGraphicsBounds = false;
       actor.graphics.use(cardSprite(atlas, cardId, place.faceUp, place.fan));
       actor.on('pointerenter', (event) => {
+        if (!canInspectPointer(event, ctx.scene.engine.input.pointers)) return;
         this.followHole(cardId, event.worldPos.x, true);
       });
       actor.on('pointermove', (event) => {
+        if (!canInspectPointer(event, ctx.scene.engine.input.pointers)) return;
+        this.handHover.touch.move(event);
         this.followHole(cardId, event.worldPos.x, false);
+      });
+      actor.on('pointerdown', (event) => {
+        this.handHover.touch.start(event);
+        this.followHole(cardId, event.worldPos.x, true);
+      });
+      actor.on('pointercancel', () => {
+        this.handHover.touch.cancel();
+        this.handHover.release();
       });
       actor.on('pointerleave', () => {
         this.handHover.leave(cardId);
@@ -1065,6 +1111,10 @@ export class PokerDriver implements GameDriver<PokerState> {
         this.hovered = null;
       });
       actor.on('pointerup', (event) => {
+        if (event.pointerType === ex.PointerType.Touch) {
+          this.handHover.release();
+          if (!this.handHover.touch.isTap(event)) return;
+        }
         const current = this.state;
         const context = this.ctx;
         if (!current || !context) {
@@ -1102,10 +1152,18 @@ export class PokerDriver implements GameDriver<PokerState> {
     record.actor.graphics.opacity = place.opacity;
     record.actor.scale = ex.vec(place.scale, place.scale);
     record.actor.rotation = place.rotation;
-    const lift = this.droppable.has(cardId)
+    const lift = this.canInspectHole(cardId)
       ? this.handHover.current(cardId)
       : 0;
-    placeCardLift(record.actor, place.x, place.y, place.z, lift);
+    placeCardLift(
+      record.actor,
+      place.x,
+      place.y,
+      place.z,
+      lift,
+      false,
+      place.personal,
+    );
     if (
       record.faceUp !== place.faceUp ||
       record.personal !== place.personal ||
@@ -1121,7 +1179,7 @@ export class PokerDriver implements GameDriver<PokerState> {
   }
 
   private liftedY(cardId: string, y: number): number {
-    const lift = this.droppable.has(cardId)
+    const lift = this.canInspectHole(cardId)
       ? this.handHover.current(cardId)
       : 0;
     return y - Math.round(lift);
@@ -1137,8 +1195,18 @@ export class PokerDriver implements GameDriver<PokerState> {
     return localHandHitBoxes(hole, this.cards, CARD_DRAW);
   }
 
+  private canInspectHole(cardId: string): boolean {
+    const ctx = this.ctx;
+    return (
+      !!ctx &&
+      !ctx.inputBlocked() &&
+      ctx.meSeatIndex !== null &&
+      this.state?.seats[String(ctx.meSeatIndex)]?.hole.includes(cardId) === true
+    );
+  }
+
   private followHole(cardId: string, pointerX: number, entered: boolean): void {
-    if (!this.droppable.has(cardId)) {
+    if (!this.canInspectHole(cardId)) {
       this.handHover.leave(cardId);
       return;
     }
@@ -1191,7 +1259,7 @@ export class PokerDriver implements GameDriver<PokerState> {
     if (!this.countdown) {
       this.countdown = this.textActor(
         ctx,
-        bannerX(text),
+        bannerX(text, LABEL_SIZE),
         COUNTDOWN_Y,
         text,
         GOLD,
@@ -1199,8 +1267,8 @@ export class PokerDriver implements GameDriver<PokerState> {
       return;
     }
     this.countdown.graphics.isVisible = true;
-    this.countdown.pos = ex.vec(bannerX(text), COUNTDOWN_Y);
-    this.countdown.graphics.use(canvasText(text, 8, GOLD));
+    this.countdown.pos = ex.vec(bannerX(text, LABEL_SIZE), COUNTDOWN_Y);
+    this.countdown.graphics.use(canvasText(text, LABEL_SIZE, GOLD));
   }
 
   private clearCountdown(): void {
@@ -1243,7 +1311,7 @@ export class PokerDriver implements GameDriver<PokerState> {
     for (let index = 0; index < hole.length; index += 1) {
       const cardId = hole[index];
       const slot = slots[index];
-      if (!cardId || !slot || !this.droppable.has(cardId)) {
+      if (!cardId || !slot) {
         continue;
       }
       ids.push(cardId);
@@ -1256,7 +1324,7 @@ export class PokerDriver implements GameDriver<PokerState> {
       if (!cardId || !record) {
         continue;
       }
-      const lift = this.droppable.has(cardId)
+      const lift = this.canInspectHole(cardId)
         ? this.handHover.current(cardId)
         : 0;
       placeCardLift(
@@ -1265,6 +1333,8 @@ export class PokerDriver implements GameDriver<PokerState> {
         record.home.y,
         record.restZ,
         lift,
+        false,
+        record.personal,
       );
     }
     const pixels = this.hovered
@@ -1352,7 +1422,7 @@ export class PokerDriver implements GameDriver<PokerState> {
       anchor: ex.vec(0, 0),
       z: 16,
     });
-    actor.graphics.use(canvasText(text, 8, color));
+    actor.graphics.use(canvasText(text, LABEL_SIZE, color));
     ctx.scene.add(actor);
     return actor;
   }

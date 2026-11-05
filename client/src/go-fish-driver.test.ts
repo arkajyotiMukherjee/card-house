@@ -1,9 +1,17 @@
-import { describe, expect, it } from 'vitest';
-import type { Scene } from 'excalibur';
+import { describe, expect, it, vi } from 'vitest';
+import { Scene } from 'excalibur';
 import type { GoFishState } from '../../src/shared/games/go-fish';
 import { GoFishDriver } from './go-fish-driver';
 import type { CardAtlas } from './card-atlas';
 import type { RenderContext } from './game-driver';
+
+vi.mock('./canvas-ui', async () => {
+  const { GraphicsGroup } = await import('excalibur');
+  return {
+    canvasText: () => new GraphicsGroup({ members: [] }),
+    panelRect: () => new GraphicsGroup({ members: [] }),
+  };
+});
 
 function state(): GoFishState {
   return {
@@ -23,7 +31,7 @@ function context(
   blocked = false,
 ): RenderContext {
   return {
-    scene: {} as Scene,
+    scene: new Scene(),
     seats: [
       { seatIndex: 0, name: 'Ada', self: seatIndex === 0, x: 480, y: 456 },
       { seatIndex: 1, name: 'Bea', self: seatIndex === 1, x: 780, y: 310 },
@@ -60,7 +68,7 @@ describe('GoFishDriver input', () => {
     expect(sent).toEqual([{ type: 'ask', targetSeat: 1, rank: '10' }]);
   });
 
-  it('sends an empty rank when Ask is clicked with nothing selected', () => {
+  it('ignores Ask until a rank is selected', () => {
     const driver = new GoFishDriver();
     const sent: unknown[] = [];
     driver.handleInput(
@@ -68,7 +76,7 @@ describe('GoFishDriver input', () => {
       state(),
       context(sent, 0),
     );
-    expect(sent).toEqual([{ type: 'ask', targetSeat: 1, rank: '' }]);
+    expect(sent).toEqual([]);
   });
 
   it('does not select a card when it is not your turn', () => {
@@ -79,7 +87,21 @@ describe('GoFishDriver input', () => {
     const ctx = context(sent, 0);
     driver.handleInput({ type: 'pointerup', target: 'AS' }, table, ctx);
     driver.handleInput({ type: 'pointerup', target: 'ask:1' }, table, ctx);
-    expect(sent).toEqual([{ type: 'ask', targetSeat: 1, rank: '' }]);
+    expect(sent).toEqual([]);
+  });
+
+  it('ignores Ask after deselecting the rank or losing the turn', () => {
+    const driver = new GoFishDriver();
+    const sent: unknown[] = [];
+    const table = state();
+    const ctx = context(sent, 0);
+    driver.handleInput({ type: 'pointerup', target: 'AS' }, table, ctx);
+    driver.handleInput({ type: 'pointerup', target: 'AS' }, table, ctx);
+    driver.handleInput({ type: 'pointerup', target: 'ask:1' }, table, ctx);
+    driver.handleInput({ type: 'pointerup', target: 'AS' }, table, ctx);
+    table.turnSeatIndex = 1;
+    driver.handleInput({ type: 'pointerup', target: 'ask:1' }, table, ctx);
+    expect(sent).toEqual([]);
   });
 
   it('does not send a move after the rules finish', () => {
