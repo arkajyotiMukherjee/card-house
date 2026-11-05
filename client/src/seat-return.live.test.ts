@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { DbConnection } from './module_bindings';
+import { lobbyTableQueries } from './lobby';
 
 const connections: DbConnection[] = [];
 let testLobbyCode: string | undefined;
@@ -54,6 +55,13 @@ describe.skipIf(!enabled)('live three-player seats', () => {
     );
     const lobby = [...host.db.lobby.iter()].find((row) => !known.has(row.id))!;
     testLobbyCode = lobby.code;
+    await new Promise<void>((resolve, reject) => {
+      host
+        .subscriptionBuilder()
+        .onApplied(() => resolve())
+        .onError((ctx) => reject(ctx.event))
+        .subscribe(lobbyTableQueries(lobby.id));
+    });
     const clients = [host, second, third];
     const ids = clients.map((_connection, i) => `seat-live-${Date.now()}-${i}`);
     for (const [i, connection] of clients.entries()) {

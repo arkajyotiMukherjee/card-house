@@ -220,6 +220,9 @@ const tablesSchema = __schema({
       { accessor: 'id', name: 'SeatAbsence_id_idx_btree', algorithm: 'btree', columns: [
         'id',
       ] },
+      { accessor: 'tableId', name: 'SeatAbsence_table_id_idx_btree', algorithm: 'btree', columns: [
+        'tableId',
+      ] },
     ],
     constraints: [
       { name: 'SeatAbsence_id_key', constraint: 'unique', columns: ['id'] },

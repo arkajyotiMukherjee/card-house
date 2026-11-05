@@ -325,7 +325,7 @@ const SeatAbsence = table(
   { name: 'SeatAbsence', public: true },
   {
     id: t.string().primaryKey(),
-    tableId: t.string(),
+    tableId: t.string().index('btree'),
     lobbyMemberId: t.string(),
     deadlineMicros: t.option(t.u64()),
   },
