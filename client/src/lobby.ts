@@ -157,14 +157,16 @@ export const TABLE_LIST = PHONE_LAYOUT
       create: { x: 808, y: 70, w: 136, h: BUTTON_HEIGHT },
       list: { x: 808, y: 108, bottom: 468 },
       header: { h: 14, gap: 4 },
-      row: { w: 136, h: 44, gap: 4 },
+      row: { w: 136, h: 72, gap: 8 },
       more: { x: 808, y: 468 },
       error: { x: 808, y: 480 },
     } as const);
 
-/** Watch control on a table row. A spectator does not take a player seat. */
-export const WATCH_BUTTON = { x: 16, y: 30, w: 48, h: 12 } as const;
-export const MOBILE_WATCH_BUTTON = { x: 184, y: 56, w: 112, h: 64 } as const;
+/** Separate action faces with a clear gap; phone sizes are logical canvas pixels. */
+export const JOIN_BUTTON = { x: 6, y: 36, w: 58, h: 28 } as const;
+export const WATCH_BUTTON = { x: 72, y: 36, w: 58, h: 28 } as const;
+export const MOBILE_JOIN_BUTTON = { x: 12, y: 48, w: 136, h: 72 } as const;
+export const MOBILE_WATCH_BUTTON = { x: 164, y: 48, w: 136, h: 72 } as const;
 
 export function watchHit(
   localX: number,

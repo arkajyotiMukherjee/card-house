@@ -108,6 +108,7 @@ describe('shared button height', () => {
     LOBBY_PANEL.joinButton,
     LOBBY_PANEL.saveButton,
     TABLE_LIST.create,
+    WATCH_BUTTON,
     CHAT_PANEL.send,
     LEAVE_ROOM,
     LEAVE_CONFIRM.leave,
@@ -165,6 +166,5 @@ describe('shared button height', () => {
     }
     expect(THEME_PANEL.arrow.h).toBe(24);
     expect(ASK_BUTTON.h).toBe(22);
-    expect(WATCH_BUTTON.h).toBe(12);
   });
 });

@@ -23,7 +23,7 @@ export function buttonFontSize(
 /**
  * Face height for menu chrome, lobby, create-table, chat, leave, and overlays.
  * A control keeps another height only when it is a different kind of target:
- * the tall main-menu stack, a square icon, the seat Ask chip, or Watch.
+ * the tall main-menu stack, a square icon, the seat Ask chip, or phone controls.
  */
 export const BUTTON_HEIGHT = 28;
 
