@@ -70,7 +70,7 @@ import {
 import { markDisconnected } from './lobby-presence';
 import { discordProfile } from './discord-member';
 import { speakingRowId, voicePlace } from './speaking-state';
-import { stateIfLobbyReady } from './lobby-deal';
+import { manualStartRejection, stateIfLobbyReady } from './lobby-deal';
 import { openingTableState } from './opening-state';
 import {
   joinBlockForStatus,
@@ -2318,34 +2318,7 @@ export const join_table = spacetimedb.reducer(
       seatState: { tag: 'active' },
     });
 
-    const seatedNow: RulesSeat[] = [];
-    for (const seat of ctx.db.GameSeat.byTable.filter(gameTable.id)) {
-      seatedNow.push(rulesSeat(seat));
-    }
-    let stateJson = gameTable.stateJson;
-    let status = gameTable.status;
-    const rules = rulesByType[gameTable.gameType];
-    if (
-      rules &&
-      stateIfLobbyReady(stateJson, seatedNow.length, gameTable.minPlayers) ===
-        'deal'
-    ) {
-      const next = rules.initialState(seatedNow, rulesTable(gameTable));
-      stateJson = storedState(next);
-      status = storedStatus(
-        tableStatusTag(
-          gameTable.gameType,
-          next,
-          currentStatusTag(gameTable.status.tag),
-        ),
-      );
-    }
-    ctx.db.GameTable.id.update({
-      ...gameTable,
-      stateJson,
-      status,
-      lastActivityAt: ctx.timestamp,
-    });
+    ctx.db.GameTable.id.update({ ...gameTable, lastActivityAt: ctx.timestamp });
     rememberTable(ctx.db, ctx.sender.toHexString(), lobby.id, gameTable.id);
     noteLobbyActivity(ctx, lobby.id);
   },
@@ -3236,6 +3209,57 @@ export const handle_game_intent = spacetimedb.reducer(
       intent = JSON.parse(intentPayload);
     } catch {
       throw new SenderError('Intent must be JSON');
+    }
+
+    if (
+      typeof intent === 'object' &&
+      intent !== null &&
+      'type' in intent &&
+      intent.type === 'start_game'
+    ) {
+      const session = ctx.db.OperatorSession.identity.find(
+        ctx.sender.toHexString(),
+      );
+      if (session?.clientId !== clientId || session.lobbyId !== lobby.id) {
+        throw new SenderError('Join this room before starting');
+      }
+      const seated = [...ctx.db.GameSeat.byTable.filter(gameTable.id)].sort(
+        (a, b) =>
+          a.joinedAt.microsSinceUnixEpoch < b.joinedAt.microsSinceUnixEpoch
+            ? -1
+            : a.joinedAt.microsSinceUnixEpoch > b.joinedAt.microsSinceUnixEpoch
+              ? 1
+              : a.id.localeCompare(b.id),
+      );
+      reject(
+        manualStartRejection(
+          gameTable.stateJson,
+          seated.length,
+          gameTable.minPlayers,
+          seated[0]?.lobbyMemberId === member.id,
+        ),
+      );
+      const rules = rulesByType[gameTable.gameType];
+      if (!rules) throw new SenderError('Game rules not found');
+      const next = rules.initialState(
+        seated.map(rulesSeat),
+        rulesTable(gameTable),
+      );
+      ctx.db.GameTable.id.update({
+        ...gameTable,
+        stateJson: storedState(next),
+        status: storedStatus(
+          tableStatusTag(
+            gameTable.gameType,
+            next,
+            currentStatusTag(gameTable.status.tag),
+          ),
+        ),
+        lastActivityAt: ctx.timestamp,
+      });
+      noteLobbyActivity(ctx, lobby.id);
+      queueBotTurns(ctx, gameTable.id);
+      return;
     }
 
     commitIntent(ctx, gameTable.id, member.id, seat.id, intent, prev);

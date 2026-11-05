@@ -129,6 +129,7 @@ export class GameScene extends ex.Scene {
   private linkLine = '';
   private linkText = canvasText('', 8, GOLD);
   private linkActor: ex.Actor | undefined;
+  private startButton: ex.Actor | undefined;
   private waitingText!: ex.Text;
   private spectatingText!: ex.Text;
   private subscription: SubscriptionHandle | undefined;
@@ -437,6 +438,8 @@ export class GameScene extends ex.Scene {
   }
 
   private endSubscription(): void {
+    this.startButton?.kill();
+    this.startButton = undefined;
     const handle = this.subscription;
     this.subscription = undefined;
     this.subscribedTableId = '';
@@ -751,6 +754,46 @@ export class GameScene extends ex.Scene {
     if (!this.ready || !row || row.id !== this.tableId) {
       return;
     }
+    this.startButton?.kill();
+    this.startButton = undefined;
+    const seats = [...this.connection.db.gameSeat.iter()]
+      .filter((s) => s.tableId === row.id)
+      .sort((a, b) =>
+        a.joinedAt.microsSinceUnixEpoch < b.joinedAt.microsSinceUnixEpoch
+          ? -1
+          : a.joinedAt.microsSinceUnixEpoch > b.joinedAt.microsSinceUnixEpoch
+            ? 1
+            : a.id.localeCompare(b.id),
+      );
+    let waiting = false;
+    try {
+      waiting = JSON.parse(row.stateJson).phase === 'lobby';
+    } catch {
+      /* invalid state is shown by the driver */
+    }
+    if (waiting && seats[0]?.lobbyMemberId === this.lobbyMemberId) {
+      const actor = new ex.Actor({
+        pos: ex.vec(380, 310),
+        anchor: ex.vec(0, 0),
+        width: 200,
+        height: 40,
+        z: 20,
+      });
+      actor.graphics.use(panelRect(200, 40, BUTTON, STROKE));
+      const caption = new ex.Actor({
+        pos: ex.vec(20, 14),
+        anchor: ex.vec(0, 0),
+      });
+      caption.graphics.use(canvasText('Start game', BUTTON_FONT_SIZE, GOLD));
+      actor.addChild(caption);
+      actor.on('pointerup', () =>
+        this.sendPayload(JSON.stringify({ type: 'start_game' }), {
+          type: 'start_game',
+        }),
+      );
+      this.add(actor);
+      this.startButton = actor;
+    }
     if (row.gameType === this.bluffDriver.gameType) {
       this.presidentDriver.destroy(this.driverContext());
       this.goFishDriver.destroy(this.driverContext());
@@ -929,7 +972,7 @@ export class GameScene extends ex.Scene {
     }
     this.errorText.text = '';
     this.waitingText.text =
-      state.phase === 'lobby' ? 'Waiting for players' : '';
+      state.phase === 'lobby' ? 'Waiting for host to start' : '';
     this.bluffDriver.render(state, this.driverContext());
     this.paintHud(bluffStatusHud(state, this.placed));
   }
@@ -948,7 +991,7 @@ export class GameScene extends ex.Scene {
     }
     this.errorText.text = '';
     this.waitingText.text =
-      state.phase === 'lobby' ? 'Waiting for players' : '';
+      state.phase === 'lobby' ? 'Waiting for host to start' : '';
     this.presidentDriver.render(state, this.driverContext());
     this.paintHud(presidentStatusHud(state, this.placed));
   }
@@ -967,7 +1010,7 @@ export class GameScene extends ex.Scene {
     }
     this.errorText.text = '';
     this.waitingText.text =
-      state.phase === 'lobby' ? 'Waiting for players' : '';
+      state.phase === 'lobby' ? 'Waiting for host to start' : '';
     this.goFishDriver.render(state, this.driverContext());
     this.paintHud(goFishStatusHud(state, this.placed));
   }
@@ -986,7 +1029,7 @@ export class GameScene extends ex.Scene {
     }
     this.errorText.text = '';
     this.waitingText.text =
-      state.phase === 'lobby' ? 'Waiting for players' : '';
+      state.phase === 'lobby' ? 'Waiting for host to start' : '';
     this.crazyEightsDriver.render(state, this.driverContext());
     this.paintHud(crazyEightsStatusHud(state, this.placed));
   }
@@ -1005,7 +1048,7 @@ export class GameScene extends ex.Scene {
     }
     this.errorText.text = '';
     this.waitingText.text =
-      state.phase === 'lobby' ? 'Waiting for players' : '';
+      state.phase === 'lobby' ? 'Waiting for host to start' : '';
     this.rummyDriver.render(state, this.driverContext());
     this.paintHud(rummyStatusHud(state, this.placed));
   }
@@ -1024,7 +1067,7 @@ export class GameScene extends ex.Scene {
     }
     this.errorText.text = '';
     this.waitingText.text =
-      state.phase === 'lobby' ? 'Waiting for players' : '';
+      state.phase === 'lobby' ? 'Waiting for host to start' : '';
     this.blackjackDriver.render(state, this.driverContext());
     this.paintHud(blackjackStatusHud(state, this.placed));
   }
@@ -1043,7 +1086,7 @@ export class GameScene extends ex.Scene {
     }
     this.errorText.text = '';
     this.waitingText.text =
-      state.phase === 'lobby' ? 'Waiting for players' : '';
+      state.phase === 'lobby' ? 'Waiting for host to start' : '';
     this.spadesDriver.render(state, this.driverContext());
     this.paintHud(spadesStatusHud(state, this.placed));
   }
@@ -1062,7 +1105,7 @@ export class GameScene extends ex.Scene {
     }
     this.errorText.text = '';
     this.waitingText.text =
-      state.phase === 'lobby' ? 'Waiting for players' : '';
+      state.phase === 'lobby' ? 'Waiting for host to start' : '';
     this.heartsDriver.render(state, this.driverContext());
     this.paintHud(heartsStatusHud(state, this.placed));
   }
@@ -1081,7 +1124,7 @@ export class GameScene extends ex.Scene {
     }
     this.errorText.text = '';
     this.waitingText.text =
-      state.phase === 'lobby' ? 'Waiting for players' : '';
+      state.phase === 'lobby' ? 'Waiting for host to start' : '';
     this.pokerDriver.render(state, this.driverContext());
     this.paintHud(pokerStatusHud(state, this.placed));
   }

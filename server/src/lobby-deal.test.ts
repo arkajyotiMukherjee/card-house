@@ -1,6 +1,6 @@
 import type { GameSeat, GameTable } from '../../src/shared/games/game-rules.ts';
 import { bluffRules } from '../../src/shared/games/bluff.ts';
-import { stateIfLobbyReady } from './lobby-deal.ts';
+import { manualStartRejection, stateIfLobbyReady } from './lobby-deal.ts';
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -53,6 +53,33 @@ assert(
 assert(
   stateIfLobbyReady('{"phase":"play","hands":{}}', 2, 2) === 'keep',
   'a started table is not dealt again',
+);
+
+const threePlayerTable = { ...table, maxPlayers: 3 };
+assert(
+  manualStartRejection(JSON.stringify(lobby), 3, 2, false) !== undefined,
+  'a guest cannot start',
+);
+assert(
+  manualStartRejection(JSON.stringify(lobby), 1, 2, true) !== undefined,
+  'host waits for minimum players',
+);
+assert(
+  manualStartRejection(JSON.stringify(lobby), 3, 2, true) === undefined,
+  'host can start with all three seats',
+);
+assert(
+  manualStartRejection('{"phase":"play"}', 3, 2, true) !== undefined,
+  'repeated start cannot redeal',
+);
+const threePlayerDeal = bluffRules.initialState(
+  [seat(0), seat(1), seat(2)],
+  threePlayerTable,
+);
+assert(threePlayerDeal.phase === 'play', 'all three players start together');
+assert(
+  Object.keys(threePlayerDeal.hands).length === 3,
+  'every player receives a hand',
 );
 
 const dealt = bluffRules.initialState([seat(0), seat(1)], table);
