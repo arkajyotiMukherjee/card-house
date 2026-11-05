@@ -53,6 +53,7 @@ import { tableScenePaint } from './client-look';
 import { statsCaption } from './client-stats';
 import { type TableStyle } from './table-atlas';
 import {
+  BUTTON_FONT_SIZE,
   BUTTON_PRESS_SHIFT,
   buttonCaptionPos,
   buttonFontSize,

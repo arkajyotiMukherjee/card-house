@@ -61,7 +61,8 @@ import {
   TABLE_LIST,
   WATCH_BUTTON,
   MOBILE_WATCH_BUTTON,
-  watchHit,
+  JOIN_BUTTON,
+  MOBILE_JOIN_BUTTON,
   watchingTableIds,
   type ChatLine,
   type ChatMessageRow,
@@ -1426,7 +1427,6 @@ export class LobbyScene {
       line.seated ? FIELD_SEATED : FIELD,
       line.seated ? STROKE_HOT : STROKE,
     );
-    const restStroke = line.seated ? STROKE_HOT : STROKE;
     actor.graphics.use(face);
     const full = line.currentSeats >= line.maxPlayers;
     const dot = new ex.Rectangle({
@@ -1457,84 +1457,81 @@ export class LobbyScene {
     );
     if (line.seated) {
       this.seatBadge(actor, row.w - 33, 3);
-    } else {
-      this.watchControl(actor, line.watching);
     }
-    if (isMobileDevice()) {
-      this.childLabel(
-        actor,
-        16,
-        42,
-        line.seated ? 'Return' : full ? 'Watch' : 'Join',
-        GOLD,
-        14,
-      );
-    }
-    actor.on('pointerenter', () => {
-      face.strokeColor = STROKE_HOT;
-    });
-    const isWatch = ({ worldPos }: ex.PointerEvent): boolean =>
-      !line.seated &&
-      (full ||
-        watchHit(
-          worldPos.x - actor.pos.x,
-          worldPos.y - actor.pos.y,
-          isMobileDevice(),
-        ));
-    let watchOnPress = false;
-    bindButtonPress(
+    // The card is informational. Only the two visible buttons accept a tap.
+    this.silencePointer(actor);
+    const mobile = isMobileDevice();
+    this.tableAction(
       actor,
-      (event) => {
-        watchOnPress = isWatch(event);
-      },
-      () => {
-        face.strokeColor = restStroke;
-      },
-      (event) => {
-        if (watchOnPress !== isWatch(event)) return;
-        if (watchOnPress) {
-          void this.spectateTable(line.id);
-        } else {
-          void this.joinTable(line.id);
-        }
-      },
+      mobile ? MOBILE_JOIN_BUTTON : JOIN_BUTTON,
+      line.seated ? 'Return' : full ? 'Full' : 'Join',
+      () => void this.joinTable(line.id),
+      true,
+      !full || line.seated,
+    );
+    this.tableAction(
+      actor,
+      mobile ? MOBILE_WATCH_BUTTON : WATCH_BUTTON,
+      'Watch',
+      () => void this.spectateTable(line.id),
+      line.watching,
+      !line.seated,
     );
     this.scene.add(actor);
     return actor;
   }
 
-  private watchControl(parent: ex.Actor, watching: boolean): void {
-    const box = isMobileDevice() ? MOBILE_WATCH_BUTTON : WATCH_BUTTON;
+  private tableAction(
+    row: ex.Actor,
+    box: { x: number; y: number; w: number; h: number },
+    label: string,
+    activate: () => void,
+    primary: boolean,
+    enabled: boolean,
+  ): void {
+    // Scene actors participate in the shared CSS-pixel touch-target expansion.
     const button = new ex.Actor({
-      pos: ex.vec(box.x, box.y),
+      pos: row.pos.add(ex.vec(box.x, box.y)),
       anchor: ex.vec(0, 0),
+      width: box.w,
+      height: box.h,
+      z: 21,
     });
-    button.pointer.useGraphicsBounds = false;
-    button.pointer.useColliderShape = false;
-    button.graphics.use(
-      solidRect(
-        box.w,
-        PHONE_LAYOUT ? 48 : box.h,
-        watching ? STROKE_HOT : BUTTON,
-      ),
-    );
-    parent.addChild(button);
+    const fill = enabled && primary ? BUTTON : FIELD;
+    const stroke = enabled ? STROKE : DIM;
+    const face = panelRect(box.w, box.h, fill, stroke);
+    button.graphics.use(face);
+    const size = PHONE_LAYOUT ? 12 : BUTTON_FONT_SIZE;
+    const rest = buttonCaptionPos(label, box.w, box.h, size);
     const caption = new ex.Actor({
-      pos: ex.vec(4, 2),
+      pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
-    caption.pointer.useGraphicsBounds = false;
-    caption.pointer.useColliderShape = false;
-    const size = PHONE_LAYOUT ? 12 : buttonFontSize('Watch', box.w, box.h);
-    const watchLabel = buttonCaptionPos(
-      'Watch',
-      box.w,
-      PHONE_LAYOUT ? 48 : box.h,
-      size,
-    );
-    caption.pos = ex.vec(watchLabel.x, watchLabel.y);
-    caption.graphics.use(canvasText('Watch', size, watching ? INK : GOLD));
+    caption.graphics.use(canvasText(label, size, enabled ? GOLD : DIM));
+    this.silencePointer(caption);
     button.addChild(caption);
+    if (enabled) {
+      button.on('pointerenter', () => {
+        face.strokeColor = STROKE_HOT;
+      });
+      bindButtonPress(
+        button,
+        () => {
+          face.color = BUTTON_DOWN;
+          caption.pos.y = rest.y + BUTTON_PRESS_SHIFT;
+        },
+        () => {
+          face.color = fill;
+          face.strokeColor = stroke;
+          caption.pos.y = rest.y;
+        },
+        activate,
+      );
+    } else {
+      this.silencePointer(button);
+    }
+    this.scene.add(button);
+    this.rowActors.push(button);
   }
 
   private seatBadge(parent: ex.Actor, x: number, y: number): void {
