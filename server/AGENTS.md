@@ -55,7 +55,7 @@ Then publish and regenerate `client/src/module_bindings/`. `scripts/bootstrap.sh
 
 ## Leave alone
 
-Do not add a host flag. Every member is equal.
+The earliest remaining seated player is the table host and may manually start a waiting game.
 
 Do not listen on a port from this package. SpacetimeDB is started by the CLI in `scripts/bootstrap.sh`.
 

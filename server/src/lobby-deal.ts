@@ -1,5 +1,5 @@
 /**
- * Deal a table that is still in the lobby phase once enough seats exist.
+ * Deal a table that is still in the lobby phase when the host requests a start with enough players.
  * Dummy `{ count }` and stub `{ label }` have no `phase`, so they stay put.
  * A `play` or `finished` phase is left alone.
  */
@@ -24,4 +24,17 @@ export function stateIfLobbyReady(
     return 'keep';
   }
   return 'deal';
+}
+
+export function manualStartRejection(
+  stateJson: string,
+  seatedCount: number,
+  minPlayers: number,
+  isHost: boolean,
+): string | undefined {
+  if (!isHost) return 'Only the table host can start the game';
+  if (stateIfLobbyReady(stateJson, seatedCount, minPlayers) !== 'deal') {
+    return 'Wait for the minimum players; the game must still be waiting';
+  }
+  return undefined;
 }
