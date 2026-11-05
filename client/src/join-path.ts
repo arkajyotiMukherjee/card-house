@@ -27,6 +27,17 @@ export function roomCodeFromPath(pathname: string): string | undefined {
   return code;
 }
 
+/** Show the confirmed lobby in the URL without navigating away from it. */
+export function showLobbyUrl(code: string): void {
+  const lobbyCode = roomCodeFromPath(code);
+  if (!lobbyCode || window.location.pathname === `/${lobbyCode}`) {
+    return;
+  }
+  const url = new URL(window.location.href);
+  url.pathname = `/${lobbyCode}`;
+  window.history.replaceState(window.history.state, '', url);
+}
+
 function queryValue(params: URLSearchParams, ...keys: string[]): string {
   for (const key of keys) {
     const value = params.get(key);

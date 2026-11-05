@@ -11,6 +11,7 @@ import { personalCardAtlas, pixelFont } from './boot-scene';
 import { statsCaption } from './client-stats';
 import { subscribeLobbyTables } from './connect';
 import { joinFailureMessage, wrapTableError } from './join-errors';
+import { showLobbyUrl } from './join-path';
 import { tableToReopen } from './last-room';
 import { roomComposer } from './room-composer';
 import { wrapText } from './menu-layout';
@@ -336,6 +337,7 @@ export class LobbyScene {
     this.returnedToMenu = false;
     this.lobbyId = lobbyId;
     this.lobbyCode = code;
+    showLobbyUrl(code);
     this.closeLeaveConfirm();
     this.ensurePanel();
     this.refreshCards();
