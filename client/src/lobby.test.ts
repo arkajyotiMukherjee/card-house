@@ -400,6 +400,7 @@ describe('lobby tables', () => {
       `SELECT "GameSeat".* FROM "GameTable" JOIN "GameSeat" ON "GameSeat"."tableId" = "GameTable"."id" WHERE "GameTable"."lobbyId" = 'lobby_a''b'`,
       `SELECT "Spectator".* FROM "GameTable" JOIN "Spectator" ON "Spectator"."tableId" = "GameTable"."id" WHERE "GameTable"."lobbyId" = 'lobby_a''b'`,
       `SELECT * FROM "LobbyChatMessage" WHERE "lobbyId" = 'lobby_a''b'`,
+      `SELECT "SeatAbsence".* FROM "GameTable" JOIN "SeatAbsence" ON "SeatAbsence"."tableId" = "GameTable"."id" WHERE "GameTable"."lobbyId" = 'lobby_a''b'`,
     ]);
     expect(tableSettingsJson(2, 6, 'Bluff #1')).toBe(
       '{"name":"Bluff #1","minPlayers":2,"maxPlayers":6}',

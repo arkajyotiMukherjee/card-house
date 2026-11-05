@@ -61,6 +61,11 @@ export function rememberLobby(
   if (!isStoredRoomCode(code) || !isStoredName(playerName)) {
     return;
   }
+  if (typeof window !== 'undefined' && storage === window.localStorage) {
+    const url = new URL(window.location.href);
+    url.pathname = `/${code}`;
+    window.history.replaceState(null, '', url);
+  }
   const previous = readLastRoom(storage);
   const tableId = previous?.lobbyCode === code ? previous.tableId : '';
   writeLastRoom(storage, { lobbyCode: code, name: playerName, tableId });
@@ -90,6 +95,9 @@ export function forgetTable(storage: RoomStorage = localStorage): void {
 
 export function clearLastRoom(storage: RoomStorage = localStorage): void {
   storage.removeItem(LAST_ROOM_STORAGE_KEY);
+  if (typeof window !== 'undefined' && storage === window.localStorage) {
+    window.history.replaceState(null, '', '/');
+  }
 }
 
 /**

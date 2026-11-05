@@ -1,3 +1,4 @@
+import { strategyFor } from '../../src/shared/games/bots/registry';
 import {
   CaseConversionPolicy,
   ScheduleAt,
@@ -319,6 +320,17 @@ const GameSeat = table(
   },
 );
 
+// A seat stays reserved until its absent owner has had a full turn warning.
+const SeatAbsence = table(
+  { name: 'SeatAbsence', public: true },
+  {
+    id: t.string().primaryKey(),
+    tableId: t.string(),
+    lobbyMemberId: t.string(),
+    deadlineMicros: t.option(t.u64()),
+  },
+);
+
 const Spectator = table(
   {
     name: 'Spectator',
@@ -515,6 +527,7 @@ const spacetimedb = schema(
     GameTable,
     Tournament,
     GameSeat,
+    SeatAbsence,
     Spectator,
     GameEvent,
     LobbyChatMessage,
@@ -880,6 +893,16 @@ export const on_connect = spacetimedb.clientConnected(
     ensureRoomCaps(ctx);
     ensureLobbyIdleJob(ctx);
     ensureTableCleanup(ctx);
+    const returning = ctx.db.OperatorSession.identity.find(
+      ctx.sender.toHexString(),
+    );
+    if (returning?.tableId) {
+      for (const seat of ctx.db.GameSeat.byTable.filter(returning.tableId)) {
+        const member = ctx.db.LobbyMember.id.find(seat.lobbyMemberId);
+        if (member?.clientId === returning.clientId)
+          ctx.db.SeatAbsence.id.delete(seat.id);
+      }
+    }
     const line = reconnectActivity(
       ctx.db,
       ctx.sender.toHexString(),
@@ -1296,10 +1319,119 @@ export const set_lobby_idle_timeout = spacetimedb.reducer(
   },
 );
 
+function sweepAbsentSeats(ctx: ModuleCtx): void {
+  const now = ctx.timestamp.microsSinceUnixEpoch;
+  for (const seat of ctx.db.GameSeat.iter()) {
+    const table = ctx.db.GameTable.id.find(seat.tableId);
+    const member = ctx.db.LobbyMember.id.find(seat.lobbyMemberId);
+    if (!table || !member || member.isBot || table.status.tag !== 'in_progress')
+      continue;
+    if (!member.connected && !ctx.db.SeatAbsence.id.find(seat.id)) {
+      ctx.db.SeatAbsence.insert({
+        id: seat.id,
+        tableId: table.id,
+        lobbyMemberId: member.id,
+        deadlineMicros: undefined,
+      });
+    }
+  }
+  for (const absent of ctx.db.SeatAbsence.iter()) {
+    const table = ctx.db.GameTable.id.find(absent.tableId);
+    const seat = ctx.db.GameSeat.id.find(absent.id);
+    if (!table || !seat || seat.lobbyMemberId !== absent.lobbyMemberId) {
+      ctx.db.SeatAbsence.id.delete(absent.id);
+      continue;
+    }
+    const strategy = strategyFor(table.gameType);
+    if (!strategy || table.status.tag !== 'in_progress') continue;
+    const state = JSON.parse(table.stateJson);
+    const acting = strategy.actingSeats(state).includes(seat.seatIndex);
+    if (!acting) {
+      if (absent.deadlineMicros !== undefined)
+        ctx.db.SeatAbsence.id.update({ ...absent, deadlineMicros: undefined });
+      continue;
+    }
+    if (absent.deadlineMicros === undefined) {
+      ctx.db.SeatAbsence.id.update({
+        ...absent,
+        deadlineMicros: now + 60_000_000n,
+      });
+      continue;
+    }
+    if (now < absent.deadlineMicros) continue;
+    if (table.gameType === POKER_GAME_TYPE) {
+      const next = pokerSeatLeft(state as PokerState, seat.seatIndex);
+      ctx.db.GameTable.id.update({
+        ...table,
+        stateJson: storedState(next),
+        status: storedStatus(
+          tableStatusTag(
+            table.gameType,
+            next,
+            currentStatusTag(table.status.tag),
+          ),
+        ),
+        lastActivityAt: ctx.timestamp,
+      });
+      ctx.db.GameSeat.id.delete(seat.id);
+      queueTableBeat(ctx, table.id);
+    } else {
+      // Preserve the dealt hand and turn order while a CPU replaces the absent player.
+      const member = ctx.db.LobbyMember.id.find(seat.lobbyMemberId);
+      if (!member) continue;
+      const botId = `timeout_${seat.id}`;
+      if (!ctx.db.LobbyMember.id.find(botId))
+        ctx.db.LobbyMember.insert({
+          ...member,
+          id: botId,
+          clientId: botId,
+          name: 'CPU (Away)',
+          isBot: true,
+          connected: false,
+          discordUserId: '',
+          discordUsername: '',
+          discordGlobalName: '',
+          discordDiscriminator: undefined,
+        });
+      ctx.db.GameSeat.id.update({
+        ...seat,
+        lobbyMemberId: botId,
+        seatState: { tag: 'active' },
+      });
+    }
+    ctx.db.SeatAbsence.id.delete(absent.id);
+  }
+  for (const table of ctx.db.GameTable.iter()) {
+    const lobby = ctx.db.Lobby.id.find(table.lobbyId);
+    if (!lobby || lobby.solo || table.status.tag !== 'in_progress') continue;
+    const strategy = strategyFor(table.gameType);
+    if (!strategy) continue;
+    const state = JSON.parse(table.stateJson);
+    for (const seat of ctx.db.GameSeat.byTable.filter(table.id)) {
+      const member = ctx.db.LobbyMember.id.find(seat.lobbyMemberId);
+      if (
+        member?.isBot &&
+        strategy.actingSeats(state).includes(seat.seatIndex)
+      ) {
+        commitIntent(
+          ctx,
+          table.id,
+          member.id,
+          seat.id,
+          strategy.choose(state, seat.seatIndex),
+          state,
+        );
+        break;
+      }
+    }
+  }
+}
+
 export const close_idle_lobbies = spacetimedb.reducer(
   { name: 'close_idle_lobbies', onSchedule: LobbyIdleSweep },
   { sweep: LobbyIdleSweep.rowType },
   (ctx, { sweep: _sweep }) => {
+    sweepAbsentSeats(ctx);
     closeIdleLobbies(ctx);
     if (firstRow(ctx.db.LobbyIdleSweep.iter()) === undefined) {
       ctx.db.LobbyIdleSweep.insert({
@@ -2267,6 +2399,19 @@ export const join_table = spacetimedb.reducer(
       throw new SenderError('Member is not in this room');
     }
 
+    const caller = ctx.db.OperatorSession.identity.find(
+      ctx.sender.toHexString(),
+    );
+    if (caller?.clientId !== member.clientId || caller.lobbyId !== lobby.id) {
+      throw new SenderError('Join this room before taking a seat');
+    }
+    for (const existing of ctx.db.GameSeat.byTable.filter(gameTable.id)) {
+      if (existing.lobbyMemberId !== member.id) continue;
+      ctx.db.SeatAbsence.id.delete(existing.id);
+      ctx.db.GameSeat.id.update({ ...existing, seatState: { tag: 'active' } });
+      rememberTable(ctx.db, ctx.sender.toHexString(), lobby.id, gameTable.id);
+      return;
+    }
     for (const seat of ctx.db.GameSeat.iter()) {
       if (seat.lobbyMemberId === member.id) {
         throw new SenderError('Already seated');
@@ -2548,6 +2693,12 @@ export const leave_table = spacetimedb.reducer(
       throw new SenderError('Member is not in this room');
     }
 
+    const caller = ctx.db.OperatorSession.identity.find(
+      ctx.sender.toHexString(),
+    );
+    if (caller?.clientId !== member.clientId || caller.lobbyId !== lobby.id) {
+      throw new SenderError('You can only leave your own seat');
+    }
     const seatIds: string[] = [];
     const leavingSeats: number[] = [];
     for (const seat of ctx.db.GameSeat.byTable.filter(gameTable.id)) {
@@ -2568,6 +2719,26 @@ export const leave_table = spacetimedb.reducer(
     if (soloLeaveRemovesRoom(lobby.solo, member.isBot)) {
       deleteRoomShell(ctx, lobby.id);
       forgetLobby(ctx.db, ctx.sender.toHexString());
+      return;
+    }
+    if (gameTable.status.tag === 'in_progress' && seatIds.length > 0) {
+      for (const seatId of seatIds) {
+        const seat = ctx.db.GameSeat.id.find(seatId);
+        if (!seat) continue;
+        ctx.db.GameSeat.id.update({
+          ...seat,
+          seatState: { tag: 'disconnected' },
+        });
+        if (!ctx.db.SeatAbsence.id.find(seat.id))
+          ctx.db.SeatAbsence.insert({
+            id: seat.id,
+            tableId: gameTable.id,
+            lobbyMemberId: member.id,
+            deadlineMicros: undefined,
+          });
+      }
+      forgetTable(ctx.db, ctx.sender.toHexString(), gameTable.id);
+      noteLobbyActivity(ctx, lobby.id);
       return;
     }
     for (const seatId of seatIds) {

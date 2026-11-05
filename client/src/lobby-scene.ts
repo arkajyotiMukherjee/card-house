@@ -247,6 +247,14 @@ export class LobbyScene {
       return;
     }
     this.watching = true;
+    let lastSecond = 0;
+    this.scene.on('preupdate', () => {
+      const second = Math.floor(Date.now() / 1000);
+      if (second !== lastSecond) {
+        lastSecond = second;
+        this.render();
+      }
+    });
     this.linkText.text = this.linkLine;
     this.linkActor = new ex.Actor({
       pos: ex.vec(16, 4),
@@ -388,7 +396,8 @@ export class LobbyScene {
     if (openId.length === 0) {
       return false;
     }
-    this.onSeated(openId, member.id);
+    if (this.memberSeatedHere(openId, member.id)) void this.joinTable(openId);
+    else this.onSeated(openId, member.id);
     return true;
   }
 
@@ -1447,11 +1456,22 @@ export class LobbyScene {
     dotActor.graphics.use(dot);
     actor.addChild(dotActor);
     this.childLabel(actor, 16, 4, line.tableName, GOLD, PHONE_LAYOUT ? 14 : 8);
+    const absence = [...this.connection.db.seatAbsence.iter()].find(
+      (a) =>
+        a.tableId === line.id &&
+        this.readMembers().some(
+          (m) => m.id === a.lobbyMemberId && m.clientId === this.clientId,
+        ),
+    );
+    const returnLine =
+      absence?.deadlineMicros === undefined
+        ? 'Return to table'
+        : `Return ${Math.max(0, Math.ceil((Number(absence.deadlineMicros / 1000n) - Date.now()) / 1000))}s`;
     this.childLabel(
       actor,
       16,
       PHONE_LAYOUT ? 24 : 17,
-      `${line.seatsLabel} ${line.statusLabel}`,
+      absence ? returnLine : `${line.seatsLabel} ${line.statusLabel}`,
       DIM,
       PHONE_LAYOUT ? 12 : 8,
     );

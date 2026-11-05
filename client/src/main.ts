@@ -111,7 +111,10 @@ function applyContainScale(): void {
 const scene = new BootScene(theme.table, theme.background);
 const loading = new BootScene(theme.table, theme.background);
 const menu = new MenuScene(clientId);
-const savedRoomAtStart = joinCode ? undefined : readLastRoom();
+const savedRoomAtStart =
+  readLastRoom()?.lobbyCode === joinCode || !joinCode
+    ? readLastRoom()
+    : undefined;
 const loadingLine = reloadLoadingLine(savedRoomAtStart);
 if (loadingLine) {
   loading.setStatus(loadingLine);
@@ -234,7 +237,10 @@ void engine.start(loader).then(() => {
           engine.goToScene('game');
         };
         roomScene.mount();
-        const savedRoom = joinCode ? undefined : readLastRoom();
+        const savedRoom =
+          readLastRoom()?.lobbyCode === joinCode || !joinCode
+            ? readLastRoom()
+            : undefined;
         let pendingReload: LastRoom | undefined = savedRoom;
         let reloadBusy = false;
         const panel = mountLobbyPanel(
@@ -327,7 +333,7 @@ void engine.start(loader).then(() => {
           tableScene.setBackground(hex);
           roomScene.refreshCards();
         });
-        if (joinCode) {
+        if (joinCode && !savedRoom) {
           const joinName = joinNameFromSearch(window.location.search);
           if (joinName.state === 'ready') {
             menu.openJoin(joinCode, joinName.name);

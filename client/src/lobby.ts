@@ -746,14 +746,13 @@ export function listLayout(
   return { slots, hidden };
 }
 
-export function lobbyTableQueries(
-  lobbyId: string,
-): [string, string, string, string] {
+export function lobbyTableQueries(lobbyId: string): string[] {
   const id = `'${lobbyId.replaceAll("'", "''")}'`;
   return [
     `SELECT * FROM "GameTable" WHERE "lobbyId" = ${id}`,
     `SELECT "GameSeat".* FROM "GameTable" JOIN "GameSeat" ON "GameSeat"."tableId" = "GameTable"."id" WHERE "GameTable"."lobbyId" = ${id}`,
     `SELECT "Spectator".* FROM "GameTable" JOIN "Spectator" ON "Spectator"."tableId" = "GameTable"."id" WHERE "GameTable"."lobbyId" = ${id}`,
     `SELECT * FROM "LobbyChatMessage" WHERE "lobbyId" = ${id}`,
+    `SELECT "SeatAbsence".* FROM "GameTable" JOIN "SeatAbsence" ON "SeatAbsence"."tableId" = "GameTable"."id" WHERE "GameTable"."lobbyId" = ${id}`,
   ];
 }
