@@ -1583,14 +1583,6 @@ export class LobbyScene {
       DIM,
       PHONE_LAYOUT ? 12 : 8,
     );
-    this.childLabel(
-      actor,
-      8,
-      43,
-      tableCodeForId(line.id),
-      DIM,
-      PHONE_LAYOUT ? 12 : 8,
-    );
     if (line.seated) {
       this.seatBadge(actor, row.w - 33, 3);
     }

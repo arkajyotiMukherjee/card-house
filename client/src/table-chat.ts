@@ -125,16 +125,23 @@ export function tableChatButtonVisible(
   return showTableChatButton(tableIsSolo(tableId, tables, lobbies));
 }
 
+export function tableChatSender(
+  row: TableChatRow,
+  members: Iterable<MemberRef>,
+  selfLobbyMemberId: string,
+): string {
+  if (!row.lobbyMemberId) return '';
+  return row.lobbyMemberId === selfLobbyMemberId
+    ? 'You'
+    : memberName(members, row.lobbyMemberId);
+}
+
 /** `"You: hi"` for the sender, `"Name: hi"` for everyone else at that table. */
 export function tableChatLine(
   row: TableChatRow,
   members: Iterable<MemberRef>,
   selfLobbyMemberId: string,
 ): string {
-  if (!row.lobbyMemberId) return row.body;
-  const who =
-    row.lobbyMemberId === selfLobbyMemberId
-      ? 'You'
-      : memberName(members, row.lobbyMemberId);
-  return `${who}: ${row.body}`;
+  const sender = tableChatSender(row, members, selfLobbyMemberId);
+  return sender ? `${sender}: ${row.body}` : row.body;
 }

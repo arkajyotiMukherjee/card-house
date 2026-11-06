@@ -46,10 +46,10 @@ export const TABLE_CHAT_PANEL = HOW_TO_PLAY_PANEL;
 export const TABLE_CHAT_TEXT = {
   padding: 24,
   top: PHONE_LAYOUT ? 104 : 96,
-  size: PHONE_LAYOUT ? 12 : 8,
-  lineHeight: PHONE_LAYOUT ? 22 : 16,
-  rows: PHONE_LAYOUT ? 11 : 13,
-  columns: PHONE_LAYOUT ? 56 : 84,
+  size: PHONE_LAYOUT ? 12 : 10,
+  lineHeight: PHONE_LAYOUT ? 24 : 22,
+  rows: PHONE_LAYOUT ? 10 : 12,
+  columns: PHONE_LAYOUT ? 56 : 67,
 } as const;
 
 /** Text field and Send button along the bottom of the chat window. */

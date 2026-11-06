@@ -157,16 +157,16 @@ export const TABLE_LIST = PHONE_LAYOUT
       create: { x: 808, y: 70, w: 136, h: BUTTON_HEIGHT },
       list: { x: 808, y: 108, bottom: 468 },
       header: { h: 14, gap: 4 },
-      row: { w: 136, h: 96, gap: 8 },
+      row: { w: 136, h: 84, gap: 8 },
       more: { x: 808, y: 468 },
       error: { x: 808, y: 480 },
     } as const);
 
 /** Separate action faces with a clear gap; phone sizes are logical canvas pixels. */
-export const JOIN_BUTTON = { x: 6, y: 60, w: 58, h: 28 } as const;
-export const WATCH_BUTTON = { x: 72, y: 60, w: 58, h: 28 } as const;
-export const MOBILE_JOIN_BUTTON = { x: 12, y: 58, w: 136, h: 66 } as const;
-export const MOBILE_WATCH_BUTTON = { x: 164, y: 58, w: 136, h: 66 } as const;
+export const JOIN_BUTTON = { x: 6, y: 48, w: 58, h: 28 } as const;
+export const WATCH_BUTTON = { x: 72, y: 48, w: 58, h: 28 } as const;
+export const MOBILE_JOIN_BUTTON = { x: 12, y: 48, w: 136, h: 66 } as const;
+export const MOBILE_WATCH_BUTTON = { x: 164, y: 48, w: 136, h: 66 } as const;
 
 export function watchHit(
   localX: number,

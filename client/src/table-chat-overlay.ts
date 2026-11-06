@@ -37,14 +37,13 @@ import {
   type FieldLabel,
 } from './html-field';
 import { wrapText } from './menu-layout';
-import { tableCodeForId } from './join-path';
 import type { DbConnection } from './module_bindings';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from './sheets';
 import {
   applyChatKey,
   applyChatText,
   tableChatButtonVisible,
-  tableChatLine,
+  tableChatSender,
   tableChatMessagesForTable,
   TABLE_CHAT_BODY_MAX,
   type ChatLobbyRef,
@@ -59,6 +58,10 @@ const Z_PANEL = 101;
 const Z_TEXT = 102;
 const FIELD = ex.Color.fromHex('#0b2418');
 const CHAT_TEXT_PAD = 6;
+const SEND_GREEN = ex.Color.fromHex('#1b5c38');
+const SEND_GREEN_DOWN = ex.Color.fromHex('#0e3d24');
+const OTHER_SENDER = ex.Color.fromHex('#8de2b0');
+const SYSTEM_MESSAGE = ex.Color.fromHex('#aabfaf');
 
 function tableChatLabel(): FieldLabel {
   const box = TABLE_CHAT_INPUT;
@@ -91,7 +94,7 @@ export class TableChatOverlay {
   private opened = false;
   private waiting?: WaitingTable;
   private waitingDetails?: ex.Text;
-  private waitingCode?: ex.Text;
+  private waitingSeats?: ex.Text;
   private startControl?: ex.Actor;
   private startLabel?: ex.Text;
   private tableId = '';
@@ -102,7 +105,8 @@ export class TableChatOverlay {
   private button!: ex.Actor;
   private chatCaption!: ex.Actor;
   private overlayActors: ex.Actor[] = [];
-  private lineTexts: ex.Text[] = [];
+  private lineTexts: { sender: ex.Text; body: ex.Text; bodyActor: ex.Actor }[] =
+    [];
   private inputField: ex.Text | undefined;
   private inputCaret: ex.Actor | undefined;
   private errorText: ex.Text | undefined;
@@ -184,8 +188,8 @@ export class TableChatOverlay {
     this.open(false);
     if (this.waitingDetails)
       this.waitingDetails.text = waiting.name.slice(0, 32);
-    if (this.waitingCode) {
-      this.waitingCode.text = `${tableCodeForId(this.tableId)}   ${waiting.seated}/${waiting.capacity} seated`;
+    if (this.waitingSeats) {
+      this.waitingSeats.text = `${waiting.seated}/${waiting.capacity} seated`;
     }
     if (this.startControl && this.startLabel) {
       const visible = waiting.start !== undefined;
@@ -229,7 +233,7 @@ export class TableChatOverlay {
     this.overlayActors = [];
     this.lineTexts = [];
     this.waitingDetails = undefined;
-    this.waitingCode = undefined;
+    this.waitingSeats = undefined;
     this.startControl = undefined;
     this.startLabel = undefined;
     this.inputField = undefined;
@@ -248,18 +252,31 @@ export class TableChatOverlay {
       this.tableId,
     );
     const members = [...this.readMembers()];
-    const lines: string[] = [];
-    for (const row of rows) {
-      const line = tableChatLine(row, members, this.lobbyMemberId);
-      for (const wrapped of wrapText(line, TABLE_CHAT_TEXT.columns)
-        .join('\n')
-        .split('\n')) {
-        lines.push(wrapped);
-      }
-    }
+    const lines = rows.flatMap((row) => {
+      const name = tableChatSender(row, members, this.lobbyMemberId);
+      const sender = name.length > 20 ? `${name.slice(0, 17)}...` : name;
+      const prefix = sender ? `${sender}: ` : '';
+      return wrapText(row.body, TABLE_CHAT_TEXT.columns - prefix.length).map(
+        (body, index) => ({
+          sender: index === 0 ? prefix : '',
+          indent: prefix.length,
+          body,
+          system: !sender,
+          self: row.lobbyMemberId === this.lobbyMemberId,
+        }),
+      );
+    });
     const slice = lines.slice(-TABLE_CHAT_TEXT.rows);
-    this.lineTexts.forEach((text, index) => {
-      text.text = slice[index] ?? '';
+    this.lineTexts.forEach((line, index) => {
+      const entry = slice[index];
+      line.sender.text = entry?.sender ?? '';
+      line.sender.color = entry?.self ? GOLD : OTHER_SENDER;
+      line.body.text = entry?.body ?? '';
+      line.body.color = entry?.system ? SYSTEM_MESSAGE : SELF;
+      line.bodyActor.pos.x =
+        TABLE_CHAT_PANEL.x +
+        TABLE_CHAT_TEXT.padding +
+        (entry?.indent ?? 0) * TABLE_CHAT_TEXT.size;
     });
   }
 
@@ -475,7 +492,7 @@ export class TableChatOverlay {
         return graphic;
       };
       this.waitingDetails = label(48, GOLD);
-      this.waitingCode = label(66, SELF);
+      this.waitingSeats = label(66, SELF);
       this.track(
         this.buildHeaderButton(440, 116, 'Copy Link', () => {
           const url = new URL(window.location.pathname, window.location.origin);
@@ -500,18 +517,27 @@ export class TableChatOverlay {
     }
 
     for (let row = 0; row < text.rows; row += 1) {
-      const lineText = canvasText('', text.size, SELF);
-      const actor = new ex.Actor({
-        pos: ex.vec(
-          panel.x + text.padding,
-          panel.y + text.top + row * text.lineHeight,
-        ),
+      const position = ex.vec(
+        panel.x + text.padding,
+        panel.y + text.top + row * text.lineHeight,
+      );
+      const sender = canvasText('', text.size, OTHER_SENDER);
+      const body = canvasText('', text.size, SELF);
+      const senderActor = new ex.Actor({
+        pos: position,
         anchor: ex.vec(0, 0),
         z: Z_TEXT,
       });
-      actor.graphics.use(lineText);
-      this.track(actor);
-      this.lineTexts.push(lineText);
+      const bodyActor = new ex.Actor({
+        pos: position.clone(),
+        anchor: ex.vec(0, 0),
+        z: Z_TEXT,
+      });
+      senderActor.graphics.use(sender);
+      bodyActor.graphics.use(body);
+      this.track(senderActor);
+      this.track(bodyActor);
+      this.lineTexts.push({ sender, body, bodyActor });
     }
 
     const inputBoxSpec = TABLE_CHAT_INPUT;
@@ -572,7 +598,7 @@ export class TableChatOverlay {
       height: box.h,
       z: Z_TEXT,
     });
-    const face = panelRect(box.w, box.h, BUTTON, STROKE);
+    const face = panelRect(box.w, box.h, SEND_GREEN, STROKE);
     actor.graphics.use(face);
     const size = buttonFontSize('Send', box.w, box.h);
     const rest = buttonCaptionPos('Send', box.w, box.h, size);
@@ -588,12 +614,12 @@ export class TableChatOverlay {
     bindButtonPress(
       actor,
       () => {
-        face.color = BUTTON_DOWN;
+        face.color = SEND_GREEN_DOWN;
         caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
       },
       () => {
         face.strokeColor = STROKE;
-        face.color = BUTTON;
+        face.color = SEND_GREEN;
         caption.pos = ex.vec(rest.x, rest.y);
       },
       () => this.send(),
