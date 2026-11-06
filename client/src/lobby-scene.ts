@@ -11,7 +11,7 @@ import { personalCardAtlas, pixelFont } from './boot-scene';
 import { statsCaption } from './client-stats';
 import { subscribeLobbyTables } from './connect';
 import { joinFailureMessage, wrapTableError } from './join-errors';
-import { showLobbyUrl } from './join-path';
+import { showLobbyUrl, tableCodeForId } from './join-path';
 import { tableToReopen } from './last-room';
 import { roomComposer } from './room-composer';
 import { wrapText } from './menu-layout';
@@ -171,6 +171,8 @@ export class LobbyScene {
   private watching = false;
   private busy = false;
   private creating = false;
+  private tableNameDraft = '';
+  private tableNameText?: ex.Text;
   private gameIndex = 0;
   private variationIndex = 0;
   private maxPlayers = gameOption(0).maxPlayers;
@@ -254,7 +256,12 @@ export class LobbyScene {
       const second = Math.floor(Date.now() / 1000);
       if (second !== lastSecond) {
         lastSecond = second;
-        this.render();
+        if (
+          [...this.connection.db.seatAbsence.iter()].some(
+            (absence) => absence.deadlineMicros !== undefined,
+          )
+        )
+          this.render();
       }
     });
     this.linkText.text = this.linkLine;
@@ -336,9 +343,9 @@ export class LobbyScene {
 
   openLobby(lobbyId: string, code = ''): Promise<boolean> {
     this.returnedToMenu = false;
+    if (this.lobbyId !== lobbyId) showLobbyUrl(code);
     this.lobbyId = lobbyId;
     this.lobbyCode = code;
-    showLobbyUrl(code);
     this.closeLeaveConfirm();
     this.ensurePanel();
     this.refreshCards();
@@ -1118,6 +1125,50 @@ export class LobbyScene {
         popup,
       ),
     ];
+    const name = CREATE_TABLE.name;
+    this.addLabel(
+      name.x,
+      name.y - (PHONE_LAYOUT ? 15 : 12),
+      'Table name (optional)',
+      PHONE_LAYOUT ? 12 : 8,
+      DIM,
+      popup,
+    );
+    const nameFace = new ex.Actor({
+      pos: ex.vec(name.x - box.x, name.y - box.y),
+      anchor: ex.vec(0, 0),
+      width: name.w,
+      height: name.h,
+      z: 1,
+    });
+    nameFace.graphics.use(panelRect(name.w, name.h, FIELD, STROKE));
+    popup.addChild(nameFace);
+    const metrics = chatFieldLabel(name);
+    this.tableNameText = this.addLabel(
+      metrics.x,
+      metrics.y,
+      '',
+      metrics.size,
+      GOLD,
+      popup,
+    );
+    const nameField = bindCanvasTextField({
+      id: 'table-name',
+      label: 'Table name (optional)',
+      box: name,
+      maxLength: 32,
+      active: () => this.creating && this.engine.currentScene === this.scene,
+      read: () => this.tableNameDraft,
+      sanitize: (value) => applyChatText(value).slice(0, 32),
+      write: (value) => {
+        this.tableNameDraft = value;
+        if (this.tableNameText) this.tableNameText.text = value;
+      },
+      submit: () => void this.createTable(),
+      cancel: () => this.closeCreate(),
+      metrics,
+    });
+    nameFace.on('pointerup', () => nameField.focus());
     this.button(
       CREATE_TABLE.create,
       'Create',
@@ -1146,6 +1197,8 @@ export class LobbyScene {
       return;
     }
     this.creating = true;
+    this.tableNameDraft = '';
+    if (this.tableNameText) this.tableNameText.text = '';
     this.variationIndex = 0;
     this.paintChoice();
     this.setPopupOpen(true);
@@ -1229,7 +1282,9 @@ export class LobbyScene {
     }
     const game = gameOption(this.gameIndex);
     const maxPlayers = clampPlayerCount(game, this.maxPlayers);
-    const tableName = nextTableName(this.readTables(), this.lobbyId, game);
+    const tableName =
+      this.tableNameDraft.trim() ||
+      nextTableName(this.readTables(), this.lobbyId, game);
     const variation =
       game.gameType === POKER_GAME_TYPE
         ? POKER_VARIATIONS[this.variationIndex]
@@ -1257,9 +1312,20 @@ export class LobbyScene {
     this.render();
   }
 
-  private async joinTable(tableId: string): Promise<void> {
+  async followTableLink(code: string): Promise<boolean> {
+    const table = [...this.connection.db.gameTable.iter()].find(
+      (row) => row.lobbyId === this.lobbyId && tableCodeForId(row.id) === code,
+    );
+    if (!table) {
+      this.setError('Table link unavailable');
+      return false;
+    }
+    return this.joinTable(table.id, true);
+  }
+
+  private async joinTable(tableId: string, fromLink = false): Promise<boolean> {
     if (this.busy || this.lobbyId.length === 0) {
-      return;
+      return false;
     }
     const member = memberByClient(
       this.readMembers(),
@@ -1268,7 +1334,19 @@ export class LobbyScene {
     );
     if (!member) {
       this.setError('Join the room first');
-      return;
+      return false;
+    }
+    const table = fromLink
+      ? [...this.connection.db.gameTable.iter()].find(
+          (row) => row.id === tableId,
+        )
+      : undefined;
+    if (
+      fromLink &&
+      table?.status.tag !== 'WaitingForPlayers' &&
+      !this.memberSeatedHere(tableId, member.id)
+    ) {
+      return this.spectateTable(tableId);
     }
     this.busy = true;
     this.setError('');
@@ -1278,26 +1356,34 @@ export class LobbyScene {
         lobbyMemberId: member.id,
       });
     } catch (error: unknown) {
+      if (
+        fromLink &&
+        /Game already (started|ended)/i.test(errorMessage(error))
+      ) {
+        this.busy = false;
+        return await this.spectateTable(tableId);
+      }
       const message = joinFailureMessage(error, 'Could not join the table');
       if (
         message === 'Already seated' &&
         this.memberSeatedHere(tableId, member.id)
       ) {
         this.onSeated(tableId, member.id);
-        return;
+        return true;
       }
       this.setError(message);
-      return;
+      return false;
     } finally {
       this.busy = false;
     }
     this.render();
     this.onSeated(tableId, member.id);
+    return true;
   }
 
-  private async spectateTable(tableId: string): Promise<void> {
+  private async spectateTable(tableId: string): Promise<boolean> {
     if (this.busy || this.lobbyId.length === 0) {
-      return;
+      return false;
     }
     const member = memberByClient(
       this.readMembers(),
@@ -1306,7 +1392,7 @@ export class LobbyScene {
     );
     if (!member) {
       this.setError('Join the room first');
-      return;
+      return false;
     }
     this.busy = true;
     this.setError('');
@@ -1322,15 +1408,16 @@ export class LobbyScene {
         this.memberWatchingHere(tableId, member.id)
       ) {
         this.onSeated(tableId, member.id);
-        return;
+        return true;
       }
       this.setError(message);
-      return;
+      return false;
     } finally {
       this.busy = false;
     }
     this.render();
     this.onSeated(tableId, member.id);
+    return true;
   }
 
   private memberSeatedHere(tableId: string, lobbyMemberId: string): boolean {
@@ -1457,7 +1544,26 @@ export class LobbyScene {
     });
     dotActor.graphics.use(dot);
     actor.addChild(dotActor);
-    this.childLabel(actor, 16, 4, line.tableName, GOLD, PHONE_LAYOUT ? 14 : 8);
+    const titleSize = PHONE_LAYOUT ? 14 : 8;
+    const titleLimit = Math.floor(
+      (row.w - 24 - (line.seated ? 30 : 0)) / titleSize,
+    );
+    const [first, ...rest] = wrapText(line.tableName, titleLimit);
+    const title =
+      PHONE_LAYOUT && rest.length > 0
+        ? `${(first ?? '').slice(0, titleLimit - 3)}...`
+        : (first ?? '');
+    this.childLabel(actor, 16, 4, title, GOLD, titleSize);
+    if (!PHONE_LAYOUT && rest.length > 0) {
+      const tail = rest.join(' ');
+      this.childLabel(
+        actor,
+        8,
+        17,
+        tail.length > 15 ? `${tail.slice(0, 12)}...` : tail,
+        GOLD,
+      );
+    }
     const absence = [...this.connection.db.seatAbsence.iter()].find(
       (a) =>
         a.tableId === line.id &&
@@ -1467,13 +1573,21 @@ export class LobbyScene {
     );
     const returnLine =
       absence?.deadlineMicros === undefined
-        ? 'Return to table'
+        ? 'Seat saved'
         : `Return ${Math.max(0, Math.ceil((Number(absence.deadlineMicros / 1000n) - Date.now()) / 1000))}s`;
     this.childLabel(
       actor,
-      16,
-      PHONE_LAYOUT ? 24 : 17,
+      8,
+      PHONE_LAYOUT ? 24 : 30,
       absence ? returnLine : `${line.seatsLabel} ${line.statusLabel}`,
+      DIM,
+      PHONE_LAYOUT ? 12 : 8,
+    );
+    this.childLabel(
+      actor,
+      8,
+      43,
+      tableCodeForId(line.id),
       DIM,
       PHONE_LAYOUT ? 12 : 8,
     );

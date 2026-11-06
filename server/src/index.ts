@@ -2418,6 +2418,11 @@ export const join_table = spacetimedb.reducer(
       }
     }
 
+    const blocked = joinBlockForStatus(currentStatusTag(gameTable.status.tag));
+    if (blocked) {
+      throw new SenderError(blocked);
+    }
+
     const taken: number[] = [];
     let seated = 0;
     for (const seat of ctx.db.GameSeat.byTable.filter(gameTable.id)) {
@@ -2427,11 +2432,6 @@ export const join_table = spacetimedb.reducer(
     const caps = currentRoomCaps(ctx.db);
     reject(joinSeatRejection(seated, gameTable.maxPlayers, caps));
     const openSeats = openSeatCount(gameTable.maxPlayers, caps);
-
-    const blocked = joinBlockForStatus(currentStatusTag(gameTable.status.tag));
-    if (blocked) {
-      throw new SenderError(blocked);
-    }
 
     let seatIndex = 0;
     while (seatIndex < openSeats && taken.includes(seatIndex)) {
@@ -2463,6 +2463,17 @@ export const join_table = spacetimedb.reducer(
       seatState: { tag: 'active' },
     });
 
+    ctx.db.TableChatMessage.insert({
+      id: tableChatRowId(
+        gameTable.id,
+        member.id,
+        ctx.timestamp.microsSinceUnixEpoch,
+      ),
+      tableId: gameTable.id,
+      lobbyMemberId: '',
+      body: `${member.name} joined the table.`,
+      createdAt: ctx.timestamp,
+    });
     ctx.db.GameTable.id.update({ ...gameTable, lastActivityAt: ctx.timestamp });
     rememberTable(ctx.db, ctx.sender.toHexString(), lobby.id, gameTable.id);
     noteLobbyActivity(ctx, lobby.id);

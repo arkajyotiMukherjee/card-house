@@ -53,7 +53,6 @@ import { tableScenePaint } from './client-look';
 import { statsCaption } from './client-stats';
 import { type TableStyle } from './table-atlas';
 import {
-  BUTTON_FONT_SIZE,
   BUTTON_PRESS_SHIFT,
   buttonCaptionPos,
   buttonFontSize,
@@ -130,7 +129,10 @@ export class GameScene extends ex.Scene {
   private linkLine = '';
   private linkText = canvasText('', 8, GOLD);
   private linkActor: ex.Actor | undefined;
-  private startButton: ex.Actor | undefined;
+  private active = false;
+  private waiting = false;
+  private starting = false;
+  private dealActors: ex.Actor[] = [];
   private waitingText!: ex.Text;
   private spectatingText!: ex.Text;
   private subscription: SubscriptionHandle | undefined;
@@ -145,8 +147,15 @@ export class GameScene extends ex.Scene {
   private readonly spadesDriver = new SpadesDriver();
   private readonly heartsDriver = new HeartsDriver();
   private readonly pokerDriver = new PokerDriver();
-  private lastRow: { id: string; gameType: string; stateJson: string } | null =
-    null;
+  private lastRow: {
+    id: string;
+    gameType: string;
+    stateJson: string;
+    name: string;
+    minPlayers: number;
+    maxPlayers: number;
+    waiting: boolean;
+  } | null = null;
   private placed: PlacedSeat[] = [];
   private readonly speakingFader = new SpeakingFader();
   private speaking = new Set<string>();
@@ -215,6 +224,9 @@ export class GameScene extends ex.Scene {
     this.lobbyMemberId = lobbyMemberId;
     this.leaving = false;
     this.lastRow = null;
+    this.waiting = false;
+    this.starting = false;
+    this.clearOpeningDeal();
     this.clearStrip();
     this.shownEvents.clear();
     if (this.ready) {
@@ -317,6 +329,7 @@ export class GameScene extends ex.Scene {
   }
 
   onActivate(): void {
+    this.active = true;
     this.input.keyboard.on('press', this.onKeyPress);
     this.input.pointers.on('wheel', this.onWheel);
     this.bindTable();
@@ -324,6 +337,9 @@ export class GameScene extends ex.Scene {
   }
 
   onDeactivate(): void {
+    this.active = false;
+    this.waiting = false;
+    this.clearOpeningDeal();
     this.input.keyboard.off('press', this.onKeyPress);
     this.input.pointers.off('wheel', this.onWheel);
     this.howToPlay.close();
@@ -439,8 +455,6 @@ export class GameScene extends ex.Scene {
   }
 
   private endSubscription(): void {
-    this.startButton?.kill();
-    this.startButton = undefined;
     const handle = this.subscription;
     this.subscription = undefined;
     this.subscribedTableId = '';
@@ -725,17 +739,99 @@ export class GameScene extends ex.Scene {
     id: string;
     gameType: string;
     stateJson: string;
+    name: string;
+    minPlayers: number;
+    maxPlayers: number;
   }): void {
-    if (!this.ready || row.id !== this.tableId) {
+    if (!this.ready || !this.active || row.id !== this.tableId) {
       return;
     }
-    this.lastRow = {
-      id: row.id,
-      gameType: row.gameType,
-      stateJson: row.stateJson,
-    };
+    let waiting = false;
+    try {
+      waiting = JSON.parse(row.stateJson).phase === 'lobby';
+    } catch {
+      // Invalid state is reported by the game driver.
+    }
+    this.lastRow = { ...row, waiting };
     this.howToPlay.setGameType(row.gameType);
     this.paintGame();
+  }
+
+  private startWaitingGame(): void {
+    if (!this.waiting || this.starting) return;
+    this.starting = true;
+    const tableId = this.tableId;
+    void this.connection.reducers
+      .handleGameIntent({
+        tableId,
+        clientId: this.clientId,
+        intentPayload: JSON.stringify({ type: 'start_game' }),
+      })
+      .catch((error: unknown) => {
+        if (this.tableId === tableId) {
+          this.tableChat.showError(
+            error instanceof Error ? error.message : 'Could not start the game',
+          );
+        }
+      })
+      .finally(() => {
+        if (this.tableId === tableId) this.starting = false;
+      });
+  }
+
+  private clearOpeningDeal(): void {
+    for (const actor of this.dealActors) actor.kill();
+    this.dealActors = [];
+  }
+
+  private playOpeningDeal(): boolean {
+    if (
+      this.placed.length === 0 ||
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
+      return false;
+    }
+    this.waitingText.text = 'Dealing cards...';
+    this.placeHud(false);
+    const origin = ex.vec(480, 256);
+    const targets = [...this.placed];
+    const back = personalCardAtlas().back();
+    const cards: ex.Actor[] = [];
+    for (let round = 0; round < 3; round += 1) {
+      for (const _seat of targets) {
+        const card = new ex.Actor({ pos: origin.clone(), z: 60 });
+        card.graphics.use(back.clone());
+        card.graphics.opacity = 0;
+        card.pointer.useGraphicsBounds = false;
+        card.pointer.useColliderShape = false;
+        this.add(card);
+        cards.push(card);
+      }
+    }
+    this.dealActors = cards;
+    let elapsed = 0;
+    const stagger = Math.min(70, 520 / cards.length);
+    cards[0].on('postupdate', (event) => {
+      elapsed += event.elapsed;
+      for (const [index, card] of cards.entries()) {
+        const progress = Math.max(
+          0,
+          Math.min(1, (elapsed - index * stagger) / 250),
+        );
+        const seat = targets[index % targets.length];
+        const eased = 1 - (1 - progress) ** 2;
+        card.graphics.opacity = progress > 0 && progress < 1 ? 1 : 0;
+        card.pos = ex.vec(
+          origin.x + (seat.x - origin.x) * eased,
+          origin.y + (seat.y - origin.y) * eased,
+        );
+      }
+      if (elapsed >= (cards.length - 1) * stagger + 250) {
+        this.clearOpeningDeal();
+        this.paintGame();
+      }
+    });
+    return true;
   }
 
   private readSubscribedState(): void {
@@ -752,48 +848,43 @@ export class GameScene extends ex.Scene {
 
   private paintGame(): void {
     const row = this.lastRow;
-    if (!this.ready || !row || row.id !== this.tableId) {
+    if (
+      !this.ready ||
+      !this.active ||
+      !row ||
+      row.id !== this.tableId ||
+      this.dealActors.length > 0
+    ) {
       return;
     }
-    this.startButton?.kill();
-    this.startButton = undefined;
-    const seats = [...this.connection.db.gameSeat.iter()]
-      .filter((s) => s.tableId === row.id)
-      .sort((a, b) =>
-        a.joinedAt.microsSinceUnixEpoch < b.joinedAt.microsSinceUnixEpoch
-          ? -1
-          : a.joinedAt.microsSinceUnixEpoch > b.joinedAt.microsSinceUnixEpoch
-            ? 1
-            : a.id.localeCompare(b.id),
-      );
-    let waiting = false;
-    try {
-      waiting = JSON.parse(row.stateJson).phase === 'lobby';
-    } catch {
-      /* invalid state is shown by the driver */
-    }
-    if (waiting && seats[0]?.lobbyMemberId === this.lobbyMemberId) {
-      const actor = new ex.Actor({
-        pos: ex.vec(380, 310),
-        anchor: ex.vec(0, 0),
-        width: 200,
-        height: 40,
-        z: 20,
+    const beganPlaying = this.waiting && !row.waiting;
+    this.waiting = row.waiting;
+    if (row.waiting) {
+      const seats = [...this.connection.db.gameSeat.iter()]
+        .filter((seat) => seat.tableId === row.id)
+        .sort((a, b) => {
+          const first = a.joinedAt.microsSinceUnixEpoch;
+          const second = b.joinedAt.microsSinceUnixEpoch;
+          return first === second
+            ? a.id.localeCompare(b.id)
+            : first < second
+              ? -1
+              : 1;
+        });
+      this.tableChat.setWaiting({
+        name: row.name,
+        seated: seats.length,
+        capacity: row.maxPlayers,
+        minimum: row.minPlayers,
+        start:
+          seats[0]?.lobbyMemberId === this.lobbyMemberId
+            ? () => this.startWaitingGame()
+            : undefined,
+        leave: () => this.leave(true),
       });
-      actor.graphics.use(panelRect(200, 40, BUTTON, STROKE));
-      const caption = new ex.Actor({
-        pos: ex.vec(20, 14),
-        anchor: ex.vec(0, 0),
-      });
-      caption.graphics.use(canvasText('Start game', BUTTON_FONT_SIZE, GOLD));
-      actor.addChild(caption);
-      actor.on('pointerup', () =>
-        this.sendPayload(JSON.stringify({ type: 'start_game' }), {
-          type: 'start_game',
-        }),
-      );
-      this.add(actor);
-      this.startButton = actor;
+    } else {
+      this.tableChat.setWaiting(undefined);
+      if (beganPlaying && this.playOpeningDeal()) return;
     }
     if (row.gameType === this.bluffDriver.gameType) {
       this.presidentDriver.destroy(this.driverContext());
@@ -1278,11 +1369,11 @@ export class GameScene extends ex.Scene {
     );
   }
 
-  private leave(): void {
+  private leave(fromWaiting = false): void {
     if (
       this.leaving ||
       this.howToPlay.isOpen ||
-      this.tableChat.isOpen ||
+      (this.tableChat.isOpen && !fromWaiting) ||
       this.tableId.length === 0
     ) {
       return;
@@ -1298,9 +1389,10 @@ export class GameScene extends ex.Scene {
       })
       .catch((error: unknown) => {
         this.leaving = false;
-        this.showError(
-          error instanceof Error ? error.message : 'Could not leave',
-        );
+        const message =
+          error instanceof Error ? error.message : 'Could not leave';
+        if (fromWaiting) this.tableChat.showError(message);
+        else this.showError(message);
       });
   }
 

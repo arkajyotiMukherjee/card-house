@@ -37,6 +37,7 @@ import {
   type FieldLabel,
 } from './html-field';
 import { wrapText } from './menu-layout';
+import { tableCodeForId } from './join-path';
 import type { DbConnection } from './module_bindings';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from './sheets';
 import {
@@ -70,6 +71,15 @@ function tableChatLabel(): FieldLabel {
   };
 }
 
+interface WaitingTable {
+  name: string;
+  seated: number;
+  capacity: number;
+  minimum: number;
+  start?: () => void;
+  leave: () => void;
+}
+
 /**
  * Per-table chat drawn on top of the table. Scoped to one `GameTable`:
  * `setTable` resets the draft and history when the table id changes, and
@@ -79,6 +89,11 @@ function tableChatLabel(): FieldLabel {
  */
 export class TableChatOverlay {
   private opened = false;
+  private waiting?: WaitingTable;
+  private waitingDetails?: ex.Text;
+  private waitingCode?: ex.Text;
+  private startControl?: ex.Actor;
+  private startLabel?: ex.Text;
   private tableId = '';
   private lobbyMemberId = '';
   private draft = '';
@@ -120,7 +135,7 @@ export class TableChatOverlay {
         this.send();
       },
       cancel: () => {
-        this.close();
+        if (!this.waiting) this.close();
       },
       enterKeyHint: 'send',
       autoCapitalize: 'off',
@@ -153,6 +168,7 @@ export class TableChatOverlay {
     this.lobbyMemberId = lobbyMemberId;
     if (changed) {
       this.draft = '';
+      this.waiting = undefined;
       if (this.opened) {
         this.close();
       }
@@ -160,7 +176,29 @@ export class TableChatOverlay {
     this.refreshChatButton();
   }
 
+  setWaiting(waiting: WaitingTable | undefined): void {
+    const wasWaiting = Boolean(this.waiting);
+    this.waiting = waiting;
+    if (wasWaiting !== Boolean(waiting)) this.close();
+    if (!waiting) return;
+    this.open(false);
+    if (this.waitingDetails)
+      this.waitingDetails.text = waiting.name.slice(0, 32);
+    if (this.waitingCode) {
+      this.waitingCode.text = `${tableCodeForId(this.tableId)}   ${waiting.seated}/${waiting.capacity} seated`;
+    }
+    if (this.startControl && this.startLabel) {
+      const visible = waiting.start !== undefined;
+      this.startControl.graphics.isVisible = visible;
+      this.startControl.pointer.useColliderShape = visible;
+      this.startControl.pointer.useGraphicsBounds = visible;
+      this.startLabel.text = visible ? 'Start Game' : '';
+      this.startLabel.color = waiting.seated >= waiting.minimum ? GOLD : STROKE;
+    }
+  }
+
   toggle(): void {
+    if (this.waiting) return;
     if (this.opened) {
       this.close();
     } else {
@@ -168,7 +206,7 @@ export class TableChatOverlay {
     }
   }
 
-  open(): void {
+  open(focus = true): void {
     if (!this.chatAvailable || this.opened || this.tableId.length === 0) {
       return;
     }
@@ -177,7 +215,7 @@ export class TableChatOverlay {
     this.buildOverlay();
     this.refresh();
     this.composer.refresh();
-    this.composer.focus();
+    if (focus) this.composer.focus();
   }
 
   close(): void {
@@ -190,6 +228,10 @@ export class TableChatOverlay {
     }
     this.overlayActors = [];
     this.lineTexts = [];
+    this.waitingDetails = undefined;
+    this.waitingCode = undefined;
+    this.startControl = undefined;
+    this.startLabel = undefined;
     this.inputField = undefined;
     this.inputCaret = undefined;
     this.errorText = undefined;
@@ -230,7 +272,7 @@ export class TableChatOverlay {
       return true;
     }
     if (evt.key === ex.Keys.Escape) {
-      this.close();
+      if (!this.waiting) this.close();
       return true;
     }
     if (evt.originalEvent?.ctrlKey || evt.originalEvent?.metaKey) {
@@ -296,9 +338,12 @@ export class TableChatOverlay {
     showFieldCaret(this.inputCaret, true, layout.x, layout.y);
   }
 
-  private showError(message: string): void {
+  showError(message: string, color = DANGER): void {
     if (this.errorText) {
-      this.errorText.text = message;
+      this.errorText.color = color;
+      this.errorText.text = wrapText(message, TABLE_CHAT_TEXT.columns)
+        .slice(0, 1)
+        .join('');
     }
   }
 
@@ -397,23 +442,62 @@ export class TableChatOverlay {
     backdrop.graphics.use(dim);
     this.track(backdrop);
 
-    const window = new ex.Actor({
+    const panelActor = new ex.Actor({
       pos: ex.vec(panel.x, panel.y),
       anchor: ex.vec(0, 0),
       width: panel.w,
       height: panel.h,
       z: Z_PANEL,
     });
-    window.graphics.use(panelRect(panel.w, panel.h, PLATE, STROKE_HOT));
-    this.track(window);
+    panelActor.graphics.use(panelRect(panel.w, panel.h, PLATE, STROKE_HOT));
+    this.track(panelActor);
 
     const title = new ex.Actor({
       pos: ex.vec(panel.x + text.padding, panel.y + 20),
       anchor: ex.vec(0, 0),
       z: Z_TEXT,
     });
-    title.graphics.use(canvasText('Table Chat', 16, GOLD));
+    title.graphics.use(
+      canvasText(this.waiting ? 'Table Lobby' : 'Table Chat', 16, GOLD),
+    );
     this.track(title);
+
+    if (this.waiting) {
+      const label = (y: number, color: ex.Color): ex.Text => {
+        const actor = new ex.Actor({
+          pos: ex.vec(panel.x + text.padding, panel.y + y),
+          anchor: ex.vec(0, 0),
+          z: Z_TEXT,
+        });
+        const graphic = canvasText('', 8, color);
+        actor.graphics.use(graphic);
+        this.track(actor);
+        return graphic;
+      };
+      this.waitingDetails = label(48, GOLD);
+      this.waitingCode = label(66, SELF);
+      this.track(
+        this.buildHeaderButton(440, 116, 'Copy Link', () => {
+          const url = new URL(window.location.pathname, window.location.origin);
+          void navigator.clipboard?.writeText(url.href).then(
+            () => this.showError('Table link copied', GOLD),
+            () => this.showError('Copy the table link from the address bar'),
+          );
+          if (!navigator.clipboard)
+            this.showError('Copy the table link from the address bar');
+        }),
+      );
+      const start = this.buildHeaderButton(566, 130, 'Start Game', () => {
+        const waiting = this.waiting;
+        if (!waiting?.start) return;
+        if (waiting.seated < waiting.minimum) {
+          this.showError(`Waiting for at least ${waiting.minimum} players`);
+          return;
+        }
+        waiting.start();
+      });
+      this.startControl = this.track(start);
+    }
 
     for (let row = 0; row < text.rows; row += 1) {
       const lineText = canvasText('', text.size, SELF);
@@ -445,6 +529,7 @@ export class TableChatOverlay {
       STROKE_HOT,
     );
     inputBox.graphics.use(inputRect);
+    inputBox.on('pointerup', () => this.composer.focus());
     this.track(inputBox);
 
     const metrics = tableChatLabel();
@@ -470,7 +555,12 @@ export class TableChatOverlay {
     errorActor.graphics.use(this.errorText);
     this.track(errorActor);
 
-    this.track(this.buildCloseButton());
+    this.track(
+      this.buildHeaderButton(706, 110, this.waiting ? 'Leave' : 'Close', () => {
+        if (this.waiting) this.waiting.leave();
+        else this.close();
+      }),
+    );
   }
 
   private buildSendButton(): ex.Actor {
@@ -511,15 +601,16 @@ export class TableChatOverlay {
     return actor;
   }
 
-  private buildCloseButton(): ex.Actor {
+  private buildHeaderButton(
+    x: number,
+    w: number,
+    label: string,
+    activate: () => void,
+  ): ex.Actor {
     const panel = TABLE_CHAT_PANEL;
-    const w = 120;
     const h = TABLE_CHAT_INPUT.h;
     const actor = new ex.Actor({
-      pos: ex.vec(
-        panel.x + panel.w - w - TABLE_CHAT_TEXT.padding,
-        panel.y + 16,
-      ),
+      pos: ex.vec(x, panel.y + 16),
       anchor: ex.vec(0, 0),
       width: w,
       height: h,
@@ -527,13 +618,15 @@ export class TableChatOverlay {
     });
     const face = panelRect(w, h, BUTTON, STROKE);
     actor.graphics.use(face);
-    const size = buttonFontSize('Close', w, h);
-    const rest = buttonCaptionPos('Close', w, h, size);
+    const size = buttonFontSize(label, w, h);
+    const rest = buttonCaptionPos(label, w, h, size);
     const caption = new ex.Actor({
       pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText('Close', size, GOLD));
+    const graphic = canvasText(label, size, GOLD);
+    if (label === 'Start Game') this.startLabel = graphic;
+    caption.graphics.use(graphic);
     actor.addChild(caption);
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;
@@ -549,7 +642,7 @@ export class TableChatOverlay {
         face.color = BUTTON;
         caption.pos = ex.vec(rest.x, rest.y);
       },
-      () => this.close(),
+      activate,
     );
     return actor;
   }

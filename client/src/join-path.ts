@@ -38,6 +38,36 @@ export function showLobbyUrl(code: string): void {
   window.history.replaceState(window.history.state, '', url);
 }
 
+/** Existing table IDs end with a unique timestamp and a per-creation suffix. */
+export function tableCodeForId(tableId: string): string {
+  const match = /_(\d+)_([a-z0-9-]+)$/i.exec(tableId);
+  if (!match) return '';
+  return `${BigInt(match[1]).toString(36)}-${match[2]}`.toUpperCase();
+}
+
+export function tableLinkFromPath(
+  pathname: string,
+): { lobbyCode: string; tableCode: string } | undefined {
+  const parts = pathname.split('/').filter(Boolean);
+  if (parts.length !== 2) return undefined;
+  const lobbyCode = roomCodeFromPath(parts[0]);
+  const tableCode = parts[1].toUpperCase();
+  if (!lobbyCode || !/^[A-Z0-9]{1,13}-[A-Z0-9-]{1,16}$/.test(tableCode)) {
+    return undefined;
+  }
+  return { lobbyCode, tableCode };
+}
+
+export function showTableUrl(lobbyCode: string, tableId: string): void {
+  const code = tableCodeForId(tableId);
+  if (!code || !roomCodeFromPath(lobbyCode)) return;
+  const url = new URL(window.location.href);
+  url.pathname = `/${lobbyCode}/${code}`;
+  if (window.location.pathname !== url.pathname) {
+    window.history.replaceState(window.history.state, '', url);
+  }
+}
+
 function queryValue(params: URLSearchParams, ...keys: string[]): string {
   for (const key of keys) {
     const value = params.get(key);

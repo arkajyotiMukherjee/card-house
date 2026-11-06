@@ -131,6 +131,7 @@ export function tableChatLine(
   members: Iterable<MemberRef>,
   selfLobbyMemberId: string,
 ): string {
+  if (!row.lobbyMemberId) return row.body;
   const who =
     row.lobbyMemberId === selfLobbyMemberId
       ? 'You'

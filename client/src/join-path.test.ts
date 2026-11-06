@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { discordIdentityFromSearch, roomCodeFromPath } from './join-path';
+import {
+  discordIdentityFromSearch,
+  roomCodeFromPath,
+  tableCodeForId,
+  tableLinkFromPath,
+} from './join-path';
 
 describe('join path', () => {
   it('reads a four-character room code from the URL path', () => {
@@ -12,6 +17,18 @@ describe('join path', () => {
     expect(roomCodeFromPath('/assets/cards-hearts.png')).toBeUndefined();
     expect(roomCodeFromPath('/IO01')).toBeUndefined();
     expect(roomCodeFromPath('/ABC')).toBeUndefined();
+  });
+
+  it('uses the timestamp and suffix to distinguish tables in a share link', () => {
+    const first = tableCodeForId('table_lobby_1700000000000000_0');
+    const second = tableCodeForId('table_lobby_1700000000000000_1');
+    expect(first).not.toBe(second);
+    expect(tableLinkFromPath(`/ab3d/${first.toLowerCase()}`)).toEqual({
+      lobbyCode: 'AB3D',
+      tableCode: first,
+    });
+    expect(tableLinkFromPath('/AB3D/unknown')).toBeUndefined();
+    expect(tableLinkFromPath(`/AB3D/${first}/extra`)).toBeUndefined();
   });
 
   it('reads a Discord identity fixture from the query string', () => {

@@ -157,16 +157,16 @@ export const TABLE_LIST = PHONE_LAYOUT
       create: { x: 808, y: 70, w: 136, h: BUTTON_HEIGHT },
       list: { x: 808, y: 108, bottom: 468 },
       header: { h: 14, gap: 4 },
-      row: { w: 136, h: 72, gap: 8 },
+      row: { w: 136, h: 96, gap: 8 },
       more: { x: 808, y: 468 },
       error: { x: 808, y: 480 },
     } as const);
 
 /** Separate action faces with a clear gap; phone sizes are logical canvas pixels. */
-export const JOIN_BUTTON = { x: 6, y: 36, w: 58, h: 28 } as const;
-export const WATCH_BUTTON = { x: 72, y: 36, w: 58, h: 28 } as const;
-export const MOBILE_JOIN_BUTTON = { x: 12, y: 48, w: 136, h: 72 } as const;
-export const MOBILE_WATCH_BUTTON = { x: 164, y: 48, w: 136, h: 72 } as const;
+export const JOIN_BUTTON = { x: 6, y: 60, w: 58, h: 28 } as const;
+export const WATCH_BUTTON = { x: 72, y: 60, w: 58, h: 28 } as const;
+export const MOBILE_JOIN_BUTTON = { x: 12, y: 58, w: 136, h: 66 } as const;
+export const MOBILE_WATCH_BUTTON = { x: 164, y: 58, w: 136, h: 66 } as const;
 
 export function watchHit(
   localX: number,
@@ -364,28 +364,30 @@ export function discordBadgeBox(): {
 }
 
 export const CREATE_TABLE = {
-  panel: { x: 188, y: 140, w: 440, h: 250 },
+  panel: { x: 188, y: 140, w: 440, h: 272 },
   prev: { x: 204, y: 220, w: 72, h: BUTTON_HEIGHT },
   next: { x: 284, y: 220, w: 72, h: BUTTON_HEIGHT },
   minus: { x: 420, y: 220, w: 40, h: BUTTON_HEIGHT },
   plus: { x: 468, y: 220, w: 40, h: BUTTON_HEIGHT },
   varPrev: { x: 204, y: 268, w: 72, h: BUTTON_HEIGHT },
   varNext: { x: 284, y: 268, w: 72, h: BUTTON_HEIGHT },
-  create: { x: 204, y: 328, w: 160, h: BUTTON_HEIGHT },
-  cancel: { x: 376, y: 328, w: 160, h: BUTTON_HEIGHT },
+  name: { x: 204, y: 322, w: 408, h: BUTTON_HEIGHT },
+  create: { x: 204, y: 366, w: 160, h: BUTTON_HEIGHT },
+  cancel: { x: 376, y: 366, w: 160, h: BUTTON_HEIGHT },
 } as const;
 
 /** Wide landscape dialog with separate thumb-sized selectors. */
 export const MOBILE_CREATE_TABLE = {
-  panel: { x: 160, y: 32, w: 640, h: 476 },
+  panel: { x: 160, y: 32, w: 640, h: 496 },
   prev: { x: 184, y: 108, w: 80, h: 64 },
   next: { x: 696, y: 108, w: 80, h: 64 },
   minus: { x: 184, y: 208, w: 80, h: 64 },
   plus: { x: 696, y: 208, w: 80, h: 64 },
   varPrev: { x: 184, y: 308, w: 80, h: 64 },
   varNext: { x: 696, y: 308, w: 80, h: 64 },
-  create: { x: 184, y: 416, w: 280, h: 64 },
-  cancel: { x: 496, y: 416, w: 280, h: 64 },
+  name: { x: 184, y: 393, w: 592, h: 44 },
+  create: { x: 184, y: 451, w: 280, h: 64 },
+  cancel: { x: 496, y: 451, w: 280, h: 64 },
 } as const;
 
 export function normalizePlayerName(raw: string): string {

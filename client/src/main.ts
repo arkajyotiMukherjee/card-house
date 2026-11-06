@@ -26,7 +26,13 @@ import {
   fetchDefaultPlayerName,
   joinNameFromSearch,
 } from './discord-join';
-import { discordIdentityFromSearch, roomCodeFromPath } from './join-path';
+import {
+  discordIdentityFromSearch,
+  roomCodeFromPath,
+  showLobbyUrl,
+  showTableUrl,
+  tableLinkFromPath,
+} from './join-path';
 import { LobbyScene } from './lobby-scene';
 import { mountLobbyPanel, type LobbyPanel } from './lobby-panel';
 import { MenuScene } from './menu-scene';
@@ -52,7 +58,9 @@ import { backgroundHex } from './theme';
 const clientId = getOrCreateClientId();
 const theme = tableScenePaint(clientId);
 applyPageBackground(theme.background);
-const joinCode = roomCodeFromPath(window.location.pathname);
+const initialTableLink = tableLinkFromPath(window.location.pathname);
+const joinCode =
+  initialTableLink?.lobbyCode ?? roomCodeFromPath(window.location.pathname);
 const parsedIdentity = discordIdentityFromSearch(window.location.search);
 const discordIdentity =
   parsedIdentity && parsedIdentity.discordUsername.length > 0
@@ -183,6 +191,8 @@ void engine.start(loader).then(() => {
               return;
             }
             forgetTable();
+            const room = readLastRoom();
+            if (room) showLobbyUrl(room.lobbyCode);
             endTableSession();
             engine.goToScene('boot');
           },
@@ -231,6 +241,8 @@ void engine.start(loader).then(() => {
         };
         openSeatedTable = (tableId, lobbyMemberId): void => {
           rememberTable(tableId);
+          const saved = readLastRoom();
+          if (saved) showTableUrl(saved.lobbyCode, tableId);
           openTableId = tableId;
           publishStats();
           tableScene.open(tableId, lobbyMemberId);
@@ -243,6 +255,13 @@ void engine.start(loader).then(() => {
             : undefined;
         let pendingReload: LastRoom | undefined = savedRoom;
         let reloadBusy = false;
+        let pendingTableCode = initialTableLink?.tableCode;
+        const followTableLink = async (lobbyCode: string): Promise<boolean> => {
+          const code = pendingTableCode;
+          if (!code || lobbyCode !== initialTableLink?.lobbyCode) return false;
+          pendingTableCode = undefined;
+          return roomScene.followTableLink(code);
+        };
         const panel = mountLobbyPanel(
           engine,
           scene,
@@ -257,8 +276,11 @@ void engine.start(loader).then(() => {
                 void finishReload(lobby);
                 return;
               }
+              if (openTableId) return;
               scene.setStatus('');
-              void roomScene.openLobby(lobby.id, lobby.code);
+              void roomScene.openLobby(lobby.id, lobby.code).then((ready) => {
+                if (ready) void followTableLink(lobby.code);
+              });
             },
           },
         );
@@ -359,8 +381,10 @@ void engine.start(loader).then(() => {
             const ready = await roomScene.openLobby(lobby.id, lobby.code);
             const atTable =
               ready &&
-              saved.tableId.length > 0 &&
-              roomScene.reopenIfSeated(saved.tableId);
+              (pendingTableCode
+                ? await followTableLink(lobby.code)
+                : saved.tableId.length > 0 &&
+                  roomScene.reopenIfSeated(saved.tableId));
             const landing = reloadLanding({ atTable, inRoom: true });
             pendingReload = undefined;
             if (landing === 'table') {

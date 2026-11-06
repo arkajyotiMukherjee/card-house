@@ -45,10 +45,10 @@ export const TABLE_CHAT_PANEL = HOW_TO_PLAY_PANEL;
 /** Message history grid inside the chat window. */
 export const TABLE_CHAT_TEXT = {
   padding: 24,
-  top: PHONE_LAYOUT ? 88 : 64,
+  top: PHONE_LAYOUT ? 104 : 96,
   size: PHONE_LAYOUT ? 12 : 8,
   lineHeight: PHONE_LAYOUT ? 22 : 16,
-  rows: PHONE_LAYOUT ? 11 : 15,
+  rows: PHONE_LAYOUT ? 11 : 13,
   columns: PHONE_LAYOUT ? 56 : 84,
 } as const;
 
