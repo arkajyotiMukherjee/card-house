@@ -17,7 +17,9 @@ export function wrapChatLines(
   body: string,
   columns: number,
 ): ChatDisplayLine[] {
-  const sender = name.length > 20 ? `${name.slice(0, 17)}...` : name;
+  const nameLimit = Math.min(20, Math.floor(columns / 3));
+  const sender =
+    name.length > nameLimit ? `${name.slice(0, nameLimit - 3)}...` : name;
   const prefix = sender ? `${sender}: ` : '';
   return wrapText(body, columns - prefix.length).map((text, index) => ({
     sender: index === 0 ? prefix : '',

@@ -189,7 +189,7 @@ export const CHAT_PANEL = PHONE_LAYOUT
       title: { x: 230, y: 76, size: 12 },
       list: { x: 230, y: 102, bottom: 426, ...CHAT_TEXT.phone },
       field: { x: 230, y: 438, w: 268, h: 64 },
-      send: { x: 506, y: 446, w: 100, h: 48 },
+      send: { x: 506, y: 438, w: 100, h: 64 },
     } as const)
   : ({
       panel: { x: 170, y: 68, w: 620, h: 380 },

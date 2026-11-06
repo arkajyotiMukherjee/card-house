@@ -152,6 +152,13 @@ it('separates mobile lobby chat and table targets and keeps two rows above pagin
     LEAVE_CONFIRM,
     listLayout,
   } = await import('./lobby');
+  const {
+    TABLE_CHAT_PANEL,
+    TABLE_CHAT_INPUT,
+    TABLE_CHAT_SEND_BUTTON,
+    TABLE_CHAT_TEXT,
+  } = await import('./game-scene');
+  const { wrapChatLines } = await import('./chat-layout');
   const { rectsOverlap } = await import('./table-presentation');
   expect(rectsOverlap(LEAVE_ROOM, TABLE_LIST.create)).toBe(false);
   expect(rectsOverlap(LEAVE_CONFIRM.leave, LEAVE_CONFIRM.cancel)).toBe(false);
@@ -174,6 +181,42 @@ it('separates mobile lobby chat and table targets and keeps two rows above pagin
   expect(MOBILE_WATCH_BUTTON.y + MOBILE_WATCH_BUTTON.h).toBeLessThan(
     TABLE_LIST.row.h,
   );
+  expect(rectsOverlap(TABLE_CHAT_INPUT, TABLE_CHAT_SEND_BUTTON)).toBe(false);
+  for (const box of [
+    CHAT_PANEL.field,
+    CHAT_PANEL.send,
+    TABLE_CHAT_INPUT,
+    TABLE_CHAT_SEND_BUTTON,
+  ]) {
+    expect((box.h * 390) / 540).toBeGreaterThanOrEqual(44);
+  }
+  const { list, panel } = CHAT_PANEL;
+  const roomColumns = Math.floor(
+    (panel.w - 2 * (list.x - panel.x)) / list.size,
+  );
+  const longMessage = '0123456789'.repeat(24);
+  for (const columns of [roomColumns, TABLE_CHAT_TEXT.columns]) {
+    const lines = wrapChatLines(
+      'A long player display name',
+      longMessage,
+      columns,
+    );
+    expect(lines[0]?.sender).toBeTruthy();
+    if (columns === roomColumns) {
+      expect(lines.length).toBeLessThanOrEqual(
+        Math.floor((list.bottom - list.y) / list.lineHeight),
+      );
+    }
+    expect(lines.map(({ body }) => body).join('')).toBe(longMessage);
+    for (const { indent, body } of lines) {
+      expect(indent + body.length).toBeLessThanOrEqual(columns);
+    }
+  }
+  const lastTableLine =
+    TABLE_CHAT_PANEL.y +
+    TABLE_CHAT_TEXT.top +
+    (TABLE_CHAT_TEXT.rows - 1) * TABLE_CHAT_TEXT.lineHeight;
+  expect(lastTableLine + TABLE_CHAT_TEXT.size).toBeLessThan(TABLE_CHAT_INPUT.y);
   const line = {
     id: 'one',
     gameType: 'bluff',
