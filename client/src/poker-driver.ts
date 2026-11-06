@@ -296,7 +296,6 @@ export class PokerDriver implements GameDriver<PokerState> {
   private droppedActors = new Map<string, ex.Actor>();
   private droppedLabel: ex.Actor | null = null;
   private lastHole: string[] = [];
-  private droppable = new Set<string>();
   private hovered: string | null = null;
   private readonly handHover = new HandHover();
   private hoverClock: ex.Actor | null = null;
@@ -374,7 +373,7 @@ export class PokerDriver implements GameDriver<PokerState> {
       }
       return;
     }
-    if (state.step === 'discard' && pokerCanDiscard(state, seatIndex)) {
+    if (pokerCanDiscard(state, seatIndex)) {
       const hole = state.seats[String(seatIndex)]?.hole ?? [];
       if (hole.includes(event.target)) {
         ctx.sendIntent({ type: 'discard', card: event.target });
@@ -932,15 +931,6 @@ export class PokerDriver implements GameDriver<PokerState> {
       }
     >();
     this.syncBoard(state, ctx);
-    const mine =
-      ctx.meSeatIndex !== null && state.turnSeatIndex === ctx.meSeatIndex;
-    const canDrop =
-      mine &&
-      state.phase === 'play' &&
-      state.step === 'discard' &&
-      ctx.meSeatIndex !== null &&
-      pokerCanDiscard(state, ctx.meSeatIndex);
-    this.droppable = new Set();
     this.trackDrops(state, ctx);
     for (const seat of ctx.seats) {
       const row = state.seats[String(seat.seatIndex)];
@@ -959,10 +949,6 @@ export class PokerDriver implements GameDriver<PokerState> {
         const slot = slots[index];
         if (!cardId || !slot) {
           continue;
-        }
-        const droppable = canDrop && seat.self;
-        if (droppable) {
-          this.droppable.add(cardId);
         }
         desired.set(cardId, {
           x: slot.x,
@@ -991,7 +977,7 @@ export class PokerDriver implements GameDriver<PokerState> {
     for (const [cardId, place] of desired) {
       this.placeCard(cardId, place, ctx);
     }
-    if (this.hovered !== null && !this.droppable.has(this.hovered)) {
+    if (this.hovered !== null && !this.canInspectHole(this.hovered)) {
       this.hovered = null;
     }
     this.refreshDropMarks(ctx);
@@ -1337,29 +1323,34 @@ export class PokerDriver implements GameDriver<PokerState> {
         record.personal,
       );
     }
-    const pixels = this.hovered
-      ? Math.round(this.handHover.current(this.hovered))
-      : 0;
-    const key = `${this.hovered ?? ''}:${pixels}`;
-    if (key === this.dropMarkKey) {
-      return;
-    }
-    this.dropMarkKey = key;
     this.refreshDropMarks(ctx);
   }
 
   /** A red outline and "Drop" tag on the hole card the click would discard. */
   private refreshDropMarks(ctx: RenderContext): void {
+    const cardId = this.hovered;
+    const state = this.state;
+    const seatIndex = ctx.meSeatIndex;
+    const record =
+      cardId !== null &&
+      state &&
+      seatIndex !== null &&
+      pokerCanDiscard(state, seatIndex) &&
+      this.canInspectHole(cardId)
+        ? this.cards.get(cardId)
+        : undefined;
+    const x = record?.home.x ?? 0;
+    const y =
+      record && cardId !== null ? this.liftedY(cardId, record.home.y) : 0;
+    const key = record ? `${cardId}:${x}:${y}` : '';
+    if (key === this.dropMarkKey) return;
+    this.dropMarkKey = key;
     for (const actor of this.dropMarks) {
       actor.kill();
     }
     this.dropMarks = [];
-    const record = this.hovered ? this.cards.get(this.hovered) : undefined;
-    if (!record) {
-      return;
-    }
-    const x = record.home.x;
-    const y = this.liftedY(this.hovered ?? '', record.home.y);
+    if (!record) return;
+
     const outline = new ex.Actor({
       pos: ex.vec(x, y),
       anchor: ex.vec(0.5, 0.5),
@@ -1526,7 +1517,6 @@ export class PokerDriver implements GameDriver<PokerState> {
     }
     this.board = [];
     this.hovered = null;
-    this.droppable = new Set();
     this.handHover.clear();
     this.dropMarkKey = '';
     for (const actor of this.dropMarks) {

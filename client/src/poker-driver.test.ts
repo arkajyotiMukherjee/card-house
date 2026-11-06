@@ -1,9 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import type { PokerState } from '../../src/shared/games/poker';
 import { PokerDriver } from './poker-driver';
 import type { CardAtlas } from './card-atlas';
 import type { RenderContext } from './game-driver';
-import type { Scene } from 'excalibur';
+import { Rectangle, Scene } from 'excalibur';
 
 function seat(
   chips: number,
@@ -190,6 +190,72 @@ describe('PokerDriver input', () => {
       context(sent, 0),
     );
     expect(sent).toEqual([{ type: 'discard', card: 'KD' }]);
+  });
+
+  it('shows the Drop marker only while the hovered card can be discarded', () => {
+    const createElement = vi
+      .spyOn(document, 'createElement')
+      .mockImplementation(() => {
+        const canvas = { width: 0, height: 0 };
+        return {
+          ...canvas,
+          setAttribute() {},
+          getContext: () => ({
+            canvas,
+            clearRect() {},
+            fillRect() {},
+            strokeRect() {},
+            save() {},
+            restore() {},
+            setLineDash() {},
+            getLineDash: () => [],
+            resetTransform() {},
+            translate() {},
+            scale() {},
+            measureText: (text: string) => ({
+              actualBoundingBoxLeft: 0,
+              actualBoundingBoxRight: text.length * 8,
+              actualBoundingBoxAscent: 8,
+              actualBoundingBoxDescent: 0,
+            }),
+          }),
+        } as unknown as HTMLElement;
+      });
+    onTestFinished(() => {
+      createElement.mockRestore();
+    });
+    const driver = new PokerDriver();
+    const ctx = context([], 0);
+    const graphic = () => new Rectangle({ width: 64, height: 64 });
+    const atlas = { back: graphic, sprite: graphic } as unknown as CardAtlas;
+    ctx.scene = new Scene();
+    ctx.cards = atlas;
+    ctx.myCards = atlas;
+
+    const holdEm = state({ pot: 0 });
+    driver.render(holdEm, ctx);
+    driver['followHole']('KD', 480, true);
+    driver['easeHand'](16);
+    expect(driver['dropMarks']).toHaveLength(0);
+
+    const oklahoma = {
+      ...holdEm,
+      variation: 'oklahoma',
+      step: 'discard',
+      seats: {
+        ...holdEm.seats,
+        '0': { ...holdEm.seats['0']!, mustDiscard: true },
+      },
+    } satisfies PokerState;
+    driver.render(oklahoma, ctx);
+    expect(driver['dropMarks']).toHaveLength(2);
+
+    driver.render({ ...oklahoma, step: 'bet' }, ctx);
+    expect(driver['dropMarks']).toHaveLength(0);
+
+    driver.render({ ...oklahoma, turnSeatIndex: 1 }, ctx);
+    driver['easeHand'](16);
+    expect(driver['dropMarks']).toHaveLength(0);
   });
 
   it('does not send a move when it is not your turn or the overlay is open', () => {
