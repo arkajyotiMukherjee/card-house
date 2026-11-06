@@ -5,6 +5,7 @@ import {
   type DummyState,
 } from '../../src/shared/games/dummy-counter';
 import { BUTTON_HEIGHT } from './button-style';
+import { CHAT_TEXT } from './chat-layout';
 import { isMobileDevice } from './mobile-shell';
 const PHONE_LAYOUT = typeof window !== 'undefined' && isMobileDevice();
 
@@ -46,8 +47,7 @@ export const TABLE_CHAT_PANEL = HOW_TO_PLAY_PANEL;
 export const TABLE_CHAT_TEXT = {
   padding: 24,
   top: PHONE_LAYOUT ? 104 : 96,
-  size: PHONE_LAYOUT ? 12 : 10,
-  lineHeight: PHONE_LAYOUT ? 24 : 22,
+  ...CHAT_TEXT[PHONE_LAYOUT ? 'phone' : 'desktop'],
   rows: PHONE_LAYOUT ? 10 : 12,
   columns: PHONE_LAYOUT ? 56 : 67,
 } as const;

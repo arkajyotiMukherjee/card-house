@@ -16,6 +16,7 @@ import {
 import type { GameDefinition } from '../../src/shared/games/game-definition';
 import { PLAYER_NAME_MAX } from '../../src/shared/discord-player-name';
 import { BUTTON_HEIGHT } from './button-style';
+import { CHAT_TEXT } from './chat-layout';
 import { isMobileDevice } from './mobile-shell';
 
 const PHONE_LAYOUT = typeof window !== 'undefined' && isMobileDevice();
@@ -186,15 +187,15 @@ export const CHAT_PANEL = PHONE_LAYOUT
   ? ({
       panel: { x: 222, y: 68, w: 392, h: 436 },
       title: { x: 230, y: 76, size: 12 },
-      list: { x: 230, y: 98, bottom: 426, lineH: 18 },
+      list: { x: 230, y: 102, bottom: 426, ...CHAT_TEXT.phone },
       field: { x: 230, y: 438, w: 268, h: 64 },
       send: { x: 506, y: 446, w: 100, h: 48 },
     } as const)
   : ({
       panel: { x: 170, y: 68, w: 620, h: 380 },
       /** Sits above the first message so the heading glyphs do not cover it. */
-      title: { x: 178, y: 76, size: 8 },
-      list: { x: 178, y: 88, bottom: 436, lineH: 12 },
+      title: { x: 178, y: 76, size: 10 },
+      list: { x: 178, y: 98, bottom: 436, ...CHAT_TEXT.desktop },
       field: { x: 178, y: 440, w: 500, h: BUTTON_HEIGHT },
       send: { x: 686, y: 440, w: 96, h: BUTTON_HEIGHT },
     } as const);

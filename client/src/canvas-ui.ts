@@ -11,6 +11,10 @@ export const BUTTON = ex.Color.fromHex('#6e2a24');
 export const BUTTON_DOWN = ex.Color.fromHex('#3f1614');
 export const STROKE = ex.Color.fromHex('#e6c27a');
 export const STROKE_HOT = ex.Color.fromHex('#fff6d0');
+export const CHAT_SEND = ex.Color.fromHex('#1b5c38');
+export const CHAT_SEND_DOWN = ex.Color.fromHex('#0e3d24');
+export const CHAT_OTHER_SENDER = ex.Color.fromHex('#8de2b0');
+export const CHAT_SYSTEM_MESSAGE = ex.Color.fromHex('#aabfaf');
 export const DANGER = ex.Color.fromHex('#e85d4c');
 
 export function canvasText(

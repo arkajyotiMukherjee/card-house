@@ -30,7 +30,15 @@ import {
   type CanvasTextFieldHandle,
   type FieldLabel,
 } from './html-field';
-import { makeFieldCaret, showFieldCaret } from './canvas-ui';
+import {
+  CHAT_OTHER_SENDER,
+  CHAT_SEND,
+  CHAT_SEND_DOWN,
+  makeFieldCaret,
+  SELF,
+  showFieldCaret,
+} from './canvas-ui';
+import { wrapChatLines } from './chat-layout';
 import {
   applyChatKey,
   applyChatText,
@@ -65,7 +73,6 @@ import {
   JOIN_BUTTON,
   MOBILE_JOIN_BUTTON,
   watchingTableIds,
-  type ChatLine,
   type ChatMessageRow,
   type ListSlot,
   type MemberRecord,
@@ -80,8 +87,8 @@ const CREATE_TABLE = PHONE_LAYOUT ? MOBILE_CREATE_TABLE : DESKTOP_CREATE_TABLE;
 const GOLD = ex.Color.fromHex('#f4e4b3');
 const DIM = ex.Color.fromHex('#d7c08a');
 const FIELD = ex.Color.fromHex('#0b2418');
-const BUTTON = ex.Color.fromHex('#1b5c38');
-const BUTTON_DOWN = ex.Color.fromHex('#0e3d24');
+const BUTTON = CHAT_SEND;
+const BUTTON_DOWN = CHAT_SEND_DOWN;
 const STROKE = ex.Color.fromHex('#e6c27a');
 const STROKE_HOT = ex.Color.fromHex('#fff6d0');
 const DANGER = ex.Color.fromHex('#e85d4c');
@@ -813,44 +820,52 @@ export class LobbyScene {
       this.lobbyId,
       this.clientId,
     );
-    const { list } = CHAT_PANEL;
-    const capacity = Math.floor((list.bottom - list.y) / list.lineH);
-    const wrapped = PHONE_LAYOUT
-      ? lines.flatMap((line) =>
-          wrapText(
-            `${line.name}: ${line.body}`,
-            Math.floor((CHAT_PANEL.panel.w - 16) / 12),
-          ).map((body) => ({
-            ...line,
-            name: '',
-            body,
-          })),
-        )
-      : lines;
-    const visible = wrapped.slice(Math.max(0, wrapped.length - capacity));
-    for (let index = 0; index < visible.length; index += 1) {
-      const line = visible[index];
-      if (!line) {
-        continue;
+    const { list, panel } = CHAT_PANEL;
+    const capacity = Math.floor((list.bottom - list.y) / list.lineHeight);
+    const columns = Math.floor((panel.w - 2 * (list.x - panel.x)) / list.size);
+    const visible = lines
+      .flatMap(({ name, body, self }) =>
+        wrapChatLines(name, body, columns).map((line) => ({ ...line, self })),
+      )
+      .slice(-capacity);
+    visible.forEach((line, index) => {
+      const y = list.y + index * list.lineHeight;
+      if (line.sender) {
+        this.chatMessageActors.push(
+          this.addChatLabel(
+            list.x,
+            y,
+            line.sender,
+            list.size,
+            line.self ? GOLD : CHAT_OTHER_SENDER,
+          ),
+        );
       }
-      this.chatMessageActors.push(this.chatLineActor(line, index));
-    }
+      this.chatMessageActors.push(
+        this.addChatLabel(
+          list.x + line.indent * list.size,
+          y,
+          line.body,
+          list.size,
+          SELF,
+        ),
+      );
+    });
   }
 
-  private chatLineActor(line: ChatLine, index: number): ex.Actor {
-    const { list } = CHAT_PANEL;
-    const y = list.y + index * list.lineH;
+  private addChatLabel(
+    x: number,
+    y: number,
+    text: string,
+    size: number,
+    color: ex.Color,
+  ): ex.Actor {
     const actor = new ex.Actor({
-      pos: ex.vec(list.x, y),
+      pos: ex.vec(x, y),
       anchor: ex.vec(0, 0),
       z: 16,
     });
-    const text = PHONE_LAYOUT
-      ? line.body
-      : `${line.name}: ${line.body}`.slice(0, 76);
-    actor.graphics.use(
-      canvasText(text, PHONE_LAYOUT ? 12 : 8, line.self ? STROKE_HOT : GOLD),
-    );
+    actor.graphics.use(canvasText(text, size, color));
     this.scene.add(actor);
     return actor;
   }

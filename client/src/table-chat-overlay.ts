@@ -10,6 +10,10 @@ import {
   BUTTON,
   BUTTON_DOWN,
   canvasText,
+  CHAT_OTHER_SENDER,
+  CHAT_SEND,
+  CHAT_SEND_DOWN,
+  CHAT_SYSTEM_MESSAGE,
   DANGER,
   GOLD,
   makeFieldCaret,
@@ -36,6 +40,7 @@ import {
   type CanvasTextFieldHandle,
   type FieldLabel,
 } from './html-field';
+import { wrapChatLines } from './chat-layout';
 import { wrapText } from './menu-layout';
 import type { DbConnection } from './module_bindings';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from './sheets';
@@ -58,10 +63,6 @@ const Z_PANEL = 101;
 const Z_TEXT = 102;
 const FIELD = ex.Color.fromHex('#0b2418');
 const CHAT_TEXT_PAD = 6;
-const SEND_GREEN = ex.Color.fromHex('#1b5c38');
-const SEND_GREEN_DOWN = ex.Color.fromHex('#0e3d24');
-const OTHER_SENDER = ex.Color.fromHex('#8de2b0');
-const SYSTEM_MESSAGE = ex.Color.fromHex('#aabfaf');
 
 function tableChatLabel(): FieldLabel {
   const box = TABLE_CHAT_INPUT;
@@ -254,14 +255,10 @@ export class TableChatOverlay {
     const members = [...this.readMembers()];
     const lines = rows.flatMap((row) => {
       const name = tableChatSender(row, members, this.lobbyMemberId);
-      const sender = name.length > 20 ? `${name.slice(0, 17)}...` : name;
-      const prefix = sender ? `${sender}: ` : '';
-      return wrapText(row.body, TABLE_CHAT_TEXT.columns - prefix.length).map(
-        (body, index) => ({
-          sender: index === 0 ? prefix : '',
-          indent: prefix.length,
-          body,
-          system: !sender,
+      return wrapChatLines(name, row.body, TABLE_CHAT_TEXT.columns).map(
+        (line) => ({
+          ...line,
+          system: !name,
           self: row.lobbyMemberId === this.lobbyMemberId,
         }),
       );
@@ -270,9 +267,9 @@ export class TableChatOverlay {
     this.lineTexts.forEach((line, index) => {
       const entry = slice[index];
       line.sender.text = entry?.sender ?? '';
-      line.sender.color = entry?.self ? GOLD : OTHER_SENDER;
+      line.sender.color = entry?.self ? GOLD : CHAT_OTHER_SENDER;
       line.body.text = entry?.body ?? '';
-      line.body.color = entry?.system ? SYSTEM_MESSAGE : SELF;
+      line.body.color = entry?.system ? CHAT_SYSTEM_MESSAGE : SELF;
       line.bodyActor.pos.x =
         TABLE_CHAT_PANEL.x +
         TABLE_CHAT_TEXT.padding +
@@ -521,7 +518,7 @@ export class TableChatOverlay {
         panel.x + text.padding,
         panel.y + text.top + row * text.lineHeight,
       );
-      const sender = canvasText('', text.size, OTHER_SENDER);
+      const sender = canvasText('', text.size, CHAT_OTHER_SENDER);
       const body = canvasText('', text.size, SELF);
       const senderActor = new ex.Actor({
         pos: position,
@@ -598,7 +595,7 @@ export class TableChatOverlay {
       height: box.h,
       z: Z_TEXT,
     });
-    const face = panelRect(box.w, box.h, SEND_GREEN, STROKE);
+    const face = panelRect(box.w, box.h, CHAT_SEND, STROKE);
     actor.graphics.use(face);
     const size = buttonFontSize('Send', box.w, box.h);
     const rest = buttonCaptionPos('Send', box.w, box.h, size);
@@ -614,12 +611,12 @@ export class TableChatOverlay {
     bindButtonPress(
       actor,
       () => {
-        face.color = SEND_GREEN_DOWN;
+        face.color = CHAT_SEND_DOWN;
         caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
       },
       () => {
         face.strokeColor = STROKE;
-        face.color = SEND_GREEN;
+        face.color = CHAT_SEND;
         caption.pos = ex.vec(rest.x, rest.y);
       },
       () => this.send(),
