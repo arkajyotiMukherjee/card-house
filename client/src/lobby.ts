@@ -186,7 +186,7 @@ export function watchHit(
 export const CHAT_PANEL = PHONE_LAYOUT
   ? ({
       panel: { x: 222, y: 68, w: 392, h: 436 },
-      title: { x: 230, y: 76, size: 12 },
+      title: { x: 230, y: 76, size: CHAT_TEXT.phone.size },
       list: { x: 230, y: 102, bottom: 426, ...CHAT_TEXT.phone },
       field: { x: 230, y: 438, w: 268, h: 64 },
       send: { x: 506, y: 438, w: 100, h: 64 },
@@ -194,7 +194,7 @@ export const CHAT_PANEL = PHONE_LAYOUT
   : ({
       panel: { x: 170, y: 68, w: 620, h: 380 },
       /** Sits above the first message so the heading glyphs do not cover it. */
-      title: { x: 178, y: 76, size: 10 },
+      title: { x: 178, y: 76, size: CHAT_TEXT.desktop.size },
       list: { x: 178, y: 98, bottom: 436, ...CHAT_TEXT.desktop },
       field: { x: 178, y: 440, w: 500, h: BUTTON_HEIGHT },
       send: { x: 686, y: 440, w: 96, h: BUTTON_HEIGHT },
@@ -308,7 +308,7 @@ export function chatLines(
     const member = names.get(message.lobbyMemberId);
     return {
       id: message.id,
-      name: member?.name ?? 'Unknown',
+      name: message.lobbyMemberId === '' ? '' : (member?.name ?? 'Unknown'),
       body: message.body,
       self: member?.clientId === selfClientId,
     };

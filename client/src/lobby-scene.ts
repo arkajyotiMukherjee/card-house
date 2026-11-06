@@ -34,6 +34,7 @@ import {
   CHAT_OTHER_SENDER,
   CHAT_SEND,
   CHAT_SEND_DOWN,
+  CHAT_SYSTEM_MESSAGE,
   makeFieldCaret,
   SELF,
   showFieldCaret,
@@ -101,21 +102,15 @@ const BANNER_FILL = ex.Color.fromHex('#0a2e1c');
 
 const CHAT_TEXT_PAD = 6;
 
-function chatFieldLabel(box: {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}): FieldLabel {
+function chatFieldLabel(
+  box: { x: number; y: number; w: number; h: number },
+  size: number = CHAT_PANEL.list.size,
+): FieldLabel {
   return {
-    size: PHONE_LAYOUT ? 12 : BUTTON_FONT_SIZE,
+    size,
     x: box.x + CHAT_TEXT_PAD,
-    y: box.y + Math.round((box.h - (PHONE_LAYOUT ? 12 : BUTTON_FONT_SIZE)) / 2),
-    columns: fieldLabelColumns(
-      box.w,
-      CHAT_TEXT_PAD,
-      PHONE_LAYOUT ? 12 : BUTTON_FONT_SIZE,
-    ),
+    y: box.y + Math.round((box.h - size) / 2),
+    columns: fieldLabelColumns(box.w, CHAT_TEXT_PAD, size),
   };
 }
 
@@ -825,7 +820,11 @@ export class LobbyScene {
     const columns = Math.floor((panel.w - 2 * (list.x - panel.x)) / list.size);
     const visible = lines
       .flatMap(({ name, body, self }) =>
-        wrapChatLines(name, body, columns).map((line) => ({ ...line, self })),
+        wrapChatLines(name, body, columns).map((line) => ({
+          ...line,
+          self,
+          system: !name,
+        })),
       )
       .slice(-capacity);
     visible.forEach((line, index) => {
@@ -847,7 +846,7 @@ export class LobbyScene {
           y,
           line.body,
           list.size,
-          SELF,
+          line.system ? CHAT_SYSTEM_MESSAGE : SELF,
         ),
       );
     });
@@ -1158,7 +1157,7 @@ export class LobbyScene {
     });
     nameFace.graphics.use(panelRect(name.w, name.h, FIELD, STROKE));
     popup.addChild(nameFace);
-    const metrics = chatFieldLabel(name);
+    const metrics = chatFieldLabel(name, PHONE_LAYOUT ? 12 : BUTTON_FONT_SIZE);
     this.tableNameText = this.addLabel(
       metrics.x,
       metrics.y,

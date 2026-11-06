@@ -646,8 +646,10 @@ export class MenuScene extends ex.Scene {
       });
       actor.on('pointerup', (event) => {
         this.claimOverlayClick(event);
-        this.focused = field.id;
-        this.paintPrompt();
+        if (!isMobileDevice()) {
+          this.focusPromptBox(field.id);
+          this.focusMenuField();
+        }
       });
       this.add(actor);
       this.overlay.push(actor);
@@ -1586,12 +1588,12 @@ export class MenuScene extends ex.Scene {
     this.paintPrompt();
   }
 
-  private focusMenuField(): void {
+  private focusMenuField(fromUserGesture = false): void {
     if (this.focused === 'code') {
-      this.codeField?.focus();
+      this.codeField?.focus(fromUserGesture);
       return;
     }
-    this.nameField?.focus();
+    this.nameField?.focus(fromUserGesture);
   }
 
   private movePromptField(key: FieldMoveKey): boolean {
@@ -1603,7 +1605,7 @@ export class MenuScene extends ex.Scene {
     }
     this.focused = this.focused === 'name' ? 'code' : 'name';
     this.paintPrompt();
-    this.focusMenuField();
+    this.focusMenuField(true);
     return true;
   }
 
@@ -1622,7 +1624,7 @@ export class MenuScene extends ex.Scene {
     }
     this.focused = next;
     this.paintPrompt();
-    this.focusMenuField();
+    this.focusMenuField(true);
   }
 
   private storeName(value: string): void {

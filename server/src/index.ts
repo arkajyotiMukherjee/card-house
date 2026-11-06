@@ -1469,6 +1469,25 @@ function firstRow<T>(rows: Iterable<T>): T | undefined {
   return undefined;
 }
 
+function appendLobbyChat(
+  ctx: ModuleCtx,
+  lobbyId: string,
+  lobbyMemberId: string,
+  body: string,
+): void {
+  let order = 0;
+  for (const _message of ctx.db.LobbyChatMessage.byLobby.filter(lobbyId)) {
+    order += 1;
+  }
+  ctx.db.LobbyChatMessage.insert({
+    id: chatMessageId(lobbyId, order),
+    lobbyId,
+    lobbyMemberId,
+    body,
+    createdAt: ctx.timestamp,
+  });
+}
+
 export const join_lobby = spacetimedb.reducer(
   { name: 'join_lobby' },
   {
@@ -1520,6 +1539,7 @@ export const join_lobby = spacetimedb.reducer(
       discordDiscriminator: undefined,
       isBot: false,
     });
+    appendLobbyChat(ctx, lobby.id, '', `${request.name} joined the lobby.`);
     rememberLobby(ctx.db, ctx.sender.toHexString(), lobby.id, request.clientId);
     noteLobbyActivity(ctx, lobby.id);
   },
@@ -1614,6 +1634,7 @@ export const join_lobby_with_discord = spacetimedb.reducer(
       discordDiscriminator: discord.discordDiscriminator,
       isBot: false,
     });
+    appendLobbyChat(ctx, lobby.id, '', `${request.name} joined the lobby.`);
     rememberLobby(ctx.db, ctx.sender.toHexString(), lobby.id, request.clientId);
     noteLobbyActivity(ctx, lobby.id);
   },
@@ -1653,17 +1674,7 @@ export const send_lobby_chat_message = spacetimedb.reducer(
       throw new SenderError('Member not found');
     }
 
-    let order = 0;
-    for (const _message of ctx.db.LobbyChatMessage.byLobby.filter(lobbyId)) {
-      order += 1;
-    }
-    ctx.db.LobbyChatMessage.insert({
-      id: chatMessageId(lobbyId, order),
-      lobbyId,
-      lobbyMemberId: member.id,
-      body,
-      createdAt: ctx.timestamp,
-    });
+    appendLobbyChat(ctx, lobbyId, member.id, body);
     noteLobbyActivity(ctx, lobbyId);
   },
 );

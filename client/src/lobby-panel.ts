@@ -546,18 +546,20 @@ export function mountLobbyPanel(
   };
 
   nameBox.on('pointerup', () => {
-    if (joinedCode.length > 0) {
+    if (PHONE_LAYOUT || joinedCode.length > 0) {
       return;
     }
     focused = 'name';
     paintFields();
+    focusLobbyForm();
   });
   codeBox.on('pointerup', () => {
-    if (joinedCode.length > 0) {
+    if (PHONE_LAYOUT || joinedCode.length > 0) {
       return;
     }
     focused = 'code';
     paintFields();
+    focusLobbyForm();
   });
   createButton.on('pointerup', () => {
     void submit('create');
@@ -582,15 +584,15 @@ export function mountLobbyPanel(
     code?: CanvasTextFieldHandle;
     rename?: CanvasTextFieldHandle;
   } = {};
-  const focusLobbyForm = (): void => {
+  const focusLobbyForm = (fromUserGesture = false): void => {
     if (!sceneActive() || joinedCode.length > 0) {
       return;
     }
     if (focused === 'code') {
-      formInputs.code?.focus();
+      formInputs.code?.focus(fromUserGesture);
       return;
     }
-    formInputs.name?.focus();
+    formInputs.name?.focus(fromUserGesture);
   };
   const moveLobbyForm = (key: FieldMoveKey): boolean => {
     if (key !== 'Tab' || joinedCode.length > 0) {
@@ -598,7 +600,7 @@ export function mountLobbyPanel(
     }
     focused = focused === 'name' ? 'code' : 'name';
     paintFields();
-    focusLobbyForm();
+    focusLobbyForm(true);
     return true;
   };
   formInputs.name = bindCanvasTextField({
@@ -764,7 +766,7 @@ export function mountLobbyPanel(
     if (evt.key === ex.Keys.Tab) {
       focused = focused === 'name' ? 'code' : 'name';
       paintFields();
-      focusLobbyForm();
+      focusLobbyForm(true);
       return;
     }
     const typed = evt.value ?? '';

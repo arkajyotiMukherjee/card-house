@@ -32,9 +32,9 @@ export const KEYBOARD_MARGIN = 12;
  *
  * iOS opens the keyboard only when the finger lands on the input itself, in
  * the same gesture. So the input is already on the box (pointer events on)
- * before the tap, and nothing focuses it later from a canvas `pointerup`.
- * On a phone or tablet the scenes' `focus()` only places the input; a desktop
- * keeps the programmatic focus so physical keys type at once.
+ * before the tap. If viewport motion leaves an input out of place, the native
+ * canvas touch can focus it in the same gesture. On phones, ordinary scene
+ * focus requests only place the input; a user gesture can also move focus.
  *
  * Focus is plain `focus()`, not `preventScroll`. Once the keyboard is up the
  * visual viewport shrinks, and `keyboardLift` slides the canvas and the inputs
@@ -196,7 +196,7 @@ export function fieldCaretIndexAt(options: {
 
 export interface CanvasTextFieldHandle {
   sync(): void;
-  focus(): void;
+  focus(fromUserGesture?: boolean): void;
   refresh(): void;
   close(): void;
   /** Insertion index. The end of the value when this input is not focused. */
@@ -443,12 +443,12 @@ export function bindCanvasTextField(
     sync() {
       assignValue(input, field.sanitize(field.read()), 'end');
     },
-    focus() {
+    focus(fromUserGesture = false) {
       placeField(entry);
       if (!field.active()) {
         return;
       }
-      if (isMobileDevice()) {
+      if (!fromUserGesture && isMobileDevice()) {
         return;
       }
       input.focus();
@@ -702,12 +702,55 @@ function startLoop(): void {
   loopHandle = requestAnimationFrame(syncFields);
 }
 
+function focusCanvasFieldFromTouch(event: TouchEvent): void {
+  const canvas = gameCanvas();
+  const touch = event.changedTouches?.[0];
+  if (
+    !canvas ||
+    !touch ||
+    event.changedTouches.length !== 1 ||
+    event.touches?.length ||
+    (event.target !== canvas &&
+      !fields.some(({ input }) => input === event.target))
+  ) {
+    return;
+  }
+  const { x, y } = screenToLogical(
+    canvas.getBoundingClientRect(),
+    touch.clientX,
+    touch.clientY,
+  );
+  const entry = [...fields].reverse().find(({ field }) => {
+    const box = field.box;
+    return (
+      field.active() &&
+      x >= box.x &&
+      x < box.x + box.w &&
+      y >= box.y &&
+      y < box.y + box.h
+    );
+  });
+  if (!entry || entry.input === event.target) return;
+
+  // The native gesture is still active here, even when the input missed the tap.
+  placeField(entry);
+  entry.input.focus();
+  if (document.activeElement === entry.input) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+}
+
 function install(): void {
   if (installed || !domReady()) {
     return;
   }
   installed = true;
   installStyle();
+  document.addEventListener('touchend', focusCanvasFieldFromTouch, {
+    capture: true,
+    passive: false,
+  });
   document.addEventListener('selectionchange', () => {
     for (const entry of fields) {
       if (document.activeElement === entry.input) {

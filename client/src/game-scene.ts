@@ -44,12 +44,16 @@ export const HOW_TO_PLAY_PANEL = {
 export const TABLE_CHAT_PANEL = HOW_TO_PLAY_PANEL;
 
 /** Message history grid inside the chat window. */
+const chatText = CHAT_TEXT[PHONE_LAYOUT ? 'phone' : 'desktop'];
+const CHAT_TEXT_PADDING = 24;
 export const TABLE_CHAT_TEXT = {
-  padding: 24,
+  padding: CHAT_TEXT_PADDING,
   top: PHONE_LAYOUT ? 104 : 96,
-  ...CHAT_TEXT[PHONE_LAYOUT ? 'phone' : 'desktop'],
+  ...chatText,
   rows: PHONE_LAYOUT ? 10 : 12,
-  columns: PHONE_LAYOUT ? 56 : 67,
+  columns: Math.floor(
+    (TABLE_CHAT_PANEL.w - 2 * CHAT_TEXT_PADDING) / chatText.size,
+  ),
 } as const;
 
 /** Text field and Send button along the bottom of the chat window. */

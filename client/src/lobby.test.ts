@@ -15,6 +15,7 @@ import {
   applyFieldKey,
   applyFieldText,
   clampPlayerCount,
+  chatLines,
   discordBadgeBox,
   findCreatedLobby,
   GAME_CATALOG,
@@ -51,6 +52,34 @@ describe('lobby chat layout', () => {
     expect(CHAT_PANEL.list.x).toBe(CHAT_PANEL.title.x);
     expect(CHAT_PANEL.list.bottom).toBeLessThanOrEqual(CHAT_PANEL.field.y);
   });
+});
+
+it('keeps room join notices in chat order without an Unknown sender label', () => {
+  expect(
+    chatLines(
+      [
+        { id: '02', lobbyId: 'room', lobbyMemberId: 'missing', body: 'Hello' },
+        {
+          id: '01',
+          lobbyId: 'room',
+          lobbyMemberId: '',
+          body: 'Ada joined the lobby.',
+        },
+        {
+          id: '03',
+          lobbyId: 'other',
+          lobbyMemberId: '',
+          body: 'Milo joined the lobby.',
+        },
+      ],
+      [],
+      'room',
+      'client',
+    ),
+  ).toEqual([
+    { id: '01', name: '', body: 'Ada joined the lobby.', self: false },
+    { id: '02', name: 'Unknown', body: 'Hello', self: false },
+  ]);
 });
 
 describe('lobby fields', () => {

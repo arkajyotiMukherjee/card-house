@@ -1,7 +1,6 @@
 import { bindButtonPress } from './button-press';
 import * as ex from 'excalibur';
 import {
-  BUTTON_FONT_SIZE,
   BUTTON_PRESS_SHIFT,
   buttonCaptionPos,
   buttonFontSize,
@@ -66,7 +65,7 @@ const CHAT_TEXT_PAD = 6;
 
 function tableChatLabel(): FieldLabel {
   const box = TABLE_CHAT_INPUT;
-  const size = box.h >= 60 ? 16 : BUTTON_FONT_SIZE;
+  const { size } = TABLE_CHAT_TEXT;
   return {
     size,
     x: box.x + CHAT_TEXT_PAD,

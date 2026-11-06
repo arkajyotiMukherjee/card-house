@@ -307,6 +307,79 @@ describe('canvas text field', () => {
     expect(input.getAttribute('aria-hidden')).toBeNull();
   });
 
+  it.each(['canvas', 'stale name input'])(
+    'switches phone typing from name to code when the tap lands on the %s',
+    (target) => {
+      const restoreMobile = stubMobile(true);
+      try {
+        const canvas = mountCanvas({
+          left: 0,
+          top: -48,
+          width: 960,
+          height: 540,
+        });
+        let name = '';
+        let code = '';
+        const nameBox = { x: 120, y: 140, w: 300, h: 48 };
+        const codeBox = { x: 120, y: 214, w: 300, h: 48 };
+        handles.push(
+          bindCanvasTextField({
+            id: 'menu-name',
+            label: 'Your Name',
+            box: nameBox,
+            maxLength: 16,
+            active: () => true,
+            read: () => name,
+            sanitize: (value) => applyFieldText(value, 16),
+            write: (value) => {
+              name = value;
+            },
+            submit: () => {},
+          }),
+          bindCanvasTextField({
+            id: 'menu-code',
+            label: 'Room Code',
+            box: codeBox,
+            maxLength: 6,
+            active: () => true,
+            read: () => code,
+            sanitize: applyCodeText,
+            write: (value) => {
+              code = value;
+            },
+            submit: () => {},
+          }),
+        );
+        const nameInput = document.querySelector<HTMLInputElement>(
+          '[data-cardhouse-field="menu-name"]',
+        )!;
+        const codeInput = document.querySelector<HTMLInputElement>(
+          '[data-cardhouse-field="menu-code"]',
+        )!;
+        nameInput.focus();
+        nameInput.value = 'Ada';
+        nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+        // The keyboard has shifted the canvas, and the tap missed the code input.
+        const tap = new Event('touchend', { bubbles: true, cancelable: true });
+        Object.defineProperty(tap, 'changedTouches', {
+          value: [{ clientX: codeBox.x + 10, clientY: codeBox.y - 48 + 10 }],
+        });
+        (target === 'canvas' ? canvas : nameInput).dispatchEvent(tap);
+
+        expect(document.activeElement).toBe(codeInput);
+        expect(tap.defaultPrevented).toBe(true);
+        const focused = document.activeElement as HTMLInputElement;
+        focused.value = 'ra7h';
+        focused.dispatchEvent(new Event('input', { bubbles: true }));
+        expect(name).toBe('Ada');
+        expect(code).toBe('RA7H');
+      } finally {
+        restoreMobile();
+      }
+    },
+  );
+
   it('does not focus a field later from a canvas pointerup', () => {
     mountCanvas();
     handles.push(
