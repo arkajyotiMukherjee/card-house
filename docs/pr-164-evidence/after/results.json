@@ -1,0 +1,99 @@
+[
+  {
+    "case": "lobby-mobile",
+    "viewport": {
+      "width": 844,
+      "height": 390
+    },
+    "resolution": {
+      "width": 1085,
+      "height": 540
+    }
+  },
+  {
+    "case": "lobby-wide-mobile",
+    "viewport": {
+      "width": 932,
+      "height": 430
+    },
+    "resolution": {
+      "width": 1095,
+      "height": 540
+    }
+  },
+  {
+    "case": "lobby-desktop",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "resolution": {
+      "width": 960,
+      "height": 540
+    }
+  },
+  {
+    "case": "lobby-wide-desktop",
+    "viewport": {
+      "width": 1920,
+      "height": 900
+    },
+    "resolution": {
+      "width": 1152,
+      "height": 540
+    }
+  },
+  {
+    "case": "terminal-poker-leave-then-bluff",
+    "terminalStatus": "finished",
+    "pokerSeatsAfterLeaving": 0,
+    "joinErrors": [
+      null,
+      null
+    ],
+    "totalChips": 2000
+  },
+  {
+    "case": "selection-and-long-press",
+    "selection": {
+      "selected": true,
+      "children": 0,
+      "offset": -37.89473684210527
+    },
+    "guard": {
+      "userSelect": "none",
+      "events": {
+        "selectstart": true,
+        "contextmenu": true,
+        "dragstart": true
+      },
+      "selection": ""
+    },
+    "engine": "Chromium mobile emulation; native iOS Safari not available"
+  },
+  {
+    "case": "bluff-winner-banner",
+    "bannerY": 190,
+    "bannerZ": 90,
+    "text": "Winner seat 0 Bhodor Choda",
+    "opponentCards": 54,
+    "fixture": true
+  },
+  {
+    "case": "maximum-and-fold-reveal",
+    "max": {
+      "label": "Pot max",
+      "amount": 60
+    },
+    "foldBoard": [
+      "KD",
+      "AD",
+      "7S",
+      "7H",
+      "3D"
+    ],
+    "foldWinner": [
+      0
+    ]
+  }
+]

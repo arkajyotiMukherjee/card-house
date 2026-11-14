@@ -1,3 +1,10 @@
+import {
+  anchorLobbyActor,
+  enableLobbyViewport,
+  lobbyFieldGeometry,
+  stretchLobbyActor,
+} from './lobby-viewport';
+import { anchorTableActor, tableGutter } from './table-viewport';
 import * as ex from 'excalibur';
 import { bindButtonPress } from './button-press';
 import { isMobileDevice } from './mobile-shell';
@@ -7,7 +14,7 @@ import {
   buttonCaptionPos,
   buttonFontSize,
 } from './button-style';
-import { personalCardAtlas, pixelFont } from './boot-scene';
+import { pixelFont } from './boot-scene';
 import { statsCaption } from './client-stats';
 import { subscribeLobbyTables } from './connect';
 import { joinFailureMessage, wrapTableError } from './join-errors';
@@ -15,12 +22,6 @@ import { showLobbyUrl, tableCodeForId } from './join-path';
 import { tableToReopen } from './last-room';
 import { roomComposer } from './room-composer';
 import { wrapText } from './menu-layout';
-import {
-  IDLE_CARDS,
-  IDLE_OPACITY,
-  idleCardPose,
-  type IdleCard,
-} from './lobby-ambience';
 import {
   bindCanvasTextField,
   eventTargetsHtmlField,
@@ -183,6 +184,7 @@ export class LobbyScene {
   private moreText: ex.Text | undefined;
   private tablePage = 0;
   private tablePages = 1;
+  private pagingButton: ex.Actor | undefined;
   private codeText: ex.Text | undefined;
   private codeActor: ex.Actor | undefined;
   private errorText: ex.Text | undefined;
@@ -217,7 +219,7 @@ export class LobbyScene {
   private readonly leaveConfirmButtons: ex.Actor[] = [];
   private leavingRoom = false;
   private returnedToMenu = false;
-  private readonly idleCards: Array<{ actor: ex.Actor; idle: IdleCard }> = [];
+  private viewportGutter = -1;
 
   constructor(
     private readonly engine: ex.Engine,
@@ -255,6 +257,10 @@ export class LobbyScene {
     this.watching = true;
     let lastSecond = 0;
     this.scene.on('preupdate', () => {
+      if (this.panelReady && this.viewportGutter !== tableGutter()) {
+        this.viewportGutter = tableGutter();
+        this.render();
+      }
       const second = Math.floor(Date.now() / 1000);
       if (second !== lastSecond) {
         lastSecond = second;
@@ -350,7 +356,6 @@ export class LobbyScene {
     this.lobbyCode = code;
     this.closeLeaveConfirm();
     this.ensurePanel();
-    this.refreshCards();
     this.paintCode();
     this.paintDiscordBadge();
     this.chatBody = '';
@@ -418,6 +423,7 @@ export class LobbyScene {
       return;
     }
     this.panelReady = true;
+    enableLobbyViewport(this.scene);
     const box = TABLE_LIST.panel;
     const backdrop = new ex.Actor({
       pos: ex.vec(box.x, box.y),
@@ -427,9 +433,17 @@ export class LobbyScene {
       z: 15,
     });
     backdrop.graphics.use(panelRect(box.w, box.h, PANEL, STROKE));
+    anchorLobbyActor(backdrop);
+    stretchLobbyActor(backdrop, box.w);
     this.scene.add(backdrop);
 
-    if (!PHONE_LAYOUT) this.addLabel(TABLE_LIST.list.x, 52, 'Tables', 8, DIM);
+    this.addLabel(
+      TABLE_LIST.list.x,
+      100,
+      'Tables',
+      PHONE_LAYOUT ? 12 : 10,
+      DIM,
+    );
     this.emptyText = this.addLabel(
       TABLE_LIST.list.x,
       TABLE_LIST.list.y,
@@ -445,36 +459,38 @@ export class LobbyScene {
       DIM,
     );
     this.errorText = this.addLabel(
-      PHONE_LAYOUT ? 16 : TABLE_LIST.error.x,
-      PHONE_LAYOUT ? 510 : TABLE_LIST.error.y,
+      TABLE_LIST.error.x,
+      TABLE_LIST.error.y,
       '',
       PHONE_LAYOUT ? 10 : 8,
       DANGER,
     );
-    this.button(TABLE_LIST.create, 'Create Table', () => {
+    const create = this.button(TABLE_LIST.create, 'Create Table', () => {
       this.openCreate();
     });
-    if (isMobileDevice()) {
-      this.button(
-        { x: TABLE_LIST.list.x, y: 464, w: TABLE_LIST.row.w, h: 64 },
-        'Next page',
-        () => {
-          this.tablePage = (this.tablePage + 1) % this.tablePages;
-          this.render();
-        },
-      );
-    }
+    anchorTableActor(create, 'right', TABLE_LIST.create.x);
+    const next = this.button(
+      { x: 488, y: 464, w: 140, h: PHONE_LAYOUT ? 32 : 28 },
+      'Next page',
+      () => {
+        this.tablePage = (this.tablePage + 1) % this.tablePages;
+        this.render();
+      },
+    );
+    anchorTableActor(next, 'right', 488);
+    this.pagingButton = next;
     this.buildPopup();
     this.buildBanner();
-    this.buildIdleCards();
+
     this.buildChatPanel();
     this.buildLeaveRoom();
     const stats = new ex.Actor({
-      pos: ex.vec(PHONE_LAYOUT ? 222 : 170, PHONE_LAYOUT ? 514 : 500),
+      pos: ex.vec(20, 518),
       anchor: ex.vec(0, 0),
       z: 20,
     });
     stats.graphics.use(this.statsText);
+    anchorLobbyActor(stats);
     this.statsActor = stats;
     this.scene.add(stats);
   }
@@ -489,6 +505,7 @@ export class LobbyScene {
       z: 15,
     });
     backdrop.graphics.use(panelRect(box.w, box.h, PANEL, STROKE));
+    anchorLobbyActor(backdrop);
     this.scene.add(backdrop);
     this.addLabel(
       CHAT_PANEL.title.x,
@@ -508,6 +525,7 @@ export class LobbyScene {
       z: 20,
     });
     this.chatInputBox.graphics.use(panelRect(field.w, field.h, FIELD, STROKE));
+    anchorLobbyActor(this.chatInputBox);
     this.scene.add(this.chatInputBox);
     this.chatInputText = this.addLabel(
       chatMetrics.x,
@@ -524,7 +542,7 @@ export class LobbyScene {
     this.chatField = bindCanvasTextField({
       id: 'lobby-chat',
       label: 'Chat',
-      box: CHAT_PANEL.field,
+      box: lobbyFieldGeometry(CHAT_PANEL.field, 'right'),
       maxLength: CHAT_BODY_MAX,
       active: () =>
         this.engine.currentScene === this.scene &&
@@ -549,7 +567,7 @@ export class LobbyScene {
       },
       enterKeyHint: 'send',
       autoCapitalize: 'off',
-      metrics: chatFieldLabel(CHAT_PANEL.field),
+      metrics: lobbyFieldGeometry(chatFieldLabel(CHAT_PANEL.field), 'right'),
       onCaret: () => {
         this.paintChatField();
       },
@@ -767,6 +785,7 @@ export class LobbyScene {
       this.chatInputText.color = DIM;
     }
     showFieldCaret(this.chatCaret, this.chatFocused, layout.x, layout.y);
+    anchorTableActor(this.chatCaret, 'right', layout.x);
   }
 
   private async sendChat(): Promise<void> {
@@ -819,6 +838,7 @@ export class LobbyScene {
     const capacity = Math.floor((list.bottom - list.y) / list.lineHeight);
     const columns = Math.floor((panel.w - 2 * (list.x - panel.x)) / list.size);
     const visible = lines
+      .filter(({ name }) => name.length > 0)
       .flatMap(({ name, body, self }) =>
         wrapChatLines(name, body, columns).map((line) => ({
           ...line,
@@ -865,6 +885,7 @@ export class LobbyScene {
       z: 16,
     });
     actor.graphics.use(canvasText(text, size, color));
+    anchorLobbyActor(actor);
     this.scene.add(actor);
     return actor;
   }
@@ -892,6 +913,7 @@ export class LobbyScene {
       z: 15,
     });
     backdrop.graphics.use(panelRect(box.w, box.h, BANNER_FILL, STROKE_HOT));
+    anchorLobbyActor(backdrop);
     this.scene.add(backdrop);
 
     this.centeredActor(
@@ -921,6 +943,7 @@ export class LobbyScene {
       z: 21,
     });
     actor.graphics.use(graphic);
+    anchorLobbyActor(actor);
     this.scene.add(actor);
     return actor;
   }
@@ -939,6 +962,11 @@ export class LobbyScene {
     this.codeActor.pos = ex.vec(
       this.centeredX(code, ROOM_BANNER.code.size),
       ROOM_BANNER.code.y,
+    );
+    anchorTableActor(
+      this.codeActor,
+      'left',
+      this.centeredX(code, ROOM_BANNER.code.size),
     );
   }
 
@@ -977,50 +1005,6 @@ export class LobbyScene {
     badge.addChild(caption);
     this.scene.add(badge);
     this.discordBadge = badge;
-  }
-
-  /** Repaints idle cards after a Theme change or when the lobby is shown again. */
-  refreshCards(): void {
-    for (const row of this.idleCards) {
-      row.actor.graphics.use(this.idleSprite(row.idle));
-      row.actor.graphics.opacity = IDLE_OPACITY;
-    }
-  }
-
-  private buildIdleCards(): void {
-    for (const idle of IDLE_CARDS) {
-      const actor = this.idleCardActor(idle);
-      this.idleCards.push({ actor, idle });
-      this.scene.add(actor);
-    }
-  }
-
-  private idleSprite(idle: IdleCard): ex.Sprite {
-    const mine = personalCardAtlas();
-    const sprite = idle.card === 'back' ? mine.back() : mine.sprite(idle.card);
-    sprite.scale = ex.vec(2, 2);
-    return sprite;
-  }
-
-  private idleCardActor(idle: IdleCard): ex.Actor {
-    const sprite = this.idleSprite(idle);
-    const actor = new ex.Actor({
-      pos: ex.vec(idle.x, idle.y),
-      anchor: ex.vec(0.5, 0.5),
-      z: 2,
-    });
-    actor.graphics.use(sprite);
-    actor.graphics.opacity = IDLE_OPACITY;
-    actor.pointer.useColliderShape = false;
-    actor.pointer.useGraphicsBounds = false;
-    let elapsed = 0;
-    actor.on('postupdate', (event) => {
-      elapsed += event.elapsed;
-      const pose = idleCardPose(idle, elapsed);
-      actor.pos = ex.vec(pose.x, pose.y);
-      actor.rotation = pose.rotation;
-    });
-    return actor;
   }
 
   private buildPopup(): void {
@@ -1470,21 +1454,25 @@ export class LobbyScene {
       watchingTableIds(this.readSpectators(), member?.id ?? ''),
     );
     const mobile = isMobileDevice();
-    this.tablePages = Math.max(1, Math.ceil(lines.length / 2));
+    this.tablePages = Math.max(1, Math.ceil(lines.length / 3));
     this.tablePage = Math.min(this.tablePage, this.tablePages - 1);
+    if (this.pagingButton) {
+      this.pagingButton.graphics.isVisible = this.tablePages > 1;
+      for (const child of this.pagingButton.children)
+        (child as ex.Actor).graphics.isVisible = this.tablePages > 1;
+      this.pagingButton.pointer.useColliderShape = this.tablePages > 1;
+      this.pagingButton.pointer.useGraphicsBounds = this.tablePages > 1;
+    }
     const ordered = [...lines].sort((a, b) => a.id.localeCompare(b.id));
-    const shown = mobile
-      ? ordered.slice(this.tablePage * 2, this.tablePage * 2 + 2)
-      : lines;
+    const shown = ordered.slice(this.tablePage * 3, this.tablePage * 3 + 3);
     const layout = listLayout(tableGroups(shown), mobile);
     if (this.emptyText) {
       this.emptyText.text = lines.length === 0 ? 'No tables' : '';
     }
     if (this.moreText) {
-      this.moreText.text = mobile
-        ? ''
-        : layout.hidden > 0
-          ? `+${layout.hidden} more`
+      this.moreText.text =
+        this.tablePages > 1
+          ? `Page ${this.tablePage + 1}/${this.tablePages}`
           : '';
     }
     for (const actor of this.rowActors) {
@@ -1510,22 +1498,29 @@ export class LobbyScene {
     const name = slot.group.gameName.slice(0, 11).toUpperCase();
     const count = String(slot.group.lines.length);
     this.childLabel(actor, 0, 2, name, GOLD, PHONE_LAYOUT ? 12 : 8);
-    this.childLabel(actor, row.w - count.length * 8, 2, count, DIM);
+    this.childLabel(
+      actor,
+      row.w + tableGutter() * 2 - count.length * 8,
+      2,
+      count,
+      DIM,
+    );
     const rule = new ex.Actor({
       pos: ex.vec(0, header.h - 1),
       anchor: ex.vec(0, 0),
     });
     rule.graphics.use(solidRect(row.w, 2, STROKE));
+    stretchLobbyActor(rule, row.w);
     actor.addChild(rule);
+    anchorLobbyActor(actor);
+    stretchLobbyActor(actor, TABLE_LIST.row.w);
     this.scene.add(actor);
     return actor;
   }
 
   private rowActor(slot: Extract<ListSlot, { kind: 'row' }>): ex.Actor {
     const { line } = slot;
-    const row = isMobileDevice()
-      ? { ...TABLE_LIST.row, h: 128 }
-      : TABLE_LIST.row;
+    const row = TABLE_LIST.row;
     const actor = new ex.Actor({
       pos: ex.vec(TABLE_LIST.list.x, slot.y),
       anchor: ex.vec(0, 0),
@@ -1558,26 +1553,16 @@ export class LobbyScene {
     });
     dotActor.graphics.use(dot);
     actor.addChild(dotActor);
-    const titleSize = PHONE_LAYOUT ? 14 : 8;
+    const titleSize = PHONE_LAYOUT ? 12 : 10;
     const titleLimit = Math.floor(
-      (row.w - 24 - (line.seated ? 30 : 0)) / titleSize,
+      (row.w + tableGutter() * 2 - 208) / titleSize,
     );
     const [first, ...rest] = wrapText(line.tableName, titleLimit);
     const title =
       PHONE_LAYOUT && rest.length > 0
         ? `${(first ?? '').slice(0, titleLimit - 3)}...`
         : (first ?? '');
-    this.childLabel(actor, 16, 4, title, GOLD, titleSize);
-    if (!PHONE_LAYOUT && rest.length > 0) {
-      const tail = rest.join(' ');
-      this.childLabel(
-        actor,
-        8,
-        17,
-        tail.length > 15 ? `${tail.slice(0, 12)}...` : tail,
-        GOLD,
-      );
-    }
+    this.childLabel(actor, 16, 12, title, GOLD, titleSize);
     const absence = [...this.connection.db.seatAbsence.iter()].find(
       (a) =>
         a.tableId === line.id &&
@@ -1592,13 +1577,13 @@ export class LobbyScene {
     this.childLabel(
       actor,
       8,
-      PHONE_LAYOUT ? 24 : 30,
+      40,
       absence ? returnLine : `${line.seatsLabel} ${line.statusLabel}`,
       DIM,
-      PHONE_LAYOUT ? 12 : 8,
+      PHONE_LAYOUT ? 10 : 8,
     );
     if (line.seated) {
-      this.seatBadge(actor, row.w - 33, 3);
+      this.seatBadge(actor, 176, 40);
     }
     // The card is informational. Only the two visible buttons accept a tap.
     this.silencePointer(actor);
@@ -1619,6 +1604,8 @@ export class LobbyScene {
       line.watching,
       !line.seated,
     );
+    anchorLobbyActor(actor);
+    stretchLobbyActor(actor, TABLE_LIST.row.w);
     this.scene.add(actor);
     return actor;
   }
@@ -1633,7 +1620,7 @@ export class LobbyScene {
   ): void {
     // Scene actors participate in the shared CSS-pixel touch-target expansion.
     const button = new ex.Actor({
-      pos: row.pos.add(ex.vec(box.x, box.y)),
+      pos: ex.vec(TABLE_LIST.list.x + box.x, row.pos.y + box.y),
       anchor: ex.vec(0, 0),
       width: box.w,
       height: box.h,
@@ -1672,6 +1659,7 @@ export class LobbyScene {
     } else {
       this.silencePointer(button);
     }
+    anchorTableActor(button, 'right', TABLE_LIST.list.x + box.x);
     this.scene.add(button);
     this.rowActors.push(button);
   }
@@ -1771,6 +1759,7 @@ export class LobbyScene {
       actor.pos = ex.vec(x - parent.pos.x, y - parent.pos.y);
       parent.addChild(actor);
     } else {
+      anchorLobbyActor(actor);
       this.scene.add(actor);
     }
     return graphic;
@@ -1853,6 +1842,7 @@ export class LobbyScene {
       actor.pos = ex.vec(box.x - parent.pos.x, box.y - parent.pos.y);
       parent.addChild(actor);
     } else {
+      anchorLobbyActor(actor);
       this.scene.add(actor);
     }
     return actor;

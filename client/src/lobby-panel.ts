@@ -1,3 +1,5 @@
+import { anchorLobbyActor, lobbyFieldGeometry } from './lobby-viewport';
+import { anchorTableActor } from './table-viewport';
 import * as ex from 'excalibur';
 import { isMobileDevice } from './mobile-shell';
 
@@ -145,6 +147,7 @@ function labelActor(
     z: 21,
   });
   actor.graphics.use(graphic);
+  anchorLobbyActor(actor);
   scene.add(actor);
   return graphic;
 }
@@ -162,20 +165,16 @@ export function mountLobbyPanel(
   } = {},
 ): LobbyPanel {
   const backdrop = new ex.Actor({
-    pos: ex.vec(8, 44),
+    pos: ex.vec(8, 80),
     anchor: ex.vec(0, 0),
-    width: PHONE_LAYOUT ? 204 : 144,
-    height: 460,
+    width: 184,
+    height: 424,
     z: 15,
   });
   backdrop.graphics.use(
-    panelRect(
-      PHONE_LAYOUT ? 204 : 144,
-      460,
-      ex.Color.fromHex('#0a2e1c'),
-      STROKE,
-    ),
+    panelRect(184, 424, ex.Color.fromHex('#0a2e1c'), STROKE),
   );
+  anchorLobbyActor(backdrop);
   scene.add(backdrop);
 
   const nameLabel = labelActor(scene, 16, 52, 'Name', 8, DIM);
@@ -205,7 +204,14 @@ export function mountLobbyPanel(
   const errorText = labelActor(scene, 16, 222, '', 8, DANGER);
   const roomLabel = labelActor(scene, 16, 52, '', 8, DIM);
   const roomCode = labelActor(scene, 16, 70, '', 16, GOLD);
-  const playersLabel = labelActor(scene, 16, 100, '', 8, DIM);
+  const playersLabel = labelActor(
+    scene,
+    20,
+    96,
+    '',
+    PHONE_LAYOUT ? 12 : 8,
+    DIM,
+  );
 
   const nameBox = fieldActor(scene, LOBBY_PANEL.nameField);
   const codeBox = fieldActor(scene, LOBBY_PANEL.codeField);
@@ -213,8 +219,8 @@ export function mountLobbyPanel(
   const joinButton = buttonActor(scene, LOBBY_PANEL.joinButton, 'Join');
   const renameLabel = labelActor(
     scene,
-    16,
-    PHONE_LAYOUT ? 350 : 412,
+    20,
+    392,
     'Name',
     PHONE_LAYOUT ? 12 : 8,
     DIM,
@@ -279,6 +285,7 @@ export function mountLobbyPanel(
     text.text = layout.text;
     text.color = GOLD;
     showFieldCaret(caret, showCaret, layout.x, layout.y);
+    anchorTableActor(caret, 'left', layout.x);
   };
 
   const paintFields = (): void => {
@@ -378,8 +385,9 @@ export function mountLobbyPanel(
   const renderLobby = (room: string, lines: MemberLine[]): void => {
     setFormVisible(false);
     errorText.text = '';
-    roomLabel.text = 'Room';
-    roomCode.text = room;
+    roomLabel.text = '';
+    roomCode.text = '';
+    void room;
     playersLabel.text = 'Players';
     for (const actor of nameActors) {
       actor.kill();
@@ -387,18 +395,16 @@ export function mountLobbyPanel(
     nameActors.length = 0;
     for (let index = 0; index < lines.length; index += 1) {
       const line = lines[index];
-      const y = 118 + index * (PHONE_LAYOUT ? 22 : 16);
+      const y = 126 + index * (PHONE_LAYOUT ? 24 : 20);
       if (!line) {
         continue;
       }
-      if (y >= (PHONE_LAYOUT ? 340 : 400)) {
+      if (y >= 372) {
         break;
       }
       const displayName =
-        PHONE_LAYOUT && line.name.length > 13
-          ? `${line.name.slice(0, 12)}…`
-          : line.name;
-      const size = PHONE_LAYOUT ? 12 : 8;
+        line.name.length > 14 ? `${line.name.slice(0, 13)}…` : line.name;
+      const size = PHONE_LAYOUT ? 10 : 8;
       const graphic = canvasText(displayName, size, line.self ? SELF : GOLD);
       const actor = new ex.Actor({
         pos: ex.vec(16, y),
@@ -406,6 +412,7 @@ export function mountLobbyPanel(
         z: 21,
       });
       actor.graphics.use(graphic);
+      anchorLobbyActor(actor);
       scene.add(actor);
       nameActors.push(actor);
       let markerX = 16 + displayName.length * size + 4;
@@ -415,6 +422,7 @@ export function mountLobbyPanel(
           y + Math.floor((size - HEADSET_HEIGHT) / 2) + 1,
           21,
         );
+        anchorLobbyActor(headset);
         scene.add(headset);
         nameActors.push(headset);
         markerX += HEADSET_WIDTH + 4;
@@ -427,6 +435,7 @@ export function mountLobbyPanel(
         line.id,
         () => speaking.has(line.id),
       );
+      anchorLobbyActor(bubble);
       scene.add(bubble);
       nameActors.push(bubble);
     }
@@ -680,7 +689,7 @@ export function mountLobbyPanel(
   formInputs.rename = bindCanvasTextField({
     id: 'lobby-rename',
     label: 'Your Name',
-    box: LOBBY_PANEL.renameField,
+    box: lobbyFieldGeometry(LOBBY_PANEL.renameField, 'left'),
     maxLength: NAME_MAX,
     active: () => sceneActive() && !formVisible && joinedCode.length > 0,
     read: () => renameName,
@@ -704,7 +713,7 @@ export function mountLobbyPanel(
     },
     enterKeyHint: 'done',
     autoCapitalize: 'words',
-    metrics: renameMetrics,
+    metrics: lobbyFieldGeometry(renameMetrics, 'left'),
     onCaret: () => {
       paintRename();
     },
@@ -862,6 +871,7 @@ function fieldActor(
     z: 20,
   });
   actor.graphics.use(panelRect(box.w, box.h, FIELD, STROKE));
+  anchorLobbyActor(actor);
   scene.add(actor);
   return actor;
 }
@@ -905,6 +915,7 @@ function buttonActor(
     face.color = BUTTON;
     captionActor.pos = ex.vec(rest.x, rest.y);
   });
+  anchorLobbyActor(actor);
   scene.add(actor);
   return actor;
 }

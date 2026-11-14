@@ -161,16 +161,15 @@ describe('hand hover lift', () => {
     placeCardLift(actor, 200, 500, 10, 20, true);
     expect(actor.pos.x).toBe(200);
     expect(actor.pos.y).toBe(500);
-    const frame = actor.children[0] as ex.Actor;
-    expect(frame.graphics.isVisible).toBe(true);
-    expect(frame.pointer.useColliderShape).toBe(false);
+    expect(actor.children).toHaveLength(0);
+    expect(actor.graphics.offset.y).toBe(-32);
     resetCardLift(actor);
-    expect(frame.graphics.isVisible).toBe(false);
+    expect(actor.graphics.offset.y).toBe(0);
     expect(actor.graphics.current?.scale.y).toBe(1);
     expect(actor.pos.y).toBe(500);
-    placeCardLift(actor, 200, 500, 10, 20, true);
+    placeCardLift(actor, 200, 500, 10, 0, true);
+    expect(actor.graphics.offset.y).toBe(-12);
     placeCardLift(actor, 200, 500, 10, 0, false);
-    expect(frame.graphics.isVisible).toBe(false);
     expect(actor.graphics.offset.y).toBe(0);
     expect(inspectionPose(20, true, true).lift).toBeGreaterThan(
       inspectionPose(20, true).lift,

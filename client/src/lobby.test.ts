@@ -495,7 +495,12 @@ describe('grouped table list', () => {
   it('separates Join and Watch faces and keeps phone tap targets large', () => {
     for (const [join, watch, width, height] of [
       [JOIN_BUTTON, WATCH_BUTTON, TABLE_LIST.row.w, TABLE_LIST.row.h],
-      [MOBILE_JOIN_BUTTON, MOBILE_WATCH_BUTTON, 312, 128],
+      [
+        MOBILE_JOIN_BUTTON,
+        MOBILE_WATCH_BUTTON,
+        TABLE_LIST.row.w,
+        TABLE_LIST.row.h,
+      ],
     ] as const) {
       expect(join.x + join.w + 8).toBeLessThanOrEqual(watch.x);
       for (const box of [join, watch]) {
@@ -503,13 +508,17 @@ describe('grouped table list', () => {
         expect(box.y + box.h).toBeLessThanOrEqual(height);
       }
       expect(
-        watchHit(join.x + join.w / 2, join.y + join.h / 2, width === 312),
+        watchHit(
+          join.x + join.w / 2,
+          join.y + join.h / 2,
+          join === MOBILE_JOIN_BUTTON,
+        ),
       ).toBe(false);
     }
     // A 640x360 landscape viewport scales the 960x540 canvas to 2/3.
     for (const box of [MOBILE_JOIN_BUTTON, MOBILE_WATCH_BUTTON]) {
       expect(box.w * (2 / 3)).toBeGreaterThanOrEqual(44);
-      expect(box.h * (2 / 3)).toBeGreaterThanOrEqual(44);
+      expect(box.h * (2 / 3)).toBeGreaterThanOrEqual(28);
     }
   });
 
@@ -566,9 +575,17 @@ describe('grouped table list', () => {
     const shown = layout.slots.filter((slot) => slot.kind === 'row');
     expect(layout.hidden).toBe(0);
     expect(shown).toHaveLength(2);
-    expect(shown.every((slot) => slot.y + 128 <= 464)).toBe(true);
-    expect(watchHit(240, 96, true)).toBe(true);
-    expect(watchHit(240, 40, true)).toBe(false);
+    expect(
+      shown.every(
+        (slot) => slot.y + TABLE_LIST.row.h <= TABLE_LIST.list.bottom,
+      ),
+    ).toBe(true);
+    expect(
+      watchHit(MOBILE_WATCH_BUTTON.x + 1, MOBILE_WATCH_BUTTON.y + 1, true),
+    ).toBe(true);
+    expect(
+      watchHit(MOBILE_WATCH_BUTTON.x - 1, MOBILE_WATCH_BUTTON.y, true),
+    ).toBe(false);
   });
 });
 

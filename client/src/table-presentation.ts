@@ -2,7 +2,7 @@ import { BUTTON_HEIGHT } from './button-style';
 import { isMobileDevice } from './mobile-shell';
 
 const PHONE_LAYOUT = typeof window !== 'undefined' && isMobileDevice();
-const ACTION_HEIGHT = PHONE_LAYOUT ? 64 : BUTTON_HEIGHT;
+const ACTION_HEIGHT = PHONE_LAYOUT ? 48 : BUTTON_HEIGHT;
 import {
   HOW_TO_PLAY_BUTTON,
   LEAVE_TABLE_BUTTON,
@@ -35,7 +35,7 @@ const PLAYING_SURFACE_ROWS = 74;
 export const FELT_BOTTOM =
   TABLE_SPRITE_TOP + PLAYING_SURFACE_ROWS * TABLE_SCALE;
 
-export const CLUSTER_GAP = 4;
+export const CLUSTER_GAP = PHONE_LAYOUT ? 8 : 4;
 export const CLUSTER_COLUMNS = 2;
 export const CLUSTER_BUTTON_W = 96;
 const CLUSTER_MARGIN = 8;
@@ -45,15 +45,15 @@ const CLUSTER_WIDTH =
 /** Top-left of the two-across action grid, below the felt and at the right. */
 export const ACTION_CLUSTER = {
   x: LOGICAL_WIDTH - CLUSTER_MARGIN - CLUSTER_WIDTH,
-  y: PHONE_LAYOUT ? 332 : FELT_BOTTOM,
+  y: PHONE_LAYOUT ? 364 : FELT_BOTTOM,
   w: CLUSTER_WIDTH,
-  h: LOGICAL_HEIGHT - (PHONE_LAYOUT ? 332 : FELT_BOTTOM),
+  h: LOGICAL_HEIGHT - (PHONE_LAYOUT ? 364 : FELT_BOTTOM),
 } as const;
 
 /** Short turn line just above the cluster. */
 export const TURN_LINE = {
   x: ACTION_CLUSTER.x,
-  y: ACTION_CLUSTER.y - 12,
+  y: ACTION_CLUSTER.y - 28,
 } as const;
 
 /** Desktop pickers stay above the local nameplate and left of the cluster. */

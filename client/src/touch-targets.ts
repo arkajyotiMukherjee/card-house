@@ -126,16 +126,17 @@ interface Tracked {
 
 const faces = new WeakMap<ex.Actor, { w: number; h: number }>();
 
-function onScreen(box: TouchBox): boolean {
+function onScreen(box: TouchBox, logicalWidth: number): boolean {
+  const gutter = (logicalWidth - LOGICAL_WIDTH) / 2;
   return (
-    box.x + box.w > 0 &&
+    box.x + box.w > -gutter &&
     box.y + box.h > 0 &&
-    box.x < LOGICAL_WIDTH &&
+    box.x < LOGICAL_WIDTH + gutter &&
     box.y < LOGICAL_HEIGHT
   );
 }
 
-function collect(scene: ex.Scene): Tracked[] {
+function collect(scene: ex.Scene, logicalWidth: number): Tracked[] {
   const found: Tracked[] = [];
   for (const actor of scene.actors) {
     if (actor.isKilled() || !actor.graphics.isVisible) {
@@ -169,7 +170,7 @@ function collect(scene: ex.Scene): Tracked[] {
       w: size.w,
       h: size.h,
     };
-    if (!onScreen(face)) {
+    if (!onScreen(face, logicalWidth)) {
       continue;
     }
     found.push({ actor, face, anchor: actor.anchor });
@@ -221,7 +222,7 @@ export function installTouchTargets(
       return;
     }
     const scene = engine.currentScene;
-    const tracked = collect(scene);
+    const tracked = collect(scene, engine.screen.resolution.width);
     const rect = engine.canvas.getBoundingClientRect();
     const minimum = logicalTouchTarget(rect.width, rect.height);
     const next = `${minimum}:${signature(tracked)}`;

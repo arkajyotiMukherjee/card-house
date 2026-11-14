@@ -11,6 +11,8 @@ import {
   comparePokerScores,
   pokerAdvanceKind,
   pokerBlindMark,
+  pokerBetRange,
+  pokerRaiseRange,
   pokerGameDefinition,
   pokerHoleFaceUp,
   pokerRules,
@@ -952,6 +954,98 @@ assert(runoutShowdown.phase === 'finished', 'showdown follows the river');
 assert(runoutShowdown.end === 'showdown', 'an all-in runout shows down');
 assert(pokerHoleFaceUp(runoutShowdown, 0), 'both all-in seats are shown');
 assert(pokerHoleFaceUp(runoutShowdown, 1), 'the caller is shown');
+
+// Unequal stacks must run out once the only other live seat is all-in.
+const shortStack = structuredClone(dealt);
+shortStack.seats['0']!.chips = 90;
+shortStack.seats['1']!.chips = 1880;
+const shortShove = pokerRules.applyIntent(
+  shortStack,
+  { type: 'raise', amount: 100 },
+  context(0),
+);
+assert(
+  pokerRaiseRange(shortShove, 1) === null,
+  'cannot raise a heads-up all-in',
+);
+assert(
+  !pokerHoleFaceUp(shortShove, 0),
+  'cards stay down while a call is pending',
+);
+rejects(
+  () =>
+    pokerRules.applyIntent(
+      shortShove,
+      { type: 'raise', amount: 200 },
+      context(1),
+    ),
+  'Invalid intent',
+);
+let shortRunout = pokerRules.applyIntent(
+  shortShove,
+  { type: 'call' },
+  context(1),
+);
+assert(
+  shortRunout.step === 'runout' && shortRunout.turnSeatIndex === null,
+  'a funded caller has no extra check turns',
+);
+assert(shortRunout.seats['1']!.chips === 1800, 'only the call is charged');
+assert(
+  pokerHoleFaceUp(shortRunout, 0) && pokerHoleFaceUp(shortRunout, 1),
+  'both live hands reveal as soon as betting closes',
+);
+while (shortRunout.phase === 'play') {
+  assert(
+    shortRunout.turnSeatIndex === null,
+    'runout never asks for another check',
+  );
+  shortRunout = advancePoker(shortRunout, table(), [0, 1]);
+}
+assert(
+  shortRunout.board.length === 5 && chipSum(shortRunout) === 2000,
+  'runout reveals the board and conserves chips',
+);
+for (const variation of POKER_VARIATIONS) {
+  const snapshot = pokerRules.initialState(pair, table(variation));
+  const deadBet = structuredClone(snapshot);
+  deadBet.seats['1']!.chips = 0;
+  deadBet.seats['1']!.allIn = true;
+  deadBet.currentBet = 0;
+  deadBet.seats['0']!.streetBet = 0;
+  assert(
+    pokerBetRange(deadBet, 0) === null,
+    'no opening bet against an all-in opponent',
+  );
+  rejects(
+    () =>
+      pokerRules.applyIntent(deadBet, { type: 'bet', amount: 20 }, context(0)),
+    'Invalid intent',
+  );
+  const won = pokerRules.applyIntent(
+    snapshot,
+    { type: 'fold' },
+    context(snapshot.turnSeatIndex!),
+  );
+  assert(
+    won.board.length === 5,
+    'fold winner reveals all community cards in every variation',
+  );
+  assert(
+    chipSum(won) === 2000,
+    'revealing a fold board does not change the payout',
+  );
+}
+const sidePlayable = pokerRules.initialState(
+  [seat(0), seat(1), seat(2)],
+  table(),
+);
+sidePlayable.seats['2']!.chips = 0;
+sidePlayable.seats['2']!.allIn = true;
+assert(
+  pokerRaiseRange(sidePlayable, sidePlayable.turnSeatIndex!) !== null,
+  'two funded players may still contest a side pot',
+);
 
 console.log(
   JSON.stringify({

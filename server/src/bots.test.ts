@@ -15,7 +15,10 @@ import {
   type CrazyEightsIntent,
   type CrazyEightsState,
 } from '../../src/shared/games/crazy-eights.ts';
-import { goFishRules, readGoFishState } from '../../src/shared/games/go-fish.ts';
+import {
+  goFishRules,
+  readGoFishState,
+} from '../../src/shared/games/go-fish.ts';
 import { heartsRules } from '../../src/shared/games/hearts.ts';
 import {
   pokerRules,
@@ -353,7 +356,7 @@ function pokerSpot(overrides: Partial<PokerState> = {}): PokerState {
     street: 'preflop',
     step: 'bet',
     handNumber: 1,
-    deck: [],
+    deck: ['3S', '4S', '5S', '6S', '8S'],
     board: [],
     seats: {},
     order: [0, 1, 2],

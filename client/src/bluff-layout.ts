@@ -25,6 +25,9 @@ export const CARD_DRAW = 64;
 export const HOVER_LIFT = 20;
 export const PILE_X = 480;
 export const PILE_Y = 268;
+/** Below top fans/nameplates; above the pile and all hand-card layers. */
+export const WINNER_BANNER_Y = 190;
+export const WINNER_BANNER_Z = 90;
 
 export { TABLE_CENTER } from './table-presentation';
 
@@ -355,9 +358,9 @@ export function finishedLine(
   const seat = seats.find((row) => row.seatIndex === seatIndex);
   const name = seat?.name ?? '';
   if (name.length > 0) {
-    return `Winner seat ${seatIndex} ${name}`;
+    return `Winner is ${name}`;
   }
-  return `Winner seat ${seatIndex}`;
+  return 'Winner';
 }
 
 /** True when this pile card is one the local seat just played. */

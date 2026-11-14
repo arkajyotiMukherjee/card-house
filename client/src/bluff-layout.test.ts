@@ -331,7 +331,7 @@ describe('bluff layout', () => {
         { ...playState(1), phase: 'finished', winnerSeatIndex: 0 },
         seats,
       ),
-    ).toBe('Winner seat 0 Ada');
+    ).toBe('Winner is Ada');
     expect(
       finishedLine(
         { ...playState(null), phase: 'finished', winnerSeatIndex: null },
@@ -354,4 +354,18 @@ it('groups matching ranks without mutating the dealt hand or losing jokers', asy
     'JR',
   ]);
   expect(cards).toEqual(['KH', '2S', 'AC', 'JB', '2D', '10H', 'JR']);
+});
+
+it('keeps the winner below even a full-deck opponent fan and above the pile', async () => {
+  const { WINNER_BANNER_Y, WINNER_BANNER_Z, PILE_Y } =
+    await import('./bluff-layout');
+  const { seatFan, fanCardRect } = await import('./table-presentation');
+  for (const count of [2, 13, 27, 54]) {
+    for (const slot of seatFan(480, 96, count, 'Sani Kumar')) {
+      const card = fanCardRect(slot);
+      expect(card.y + card.h).toBeLessThan(WINNER_BANNER_Y);
+    }
+  }
+  expect(WINNER_BANNER_Y + 32).toBeLessThan(PILE_Y - 32);
+  expect(WINNER_BANNER_Z).toBeGreaterThan(4 + 54);
 });

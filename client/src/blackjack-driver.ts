@@ -1,3 +1,4 @@
+import { anchorTableActor } from './table-viewport';
 import { bindButtonPress } from './button-press';
 import { isMobileDevice } from './mobile-shell';
 import * as ex from 'excalibur';
@@ -765,6 +766,7 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
         this.handleInput({ type: 'pointerup', target }, state, current);
       },
     );
+    if (box.x >= 750 && box.y >= 300) anchorTableActor(actor, 'right', box.x);
     ctx.scene.add(actor);
     this.buttons.push({ actor, box, group, target, face, caption });
   }
@@ -805,6 +807,8 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
       z: 14,
     });
     actor.graphics.use(canvasText(text, 8, color));
+    if (x === TURN_LINE.x && y === TURN_LINE.y)
+      anchorTableActor(actor, 'right');
     ctx.scene.add(actor);
     return actor;
   }

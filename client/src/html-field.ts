@@ -1,3 +1,4 @@
+import { centeredFrameRect } from './table-viewport';
 import { BUTTON_CAPTION_RASTER } from './button-style';
 import { isMobileDevice } from './mobile-shell';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from './sheets';
@@ -525,7 +526,10 @@ function placeField(entry: FieldEntry): void {
     hideField(input);
     return;
   }
-  const screen = logicalBoxToScreen(canvas.getBoundingClientRect(), field.box);
+  const screen = logicalBoxToScreen(
+    centeredFrameRect(canvas.getBoundingClientRect()),
+    field.box,
+  );
   if (screen.width <= 0 || screen.height <= 0) {
     entry.placedKey = 'off';
     hideField(input);
@@ -604,7 +608,11 @@ function placeCaretAtPoint(entry: FieldEntry, clientX: number): void {
   if (!canvas) {
     return;
   }
-  const logical = screenToLogical(canvas.getBoundingClientRect(), clientX, 0);
+  const logical = screenToLogical(
+    centeredFrameRect(canvas.getBoundingClientRect()),
+    clientX,
+    0,
+  );
   const anchor =
     entry.pointerAnchor >= 0 ? entry.pointerAnchor : caretIndexOf(entry.input);
   entry.pointerAnchor = -1;
@@ -678,7 +686,9 @@ function syncFields(): void {
     return;
   }
   const canvas = gameCanvas();
-  const rect = canvas?.getBoundingClientRect();
+  const rect = canvas
+    ? centeredFrameRect(canvas.getBoundingClientRect())
+    : undefined;
   for (const entry of fields) {
     const { field } = entry;
     if (!field.active() || !rect) {
@@ -716,7 +726,7 @@ function focusCanvasFieldFromTouch(event: TouchEvent): void {
     return;
   }
   const { x, y } = screenToLogical(
-    canvas.getBoundingClientRect(),
+    centeredFrameRect(canvas.getBoundingClientRect()),
     touch.clientX,
     touch.clientY,
   );
@@ -840,7 +850,7 @@ function updateLift(): void {
     return;
   }
   const screen = logicalBoxToScreen(
-    canvas.getBoundingClientRect(),
+    centeredFrameRect(canvas.getBoundingClientRect()),
     focused.field.box,
   );
   setLift(

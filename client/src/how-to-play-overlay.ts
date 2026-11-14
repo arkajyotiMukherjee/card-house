@@ -1,3 +1,8 @@
+import {
+  anchorTableActor,
+  TABLE_VIEWPORT_MAX_WIDTH,
+  TABLE_BACKDROP_LEFT,
+} from './table-viewport';
 import { bindButtonPress } from './button-press';
 import * as ex from 'excalibur';
 import {
@@ -23,7 +28,7 @@ import {
   HOW_TO_PLAY_TEXT,
 } from './game-scene';
 import { clampScroll, definitionFor, layoutHowToPlay } from './how-to-play';
-import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from './sheets';
+import { LOGICAL_HEIGHT } from './sheets';
 import { isMobileDevice } from './mobile-shell';
 
 const BACKDROP = new ex.Color(0, 0, 0, 0.65);
@@ -69,6 +74,7 @@ export class HowToPlayOverlay {
       HOW_TO_PLAY_BUTTON.x,
       available ? HOW_TO_PLAY_BUTTON.y : OFFSCREEN_Y,
     );
+    anchorTableActor(this.button, 'right', HOW_TO_PLAY_BUTTON.x);
     if (!available && this.opened) {
       this.close();
     }
@@ -180,6 +186,7 @@ export class HowToPlayOverlay {
       },
       () => this.toggle(),
     );
+    anchorTableActor(actor, 'right', box.x);
     this.scene.add(actor);
     return actor;
   }
@@ -189,14 +196,14 @@ export class HowToPlayOverlay {
     const text = HOW_TO_PLAY_TEXT;
 
     const backdrop = new ex.Actor({
-      pos: ex.vec(0, 0),
+      pos: ex.vec(TABLE_BACKDROP_LEFT, 0),
       anchor: ex.vec(0, 0),
-      width: LOGICAL_WIDTH,
+      width: TABLE_VIEWPORT_MAX_WIDTH,
       height: LOGICAL_HEIGHT,
       z: Z_BACKDROP,
     });
     const dim = new ex.Rectangle({
-      width: LOGICAL_WIDTH,
+      width: TABLE_VIEWPORT_MAX_WIDTH,
       height: LOGICAL_HEIGHT,
       color: BACKDROP,
       smoothing: false,

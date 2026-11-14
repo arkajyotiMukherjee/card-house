@@ -16,7 +16,6 @@ import {
 import type { GameDefinition } from '../../src/shared/games/game-definition';
 import { PLAYER_NAME_MAX } from '../../src/shared/discord-player-name';
 import { BUTTON_HEIGHT } from './button-style';
-import { CHAT_TEXT } from './chat-layout';
 import { isMobileDevice } from './mobile-shell';
 
 const PHONE_LAYOUT = typeof window !== 'undefined' && isMobileDevice();
@@ -30,16 +29,16 @@ export const LOBBY_PANEL = {
   createButton: { x: 16, y: 152, w: 128, h: BUTTON_HEIGHT },
   joinButton: { x: 16, y: 186, w: 128, h: BUTTON_HEIGHT },
   renameField: {
-    x: 16,
-    y: PHONE_LAYOUT ? 370 : 428,
-    w: PHONE_LAYOUT ? 188 : 128,
-    h: PHONE_LAYOUT ? 64 : 24,
+    x: 20,
+    y: 412,
+    w: 160,
+    h: PHONE_LAYOUT ? 40 : 24,
   },
   saveButton: {
-    x: 16,
-    y: PHONE_LAYOUT ? 438 : 458,
-    w: PHONE_LAYOUT ? 188 : 128,
-    h: PHONE_LAYOUT ? 48 : BUTTON_HEIGHT,
+    x: 20,
+    y: 464,
+    w: 160,
+    h: PHONE_LAYOUT ? 32 : BUTTON_HEIGHT,
   },
 } as const;
 
@@ -143,31 +142,20 @@ export interface ListLayout {
   hidden: number;
 }
 
-export const TABLE_LIST = PHONE_LAYOUT
-  ? ({
-      panel: { x: 624, y: 76, w: 328, h: 460 },
-      create: { x: 632, y: 80, w: 312, h: 48 },
-      list: { x: 632, y: 150, bottom: 464 },
-      header: { h: 18, gap: 4 },
-      row: { w: 312, h: 128, gap: 4 },
-      more: { x: 632, y: 468 },
-      error: { x: 632, y: 508 },
-    } as const)
-  : ({
-      panel: { x: 800, y: 44, w: 152, h: 460 },
-      create: { x: 808, y: 70, w: 136, h: BUTTON_HEIGHT },
-      list: { x: 808, y: 108, bottom: 468 },
-      header: { h: 14, gap: 4 },
-      row: { w: 136, h: 84, gap: 8 },
-      more: { x: 808, y: 468 },
-      error: { x: 808, y: 480 },
-    } as const);
+export const TABLE_LIST = {
+  panel: { x: 208, y: 80, w: 432, h: 424 },
+  create: { x: 488, y: 92, w: 140, h: PHONE_LAYOUT ? 40 : BUTTON_HEIGHT },
+  list: { x: 220, y: 148, bottom: 458 },
+  header: { h: 18, gap: 4 },
+  row: { w: 408, h: 72, gap: 8 },
+  more: { x: 220, y: 478 },
+  error: { x: 220, y: 514 },
+} as const;
 
-/** Separate action faces with a clear gap; phone sizes are logical canvas pixels. */
-export const JOIN_BUTTON = { x: 6, y: 48, w: 58, h: 28 } as const;
-export const WATCH_BUTTON = { x: 72, y: 48, w: 58, h: 28 } as const;
-export const MOBILE_JOIN_BUTTON = { x: 12, y: 48, w: 136, h: 66 } as const;
-export const MOBILE_WATCH_BUTTON = { x: 164, y: 48, w: 136, h: 66 } as const;
+export const JOIN_BUTTON = { x: 232, y: 22, w: 80, h: BUTTON_HEIGHT } as const;
+export const WATCH_BUTTON = { x: 320, y: 22, w: 80, h: BUTTON_HEIGHT } as const;
+export const MOBILE_JOIN_BUTTON = { x: 232, y: 18, w: 80, h: 44 } as const;
+export const MOBILE_WATCH_BUTTON = { x: 320, y: 18, w: 80, h: 44 } as const;
 
 export function watchHit(
   localX: number,
@@ -183,30 +171,26 @@ export function watchHit(
   );
 }
 
-export const CHAT_PANEL = PHONE_LAYOUT
-  ? ({
-      panel: { x: 222, y: 68, w: 392, h: 436 },
-      title: { x: 230, y: 76, size: CHAT_TEXT.phone.size },
-      list: { x: 230, y: 102, bottom: 426, ...CHAT_TEXT.phone },
-      field: { x: 230, y: 438, w: 268, h: 64 },
-      send: { x: 506, y: 438, w: 100, h: 64 },
-    } as const)
-  : ({
-      panel: { x: 170, y: 68, w: 620, h: 380 },
-      /** Sits above the first message so the heading glyphs do not cover it. */
-      title: { x: 178, y: 76, size: CHAT_TEXT.desktop.size },
-      list: { x: 178, y: 98, bottom: 436, ...CHAT_TEXT.desktop },
-      field: { x: 178, y: 440, w: 500, h: BUTTON_HEIGHT },
-      send: { x: 686, y: 440, w: 96, h: BUTTON_HEIGHT },
-    } as const);
+export const CHAT_PANEL = {
+  panel: { x: 656, y: 80, w: 296, h: 424 },
+  title: { x: 668, y: 96, size: PHONE_LAYOUT ? 12 : 8 },
+  list: {
+    x: 668,
+    y: 124,
+    bottom: 432,
+    size: PHONE_LAYOUT ? 10 : 8,
+    lineHeight: 18,
+  },
+  field: { x: 668, y: 448, w: 200, h: PHONE_LAYOUT ? 44 : BUTTON_HEIGHT },
+  send: { x: 876, y: 448, w: 64, h: PHONE_LAYOUT ? 44 : BUTTON_HEIGHT },
+} as const;
 
 export const CHAT_BODY_MAX = 240;
-
 export const LEAVE_ROOM = {
-  x: PHONE_LAYOUT ? 624 : 800,
-  y: 8,
-  w: PHONE_LAYOUT ? 328 : 152,
-  h: PHONE_LAYOUT ? 48 : BUTTON_HEIGHT,
+  x: 812,
+  y: 16,
+  w: 140,
+  h: PHONE_LAYOUT ? 40 : BUTTON_HEIGHT,
 } as const;
 
 export const LEAVE_CONFIRM = PHONE_LAYOUT
@@ -316,9 +300,9 @@ export function chatLines(
 }
 
 export const ROOM_BANNER = {
-  panel: { x: 380, y: 6, w: 200, h: 54 },
-  title: { size: 8, y: 12 },
-  code: { size: 24, y: 28 },
+  panel: { x: 8, y: 16, w: 184, h: 48 },
+  title: { size: 8, y: 22 },
+  code: { size: 20, y: 38 },
 } as const;
 
 export const DISCORD_BADGE = {
@@ -720,13 +704,11 @@ export function tableGroups(lines: Iterable<TableLine>): TableGroup[] {
 /** Stacks group headers and rows from the list top. Rows that would run past `bottom` are counted in `hidden`. */
 export function listLayout(
   groups: readonly TableGroup[],
-  mobile = false,
+  _mobile = false,
 ): ListLayout {
   const { header } = TABLE_LIST;
-  const list = mobile
-    ? { ...TABLE_LIST.list, y: 150, bottom: 464 }
-    : TABLE_LIST.list;
-  const row = mobile ? { ...TABLE_LIST.row, h: 128 } : TABLE_LIST.row;
+  const list = TABLE_LIST.list;
+  const row = TABLE_LIST.row;
   const slots: ListSlot[] = [];
   let y: number = list.y;
   let hidden = 0;

@@ -10,26 +10,26 @@ import { isMobileDevice } from './mobile-shell';
 const PHONE_LAYOUT = typeof window !== 'undefined' && isMobileDevice();
 
 export const LEAVE_TABLE_BUTTON = {
-  x: 16,
+  x: 8,
   y: 16,
-  w: 168,
-  h: PHONE_LAYOUT ? 64 : BUTTON_HEIGHT,
+  w: PHONE_LAYOUT ? 140 : 168,
+  h: PHONE_LAYOUT ? 44 : BUTTON_HEIGHT,
 } as const;
 
 /** The `?` control, top right. Opens the per-game How to Play overlay. */
 export const HOW_TO_PLAY_BUTTON = {
-  x: PHONE_LAYOUT ? 888 : 916,
+  x: PHONE_LAYOUT ? 908 : 900,
   y: 16,
-  w: PHONE_LAYOUT ? 64 : BUTTON_HEIGHT,
-  h: PHONE_LAYOUT ? 64 : BUTTON_HEIGHT,
+  w: PHONE_LAYOUT ? 44 : 52,
+  h: PHONE_LAYOUT ? 44 : 52,
 } as const;
 
 /** The `Chat` control, top center. Opens the per-table chat overlay. */
 export const TABLE_CHAT_BUTTON = {
-  x: 200,
+  x: PHONE_LAYOUT ? 160 : 192,
   y: 16,
-  w: PHONE_LAYOUT ? 96 : 64,
-  h: PHONE_LAYOUT ? 64 : BUTTON_HEIGHT,
+  w: PHONE_LAYOUT ? 80 : 64,
+  h: PHONE_LAYOUT ? 44 : BUTTON_HEIGHT,
 } as const;
 
 /** How to Play window, centered on the 960×540 canvas. */

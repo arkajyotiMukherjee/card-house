@@ -1,3 +1,4 @@
+import { anchorTableActor } from './table-viewport';
 import { bindButtonPress } from './button-press';
 import { isMobileDevice } from './mobile-shell';
 import * as ex from 'excalibur';
@@ -29,6 +30,8 @@ import {
   cardLift,
   faceForCard,
   finishedLine,
+  WINNER_BANNER_Y,
+  WINNER_BANNER_Z,
   handPositions,
   orderedBluffHand,
   leadRankHint,
@@ -557,7 +560,7 @@ export class BluffDriver implements GameDriver<BluffState> {
     }
     if (state.phase === 'finished') {
       const line = finishedLine(state, ctx.seats) ?? 'Finished';
-      this.labels.push(this.banner(ctx, line));
+      this.labels.push(this.banner(ctx, line, WINNER_BANNER_Y));
       return;
     }
     const turn = turnLine(state, ctx.meSeatIndex);
@@ -1163,7 +1166,7 @@ export class BluffDriver implements GameDriver<BluffState> {
       anchor: ex.vec(0, 0),
       width,
       height: size + 16,
-      z: 16,
+      z: y === WINNER_BANNER_Y ? WINNER_BANNER_Z : 16,
     });
     actor.graphics.use(panelRect(width, size + 16, BUTTON, STROKE));
     const caption = new ex.Actor({
@@ -1263,6 +1266,7 @@ export class BluffDriver implements GameDriver<BluffState> {
         this.handleInput({ type: 'pointerup', target }, state, current);
       },
     );
+    if (box.x >= 750 && box.y >= 300) anchorTableActor(actor, 'right', box.x);
     ctx.scene.add(actor);
     this.buttons.push(actor);
     return {

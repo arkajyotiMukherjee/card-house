@@ -6,6 +6,10 @@ import {
 } from '../../src/shared/games/poker';
 import { handPositions } from './bluff-layout';
 import { CHIP_HEIGHT } from './sheets';
+import { isMobileDevice } from './mobile-shell';
+
+export const BOARD_SCALE =
+  typeof window !== 'undefined' && isMobileDevice() ? 1.25 : 1;
 import {
   FELT_BOTTOM,
   actionBox,
@@ -15,7 +19,7 @@ import {
   seatPlateWidth,
 } from './table-presentation';
 
-export const BOARD_STEP = 70;
+export const BOARD_STEP = 70 * BOARD_SCALE;
 export const BOARD_SLOTS = 5;
 /** Half the card closes, then the face opens. Short enough to finish before the next street. */
 export const BOARD_FLIP_MS = 280;
@@ -129,16 +133,13 @@ export function blindChipLine(
   chips: { x: number; y: number };
 } {
   if (self) {
-    const base = {
-      x: Math.round(seatX + seatPlateWidth(name) / 2 + 6),
-      y: seatY + 6,
-    };
+    const base = { x: 16, y: 518 };
     if (!mark) {
       return { mark: null, chips: base };
     }
     return {
       mark: base,
-      chips: { x: base.x + mark.length * fontSize + 4, y: base.y },
+      chips: { x: base.x + mark.length * fontSize + 8, y: base.y },
     };
   }
   const chipsAt = fanGapLine(seatX, seatY, name, chips, 0, fontSize);
