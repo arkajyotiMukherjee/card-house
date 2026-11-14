@@ -1,0 +1,297 @@
+[
+  {
+    "name": "grants-rejoin-ownership",
+    "data": {
+      "room": "3XUL",
+      "grant": 5000,
+      "repeatGrant": false,
+      "spoofRejected": true
+    }
+  },
+  {
+    "name": "reservations-and-atomic-create",
+    "data": {
+      "refund": true,
+      "insufficientCreationRolledBack": true
+    }
+  },
+  {
+    "name": "pool-bluff",
+    "data": {
+      "turns": 109,
+      "settlement": [
+        {
+          "seatIndex": 0,
+          "walletId": "member_lobby_c2007d32def7c7f68c68bd2c4055492a85169affd12fe2e1a26b633fb68181a2_1794662390385337_8566de1c-abf4-4bfb-aef4-33d74e588dc8",
+          "name": "Alice",
+          "profit": "-200",
+          "won": false,
+          "refunded": false
+        },
+        {
+          "seatIndex": 1,
+          "walletId": "member_lobby_c2007d32def7c7f68c68bd2c4055492a85169affd12fe2e1a26b633fb68181a2_1794662390385337_7d07e7fc-f726-4a59-81ed-aacfe9c30b42",
+          "name": "Bob",
+          "profit": "200",
+          "won": true,
+          "refunded": false
+        }
+      ]
+    }
+  },
+  {
+    "name": "pool-president",
+    "data": {
+      "turns": 65,
+      "settlement": [
+        {
+          "seatIndex": 0,
+          "walletId": "member_lobby_c2007d32def7c7f68c68bd2c4055492a85169affd12fe2e1a26b633fb68181a2_1794662390385337_8566de1c-abf4-4bfb-aef4-33d74e588dc8",
+          "name": "Alice",
+          "profit": "-200",
+          "won": false,
+          "refunded": false
+        },
+        {
+          "seatIndex": 1,
+          "walletId": "member_lobby_c2007d32def7c7f68c68bd2c4055492a85169affd12fe2e1a26b633fb68181a2_1794662390385337_7d07e7fc-f726-4a59-81ed-aacfe9c30b42",
+          "name": "Bob",
+          "profit": "-200",
+          "won": false,
+          "refunded": false
+        },
+        {
+          "seatIndex": 2,
+          "walletId": "member_lobby_c2007d32def7c7f68c68bd2c4055492a85169affd12fe2e1a26b633fb68181a2_1794662390385337_e4f1af82-3287-415b-8e07-9453910fdf40",
+          "name": "Casey",
+          "profit": "400",
+          "won": true,
+          "refunded": false
+        }
+      ]
+    }
+  },
+  {
+    "name": "pool-go_fish",
+    "data": {
+      "turns": 53,
+      "settlement": [
+        {
+          "seatIndex": 0,
+          "walletId": "member_lobby_c2007d32def7c7f68c68bd2c4055492a85169affd12fe2e1a26b633fb68181a2_1794662390385337_8566de1c-abf4-4bfb-aef4-33d74e588dc8",
+          "name": "Alice",
+          "profit": "-200",
+          "won": false,
+          "refunded": false
+        },
+        {
+          "seatIndex": 1,
+          "walletId": "member_lobby_c2007d32def7c7f68c68bd2c4055492a85169affd12fe2e1a26b633fb68181a2_1794662390385337_7d07e7fc-f726-4a59-81ed-aacfe9c30b42",
+          "name": "Bob",
+          "profit": "200",
+          "won": true,
+          "refunded": false
+        }
+      ]
+    }
+  },
+  {
+    "name": "pool-crazy_eights",
+    "data": {
+      "turns": 142,
+      "settlement": [
+        {
+          "seatIndex": 0,
+          "walletId": "member_lobby_c2007d32def7c7f68c68bd2c4055492a85169affd12fe2e1a26b633fb68181a2_1794662390385337_8566de1c-abf4-4bfb-aef4-33d74e588dc8",
+          "name": "Alice",
+          "profit": "-200",
+          "won": false,
+          "refunded": false
+        },
+        {
+          "seatIndex": 1,
+          "walletId": "member_lobby_c2007d32def7c7f68c68bd2c4055492a85169affd12fe2e1a26b633fb68181a2_1794662390385337_7d07e7fc-f726-4a59-81ed-aacfe9c30b42",
+          "name": "Bob",
+          "profit": "200",
+          "won": true,
+          "refunded": false
+        }
+      ]
+    }
+  },
+  {
+    "name": "pool-rummy",
+    "data": {
+      "turns": 41,
+      "settlement": [
+        {
+          "seatIndex": 0,
+          "walletId": "member_lobby_c2007d32def7c7f68c68bd2c4055492a85169affd12fe2e1a26b633fb68181a2_1794662390385337_8566de1c-abf4-4bfb-aef4-33d74e588dc8",
+          "name": "Alice",
+          "profit": "200",
+          "won": true,
+          "refunded": false
+        },
+        {
+          "seatIndex": 1,
+          "walletId": "member_lobby_c2007d32def7c7f68c68bd2c4055492a85169affd12fe2e1a26b633fb68181a2_1794662390385337_7d07e7fc-f726-4a59-81ed-aacfe9c30b42",
+          "name": "Bob",
+          "profit": "-200",
+          "won": false,
+          "refunded": false
+        }
+      ]
+    }
+  },
+  {
+    "name": "pool-hearts",
+    "data": {
+      "turns": 660,
+      "settlement": [
+        {
+          "seatIndex": 0,
+          "walletId": "member_lobby_c2007d32def7c7f68c68bd2c4055492a85169affd12fe2e1a26b633fb68181a2_1794662390385337_8566de1c-abf4-4bfb-aef4-33d74e588dc8",
+          "name": "Alice",
+          "profit": "-200",
+          "won": false,
+          "refunded": false
+        },
+        {
+          "seatIndex": 1,
+          "walletId": "member_lobby_c2007d32def7c7f68c68bd2c4055492a85169affd12fe2e1a26b633fb68181a2_1794662390385337_7d07e7fc-f726-4a59-81ed-aacfe9c30b42",
+          "name": "Bob",
+          "profit": "-200",
+          "won": false,
+          "refunded": false
+        },
+        {
+          "seatIndex": 2,
+          "walletId": "member_lobby_c2007d32def7c7f68c68bd2c4055492a85169affd12fe2e1a26b633fb68181a2_1794662390385337_e4f1af82-3287-415b-8e07-9453910fdf40",
+          "name": "Casey",
+          "profit": "-200",
+          "won": false,
+          "refunded": false
+        },
+        {
+          "seatIndex": 3,
+          "walletId": "member_lobby_c2007d32def7c7f68c68bd2c4055492a85169affd12fe2e1a26b633fb68181a2_1794662390385337_41ef951b-917d-4524-a8c4-1dddbc7d4d64",
+          "name": "Dana",
+          "profit": "600",
+          "won": true,
+          "refunded": false
+        }
+      ]
+    }
+  },
+  {
+    "name": "pool-spades",
+    "data": {
+      "turns": 1008,
+      "settlement": [
+        {
+          "seatIndex": 0,
+          "walletId": "member_lobby_c2007d32def7c7f68c68bd2c4055492a85169affd12fe2e1a26b633fb68181a2_1794662390385337_8566de1c-abf4-4bfb-aef4-33d74e588dc8",
+          "name": "Alice",
+          "profit": "-200",
+          "won": false,
+          "refunded": false
+        },
+        {
+          "seatIndex": 1,
+          "walletId": "member_lobby_c2007d32def7c7f68c68bd2c4055492a85169affd12fe2e1a26b633fb68181a2_1794662390385337_7d07e7fc-f726-4a59-81ed-aacfe9c30b42",
+          "name": "Bob",
+          "profit": "200",
+          "won": true,
+          "refunded": false
+        },
+        {
+          "seatIndex": 2,
+          "walletId": "member_lobby_c2007d32def7c7f68c68bd2c4055492a85169affd12fe2e1a26b633fb68181a2_1794662390385337_e4f1af82-3287-415b-8e07-9453910fdf40",
+          "name": "Casey",
+          "profit": "-200",
+          "won": false,
+          "refunded": false
+        },
+        {
+          "seatIndex": 3,
+          "walletId": "member_lobby_c2007d32def7c7f68c68bd2c4055492a85169affd12fe2e1a26b633fb68181a2_1794662390385337_41ef951b-917d-4524-a8c4-1dddbc7d4d64",
+          "name": "Dana",
+          "profit": "200",
+          "won": true,
+          "refunded": false
+        }
+      ]
+    }
+  },
+  {
+    "name": "poker-funded-all-in",
+    "data": {
+      "blinds": "50/100",
+      "buyIns": [
+        3000,
+        2000
+      ],
+      "settlement": [
+        {
+          "seatIndex": 0,
+          "walletId": "member_lobby_c2007d32def7c7f68c68bd2c4055492a85169affd12fe2e1a26b633fb68181a2_1794662390385337_8566de1c-abf4-4bfb-aef4-33d74e588dc8",
+          "name": "Alice",
+          "profit": "4000"
+        },
+        {
+          "seatIndex": 1,
+          "walletId": "member_lobby_c2007d32def7c7f68c68bd2c4055492a85169affd12fe2e1a26b633fb68181a2_1794662390385337_7d07e7fc-f726-4a59-81ed-aacfe9c30b42",
+          "name": "Bob",
+          "profit": "-4000"
+        }
+      ]
+    }
+  },
+  {
+    "name": "poker-cashout",
+    "data": {
+      "conservation": true,
+      "seatsReleased": true
+    }
+  },
+  {
+    "name": "blackjack-house",
+    "data": [
+      {
+        "seatIndex": 0,
+        "walletId": "member_lobby_c2007d32def7c7f68c68bd2c4055492a85169affd12fe2e1a26b633fb68181a2_1794662390385337_8566de1c-abf4-4bfb-aef4-33d74e588dc8",
+        "name": "Alice",
+        "profit": "-50"
+      },
+      {
+        "seatIndex": 1,
+        "walletId": "member_lobby_c2007d32def7c7f68c68bd2c4055492a85169affd12fe2e1a26b633fb68181a2_1794662390385337_7d07e7fc-f726-4a59-81ed-aacfe9c30b42",
+        "name": "Bob",
+        "profit": "50"
+      }
+    ]
+  },
+  {
+    "name": "blackjack-topup-and-cashout",
+    "data": {
+      "topup": 100,
+      "settled": true
+    }
+  },
+  {
+    "name": "poker-between-hand-entry",
+    "data": {
+      "nextHand": 2,
+      "newBuyIn": 800,
+      "mintedStartingChips": false
+    }
+  },
+  {
+    "name": "blackjack-between-hand-entry-and-unbet-exit",
+    "data": {
+      "newBuyIn": 600,
+      "shoePreserved": true,
+      "immediateRefundWithoutCpuBet": true
+    }
+  }
+]

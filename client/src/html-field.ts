@@ -74,6 +74,7 @@ export interface CanvasTextField {
   label: string;
   box: LogicalBox;
   maxLength: number;
+  inputMode?: 'text' | 'numeric';
   active: () => boolean;
   read: () => string;
   sanitize: (value: string) => string;
@@ -313,7 +314,7 @@ export function bindCanvasTextField(
   input.className = 'cardhouse-field';
   input.dataset.cardhouseField = field.id;
   input.setAttribute('name', `cardhouse-${field.id}`);
-  input.setAttribute('inputmode', 'text');
+  input.setAttribute('inputmode', field.inputMode ?? 'text');
   input.setAttribute('autocorrect', 'off');
   input.setAttribute('aria-label', field.label);
   input.enterKeyHint = enterHint(field);

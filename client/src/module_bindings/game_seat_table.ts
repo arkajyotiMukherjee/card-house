@@ -16,12 +16,12 @@ import {
 
 export default __t.row({
   id: __t.string().primaryKey(),
-  tableId: __t.string().name("table_id"),
-  lobbyMemberId: __t.string().name("lobby_member_id"),
-  seatIndex: __t.u32().name("seat_index"),
+  tableId: __t.string(),
+  lobbyMemberId: __t.string(),
+  seatIndex: __t.u32(),
   chips: __t.option(__t.i32()),
-  joinedAt: __t.timestamp().name("joined_at"),
+  joinedAt: __t.timestamp(),
   get seatState() {
-    return __t.option(SeatState).name("seat_state");
+    return __t.option(SeatState);
   },
 });

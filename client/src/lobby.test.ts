@@ -428,6 +428,8 @@ describe('lobby tables', () => {
 
   it('subscribes to tables, seats, spectators, and chat for one lobby', () => {
     expect(lobbyTableQueries("lobby_a'b")).toEqual([
+      `SELECT * FROM "RoomWallet" WHERE "lobbyId" = 'lobby_a''b'`,
+      `SELECT "TableFunding".* FROM "GameTable" JOIN "TableFunding" ON "TableFunding"."tableId" = "GameTable"."id" WHERE "GameTable"."lobbyId" = 'lobby_a''b'`,
       `SELECT * FROM "GameTable" WHERE "lobbyId" = 'lobby_a''b'`,
       `SELECT "GameSeat".* FROM "GameTable" JOIN "GameSeat" ON "GameSeat"."tableId" = "GameTable"."id" WHERE "GameTable"."lobbyId" = 'lobby_a''b'`,
       `SELECT "Spectator".* FROM "GameTable" JOIN "Spectator" ON "Spectator"."tableId" = "GameTable"."id" WHERE "GameTable"."lobbyId" = 'lobby_a''b'`,
@@ -545,12 +547,10 @@ describe('grouped table list', () => {
   it('stacks headers and rows, and counts rows that do not fit', () => {
     const groups = tableGroups(tableLines(rows, seats, 'lobby_1'));
     const layout = listLayout(groups);
-    expect(layout.hidden).toBe(0);
+    expect(layout.hidden).toBe(1);
     expect(layout.slots.map((slot) => slot.kind)).toEqual([
       'header',
       'row',
-      'row',
-      'header',
       'row',
     ]);
     const ys = layout.slots.map((slot) => slot.y);

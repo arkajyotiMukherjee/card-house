@@ -257,6 +257,12 @@ function blackjackMessage(
   if (parsed.kind === 'bet') {
     return clip(`${name} bets ${parsed.amount}`);
   }
+  if (parsed.kind === 'insurance')
+    return clip(
+      parsed.take ? `${name} takes insurance` : `${name} declines insurance`,
+    );
+  if (parsed.kind === 'even_money') return clip(`${name} takes even money`);
+  if (parsed.kind === 'surrender') return clip(`${name} surrenders`);
   if (parsed.kind === 'split') {
     return clip(`${name} splits`);
   }
@@ -266,6 +272,7 @@ function blackjackMessage(
   if (parsed.kind === 'stand') {
     return clip(`${name} stands on ${parsed.total}`);
   }
+  if (parsed.kind !== 'double') return null;
   return clip(
     parsed.bust
       ? `${name} doubles and busts`

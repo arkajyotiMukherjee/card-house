@@ -559,7 +559,8 @@ export class BluffDriver implements GameDriver<BluffState> {
       return;
     }
     if (state.phase === 'finished') {
-      const line = finishedLine(state, ctx.seats) ?? 'Finished';
+      const line =
+        ctx.finishedMessage ?? finishedLine(state, ctx.seats) ?? 'Finished';
       this.labels.push(this.banner(ctx, line, WINNER_BANNER_Y));
       return;
     }

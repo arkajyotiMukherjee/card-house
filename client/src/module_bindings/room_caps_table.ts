@@ -12,7 +12,7 @@ import {
 
 export default __t.row({
   id: __t.string().primaryKey(),
-  maxLobbies: __t.u32().name("max_lobbies"),
-  maxTablesPerLobby: __t.u32().name("max_tables_per_lobby"),
-  maxSeatsPerTable: __t.u32().name("max_seats_per_table"),
+  maxLobbies: __t.u32(),
+  maxTablesPerLobby: __t.u32(),
+  maxSeatsPerTable: __t.u32(),
 });

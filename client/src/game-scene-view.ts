@@ -1,3 +1,11 @@
+import { settledSeats, finishedPrizeMessage } from './settled-seats';
+import {
+  casinoGame,
+  coinUnits,
+  formatCoins,
+  type TableEconomy,
+} from '../../src/shared/economy';
+import { coinDialog, coinDialogOpen } from './coin-dialog';
 import { anchorTableActor } from './table-viewport';
 import { bindButtonPress } from './button-press';
 import * as ex from 'excalibur';
@@ -121,6 +129,9 @@ const STRIP_HOLD_MS = 3200;
 const STRIP_FADE_MS = 500;
 
 export class GameScene extends ex.Scene {
+  private economyText?: ex.Text;
+  private topUpActor?: ex.Actor;
+  private economySecond = -1;
   private tableId = '';
   private lobbyMemberId = '';
   private ready = false;
@@ -156,6 +167,8 @@ export class GameScene extends ex.Scene {
     minPlayers: number;
     maxPlayers: number;
     waiting: boolean;
+    hostMemberId?: string;
+    startsAt?: bigint;
   } | null = null;
   private placed: PlacedSeat[] = [];
   private readonly speakingFader = new SpeakingFader();
@@ -250,6 +263,35 @@ export class GameScene extends ex.Scene {
   }
 
   onInitialize(): void {
+    this.economyText = canvasText('', isMobileDevice() ? 12 : 8, GOLD);
+    const economy = new ex.Actor({
+      pos: ex.vec(16, 146),
+      anchor: ex.vec(0, 0),
+      z: 22,
+    });
+    economy.graphics.use(this.economyText);
+    anchorTableActor(economy, 'left');
+    this.add(economy);
+    const topUp = new ex.Actor({
+      pos: ex.vec(16, -2000),
+      anchor: ex.vec(0, 0),
+      width: 120,
+      height: 30,
+      z: 22,
+    });
+    topUp.graphics.use(panelRect(120, 30, ex.Color.fromHex('#1b5c38'), STROKE));
+    const caption = new ex.Actor({ pos: ex.vec(28, 10), anchor: ex.vec(0, 0) });
+    caption.graphics.use(canvasText('Top up', 8, GOLD));
+    topUp.addChild(caption);
+    bindButtonPress(
+      topUp,
+      () => {},
+      () => {},
+      () => void this.topUp(),
+    );
+    anchorTableActor(topUp, 'left');
+    this.add(topUp);
+    this.topUpActor = topUp;
     this.applyStoredLook();
 
     const sprite = tableSprites[this.style].clone();
@@ -352,6 +394,82 @@ export class GameScene extends ex.Scene {
     this.endSubscription();
   }
 
+  onPreUpdate(): void {
+    const second = Math.floor(Date.now() / 1000);
+    if (second === this.economySecond || !this.active) return;
+    this.economySecond = second;
+    if (this.lastRow?.waiting && this.lastRow.startsAt !== undefined)
+      this.paintGame();
+    const table = [...this.connection.db.gameTable.iter()].find(
+      (row) => row.id === this.tableId,
+    );
+    const funding = [...this.connection.db.tableFunding.iter()].find(
+      (row) =>
+        row.tableId === this.tableId && row.walletId === this.lobbyMemberId,
+    );
+    const wallet = [...this.connection.db.roomWallet.iter()].find(
+      (row) => row.id === this.lobbyMemberId,
+    );
+    const countdown =
+      table?.startsAt === undefined
+        ? ''
+        : `Starts in ${Math.max(0, Math.ceil((Number(table.startsAt / 1000n) - Date.now()) / 1000))}s`;
+    const mine = this.placed.find((seat) => seat.self);
+    const chips =
+      table?.gameType === 'blackjack' && mine
+        ? JSON.parse(table.stateJson).seats[String(mine.seatIndex)]?.chips
+        : undefined;
+    if (this.economyText)
+      this.economyText.text =
+        table?.economyJson && wallet
+          ? `Room coins\n\n${formatCoins(wallet.available)}${chips === undefined ? '' : `\n\nStack\n\n${formatCoins(coinUnits(chips))}`}\n\n${countdown}`
+          : '';
+    const paused = table && JSON.parse(table.stateJson).phase !== 'play';
+    if (this.topUpActor)
+      this.topUpActor.pos.y =
+        table && funding && casinoGame(table.gameType) && paused ? 234 : -2000;
+  }
+
+  private async topUp(): Promise<void> {
+    if (coinDialogOpen(this)) return;
+    const table = [...this.connection.db.gameTable.iter()].find(
+      (row) => row.id === this.tableId,
+    );
+    const funding = [...this.connection.db.tableFunding.iter()].find(
+      (row) =>
+        row.tableId === this.tableId && row.walletId === this.lobbyMemberId,
+    );
+    if (!table?.economyJson || !funding) return;
+    this.howToPlay.close();
+    this.tableChat.close();
+    const settings = JSON.parse(table.economyJson) as TableEconomy;
+    const current = Number(funding.units) / 2;
+    const selected = await coinDialog(
+      this.engine,
+      this,
+      'Top up',
+      `Current stack ${current}. Maximum stack ${settings.maxBuyIn}.`,
+      [
+        {
+          key: 'amount',
+          label: 'Additional coins',
+          value: Math.max(1, Math.ceil(settings.minBuyIn - current)),
+        },
+      ],
+      'Add coins',
+    );
+    if (!selected) return;
+    try {
+      await this.connection.reducers.topUpTable({
+        tableId: this.tableId,
+        amount: selected.amount,
+      });
+    } catch (error) {
+      this.errorText.text =
+        error instanceof Error ? error.message : 'Could not top up';
+    }
+  }
+
   private readonly onKeyPress = (event: ex.KeyEvent): void => {
     if (this.tableChat.handleKey(event)) {
       return;
@@ -366,6 +484,7 @@ export class GameScene extends ex.Scene {
   };
 
   private watchRows(): void {
+    this.connection.db.gameSettlement.onInsert(() => this.paintSeats());
     this.connection.db.gameSeat.onInsert(() => {
       this.paintSeats();
     });
@@ -482,15 +601,26 @@ export class GameScene extends ex.Scene {
       actor.kill();
     }
     this.seatActors = [];
-    const placed = placeSeats(
-      seatLabels(
-        readSeats(this.connection),
-        readMembers(this.connection),
-        this.tableId,
-        this.clientId,
-        tableVoiceMemberIds(readPresence(this.connection), this.tableId),
-      ),
+    let labels = seatLabels(
+      readSeats(this.connection),
+      readMembers(this.connection),
+      this.tableId,
+      this.clientId,
+      tableVoiceMemberIds(readPresence(this.connection), this.tableId),
     );
+    const table = [...this.connection.db.gameTable.iter()].find(
+      (row) => row.id === this.tableId,
+    );
+    if (table && JSON.parse(table.stateJson).phase === 'finished') {
+      const snapshot = settledSeats(
+        this.connection.db.gameSettlement.iter(),
+        this.tableId,
+        table.handNumber,
+        this.lobbyMemberId,
+      );
+      if (snapshot.length) labels = snapshot;
+    }
+    const placed = placeSeats(labels);
     this.placed = placed;
     this.waitingText.text = placed.length === 0 ? 'Waiting for seats' : '';
     this.spectatingText.text = spectatingLine(
@@ -625,6 +755,7 @@ export class GameScene extends ex.Scene {
 
   private sendPayload(intentPayload: string, intent: unknown): void {
     if (
+      coinDialogOpen(this) ||
       this.howToPlay.isOpen ||
       this.tableChat.isOpen ||
       this.tableId.length === 0 ||
@@ -753,6 +884,8 @@ export class GameScene extends ex.Scene {
     name: string;
     minPlayers: number;
     maxPlayers: number;
+    hostMemberId?: string;
+    startsAt?: bigint;
   }): void {
     if (!this.ready || !this.active || row.id !== this.tableId) {
       return;
@@ -772,7 +905,7 @@ export class GameScene extends ex.Scene {
     }
     this.lastRow = { ...row, waiting };
     this.howToPlay.setGameType(row.gameType);
-    this.paintGame();
+    this.paintSeats();
   }
 
   private startWaitingGame(): void {
@@ -891,11 +1024,12 @@ export class GameScene extends ex.Scene {
         });
       this.tableChat.setWaiting({
         name: row.name,
+        startsAt: row.startsAt,
         seated: seats.length,
         capacity: row.maxPlayers,
         minimum: row.minPlayers,
         start:
-          seats[0]?.lobbyMemberId === this.lobbyMemberId
+          row.hostMemberId === this.lobbyMemberId
             ? () => this.startWaitingGame()
             : undefined,
         leave: () => this.leave(true),
@@ -1287,16 +1421,28 @@ export class GameScene extends ex.Scene {
       }
     }
     const mine = personalCardAtlas();
+    const table = [...this.connection.db.gameTable.iter()].find(
+      (row) => row.id === this.tableId,
+    );
+    const finishedMessage = table
+      ? finishedPrizeMessage(
+          this.connection.db.gameSettlement.iter(),
+          this.tableId,
+          table.handNumber,
+        )
+      : undefined;
     return {
       scene: this,
       seats: this.placed,
       meSeatIndex,
+      finishedMessage,
       cards: mine,
       myCards: mine,
       sendIntent: (intent) => {
         this.sendPayload(JSON.stringify(intent), intent);
       },
-      inputBlocked: () => this.howToPlay.isOpen || this.tableChat.isOpen,
+      inputBlocked: () =>
+        this.howToPlay.isOpen || this.tableChat.isOpen || coinDialogOpen(this),
     };
   }
 
@@ -1391,6 +1537,7 @@ export class GameScene extends ex.Scene {
   private leave(fromWaiting = false): void {
     if (
       this.leaving ||
+      coinDialogOpen(this) ||
       this.howToPlay.isOpen ||
       (this.tableChat.isOpen && !fromWaiting) ||
       this.tableId.length === 0

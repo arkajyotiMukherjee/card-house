@@ -84,6 +84,7 @@ interface WaitingTable {
   seated: number;
   capacity: number;
   minimum: number;
+  startsAt?: bigint;
   start?: () => void;
   leave: () => void;
 }
@@ -194,7 +195,10 @@ export class TableChatOverlay {
     if (this.waitingDetails)
       this.waitingDetails.text = waiting.name.slice(0, 32);
     if (this.waitingSeats) {
-      this.waitingSeats.text = `${waiting.seated}/${waiting.capacity} seated`;
+      this.waitingSeats.text =
+        waiting.startsAt === undefined
+          ? `${waiting.seated}/${waiting.capacity} seated`
+          : `Starting in ${Math.max(0, Math.ceil((Number(waiting.startsAt / 1000n) - Date.now()) / 1000))}s`;
     }
     if (this.startControl && this.startLabel) {
       const visible = waiting.start !== undefined;

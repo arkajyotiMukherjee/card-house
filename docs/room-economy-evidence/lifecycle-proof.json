@@ -1,0 +1,76 @@
+[
+  {
+    "name": "host-return-grace",
+    "data": {
+      "originalHostPreserved": true,
+      "creatorAutoSeated": true
+    }
+  },
+  {
+    "name": "full-countdown",
+    "data": {
+      "seconds": 10,
+      "cancelledOnDeparture": true,
+      "reservationRefunded": true,
+      "restartedAndDealt": true
+    }
+  },
+  {
+    "name": "cpu-takeover",
+    "data": {
+      "graceSeconds": 30,
+      "originalWalletsRetained": true,
+      "noCpuWallets": true
+    }
+  },
+  {
+    "name": "host-transfer",
+    "data": {
+      "absenceSeconds": 60,
+      "connectedSuccessor": true,
+      "returningCreatorDoesNotStealHost": true
+    }
+  },
+  {
+    "name": "waiting-disconnect-refund",
+    "data": {
+      "graceSeconds": 60,
+      "refundedCoins": 20,
+      "replacementSeatAvailable": true
+    }
+  },
+  {
+    "name": "cpu-original-payout",
+    "data": {
+      "participants": [
+        {
+          "seatIndex": 1,
+          "walletId": "member_lobby_c20048ae2032f4bad4b0be12ae0bd32b056663e75d070b56ef18566557b608b3_1794662534372237_lifecycle-AwayTwo-1794662534307",
+          "name": "AwayTwo",
+          "profit": "-40",
+          "won": false,
+          "refunded": false
+        },
+        {
+          "seatIndex": 0,
+          "walletId": "member_lobby_c20048ae2032f4bad4b0be12ae0bd32b056663e75d070b56ef18566557b608b3_1794662534372237_lifecycle-AwayOne-1794662534183",
+          "name": "AwayOne",
+          "profit": "40",
+          "won": true,
+          "refunded": false
+        }
+      ],
+      "departedMembershipsReleased": true
+    }
+  },
+  {
+    "name": "refill-and-rank",
+    "data": {
+      "availableCoins": 200,
+      "totalGrants": 400,
+      "profitUnits": "-400",
+      "blockedWhileCommitted": true,
+      "repeatedRefillRejected": true
+    }
+  }
+]

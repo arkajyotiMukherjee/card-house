@@ -1,3 +1,4 @@
+import { coinDialog } from './coin-dialog';
 import * as ex from 'excalibur';
 import { isMobileDevice } from './mobile-shell';
 import {
@@ -794,6 +795,21 @@ export class MenuScene extends ex.Scene {
       return;
     }
     this.busy = true;
+    if (kind === 'create') {
+      const grant = await coinDialog(
+        this.engine,
+        this,
+        'Room coins',
+        'Each player receives this grant once per room.',
+        [{ key: 'startingCoins', label: 'Starting coins', value: 10_000 }],
+        'Create room',
+      );
+      if (!grant) {
+        this.busy = false;
+        return;
+      }
+      localStorage.setItem('roomStartingCoins', String(grant.startingCoins));
+    }
     this.submitAttempt += 1;
     const attempt = this.submitAttempt;
     this.setError('Working...', DIM);

@@ -14,7 +14,7 @@ export interface LobbySnapshot {
 export interface LobbyConnection {
   identity?: { toHexString(): string };
   reducers: {
-    createLobby(args: Record<string, never>): Promise<void>;
+    createLobby(args: { startingCoins?: number }): Promise<void>;
     setLobbyDiscordChannel(args: {
       lobbyCode: string;
       discordChannelId: string;
@@ -35,7 +35,7 @@ export interface CreatedLobby {
 }
 
 export interface CreateLobbyHooks {
-  onCreateLobby?: (args: Record<string, never>) => void;
+  onCreateLobby?: (args: { startingCoins?: number }) => void;
   onSetChannel?: (args: {
     lobbyCode: string;
     discordChannelId: string;
@@ -45,6 +45,7 @@ export interface CreateLobbyHooks {
 export function connectLobby(
   host: string,
   database: string,
+  session?: { read(): string | undefined; write(token: string): void },
 ): Promise<DbConnection> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -53,7 +54,9 @@ export function connectLobby(
     DbConnection.builder()
       .withUri(host)
       .withDatabaseName(database)
-      .onConnect((connection) => {
+      .withToken(session?.read())
+      .onConnect((connection, _identity, token) => {
+        session?.write(token);
         connection
           .subscriptionBuilder()
           .onApplied(() => {
@@ -74,6 +77,10 @@ export function connectLobby(
             query.gameTable,
             query.gameSeat,
             query.voicePresence,
+            query.roomWallet,
+            query.tableFunding,
+            query.gameSettlement,
+            query.discordLeaderboard,
           ]);
       })
       .onConnectError((_ctx, error) => {
@@ -89,6 +96,7 @@ export async function createDiscordLobby(
   discordChannelId: string,
   publicBase: string,
   hooks?: CreateLobbyHooks,
+  startingCoins?: number,
 ): Promise<CreatedLobby> {
   const channelId = discordChannelId.trim();
   if (!DISCORD_CHANNEL_ID.test(channelId)) {
@@ -96,7 +104,7 @@ export async function createDiscordLobby(
   }
   const senderHex = connection.identity?.toHexString() ?? '';
   const knownIds = new Set(readLobbies(connection).map((lobby) => lobby.id));
-  const createArgs = {} as Record<string, never>;
+  const createArgs = startingCoins === undefined ? {} : { startingCoins };
   hooks?.onCreateLobby?.(createArgs);
   await connection.reducers.createLobby(createArgs);
   const created = await waitForLobby(connection, knownIds, senderHex);

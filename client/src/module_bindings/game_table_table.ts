@@ -16,18 +16,21 @@ import {
 
 export default __t.row({
   id: __t.string().primaryKey(),
-  lobbyId: __t.string().name("lobby_id"),
-  gameType: __t.string().name("game_type"),
+  lobbyId: __t.string(),
+  gameType: __t.string(),
   name: __t.string(),
   get status() {
     return TableStatus;
   },
-  minPlayers: __t.u32().name("min_players"),
-  maxPlayers: __t.u32().name("max_players"),
-  stateJson: __t.string().name("state_json"),
-  createdAt: __t.timestamp().name("created_at"),
-  discordVoiceChannelId: __t.string().name("discord_voice_channel_id"),
-  lastActivityAt: __t.option(__t.timestamp()).name("last_activity_at"),
-  tournamentId: __t.string().name("tournament_id"),
-  round: __t.u32(),
+  minPlayers: __t.u32(),
+  maxPlayers: __t.u32(),
+  stateJson: __t.string(),
+  economyJson: __t.string(),
+  hostMemberId: __t.string(),
+  hostAwaySince: __t.option(__t.u64()),
+  startsAt: __t.option(__t.u64()),
+  handNumber: __t.u32(),
+  createdAt: __t.timestamp(),
+  discordVoiceChannelId: __t.string(),
+  lastActivityAt: __t.option(__t.timestamp()),
 });

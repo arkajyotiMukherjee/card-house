@@ -1,3 +1,14 @@
+import { paidGameWinners } from './game-prizes';
+import { Timestamp } from 'spacetimedb';
+import {
+  casinoGame,
+  coinSetting,
+  coinUnits,
+  DEFAULT_ROOM_GRANT,
+  splitPool,
+  tableEconomy,
+  type TableEconomy,
+} from '../../src/shared/economy';
 import {
   pokerHandFinished,
   pokerSessionFinished,
@@ -48,6 +59,7 @@ import {
   POKER_VARIATIONS,
   advancePoker,
   pokerAdvanceKind,
+  pokerBankrolls,
   pokerGameDefinition,
   pokerRules,
   pokerSeatLeft,
@@ -70,7 +82,6 @@ import {
   rememberTable,
   rulesErrorLine,
   tableCreatedLine,
-  tournamentCreatedLine,
 } from './activity-log';
 import { markDisconnected } from './lobby-presence';
 import { discordProfile } from './discord-member';
@@ -127,13 +138,6 @@ import {
   voiceChannelsPending,
 } from './lobby-idle';
 import {
-  isRoundComplete,
-  nextRoundError,
-  roundStatusTag,
-  tournamentTableCountError,
-  type TournamentTableRow,
-} from './tournament';
-import {
   BOT_BEAT_MICROS,
   botIsNext,
   playBotTurns,
@@ -166,17 +170,20 @@ const TableStatus = t.enum('TableStatus', [
   'finished',
 ]);
 const SeatState = t.enum('SeatState', ['active', 'folded', 'disconnected']);
-const TournamentRoundStatus = t.enum('TournamentRoundStatus', [
-  'in_progress',
-  'complete',
-]);
-
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const TABLE_SETTING_KEYS = [
   'name',
   'minPlayers',
   'maxPlayers',
   'variation',
+  'buyIn',
+  'entryFee',
+  'smallBlind',
+  'bigBlind',
+  'minBuyIn',
+  'maxBuyIn',
+  'minBet',
+  'maxBet',
 ] as const;
 
 const DISCORD_CHANNEL_ID = /^\d{17,20}$/;
@@ -194,6 +201,8 @@ const Lobby = table(
     lastActivityAt: t.option(t.timestamp()).default(undefined),
     /** Private room seated with CPU bots. Other clients cannot join. */
     solo: t.bool().default(false),
+    startingCoins: t.u32().default(DEFAULT_ROOM_GRANT),
+    creatorIdentity: t.string().default(''),
   },
 );
 
@@ -227,6 +236,7 @@ const LobbyMember = table(
     discordDiscriminator: t.option(t.string()).default(undefined),
     /** CPU seat. Its client id is `bot:{tableId}:{seat}` and it stays disconnected. */
     isBot: t.bool().default(false),
+    leftRoom: t.bool().default(false),
   },
 );
 
@@ -240,11 +250,6 @@ const GameTable = table(
         algorithm: 'btree',
         columns: ['lobbyId'],
       },
-      {
-        accessor: 'byTournament',
-        algorithm: 'btree',
-        columns: ['tournamentId'],
-      },
     ],
   },
   {
@@ -256,38 +261,13 @@ const GameTable = table(
     minPlayers: t.u32(),
     maxPlayers: t.u32(),
     stateJson: t.string(),
+    economyJson: t.string().default(''),
+    hostMemberId: t.string().default(''),
+    hostAwaySince: t.option(t.u64()).default(undefined),
+    startsAt: t.option(t.u64()).default(undefined),
+    handNumber: t.u32().default(0),
     createdAt: t.timestamp(),
     discordVoiceChannelId: t.string().default(''),
-    lastActivityAt: t.option(t.timestamp()).default(undefined),
-    /** Empty when this table is not part of a tournament. */
-    tournamentId: t.string().default(''),
-    /** Round number within `tournamentId`. `0` outside a tournament. */
-    round: t.u32().default(0),
-  },
-);
-
-const Tournament = table(
-  {
-    name: 'Tournament',
-    public: true,
-    indexes: [
-      {
-        accessor: 'byLobby',
-        algorithm: 'btree',
-        columns: ['lobbyId'],
-      },
-    ],
-  },
-  {
-    id: t.string().primaryKey(),
-    lobbyId: t.string(),
-    gameType: t.string(),
-    name: t.string(),
-    /** The round whose tables are currently in play. Starts at `1`. */
-    currentRound: t.u32(),
-    /** Derived from the current round's tables. `complete` once every table there is finished. */
-    roundStatus: TournamentRoundStatus,
-    createdAt: t.timestamp(),
     lastActivityAt: t.option(t.timestamp()).default(undefined),
   },
 );
@@ -524,12 +504,92 @@ const ClientStats = table(
   },
 );
 
+const RoomWallet = table(
+  { name: 'RoomWallet', public: true },
+  {
+    id: t.string().primaryKey(),
+    lobbyId: t.string().index('btree'),
+    clientId: t.string(),
+    name: t.string(),
+    available: t.i64(),
+    granted: t.i64(),
+    profit: t.i64(),
+  },
+);
+const WalletOwner = table(
+  { name: 'WalletOwner' },
+  {
+    id: t.string().primaryKey(),
+    identity: t.string(),
+  },
+);
+const WalletLedger = table(
+  { name: 'WalletLedger' },
+  {
+    id: t.string().primaryKey(),
+    walletId: t.string().index('btree'),
+    tableId: t.string(),
+    kind: t.string(),
+    amount: t.i64(),
+    profit: t.i64(),
+    createdAt: t.timestamp(),
+  },
+);
+const TableFunding = table(
+  { name: 'TableFunding', public: true },
+  {
+    id: t.string().primaryKey(),
+    tableId: t.string().index('btree'),
+    walletId: t.string(),
+    seatIndex: t.u32(),
+    units: t.i64(),
+    committed: t.bool(),
+    cpu: t.bool(),
+    leaving: t.bool(),
+  },
+);
+const GameSettlement = table(
+  { name: 'GameSettlement', public: true },
+  {
+    id: t.string().primaryKey(),
+    lobbyId: t.string().index('btree'),
+    tableId: t.string(),
+    handNumber: t.u32(),
+    summaryJson: t.string(),
+    createdAt: t.timestamp(),
+  },
+);
+const DiscordLeaderboard = table(
+  { name: 'DiscordLeaderboard', public: true },
+  {
+    lobbyId: t.string().primaryKey(),
+    messageId: t.string(),
+    revision: t.string(),
+  },
+);
+
+// These two private tables bridge incompatible schemas without resetting room data.
+const RoomUpgrade = table(
+  { name: 'RoomUpgrade' },
+  {
+    id: t.string().primaryKey(),
+    ownerIdentity: t.string(),
+    phase: t.string(),
+  },
+);
+const TableBackup = table(
+  { name: 'TableBackup' },
+  {
+    id: t.string().primaryKey(),
+    payloadJson: t.string(),
+  },
+);
+
 const spacetimedb = schema(
   {
     Lobby,
     LobbyMember,
     GameTable,
-    Tournament,
     GameSeat,
     SeatAbsence,
     Spectator,
@@ -545,7 +605,15 @@ const spacetimedb = schema(
     LobbyIdleConfig,
     LobbyIdleSweep,
     BotTurnSchedule,
+    RoomUpgrade,
+    TableBackup,
     ClientStats,
+    RoomWallet,
+    WalletOwner,
+    WalletLedger,
+    TableFunding,
+    GameSettlement,
+    DiscordLeaderboard,
   },
   { CASE_CONVERSION_POLICY: CaseConversionPolicy.None },
 );
@@ -659,24 +727,10 @@ function tableIdsInLobby(ctx: ModuleCtx, lobbyId: string): string[] {
   return collectIds(ctx.db.GameTable.byLobby.filter(lobbyId));
 }
 
-function activityMicros(
-  ctx: ModuleCtx,
-  lobbyId: string,
-  kind: 'table' | 'tournament',
-): bigint[] {
-  const stamps: bigint[] = [];
-  if (kind === 'table') {
-    for (const table of ctx.db.GameTable.byLobby.filter(lobbyId)) {
-      const stamp = table.lastActivityAt ?? table.createdAt;
-      stamps.push(stamp.microsSinceUnixEpoch);
-    }
-    return stamps;
-  }
-  for (const tournament of ctx.db.Tournament.byLobby.filter(lobbyId)) {
-    const stamp = tournament.lastActivityAt ?? tournament.createdAt;
-    stamps.push(stamp.microsSinceUnixEpoch);
-  }
-  return stamps;
+function activityMicros(ctx: ModuleCtx, lobbyId: string): bigint[] {
+  return [...ctx.db.GameTable.byLobby.filter(lobbyId)].map(
+    (row) => (row.lastActivityAt ?? row.createdAt).microsSinceUnixEpoch,
+  );
 }
 
 function roomVoiceChannelIds(ctx: ModuleCtx, lobbyId: string): string[] {
@@ -694,6 +748,9 @@ function roomVoiceChannelIds(ctx: ModuleCtx, lobbyId: string): string[] {
 /** Drops people, seats, chat, and presence. Table rows stay until voice ids are clear. */
 function clearRoomOccupants(ctx: ModuleCtx, lobbyId: string): void {
   const tableIds = tableIdsInLobby(ctx, lobbyId);
+  for (const tableId of tableIds)
+    for (const funding of ctx.db.TableFunding.tableId.filter(tableId))
+      releaseFunding(ctx, funding.id);
   const seatIds: string[] = [];
   const spectatorIds: string[] = [];
   const eventIds: string[] = [];
@@ -742,7 +799,7 @@ function clearRoomOccupants(ctx: ModuleCtx, lobbyId: string): void {
   }
 }
 
-/** Removes tables, tournaments, and the lobby once no voice channel id remains. */
+/** Removes tables and the lobby once no voice channel id remains. */
 function deleteRoomShell(ctx: ModuleCtx, lobbyId: string): void {
   if (voiceChannelsPending(roomVoiceChannelIds(ctx, lobbyId))) {
     return;
@@ -755,8 +812,18 @@ function deleteRoomShell(ctx: ModuleCtx, lobbyId: string): void {
       deleteGameTable(ctx.db, gameTable);
     }
   }
-  const tournamentIds = collectIds(ctx.db.Tournament.byLobby.filter(lobbyId));
-  deleteIds(tournamentIds, (id) => ctx.db.Tournament.id.delete(id));
+  for (const wallet of ctx.db.RoomWallet.lobbyId.filter(lobbyId)) {
+    for (const entry of ctx.db.WalletLedger.walletId.filter(wallet.id))
+      ctx.db.WalletLedger.id.delete(entry.id);
+    ctx.db.WalletOwner.id.delete(wallet.id);
+    ctx.db.RoomWallet.id.delete(wallet.id);
+  }
+  for (const owner of ctx.db.WalletOwner.iter())
+    if (owner.id.startsWith(`member_${lobbyId}_`))
+      ctx.db.WalletOwner.id.delete(owner.id);
+  for (const result of ctx.db.GameSettlement.lobbyId.filter(lobbyId))
+    ctx.db.GameSettlement.id.delete(result.id);
+  ctx.db.DiscordLeaderboard.lobbyId.delete(lobbyId);
   const lobby = ctx.db.Lobby.id.find(lobbyId);
   if (lobby) {
     ctx.db.Lobby.id.delete(lobby.id);
@@ -812,8 +879,7 @@ function closeIdleLobbies(ctx: ModuleCtx): void {
     }
     const activity = roomActivityMicros(
       lobby.lastActivityAt?.microsSinceUnixEpoch,
-      activityMicros(ctx, lobby.id, 'table'),
-      activityMicros(ctx, lobby.id, 'tournament'),
+      activityMicros(ctx, lobby.id),
     );
     if (activity === undefined) {
       ctx.db.Lobby.id.update({
@@ -952,7 +1018,8 @@ export const client_disconnected = spacetimedb.clientDisconnected(
 
 export const create_lobby = spacetimedb.reducer(
   { name: 'create_lobby' },
-  (ctx) => {
+  { startingCoins: t.option(t.u32()) },
+  (ctx, { startingCoins }) => {
     ensureLobbyIdleJob(ctx);
     const caps = currentRoomCaps(ctx.db);
     reject(lobbyCapRejection(rowCount(ctx.db.Lobby.iter()), caps));
@@ -980,6 +1047,8 @@ export const create_lobby = spacetimedb.reducer(
       discordGuildId: '',
       discordLobbyVoiceChannelId: '',
       solo: false,
+      startingCoins: validCoins(startingCoins, DEFAULT_ROOM_GRANT),
+      creatorIdentity: ctx.sender.toHexString(),
     });
     console.log(lobbyCreatedLine(id));
   },
@@ -1289,6 +1358,12 @@ export const close_lobby = spacetimedb.reducer(
     if (!lobby) {
       throw new SenderError('Room not found');
     }
+    if (
+      lobby.creatorIdentity &&
+      lobby.creatorIdentity !== ctx.sender.toHexString() &&
+      rowCount(ctx.db.RoomWallet.lobbyId.filter(lobby.id)) > 0
+    )
+      throw new SenderError('Only the room creator can close this paid room');
     markLobbyClosed(ctx, lobby.id);
   },
 );
@@ -1328,113 +1403,59 @@ function sweepAbsentSeats(ctx: ModuleCtx): void {
   for (const seat of ctx.db.GameSeat.iter()) {
     const table = ctx.db.GameTable.id.find(seat.tableId);
     const member = ctx.db.LobbyMember.id.find(seat.lobbyMemberId);
-    if (!table || !member || member.isBot || table.status.tag !== 'in_progress')
+    if (!table || !member || table.status.tag !== 'in_progress') continue;
+    const funding = ctx.db.TableFunding.id.find(seat.id);
+    const away = !member.connected || seat.seatState?.tag === 'disconnected';
+    let absence = ctx.db.SeatAbsence.id.find(seat.id);
+    if (!away) {
+      if (absence) ctx.db.SeatAbsence.id.delete(seat.id);
+      if (funding?.cpu)
+        ctx.db.TableFunding.id.update({ ...funding, cpu: false });
       continue;
-    if (!member.connected && !ctx.db.SeatAbsence.id.find(seat.id)) {
-      ctx.db.SeatAbsence.insert({
+    }
+    if (!absence)
+      absence = ctx.db.SeatAbsence.insert({
         id: seat.id,
         tableId: table.id,
         lobbyMemberId: member.id,
-        deadlineMicros: undefined,
+        deadlineMicros: now + 30_000_000n,
       });
-    }
-  }
-  for (const absent of ctx.db.SeatAbsence.iter()) {
-    const table = ctx.db.GameTable.id.find(absent.tableId);
-    const seat = ctx.db.GameSeat.id.find(absent.id);
-    if (!table || !seat || seat.lobbyMemberId !== absent.lobbyMemberId) {
-      ctx.db.SeatAbsence.id.delete(absent.id);
-      continue;
-    }
-    const strategy = strategyFor(table.gameType);
-    if (!strategy || table.status.tag !== 'in_progress') continue;
-    const state = JSON.parse(table.stateJson);
-    const acting = strategy.actingSeats(state).includes(seat.seatIndex);
-    if (!acting) {
-      if (absent.deadlineMicros !== undefined)
-        ctx.db.SeatAbsence.id.update({ ...absent, deadlineMicros: undefined });
-      continue;
-    }
-    if (absent.deadlineMicros === undefined) {
+    if (absence.deadlineMicros === undefined) {
       ctx.db.SeatAbsence.id.update({
-        ...absent,
-        deadlineMicros: now + 60_000_000n,
+        ...absence,
+        deadlineMicros: now + 30_000_000n,
       });
       continue;
     }
-    if (now < absent.deadlineMicros) continue;
-    if (table.gameType === POKER_GAME_TYPE) {
-      const next = pokerSeatLeft(state as PokerState, seat.seatIndex);
-      ctx.db.GameTable.id.update({
-        ...table,
-        stateJson: storedState(next),
-        status: storedStatus(
-          tableStatusTag(
-            table.gameType,
-            next,
-            currentStatusTag(table.status.tag),
-          ),
-        ),
-        lastActivityAt: ctx.timestamp,
-      });
-      ctx.db.GameSeat.id.delete(seat.id);
-      queueTableBeat(ctx, table.id);
-    } else {
-      // Preserve the dealt hand and turn order while a CPU replaces the absent player.
-      const member = ctx.db.LobbyMember.id.find(seat.lobbyMemberId);
-      if (!member) continue;
-      const botId = `timeout_${seat.id}`;
-      if (!ctx.db.LobbyMember.id.find(botId))
-        ctx.db.LobbyMember.insert({
-          ...member,
-          id: botId,
-          clientId: botId,
-          name: 'CPU (Away)',
-          isBot: true,
-          connected: false,
-          discordUserId: '',
-          discordUsername: '',
-          discordGlobalName: '',
-          discordDiscriminator: undefined,
-        });
-      ctx.db.GameSeat.id.update({
-        ...seat,
-        lobbyMemberId: botId,
-        seatState: { tag: 'active' },
-      });
-    }
-    ctx.db.SeatAbsence.id.delete(absent.id);
-  }
-  for (const table of ctx.db.GameTable.iter()) {
-    const lobby = ctx.db.Lobby.id.find(table.lobbyId);
-    if (!lobby || lobby.solo || table.status.tag !== 'in_progress') continue;
+    if (now < absence.deadlineMicros) continue;
+    if (cashOutUnbetBlackjack(ctx, table.id, seat.id)) continue;
+    if (funding && !funding.cpu)
+      ctx.db.TableFunding.id.update({ ...funding, cpu: true });
     const strategy = strategyFor(table.gameType);
     if (!strategy) continue;
     const state = JSON.parse(table.stateJson);
-    for (const seat of ctx.db.GameSeat.byTable.filter(table.id)) {
-      const member = ctx.db.LobbyMember.id.find(seat.lobbyMemberId);
-      if (
-        member?.isBot &&
-        strategy.actingSeats(state).includes(seat.seatIndex)
-      ) {
-        commitIntent(
-          ctx,
-          table.id,
-          member.id,
-          seat.id,
-          strategy.choose(state, seat.seatIndex),
-          state,
-        );
-        break;
-      }
+    if (strategy.actingSeats(state).includes(seat.seatIndex)) {
+      commitIntent(
+        ctx,
+        table.id,
+        member.id,
+        seat.id,
+        strategy.choose(state, seat.seatIndex),
+        state,
+      );
+      queueTableBeat(ctx, table.id);
     }
   }
+  advanceCasinoTables(ctx);
 }
 
 export const close_idle_lobbies = spacetimedb.reducer(
   { name: 'close_idle_lobbies', onSchedule: LobbyIdleSweep },
   { sweep: LobbyIdleSweep.rowType },
   (ctx, { sweep: _sweep }) => {
+    if (ctx.db.RoomUpgrade.id.find('room-economy')?.phase === 'archived')
+      return;
+    sweepTableHosting(ctx);
     sweepAbsentSeats(ctx);
     closeIdleLobbies(ctx);
     if (firstRow(ctx.db.LobbyIdleSweep.iter()) === undefined) {
@@ -1509,12 +1530,14 @@ export const join_lobby = spacetimedb.reducer(
       throw new SenderError('Room closed');
     }
 
+    ensureWallet(ctx, lobby.id, request.clientId, request.name);
     const member = firstRow(
       ctx.db.LobbyMember.byLobbyAndClient.filter([lobby.id, request.clientId]),
     );
     if (member) {
       ctx.db.LobbyMember.id.update({
         ...member,
+        leftRoom: false,
         name: request.name,
         connected: true,
         lastSeenAt: ctx.timestamp,
@@ -1542,6 +1565,7 @@ export const join_lobby = spacetimedb.reducer(
       discordGlobalName: '',
       discordDiscriminator: undefined,
       isBot: false,
+      leftRoom: false,
     });
     appendLobbyChat(ctx, lobby.id, '', `${request.name} joined the lobby.`);
     rememberLobby(ctx.db, ctx.sender.toHexString(), lobby.id, request.clientId);
@@ -1594,6 +1618,7 @@ export const join_lobby_with_discord = spacetimedb.reducer(
       throw new SenderError(message);
     }
 
+    ensureWallet(ctx, lobby.id, request.clientId, request.name);
     const member = firstRow(
       ctx.db.LobbyMember.byLobbyAndClient.filter([lobby.id, request.clientId]),
     );
@@ -1606,6 +1631,7 @@ export const join_lobby_with_discord = spacetimedb.reducer(
       }
       ctx.db.LobbyMember.id.update({
         ...member,
+        leftRoom: false,
         name: request.name,
         connected: true,
         lastSeenAt: ctx.timestamp,
@@ -1637,6 +1663,7 @@ export const join_lobby_with_discord = spacetimedb.reducer(
       discordGlobalName: discord.discordGlobalName,
       discordDiscriminator: discord.discordDiscriminator,
       isBot: false,
+      leftRoom: false,
     });
     appendLobbyChat(ctx, lobby.id, '', `${request.name} joined the lobby.`);
     rememberLobby(ctx.db, ctx.sender.toHexString(), lobby.id, request.clientId);
@@ -1758,7 +1785,8 @@ function playerLimit(value: unknown, label: string): number {
   return value;
 }
 
-function tableSettings(raw: string | undefined): {
+function tableSettings(raw: string | undefined): Partial<TableEconomy> & {
+  buyIn?: number;
   name?: string;
   minPlayers?: number;
   maxPlayers?: number;
@@ -1792,6 +1820,14 @@ function tableSettings(raw: string | undefined): {
     minPlayers?: number;
     maxPlayers?: number;
     variation?: string;
+    buyIn?: number;
+    entryFee?: number;
+    smallBlind?: number;
+    bigBlind?: number;
+    minBuyIn?: number;
+    maxBuyIn?: number;
+    minBet?: number;
+    maxBet?: number;
   } = {};
   if ('name' in record) {
     if (typeof record.name !== 'string' || record.name.trim().length === 0) {
@@ -1813,6 +1849,18 @@ function tableSettings(raw: string | undefined): {
       throw new SenderError('variation must be a poker variation');
     }
     settings.variation = record.variation.trim();
+  }
+  for (const key of [
+    'buyIn',
+    'entryFee',
+    'smallBlind',
+    'bigBlind',
+    'minBuyIn',
+    'maxBuyIn',
+    'minBet',
+    'maxBet',
+  ] as const) {
+    if (key in record) settings[key] = validCoins(record[key], 20);
   }
   return settings;
 }
@@ -1845,16 +1893,15 @@ interface NewTableRow {
   createdAt: ModuleCtx['timestamp'];
   lastActivityAt: ModuleCtx['timestamp'];
   discordVoiceChannelId: string;
-  tournamentId: string;
-  round: number;
+  economyJson: string;
+  hostMemberId: string;
+  hostAwaySince: bigint | undefined;
+  startsAt: bigint | undefined;
+  handNumber: number;
 }
 
 /**
  * Builds the row for a new table, enforcing the seat and table caps.
- * `existingInLobby` and `sameTypeInLobby` are counts before this table, so a
- * caller inserting several tables in one reducer call passes the running
- * totals. `create_game_table` tags the row `tournamentId: ''`, `round: 0`;
- * `create_tournament` and `create_tournament_round` tag it with their own ids.
  */
 function openTableRow(
   ctx: ModuleCtx,
@@ -1865,8 +1912,6 @@ function openTableRow(
   existingInLobby: number,
   sameTypeInLobby: number,
   idSuffix: string,
-  tournamentId: string,
-  round: number,
 ): NewTableRow {
   reject(tableCapRejection(existingInLobby, caps));
   const definition = definitionByType[gameType];
@@ -1915,8 +1960,11 @@ function openTableRow(
     createdAt: ctx.timestamp,
     lastActivityAt: ctx.timestamp,
     discordVoiceChannelId: '',
-    tournamentId,
-    round,
+    economyJson: '',
+    hostMemberId: '',
+    hostAwaySince: undefined,
+    startsAt: undefined,
+    handNumber: 0,
   };
 }
 
@@ -1968,196 +2016,49 @@ export const create_game_table = spacetimedb.reducer(
       existing,
       sameType,
       `${existing}`,
-      '',
-      0,
     );
-    ctx.db.GameTable.insert(row);
+    const session = ctx.db.OperatorSession.identity.find(
+      ctx.sender.toHexString(),
+    );
+    const creator = session
+      ? firstRow(
+          ctx.db.LobbyMember.byLobbyAndClient.filter([
+            lobby.id,
+            session.clientId,
+          ]),
+        )
+      : undefined;
+    if (!creator || session?.lobbyId !== lobby.id)
+      throw new SenderError('Join this room before creating a table');
+    if (
+      [...ctx.db.GameSeat.iter()].some(
+        (seat) => seat.lobbyMemberId === creator.id,
+      )
+    )
+      throw new SenderError('Already seated');
+    if (
+      !definitionByType[gameType] ||
+      gameType === 'dummy' ||
+      gameType === 'stub'
+    )
+      throw new SenderError('Unknown game type');
+    ctx.db.GameTable.insert({
+      ...row,
+      hostMemberId: creator.id,
+      economyJson: JSON.stringify(validTableEconomy(gameType, settings)),
+    });
+    reserveFunding(ctx, row.id, creator.id, 0, settings.buyIn);
+    ctx.db.GameSeat.insert({
+      id: `seat_${row.id}_${creator.id}`,
+      tableId: row.id,
+      lobbyMemberId: creator.id,
+      seatIndex: 0,
+      chips: undefined,
+      joinedAt: ctx.timestamp,
+      seatState: { tag: 'active' },
+    });
+    rememberTable(ctx.db, ctx.sender.toHexString(), lobby.id, row.id);
     console.log(tableCreatedLine(row.id, lobby.id));
-    noteLobbyActivity(ctx, lobby.id);
-  },
-);
-
-/**
- * `tableCount` tables of `gameType`, tagged `round` 1, grouped under one
- * `Tournament` row. `create_tournament_round` adds later rounds the same way.
- */
-function openTournamentRoundTables(
-  ctx: ModuleCtx,
-  lobby: { id: string },
-  gameType: string,
-  settings: ReturnType<typeof tableSettings>,
-  tableCount: number,
-  tournamentId: string,
-  round: number,
-): NewTableRow[] {
-  const caps = currentRoomCaps(ctx.db);
-  let existing = 0;
-  let sameType = 0;
-  for (const table of ctx.db.GameTable.byLobby.filter(lobby.id)) {
-    existing += 1;
-    if (table.gameType === gameType) {
-      sameType += 1;
-    }
-  }
-  const rows: NewTableRow[] = [];
-  for (let index = 0; index < tableCount; index += 1) {
-    rows.push(
-      openTableRow(
-        ctx,
-        lobby,
-        gameType,
-        settings,
-        caps,
-        existing,
-        sameType,
-        `${existing}`,
-        tournamentId,
-        round,
-      ),
-    );
-    existing += 1;
-    sameType += 1;
-  }
-  return rows;
-}
-
-export const create_tournament = spacetimedb.reducer(
-  { name: 'create_tournament' },
-  {
-    lobbyId: t.string(),
-    gameType: t.string(),
-    tableCount: t.u32(),
-    settings: t.option(t.string()),
-  },
-  (
-    ctx,
-    {
-      lobbyId: rawLobbyId,
-      gameType: rawGameType,
-      tableCount,
-      settings: rawSettings,
-    },
-  ) => {
-    const lobbyId = rawLobbyId.trim();
-    const gameType = rawGameType.trim();
-    if (lobbyId.length === 0) {
-      throw new SenderError('Lobby id is required');
-    }
-    if (gameType.length === 0) {
-      throw new SenderError('Game type is required');
-    }
-    reject(tournamentTableCountError(tableCount));
-
-    const lobby = ctx.db.Lobby.id.find(lobbyId);
-    if (!lobby) {
-      throw new SenderError('Room not found');
-    }
-    if (lobby.status.tag !== 'open') {
-      throw new SenderError('Room closed');
-    }
-
-    const settings = tableSettings(rawSettings);
-    const micros = ctx.timestamp.microsSinceUnixEpoch;
-    const tournamentId = `tournament_${lobby.id}_${micros.toString()}`;
-    const name = settings.name ?? `${gameType} tournament`;
-    const rows = openTournamentRoundTables(
-      ctx,
-      lobby,
-      gameType,
-      settings,
-      tableCount,
-      tournamentId,
-      1,
-    );
-
-    ctx.db.Tournament.insert({
-      id: tournamentId,
-      lobbyId: lobby.id,
-      gameType,
-      name,
-      currentRound: 1,
-      roundStatus: { tag: 'in_progress' },
-      createdAt: ctx.timestamp,
-      lastActivityAt: ctx.timestamp,
-    });
-    for (const row of rows) {
-      ctx.db.GameTable.insert(row);
-      console.log(tableCreatedLine(row.id, lobby.id));
-    }
-    console.log(tournamentCreatedLine(tournamentId, lobby.id));
-    noteLobbyActivity(ctx, lobby.id);
-  },
-);
-
-export const create_tournament_round = spacetimedb.reducer(
-  { name: 'create_tournament_round' },
-  {
-    tournamentId: t.string(),
-    tableCount: t.u32(),
-    settings: t.option(t.string()),
-  },
-  (
-    ctx,
-    { tournamentId: rawTournamentId, tableCount, settings: rawSettings },
-  ) => {
-    const tournamentId = rawTournamentId.trim();
-    if (tournamentId.length === 0) {
-      throw new SenderError('Tournament id is required');
-    }
-    reject(tournamentTableCountError(tableCount));
-
-    const tournament = ctx.db.Tournament.id.find(tournamentId);
-    if (!tournament) {
-      throw new SenderError('Tournament not found');
-    }
-
-    const lobby = ctx.db.Lobby.id.find(tournament.lobbyId);
-    if (!lobby) {
-      throw new SenderError('Room not found');
-    }
-    if (lobby.status.tag !== 'open') {
-      throw new SenderError('Room closed');
-    }
-
-    const currentRoundTables: TournamentTableRow[] = [];
-    for (const row of ctx.db.GameTable.byTournament.filter(tournamentId)) {
-      currentRoundTables.push({
-        tournamentId: row.tournamentId,
-        round: row.round,
-        status: row.status,
-      });
-    }
-    reject(
-      nextRoundError(
-        isRoundComplete(
-          currentRoundTables,
-          tournamentId,
-          tournament.currentRound,
-        ),
-      ),
-    );
-
-    const settings = tableSettings(rawSettings);
-    const nextRound = tournament.currentRound + 1;
-    const rows = openTournamentRoundTables(
-      ctx,
-      lobby,
-      tournament.gameType,
-      settings,
-      tableCount,
-      tournamentId,
-      nextRound,
-    );
-    for (const row of rows) {
-      ctx.db.GameTable.insert(row);
-      console.log(tableCreatedLine(row.id, lobby.id));
-    }
-    ctx.db.Tournament.id.update({
-      ...tournament,
-      currentRound: nextRound,
-      roundStatus: { tag: 'in_progress' },
-      lastActivityAt: ctx.timestamp,
-    });
     noteLobbyActivity(ctx, lobby.id);
   },
 );
@@ -2307,6 +2208,18 @@ export const remove_game_table = spacetimedb.reducer(
     if (!gameTable) {
       throw new SenderError('Table not found');
     }
+    const funding = [...ctx.db.TableFunding.tableId.filter(gameTable.id)];
+    if (
+      funding.length &&
+      ctx.db.WalletOwner.id.find(gameTable.hostMemberId)?.identity !==
+        ctx.sender.toHexString() &&
+      ctx.db.Lobby.id.find(gameTable.lobbyId)?.creatorIdentity !==
+        ctx.sender.toHexString()
+    )
+      throw new SenderError('Only the host can remove this paid table');
+    if (funding.some((row) => row.committed))
+      throw new SenderError('Finish the paid game before removing this table');
+    for (const row of funding) releaseFunding(ctx, row.id);
     forgetTableForEveryone(ctx.db, gameTable.id);
     deleteGameTable(ctx.db, gameTable);
     noteLobbyActivity(ctx, gameTable.lobbyId);
@@ -2317,6 +2230,8 @@ export const clean_empty_tables = spacetimedb.reducer(
   { name: 'clean_empty_tables', onSchedule: TableCleanupSchedule },
   { schedule: TableCleanupSchedule.rowType },
   (ctx, _args) => {
+    if (ctx.db.RoomUpgrade.id.find('room-economy')?.phase === 'archived')
+      return;
     let idleLimit = EMPTY_TABLE_IDLE_MICROS;
     for (const row of ctx.db.TableCleanupSchedule.iter()) {
       idleLimit = row.idleAfterMicros;
@@ -2331,6 +2246,13 @@ export const clean_empty_tables = spacetimedb.reducer(
       }
       const activity = gameTable.lastActivityAt ?? gameTable.createdAt;
       const idleMicros = now - activity.microsSinceUnixEpoch;
+      if (
+        seats === 0 &&
+        gameTable.status.tag === 'finished' &&
+        rowCount(ctx.db.Spectator.byTable.filter(gameTable.id)) > 0 &&
+        idleMicros < idleLimit
+      )
+        continue;
       if (
         shouldRemoveEmptyTable(
           seats,
@@ -2382,8 +2304,9 @@ export const join_table = spacetimedb.reducer(
   {
     tableId: t.string(),
     lobbyMemberId: t.string(),
+    buyIn: t.option(t.u32()),
   },
-  (ctx, { tableId: rawTableId, lobbyMemberId: rawLobbyMemberId }) => {
+  (ctx, { tableId: rawTableId, lobbyMemberId: rawLobbyMemberId, buyIn }) => {
     const tableId = rawTableId.trim();
     const lobbyMemberId = rawLobbyMemberId.trim();
     if (tableId.length === 0) {
@@ -2423,6 +2346,13 @@ export const join_table = spacetimedb.reducer(
     for (const existing of ctx.db.GameSeat.byTable.filter(gameTable.id)) {
       if (existing.lobbyMemberId !== member.id) continue;
       ctx.db.SeatAbsence.id.delete(existing.id);
+      const funding = ctx.db.TableFunding.id.find(existing.id);
+      if (funding)
+        ctx.db.TableFunding.id.update({
+          ...funding,
+          cpu: false,
+          leaving: false,
+        });
       ctx.db.GameSeat.id.update({ ...existing, seatState: { tag: 'active' } });
       rememberTable(ctx.db, ctx.sender.toHexString(), lobby.id, gameTable.id);
       return;
@@ -2448,7 +2378,14 @@ export const join_table = spacetimedb.reducer(
     }
 
     const blocked = joinBlockForStatus(currentStatusTag(gameTable.status.tag));
-    if (blocked) {
+    if (
+      blocked &&
+      !(
+        gameTable.economyJson &&
+        casinoGame(gameTable.gameType) &&
+        JSON.parse(gameTable.stateJson).phase === 'finished'
+      )
+    ) {
       throw new SenderError(blocked);
     }
 
@@ -2482,6 +2419,7 @@ export const join_table = spacetimedb.reducer(
       ctx.db.Spectator.id.delete(watchingId);
     }
 
+    reserveFunding(ctx, gameTable.id, member.id, seatIndex, buyIn);
     ctx.db.GameSeat.insert({
       id: `seat_${gameTable.id}_${member.id}`,
       tableId: gameTable.id,
@@ -2506,6 +2444,7 @@ export const join_table = spacetimedb.reducer(
     ctx.db.GameTable.id.update({ ...gameTable, lastActivityAt: ctx.timestamp });
     rememberTable(ctx.db, ctx.sender.toHexString(), lobby.id, gameTable.id);
     noteLobbyActivity(ctx, lobby.id);
+    queueTableBeat(ctx, gameTable.id);
   },
 );
 
@@ -2656,6 +2595,7 @@ export const leave_lobby = spacetimedb.reducer(
     if (!member) {
       throw new SenderError('Member not found');
     }
+    if (!lobby.solo) requireWalletOwner(ctx, member.id);
     if (soloLeaveRemovesRoom(lobby.solo, member.isBot)) {
       deleteRoomShell(ctx, lobby.id);
       forgetLobby(ctx.db, ctx.sender.toHexString());
@@ -2673,17 +2613,40 @@ export const leave_lobby = spacetimedb.reducer(
     for (const spectator of spectators) {
       touched.add(spectator.tableId);
     }
-    deleteIds(
-      seats.map((seat) => seat.id),
-      (id) => ctx.db.GameSeat.id.delete(id),
-    );
+    let active = false;
+    for (const ref of seats) {
+      if (cashOutUnbetBlackjack(ctx, ref.tableId, ref.id)) continue;
+      const table = ctx.db.GameTable.id.find(ref.tableId);
+      const state = table ? JSON.parse(table.stateJson) : null;
+      if (table?.status.tag === 'in_progress' && state?.phase !== 'finished') {
+        active = true;
+        const seat = ctx.db.GameSeat.id.find(ref.id);
+        if (seat)
+          ctx.db.GameSeat.id.update({
+            ...seat,
+            seatState: { tag: 'disconnected' },
+          });
+        const funding = ctx.db.TableFunding.id.find(ref.id);
+        if (funding)
+          ctx.db.TableFunding.id.update({ ...funding, leaving: true });
+      } else {
+        releaseFunding(ctx, ref.id);
+        ctx.db.GameSeat.id.delete(ref.id);
+      }
+    }
     deleteIds(
       spectators.map((row) => row.id),
       (id) => ctx.db.Spectator.id.delete(id),
     );
     deleteIds(presence, (id) => ctx.db.VoicePresence.id.delete(id));
     deleteIds(speaking, (id) => ctx.db.SpeakingState.id.delete(id));
-    ctx.db.LobbyMember.id.delete(member.id);
+    if (active)
+      ctx.db.LobbyMember.id.update({
+        ...member,
+        connected: false,
+        leftRoom: true,
+      });
+    else ctx.db.LobbyMember.id.delete(member.id);
     for (const tableId of touched) {
       const gameTable = ctx.db.GameTable.id.find(tableId);
       if (!gameTable) {
@@ -2762,11 +2725,19 @@ export const leave_table = spacetimedb.reducer(
       return;
     }
     if (
+      seatIds.length &&
+      cashOutUnbetBlackjack(ctx, gameTable.id, seatIds[0])
+    ) {
+      forgetTable(ctx.db, ctx.sender.toHexString(), gameTable.id);
+      noteLobbyActivity(ctx, lobby.id);
+      return;
+    }
+    if (
       gameTable.status.tag === 'in_progress' &&
       seatIds.length > 0 &&
       !(
-        gameTable.gameType === POKER_GAME_TYPE &&
-        pokerHandFinished(JSON.parse(gameTable.stateJson))
+        casinoGame(gameTable.gameType) &&
+        JSON.parse(gameTable.stateJson).phase === 'finished'
       )
     ) {
       for (const seatId of seatIds) {
@@ -2776,12 +2747,15 @@ export const leave_table = spacetimedb.reducer(
           ...seat,
           seatState: { tag: 'disconnected' },
         });
+        const funding = ctx.db.TableFunding.id.find(seat.id);
+        if (funding)
+          ctx.db.TableFunding.id.update({ ...funding, leaving: true });
         if (!ctx.db.SeatAbsence.id.find(seat.id))
           ctx.db.SeatAbsence.insert({
             id: seat.id,
             tableId: gameTable.id,
             lobbyMemberId: member.id,
-            deadlineMicros: undefined,
+            deadlineMicros: ctx.timestamp.microsSinceUnixEpoch + 30_000_000n,
           });
       }
       forgetTable(ctx.db, ctx.sender.toHexString(), gameTable.id);
@@ -2789,6 +2763,7 @@ export const leave_table = spacetimedb.reducer(
       return;
     }
     for (const seatId of seatIds) {
+      releaseFunding(ctx, seatId);
       ctx.db.SeatAbsence.id.delete(seatId);
       ctx.db.GameSeat.id.delete(seatId);
     }
@@ -2920,6 +2895,7 @@ function rulesTable(row: {
   maxPlayers: number;
   stateJson: string;
   createdAt: { toMillis(): bigint };
+  economyJson?: string;
 }): RulesTable {
   const tag = row.status.tag;
   const status =
@@ -2934,6 +2910,9 @@ function rulesTable(row: {
     maxPlayers: row.maxPlayers,
     stateJson: row.stateJson,
     createdAt: Number(row.createdAt.toMillis()),
+    economy: row.economyJson
+      ? (JSON.parse(row.economyJson) as TableEconomy)
+      : undefined,
   };
 }
 
@@ -2993,38 +2972,6 @@ function storedStatus(tag: TableStatusTag): {
     return { tag: 'finished' };
   }
   return { tag: 'waiting_for_players' };
-}
-
-/**
- * Recomputes `Tournament.roundStatus` from its tables after a table's status
- * may have changed. Called from `handle_game_intent`, the only place a
- * table's `phase` (and so its status) reaches `finished`.
- */
-function refreshTournamentRoundStatus(
-  ctx: ModuleCtx,
-  tournamentId: string,
-  round: number,
-): void {
-  const tournament = ctx.db.Tournament.id.find(tournamentId);
-  if (!tournament || tournament.currentRound !== round) {
-    return;
-  }
-  const roundRows: TournamentTableRow[] = [];
-  for (const row of ctx.db.GameTable.byTournament.filter(tournamentId)) {
-    roundRows.push({
-      tournamentId: row.tournamentId,
-      round: row.round,
-      status: row.status,
-    });
-  }
-  const tag = roundStatusTag(roundRows, tournamentId, round);
-  if (tournament.roundStatus.tag !== tag) {
-    ctx.db.Tournament.id.update({
-      ...tournament,
-      roundStatus: { tag },
-      lastActivityAt: ctx.timestamp,
-    });
-  }
 }
 
 function storedState(next: unknown): string {
@@ -3147,9 +3094,6 @@ function commitIntent(
     status,
     lastActivityAt: ctx.timestamp,
   });
-  if (gameTable.tournamentId.length > 0) {
-    refreshTournamentRoundStatus(ctx, gameTable.tournamentId, gameTable.round);
-  }
 
   let order = 0;
   for (const _event of ctx.db.GameEvent.byTable.filter(gameTable.id)) {
@@ -3164,6 +3108,7 @@ function commitIntent(
     createdAt: ctx.timestamp,
   });
   recordClientStats(ctx, gameTable.id, gameTable.gameType, prev, next);
+  settleEconomy(ctx, gameTable.id, next);
   noteLobbyActivity(ctx, gameTable.lobbyId);
   return next;
 }
@@ -3228,13 +3173,34 @@ function queueTableBeat(ctx: ModuleCtx, tableId: string): void {
   if (!gameTable || gameTable.gameType !== POKER_GAME_TYPE) {
     return;
   }
+  if (
+    gameTable.economyJson &&
+    JSON.parse(gameTable.stateJson).phase === 'finished'
+  ) {
+    for (const funding of ctx.db.TableFunding.tableId.filter(tableId)) {
+      const member = ctx.db.LobbyMember.id.find(funding.walletId);
+      if (funding.leaving || !member?.connected || member.leftRoom) {
+        releaseFunding(ctx, funding.id);
+        ctx.db.GameSeat.id.delete(funding.id);
+        ctx.db.SeatAbsence.id.delete(funding.id);
+      }
+    }
+  }
   let parsed: unknown;
   try {
     parsed = JSON.parse(gameTable.stateJson);
   } catch {
     return;
   }
-  const poker = readTablePoker(parsed);
+  let poker = readTablePoker(parsed);
+  if (poker?.phase === 'finished' && gameTable.economyJson)
+    poker = pokerBankrolls(
+      poker,
+      [...ctx.db.TableFunding.tableId.filter(tableId)].map((row) => ({
+        seatIndex: row.seatIndex,
+        chips: Number(row.units) / 2,
+      })),
+    );
   if (!poker) {
     return;
   }
@@ -3242,6 +3208,11 @@ function queueTableBeat(ctx: ModuleCtx, tableId: string): void {
   if (!kind) {
     return;
   }
+  if (kind === 'hand' && gameTable.startsAt === undefined)
+    ctx.db.GameTable.id.update({
+      ...gameTable,
+      startsAt: ctx.timestamp.microsSinceUnixEpoch + 10_000_000n,
+    });
   scheduleBotTurns(
     ctx,
     tableId,
@@ -3254,13 +3225,34 @@ function advancePokerTable(ctx: ModuleCtx, tableId: string): void {
   if (!gameTable || gameTable.gameType !== POKER_GAME_TYPE) {
     return;
   }
+  if (
+    gameTable.economyJson &&
+    JSON.parse(gameTable.stateJson).phase === 'finished'
+  ) {
+    for (const funding of ctx.db.TableFunding.tableId.filter(tableId)) {
+      const member = ctx.db.LobbyMember.id.find(funding.walletId);
+      if (funding.leaving || !member?.connected || member.leftRoom) {
+        releaseFunding(ctx, funding.id);
+        ctx.db.GameSeat.id.delete(funding.id);
+        ctx.db.SeatAbsence.id.delete(funding.id);
+      }
+    }
+  }
   let parsed: unknown;
   try {
     parsed = JSON.parse(gameTable.stateJson);
   } catch {
     return;
   }
-  const poker = readTablePoker(parsed);
+  let poker = readTablePoker(parsed);
+  if (poker?.phase === 'finished' && gameTable.economyJson)
+    poker = pokerBankrolls(
+      poker,
+      [...ctx.db.TableFunding.tableId.filter(tableId)].map((row) => ({
+        seatIndex: row.seatIndex,
+        chips: Number(row.units) / 2,
+      })),
+    );
   if (!poker) {
     return;
   }
@@ -3268,10 +3260,14 @@ function advancePokerTable(ctx: ModuleCtx, tableId: string): void {
   if (pokerAdvanceKind(poker, seated) === null) {
     return;
   }
+  const kind = pokerAdvanceKind(poker, seated);
   const next = advancePoker(poker, rulesTable(gameTable), seated);
   ctx.db.GameTable.id.update({
     ...gameTable,
     stateJson: storedState(next),
+    handNumber:
+      kind === 'hand' ? gameTable.handNumber + 1 : gameTable.handNumber,
+    startsAt: undefined,
     status: storedStatus(
       tableStatusTag(
         POKER_GAME_TYPE,
@@ -3281,9 +3277,7 @@ function advancePokerTable(ctx: ModuleCtx, tableId: string): void {
     ),
     lastActivityAt: ctx.timestamp,
   });
-  if (gameTable.tournamentId.length > 0) {
-    refreshTournamentRoundStatus(ctx, gameTable.tournamentId, gameTable.round);
-  }
+  settleEconomy(ctx, tableId, next);
   noteLobbyActivity(ctx, gameTable.lobbyId);
   queueTableBeat(ctx, tableId);
 }
@@ -3421,6 +3415,11 @@ export const handle_game_intent = spacetimedb.reducer(
       throw new SenderError('Not seated');
     }
     reject(botIntentRejection(member.isBot));
+    const caller = ctx.db.OperatorSession.identity.find(
+      ctx.sender.toHexString(),
+    );
+    if (caller?.clientId !== clientId || caller.lobbyId !== lobby.id)
+      throw new SenderError('You can only play your own seat');
 
     let prev: unknown;
     try {
@@ -3448,42 +3447,15 @@ export const handle_game_intent = spacetimedb.reducer(
       if (session?.clientId !== clientId || session.lobbyId !== lobby.id) {
         throw new SenderError('Join this room before starting');
       }
-      const seated = [...ctx.db.GameSeat.byTable.filter(gameTable.id)].sort(
-        (a, b) =>
-          a.joinedAt.microsSinceUnixEpoch < b.joinedAt.microsSinceUnixEpoch
-            ? -1
-            : a.joinedAt.microsSinceUnixEpoch > b.joinedAt.microsSinceUnixEpoch
-              ? 1
-              : a.id.localeCompare(b.id),
-      );
       reject(
         manualStartRejection(
           gameTable.stateJson,
-          seated.length,
+          rowCount(ctx.db.GameSeat.byTable.filter(gameTable.id)),
           gameTable.minPlayers,
-          seated[0]?.lobbyMemberId === member.id,
+          gameTable.hostMemberId ? gameTable.hostMemberId === member.id : false,
         ),
       );
-      const rules = rulesByType[gameTable.gameType];
-      if (!rules) throw new SenderError('Game rules not found');
-      const next = rules.initialState(
-        seated.map(rulesSeat),
-        rulesTable(gameTable),
-      );
-      ctx.db.GameTable.id.update({
-        ...gameTable,
-        stateJson: storedState(next),
-        status: storedStatus(
-          tableStatusTag(
-            gameTable.gameType,
-            next,
-            currentStatusTag(gameTable.status.tag),
-          ),
-        ),
-        lastActivityAt: ctx.timestamp,
-      });
-      noteLobbyActivity(ctx, lobby.id);
-      queueBotTurns(ctx, gameTable.id);
+      startTable(ctx, gameTable.id);
       return;
     }
 
@@ -3496,6 +3468,8 @@ export const play_bot_turns = spacetimedb.reducer(
   { name: 'play_bot_turns', onSchedule: BotTurnSchedule },
   { row: BotTurnSchedule.rowType },
   (ctx, { row }) => {
+    if (ctx.db.RoomUpgrade.id.find('room-economy')?.phase === 'archived')
+      return;
     if (ctx.db.BotTurnSchedule.scheduledId.find(row.scheduledId)) {
       ctx.db.BotTurnSchedule.scheduledId.delete(row.scheduledId);
     }
@@ -3579,6 +3553,8 @@ export const start_solo_game = spacetimedb.reducer(
       discordGuildId: '',
       discordLobbyVoiceChannelId: '',
       solo: true,
+      startingCoins: DEFAULT_ROOM_GRANT,
+      creatorIdentity: ctx.sender.toHexString(),
     });
     console.log(lobbyCreatedLine(lobbyId));
 
@@ -3595,6 +3571,7 @@ export const start_solo_game = spacetimedb.reducer(
       discordGlobalName: '',
       discordDiscriminator: undefined,
       isBot: false,
+      leftRoom: false,
     });
     rememberLobby(ctx.db, sender, lobbyId, clientId);
 
@@ -3616,10 +3593,8 @@ export const start_solo_game = spacetimedb.reducer(
       0,
       0,
       'solo',
-      '',
-      0,
     );
-    ctx.db.GameTable.insert(row);
+    ctx.db.GameTable.insert({ ...row, hostMemberId: humanId });
     console.log(tableCreatedLine(row.id, lobbyId));
 
     ctx.db.GameSeat.insert({
@@ -3646,6 +3621,7 @@ export const start_solo_game = spacetimedb.reducer(
         discordGlobalName: '',
         discordDiscriminator: undefined,
         isBot: true,
+        leftRoom: false,
       });
       ctx.db.GameSeat.insert({
         id: `seat_${row.id}_${memberId}`,
@@ -3689,3 +3665,687 @@ export const start_solo_game = spacetimedb.reducer(
     queueBotTurns(ctx, row.id);
   },
 );
+
+function ensureWallet(
+  ctx: ModuleCtx,
+  lobbyId: string,
+  clientId: string,
+  name: string,
+): void {
+  const lobby = ctx.db.Lobby.id.find(lobbyId);
+  if (!lobby || lobby.solo) return;
+  const id = `member_${lobbyId}_${clientId}`;
+  const identity = ctx.sender.toHexString();
+  let owner = ctx.db.WalletOwner.id.find(id);
+  if (!owner) {
+    const legacy = [...ctx.db.OperatorSession.iter()].find(
+      (session) => session.lobbyId === lobbyId && session.clientId === clientId,
+    );
+    if (legacy)
+      owner = ctx.db.WalletOwner.insert({ id, identity: legacy.identity });
+  }
+  if (owner && owner.identity !== identity)
+    throw new SenderError('This player belongs to another browser session');
+  if (!owner) {
+    for (const existing of ctx.db.WalletOwner.iter()) {
+      if (
+        existing.identity === identity &&
+        ctx.db.RoomWallet.id.find(existing.id)?.lobbyId === lobbyId
+      )
+        throw new SenderError(
+          'Use this browser’s existing player id in this room',
+        );
+    }
+    ctx.db.WalletOwner.insert({ id, identity });
+  }
+  const wallet = ctx.db.RoomWallet.id.find(id);
+  if (wallet) {
+    ctx.db.RoomWallet.id.update({ ...wallet, name });
+    return;
+  }
+  const grant = coinUnits(lobby.startingCoins);
+  ctx.db.RoomWallet.insert({
+    id,
+    lobbyId,
+    clientId,
+    name,
+    available: grant,
+    granted: grant,
+    profit: 0n,
+  });
+  ctx.db.WalletLedger.insert({
+    id: `grant:${id}`,
+    walletId: id,
+    tableId: '',
+    kind: 'grant',
+    amount: grant,
+    profit: 0n,
+    createdAt: ctx.timestamp,
+  });
+}
+
+function requireWalletOwner(ctx: ModuleCtx, walletId: string): void {
+  if (
+    ctx.db.WalletOwner.id.find(walletId)?.identity !== ctx.sender.toHexString()
+  )
+    throw new SenderError('You can only use your own coins');
+}
+
+function walletChange(
+  ctx: ModuleCtx,
+  walletId: string,
+  id: string,
+  tableId: string,
+  kind: string,
+  amount: bigint,
+  profit = 0n,
+): void {
+  if (ctx.db.WalletLedger.id.find(id)) return;
+  const wallet = ctx.db.RoomWallet.id.find(walletId);
+  if (!wallet || wallet.available + amount < 0n)
+    throw new SenderError('Not enough room coins');
+  ctx.db.RoomWallet.id.update({
+    ...wallet,
+    available: wallet.available + amount,
+    profit: wallet.profit + profit,
+    granted: wallet.granted + (kind === 'refill' ? amount : 0n),
+  });
+  ctx.db.WalletLedger.insert({
+    id,
+    walletId,
+    tableId,
+    kind,
+    amount,
+    profit,
+    createdAt: ctx.timestamp,
+  });
+}
+
+function reserveFunding(
+  ctx: ModuleCtx,
+  tableId: string,
+  memberId: string,
+  seatIndex: number,
+  buyIn?: number,
+): void {
+  const table = ctx.db.GameTable.id.find(tableId);
+  if (!table?.economyJson) return;
+  requireWalletOwner(ctx, memberId);
+  const settings = JSON.parse(table.economyJson) as TableEconomy;
+  const casino = casinoGame(table.gameType);
+  const amount = casino
+    ? validCoins(buyIn, settings.minBuyIn)
+    : settings.entryFee;
+  if (casino && (amount < settings.minBuyIn || amount > settings.maxBuyIn))
+    throw new SenderError('Buy-in is outside this table’s limits');
+  const id = `seat_${tableId}_${memberId}`;
+  if (ctx.db.TableFunding.id.find(id))
+    throw new SenderError('Funds already reserved');
+  const units = coinUnits(amount);
+  walletChange(
+    ctx,
+    memberId,
+    `reserve:${id}:${ctx.timestamp.microsSinceUnixEpoch}`,
+    tableId,
+    'reserve',
+    -units,
+  );
+  ctx.db.TableFunding.insert({
+    id,
+    tableId,
+    walletId: memberId,
+    seatIndex,
+    units,
+    committed: table.status.tag !== 'waiting_for_players',
+    cpu: false,
+    leaving: false,
+  });
+}
+
+function releaseFunding(ctx: ModuleCtx, seatId: string): void {
+  const funding = ctx.db.TableFunding.id.find(seatId);
+  if (!funding) return;
+  walletChange(
+    ctx,
+    funding.walletId,
+    `release:${seatId}:${ctx.timestamp.microsSinceUnixEpoch}`,
+    funding.tableId,
+    'cashout',
+    funding.units,
+  );
+  ctx.db.TableFunding.id.delete(seatId);
+}
+
+function fundedRulesSeats(ctx: ModuleCtx, tableId: string): RulesSeat[] {
+  return [...ctx.db.GameSeat.byTable.filter(tableId)].map((seat) => {
+    const funding = ctx.db.TableFunding.id.find(seat.id);
+    return {
+      ...rulesSeat(seat),
+      chips: funding ? Number(funding.units) / 2 : (seat.chips ?? null),
+    };
+  });
+}
+
+function startTable(ctx: ModuleCtx, tableId: string): void {
+  const table = ctx.db.GameTable.id.find(tableId);
+  if (!table || table.status.tag !== 'waiting_for_players')
+    throw new SenderError('Game already started');
+  const players = fundedRulesSeats(ctx, tableId);
+  if (players.length < table.minPlayers)
+    throw new SenderError('Not enough players');
+  if (
+    players.some(
+      (seat) =>
+        !ctx.db.LobbyMember.id.find(seat.lobbyMemberId)?.connected ||
+        seat.seatState === 'disconnected',
+    )
+  )
+    throw new SenderError('Waiting for players to return');
+  const rules = rulesByType[table.gameType];
+  if (!rules) throw new SenderError('Game rules not found');
+  for (const funding of ctx.db.TableFunding.tableId.filter(tableId))
+    ctx.db.TableFunding.id.update({ ...funding, committed: true });
+  const next = rules.initialState(players, rulesTable(table));
+  ctx.db.GameTable.id.update({
+    ...table,
+    handNumber: 1,
+    startsAt: undefined,
+    stateJson: storedState(next),
+    status: { tag: 'in_progress' },
+    lastActivityAt: ctx.timestamp,
+  });
+  appendLobbyChat(ctx, table.lobbyId, '', `${table.name} is starting.`);
+  noteLobbyActivity(ctx, table.lobbyId);
+  settleEconomy(ctx, tableId, next);
+  queueTableBeat(ctx, tableId);
+}
+
+function settleEconomy(ctx: ModuleCtx, tableId: string, after: unknown): void {
+  const table = ctx.db.GameTable.id.find(tableId);
+  if (
+    !table?.economyJson ||
+    typeof after !== 'object' ||
+    after === null ||
+    !('phase' in after) ||
+    after.phase !== 'finished'
+  )
+    return;
+  const id = `${tableId}:${table.handNumber}`;
+  if (ctx.db.GameSettlement.id.find(id)) return;
+  const fundings = [...ctx.db.TableFunding.tableId.filter(tableId)];
+  if (fundings.length === 0) return;
+  const summary: {
+    name: string;
+    profit: string;
+    seatIndex: number;
+    walletId: string;
+    won?: boolean;
+    refunded?: boolean;
+  }[] = [];
+  const casino = casinoGame(table.gameType);
+  if (casino) {
+    const state = after as unknown as {
+      seats: Record<string, { chips: number }>;
+    };
+    for (const funding of fundings) {
+      const chips = state.seats[String(funding.seatIndex)]?.chips;
+      if (chips === undefined) continue; // A newcomer is waiting for the next hand.
+      const units = coinUnits(chips);
+      const profit = units - funding.units;
+      walletChange(
+        ctx,
+        funding.walletId,
+        `${id}:${funding.id}`,
+        tableId,
+        table.gameType === 'blackjack' ? 'house_hand' : 'poker_hand',
+        0n,
+        profit,
+      );
+      ctx.db.TableFunding.id.update({ ...funding, units });
+      summary.push({
+        seatIndex: funding.seatIndex,
+        walletId: funding.walletId,
+        name: ctx.db.RoomWallet.id.find(funding.walletId)?.name ?? 'Player',
+        profit: profit.toString(),
+      });
+    }
+  } else {
+    const winners = paidGameWinners(
+      table.gameType,
+      after,
+      fundings.map((row) => row.seatIndex),
+    );
+    const pool = fundings.reduce((sum, row) => sum + row.units, 0n);
+    const prizes = winners.length ? splitPool(pool, winners) : null;
+    for (const funding of fundings) {
+      const award = prizes
+        ? (prizes.get(funding.seatIndex) ?? 0n)
+        : funding.units;
+      const profit = award - funding.units;
+      walletChange(
+        ctx,
+        funding.walletId,
+        `${id}:${funding.id}`,
+        tableId,
+        prizes ? 'prize' : 'refund',
+        award,
+        profit,
+      );
+      summary.push({
+        seatIndex: funding.seatIndex,
+        walletId: funding.walletId,
+        name: ctx.db.RoomWallet.id.find(funding.walletId)?.name ?? 'Player',
+        profit: profit.toString(),
+        won: winners.includes(funding.seatIndex),
+        refunded: prizes === null,
+      });
+      // Keep a watcher so the result remains visible after the paid seat is released.
+      const spectatorId = spectatorRowId(tableId, funding.walletId);
+      if (
+        ctx.db.LobbyMember.id.find(funding.walletId)?.leftRoom === false &&
+        !ctx.db.Spectator.id.find(spectatorId)
+      )
+        ctx.db.Spectator.insert({
+          id: spectatorId,
+          tableId,
+          lobbyMemberId: funding.walletId,
+          joinedAt: ctx.timestamp,
+        });
+      ctx.db.GameSeat.id.delete(funding.id);
+      ctx.db.SeatAbsence.id.delete(funding.id);
+      ctx.db.TableFunding.id.delete(funding.id);
+      if (ctx.db.LobbyMember.id.find(funding.walletId)?.leftRoom)
+        ctx.db.LobbyMember.id.delete(funding.walletId);
+    }
+  }
+  if (casino) {
+    for (const funding of ctx.db.TableFunding.tableId.filter(tableId)) {
+      const seat = ctx.db.GameSeat.id.find(funding.id);
+      const member = seat
+        ? ctx.db.LobbyMember.id.find(seat.lobbyMemberId)
+        : null;
+      if (funding.leaving || !member?.connected || funding.units === 0n) {
+        if (member?.connected && !member.leftRoom) {
+          const id = spectatorRowId(tableId, member.id);
+          if (!ctx.db.Spectator.id.find(id))
+            ctx.db.Spectator.insert({
+              id,
+              tableId,
+              lobbyMemberId: member.id,
+              joinedAt: ctx.timestamp,
+            });
+        }
+        releaseFunding(ctx, funding.id);
+        ctx.db.GameSeat.id.delete(funding.id);
+        ctx.db.SeatAbsence.id.delete(funding.id);
+        if (member?.leftRoom) ctx.db.LobbyMember.id.delete(member.id);
+      }
+    }
+  }
+  ctx.db.GameSettlement.insert({
+    id,
+    lobbyId: table.lobbyId,
+    tableId,
+    handNumber: table.handNumber,
+    summaryJson: JSON.stringify(summary),
+    createdAt: ctx.timestamp,
+  });
+}
+
+export const refill_room_coins = spacetimedb.reducer(
+  { name: 'refill_room_coins' },
+  { lobbyId: t.string(), clientId: t.string() },
+  (ctx, { lobbyId, clientId }) => {
+    const id = `member_${lobbyId}_${clientId}`;
+    requireWalletOwner(ctx, id);
+    const lobby = ctx.db.Lobby.id.find(lobbyId);
+    const wallet = ctx.db.RoomWallet.id.find(id);
+    if (!lobby || lobby.status.tag !== 'open' || !wallet)
+      throw new SenderError('Room not found');
+    if ([...ctx.db.TableFunding.iter()].some((row) => row.walletId === id))
+      throw new SenderError('Cash out or finish your current game first');
+    const costs = [...ctx.db.GameTable.byLobby.filter(lobbyId)]
+      .filter((row) => row.economyJson && row.status.tag !== 'finished')
+      .map((row) => {
+        const settings = JSON.parse(row.economyJson) as TableEconomy;
+        return casinoGame(row.gameType) ? settings.minBuyIn : settings.entryFee;
+      });
+    const threshold = coinUnits(costs.length ? Math.min(...costs) : 20);
+    const grant = coinUnits(lobby.startingCoins);
+    if (wallet.available >= threshold || wallet.available >= grant)
+      throw new SenderError(
+        'Refill is only available when you cannot afford a table',
+      );
+    walletChange(
+      ctx,
+      id,
+      `refill:${id}:${ctx.timestamp.microsSinceUnixEpoch}`,
+      '',
+      'refill',
+      grant - wallet.available,
+    );
+    noteLobbyActivity(ctx, lobbyId);
+  },
+);
+
+export const top_up_table = spacetimedb.reducer(
+  { name: 'top_up_table' },
+  { tableId: t.string(), amount: t.u32() },
+  (ctx, { tableId, amount }) => {
+    const table = ctx.db.GameTable.id.find(tableId);
+    if (!table?.economyJson || !casinoGame(table.gameType))
+      throw new SenderError('Not a casino table');
+    const session = ctx.db.OperatorSession.identity.find(
+      ctx.sender.toHexString(),
+    );
+    const walletId = `member_${table.lobbyId}_${session?.clientId ?? ''}`;
+    requireWalletOwner(ctx, walletId);
+    const funding = [...ctx.db.TableFunding.tableId.filter(tableId)].find(
+      (row) => row.walletId === walletId,
+    );
+    if (!funding) throw new SenderError('Not seated');
+    const state = JSON.parse(table.stateJson);
+    if (state.phase !== 'finished' && state.phase !== 'lobby')
+      throw new SenderError('Top up between hands');
+    const settings = JSON.parse(table.economyJson) as TableEconomy;
+    const units = coinUnits(validCoins(amount, settings.minBuyIn));
+    if (
+      funding.units + units > coinUnits(settings.maxBuyIn) ||
+      funding.units + units < coinUnits(settings.minBuyIn)
+    )
+      throw new SenderError('Top-up is outside the buy-in limits');
+    walletChange(
+      ctx,
+      walletId,
+      `topup:${funding.id}:${ctx.timestamp.microsSinceUnixEpoch}`,
+      tableId,
+      'topup',
+      -units,
+    );
+    ctx.db.TableFunding.id.update({ ...funding, units: funding.units + units });
+    if (state.seats?.[String(funding.seatIndex)]) {
+      state.seats[String(funding.seatIndex)].chips =
+        Number(funding.units + units) / 2;
+      ctx.db.GameTable.id.update({ ...table, stateJson: storedState(state) });
+    }
+    queueTableBeat(ctx, tableId);
+  },
+);
+
+function sweepTableHosting(ctx: ModuleCtx): void {
+  const now = ctx.timestamp.microsSinceUnixEpoch;
+  for (const original of ctx.db.GameTable.iter()) {
+    if (original.status.tag === 'finished' && !casinoGame(original.gameType))
+      continue;
+    let table = original;
+    let seats = [...ctx.db.GameSeat.byTable.filter(table.id)];
+    if (table.status.tag === 'waiting_for_players') {
+      for (const seat of seats) {
+        const member = ctx.db.LobbyMember.id.find(seat.lobbyMemberId);
+        if (
+          member &&
+          !member.connected &&
+          now >= member.lastSeenAt.microsSinceUnixEpoch + 60_000_000n
+        ) {
+          releaseFunding(ctx, seat.id);
+          ctx.db.GameSeat.id.delete(seat.id);
+        }
+      }
+      seats = [...ctx.db.GameSeat.byTable.filter(table.id)];
+    }
+    if (!table.hostMemberId && !table.economyJson && seats.length) {
+      seats.sort((a, b) =>
+        a.joinedAt.microsSinceUnixEpoch < b.joinedAt.microsSinceUnixEpoch
+          ? -1
+          : a.joinedAt.microsSinceUnixEpoch > b.joinedAt.microsSinceUnixEpoch
+            ? 1
+            : a.id.localeCompare(b.id),
+      );
+      table = { ...table, hostMemberId: seats[0].lobbyMemberId };
+    }
+    if (!table.hostMemberId) continue;
+    const eligible = seats.filter((seat) => {
+      const member = ctx.db.LobbyMember.id.find(seat.lobbyMemberId);
+      return (
+        member?.connected &&
+        !member.isBot &&
+        seat.seatState?.tag !== 'disconnected'
+      );
+    });
+    if (eligible.some((seat) => seat.lobbyMemberId === table.hostMemberId)) {
+      table = { ...table, hostAwaySince: undefined };
+    } else if (table.hostAwaySince === undefined) {
+      table = { ...table, hostAwaySince: now };
+    } else if (now >= table.hostAwaySince + 60_000_000n && eligible.length) {
+      const index = Math.floor(ctx.random() * eligible.length);
+      table = {
+        ...table,
+        hostMemberId: eligible[index].lobbyMemberId,
+        hostAwaySince: undefined,
+      };
+      appendLobbyChat(
+        ctx,
+        table.lobbyId,
+        '',
+        `${ctx.db.LobbyMember.id.find(table.hostMemberId)?.name ?? 'A player'} now hosts ${table.name}.`,
+      );
+    }
+    const full =
+      table.status.tag === 'waiting_for_players' &&
+      seats.length === table.maxPlayers &&
+      eligible.length === seats.length;
+    if (full && table.startsAt === undefined) {
+      table = { ...table, startsAt: now + 10_000_000n };
+      appendLobbyChat(
+        ctx,
+        table.lobbyId,
+        '',
+        `${table.name} starts in 10 seconds.`,
+      );
+    } else if (
+      table.status.tag === 'waiting_for_players' &&
+      !full &&
+      table.startsAt !== undefined
+    ) {
+      table = { ...table, startsAt: undefined };
+      appendLobbyChat(
+        ctx,
+        table.lobbyId,
+        '',
+        `${table.name} countdown cancelled; waiting for players.`,
+      );
+    }
+    ctx.db.GameTable.id.update(table);
+    if (full && table.startsAt !== undefined && now >= table.startsAt)
+      startTable(ctx, table.id);
+  }
+}
+
+/** Blackjack uses the same between-hand review pause as poker. */
+function advanceCasinoTables(ctx: ModuleCtx): void {
+  const now = ctx.timestamp.microsSinceUnixEpoch;
+  for (const table of ctx.db.GameTable.iter()) {
+    if (
+      table.gameType !== 'blackjack' ||
+      !table.economyJson ||
+      table.handNumber === 0
+    )
+      continue;
+    const state = JSON.parse(table.stateJson);
+    if (state.phase !== 'finished') continue;
+    const settings = JSON.parse(table.economyJson) as TableEconomy;
+    for (const funding of ctx.db.TableFunding.tableId.filter(table.id)) {
+      const member = ctx.db.LobbyMember.id.find(funding.walletId);
+      if (
+        funding.leaving ||
+        !member?.connected ||
+        member.leftRoom ||
+        funding.units < coinUnits(settings.minBet)
+      ) {
+        releaseFunding(ctx, funding.id);
+        ctx.db.GameSeat.id.delete(funding.id);
+      }
+    }
+    const players = fundedRulesSeats(ctx, table.id);
+    if (!players.length) continue;
+    if (table.startsAt === undefined) {
+      ctx.db.GameTable.id.update({ ...table, startsAt: now + 10_000_000n });
+      continue;
+    }
+    if (now < table.startsAt) continue;
+    const next = blackjackRules.initialState(players, rulesTable(table));
+    ctx.db.GameTable.id.update({
+      ...table,
+      handNumber: table.handNumber + 1,
+      startsAt: undefined,
+      stateJson: storedState(next),
+      status: { tag: 'in_progress' },
+      lastActivityAt: ctx.timestamp,
+    });
+  }
+}
+
+export const record_discord_leaderboard = spacetimedb.reducer(
+  { name: 'record_discord_leaderboard' },
+  { lobbyId: t.string(), messageId: t.string(), revision: t.string() },
+  (ctx, { lobbyId, messageId, revision }) => {
+    const lobby = ctx.db.Lobby.id.find(lobbyId);
+    if (
+      !lobby?.discordChannelId ||
+      (lobby.creatorIdentity &&
+        lobby.creatorIdentity !== ctx.sender.toHexString())
+    )
+      throw new SenderError(
+        'Only this room’s Discord operator can record delivery',
+      );
+    if (
+      !DISCORD_CHANNEL_ID.test(messageId) ||
+      ctx.db.GameSettlement.id.find(revision)?.lobbyId !== lobbyId
+    )
+      throw new SenderError('Invalid leaderboard delivery');
+    const row = { lobbyId, messageId, revision };
+    if (ctx.db.DiscordLeaderboard.lobbyId.find(lobbyId))
+      ctx.db.DiscordLeaderboard.lobbyId.update(row);
+    else ctx.db.DiscordLeaderboard.insert(row);
+  },
+);
+
+/** Called only by the operator who archived the legacy schema; replay is rejected. */
+export const restore_legacy_tables = spacetimedb.reducer(
+  { name: 'restore_legacy_tables' },
+  (ctx) => {
+    const upgrade = ctx.db.RoomUpgrade.id.find('room-economy');
+    if (
+      !upgrade ||
+      upgrade.ownerIdentity !== ctx.sender.toHexString() ||
+      upgrade.phase !== 'archived'
+    )
+      throw new SenderError('No authorized room migration is pending');
+    for (const backup of ctx.db.TableBackup.iter()) {
+      const old = JSON.parse(backup.payloadJson) as {
+        id: string;
+        lobbyId: string;
+        gameType: string;
+        name: string;
+        status: TableStatusTag;
+        minPlayers: number;
+        maxPlayers: number;
+        stateJson: string;
+        createdAt: string;
+        lastActivityAt: string | null;
+        discordVoiceChannelId: string;
+      };
+      const seats = [...ctx.db.GameSeat.byTable.filter(old.id)].sort((a, b) =>
+        a.joinedAt.microsSinceUnixEpoch < b.joinedAt.microsSinceUnixEpoch
+          ? -1
+          : a.joinedAt.microsSinceUnixEpoch > b.joinedAt.microsSinceUnixEpoch
+            ? 1
+            : a.id.localeCompare(b.id),
+      );
+      ctx.db.GameTable.insert({
+        id: old.id,
+        lobbyId: old.lobbyId,
+        gameType: old.gameType,
+        name: old.name,
+        status: storedStatus(old.status),
+        minPlayers: old.minPlayers,
+        maxPlayers: old.maxPlayers,
+        stateJson: old.stateJson,
+        createdAt: new Timestamp(BigInt(old.createdAt)),
+        lastActivityAt: old.lastActivityAt
+          ? new Timestamp(BigInt(old.lastActivityAt))
+          : undefined,
+        discordVoiceChannelId: old.discordVoiceChannelId,
+        economyJson: '',
+        hostMemberId: seats[0]?.lobbyMemberId ?? '',
+        hostAwaySince: undefined,
+        startsAt: undefined,
+        handNumber: 0,
+      });
+      ctx.db.TableBackup.id.delete(backup.id);
+      queueTableBeat(ctx, old.id);
+    }
+    // Preserve the prior session's ownership before any browser can claim its public client id.
+    for (const session of ctx.db.OperatorSession.iter()) {
+      if (!session.lobbyId || !session.clientId) continue;
+      const id = `member_${session.lobbyId}_${session.clientId}`;
+      if (!ctx.db.WalletOwner.id.find(id))
+        ctx.db.WalletOwner.insert({ id, identity: session.identity });
+    }
+    ctx.db.RoomUpgrade.id.update({ ...upgrade, phase: 'restored' });
+  },
+);
+
+function validCoins(value: unknown, fallback: number): number {
+  try {
+    return coinSetting(value, fallback);
+  } catch (error) {
+    throw new SenderError(
+      error instanceof Error ? error.message : 'Invalid coins',
+    );
+  }
+}
+function validTableEconomy(
+  gameType: string,
+  settings: Partial<TableEconomy>,
+): TableEconomy {
+  try {
+    return tableEconomy(gameType, settings);
+  } catch (error) {
+    throw new SenderError(
+      error instanceof Error ? error.message : 'Invalid table stakes',
+    );
+  }
+}
+
+/** No wager exists yet: return the buy-in rather than having a CPU gamble it. */
+function cashOutUnbetBlackjack(
+  ctx: ModuleCtx,
+  tableId: string,
+  seatId: string,
+): boolean {
+  const table = ctx.db.GameTable.id.find(tableId);
+  const seat = ctx.db.GameSeat.id.find(seatId);
+  if (!table || !seat || table.gameType !== 'blackjack') return false;
+  const state = JSON.parse(table.stateJson);
+  if (
+    state.phase !== 'play' ||
+    state.step !== 'bet' ||
+    state.seats[String(seat.seatIndex)]?.bet !== 0
+  )
+    return false;
+  releaseFunding(ctx, seat.id);
+  ctx.db.GameSeat.id.delete(seat.id);
+  ctx.db.SeatAbsence.id.delete(seat.id);
+  const next = blackjackRules.onPlayerLeave(state, rulesSeat(seat));
+  ctx.db.GameTable.id.update({
+    ...table,
+    stateJson: storedState(next),
+    status: storedStatus(
+      tableStatusTag('blackjack', next, currentStatusTag(table.status.tag)),
+    ),
+    lastActivityAt: ctx.timestamp,
+  });
+  settleEconomy(ctx, tableId, next);
+  return true;
+}

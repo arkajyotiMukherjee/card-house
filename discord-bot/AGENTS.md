@@ -51,3 +51,7 @@ Do not draw speaking indicators here. The default player name is the mapping in 
 Do not commit a bot token, application id, or public key.
 
 Do not start this process from `scripts/bootstrap.sh`. The module publish stays there.
+
+## Room leaderboard
+
+`leaderboard.ts` serves `/cardhouse leaderboard` and updates one durable message per linked room after settlements. Use the rate-limited Discord REST API, disable mentions, coalesce revisions, and record delivery only after success. Recover an accepted post before creating another message after restart. `CARDHOUSE_BOT_SESSION_FILE` must persist the bot identity and remain untracked. Room creation accepts optional starting coins. Tests use recorded API responses; never invent a live Discord delivery when credentials or permissions are unavailable.

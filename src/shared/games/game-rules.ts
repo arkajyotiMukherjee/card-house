@@ -1,3 +1,4 @@
+import type { TableEconomy } from '../economy';
 /**
  * Plain values the rules functions read.
  * The SpacetimeDB module keeps its own row types.
@@ -25,6 +26,7 @@ export interface GameTable {
   maxPlayers: number;
   stateJson: string;
   createdAt: number;
+  economy?: TableEconomy;
 }
 
 export interface GameSeat {

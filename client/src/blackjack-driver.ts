@@ -4,6 +4,7 @@ import { isMobileDevice } from './mobile-shell';
 import * as ex from 'excalibur';
 import {
   BLACKJACK_BET_AMOUNTS,
+  blackjackRules,
   BLACKJACK_GAME_TYPE,
   blackjackStake,
   blackjackTotal,
@@ -55,7 +56,7 @@ import {
 import { ChipAtlas, type ChipDenomination } from './chip-atlas';
 import type { GameDriver, InputEvent, RenderContext } from './game-driver';
 import { LOGICAL_WIDTH } from './sheets';
-import { OPPONENT_FAN_CARD, TURN_LINE } from './table-presentation';
+import { actionBox, OPPONENT_FAN_CARD, TURN_LINE } from './table-presentation';
 
 const BUTTON = ex.Color.fromHex('#1b5c38');
 const BUTTON_DOWN = ex.Color.fromHex('#0e3d24');
@@ -85,6 +86,7 @@ const ACT_BUTTONS = [
   { target: 'stand', label: 'Stand', box: STAND_BUTTON },
   { target: 'double', label: 'Double', box: DOUBLE_BUTTON },
   { target: 'split', label: 'Split', box: SPLIT_BUTTON },
+  { target: 'surrender', label: 'Surrender', box: actionBox(4) },
 ] as const;
 
 /** A red box that blinks a few times over a control, then removes itself. */
@@ -146,7 +148,7 @@ interface CardRecord {
 interface ButtonRecord {
   actor: ex.Actor;
   box: { x: number; y: number; w: number; h: number };
-  group: 'bet' | 'act';
+  group: 'bet' | 'act' | 'insurance';
   target: string;
   face: ex.Rectangle;
   caption: ex.Actor;
@@ -189,6 +191,7 @@ function chipStack(amount: number): ChipDenomination[] {
 }
 
 function resultLabel(results: readonly BlackjackResult[]): string {
+  if (results.includes('surrender')) return 'Surrender';
   if (results.some((result) => result === 'blackjack')) {
     return 'BJ';
   }
@@ -262,6 +265,16 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
     if (state.turnSeatIndex !== ctx.meSeatIndex) {
       return;
     }
+    if (state.step === 'insurance') {
+      if (event.target === 'insurance:yes' || event.target === 'insurance:no')
+        ctx.sendIntent({
+          type: 'insurance',
+          take: event.target === 'insurance:yes',
+        });
+      else if (event.target === 'even_money')
+        ctx.sendIntent({ type: 'even_money' });
+      return;
+    }
     if (state.step === 'bet' && event.target.startsWith('bet:')) {
       const amount = Number(event.target.slice(4));
       ctx.sendIntent({ type: 'bet', amount });
@@ -272,7 +285,8 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
       (event.target === 'hit' ||
         event.target === 'stand' ||
         event.target === 'double' ||
-        event.target === 'split')
+        event.target === 'split' ||
+        event.target === 'surrender')
     ) {
       ctx.sendIntent({ type: event.target });
     }
@@ -413,7 +427,7 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
       if (!cardId || !slot) {
         continue;
       }
-      desired.set(cardId, {
+      desired.set(`dealer:${index}:${cardId}`, {
         x: slot.x,
         y: slot.y,
         faceUp: !(state.holeHidden && index === 1),
@@ -450,17 +464,20 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
           if (!cardId || !slot) {
             continue;
           }
-          desired.set(cardId, {
-            x: slot.x,
-            y: slot.y,
-            faceUp: true,
-            delay: index * 16,
-            z: (seat.self ? 12 : 6) + index,
-            personal: seat.self,
-            rotation: slot.rotation,
-            fan: !seat.self,
-            scale: slot.scale,
-          });
+          desired.set(
+            `seat:${seat.seatIndex}:${handIndex}:${index}:${cardId}`,
+            {
+              x: slot.x,
+              y: slot.y,
+              faceUp: true,
+              delay: index * 16,
+              z: (seat.self ? 12 : 6) + index,
+              personal: seat.self,
+              rotation: slot.rotation,
+              fan: !seat.self,
+              scale: slot.scale,
+            },
+          );
         }
       }
     }
@@ -502,7 +519,14 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
         rotation: place.rotation,
         z: place.z,
       });
-      actor.graphics.use(cardSprite(atlas, cardId, place.faceUp, place.fan));
+      actor.graphics.use(
+        cardSprite(
+          atlas,
+          cardId.split(':').at(-1) ?? cardId,
+          place.faceUp,
+          place.fan,
+        ),
+      );
       actor.pointer.useGraphicsBounds = false;
       actor.on('pointerenter', (event) => {
         if (!canInspectPointer(event, ctx.scene.engine.input.pointers)) return;
@@ -547,7 +571,12 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
       record.personal = place.personal;
       record.fan = place.fan;
       record.actor.graphics.use(
-        cardSprite(atlas, cardId, place.faceUp, place.fan),
+        cardSprite(
+          atlas,
+          cardId.split(':').at(-1) ?? cardId,
+          place.faceUp,
+          place.fan,
+        ),
       );
     }
     const moved =
@@ -692,15 +721,72 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
     const opacity = mine ? 1 : DIMMED;
     const betting = state.phase === 'play' && state.step === 'bet';
     const acting = state.phase === 'play' && state.step === 'act';
+    const betValues = [
+      ...new Set([
+        state.minBet ?? 10,
+        Math.max(state.minBet ?? 10, Math.min(25, state.maxBet ?? 50)),
+        state.maxBet ?? 50,
+      ]),
+    ];
+    let betIndex = 0;
     for (const button of this.buttons) {
-      const show =
+      let show =
         (betting && button.group === 'bet') ||
-        (acting && button.group === 'act');
+        (acting && button.group === 'act') ||
+        (state.phase === 'play' &&
+          state.step === 'insurance' &&
+          button.group === 'insurance');
+      if (button.group === 'bet') {
+        const amount = betValues[betIndex++];
+        if (amount === undefined) show = false;
+        else {
+          button.target = `bet:${amount}`;
+          const label = `Bet ${amount}`;
+          const size = buttonFontSize(label, button.box.w, button.box.h);
+          button.caption.graphics.use(canvasText(label, size, GOLD));
+          const rest = buttonCaptionPos(
+            label,
+            button.box.w,
+            button.box.h,
+            size,
+          );
+          button.caption.pos = ex.vec(rest.x, rest.y);
+        }
+      }
+      const action = button.target.startsWith('bet:')
+        ? { type: 'bet', amount: Number(button.target.slice(4)) }
+        : button.target.startsWith('insurance:')
+          ? { type: 'insurance', take: button.target.endsWith('yes') }
+          : { type: button.target };
+      let enabled = mine;
+      if (show && enabled && ctx.meSeatIndex !== null) {
+        try {
+          blackjackRules.applyIntent(
+            state,
+            action as Parameters<typeof blackjackRules.applyIntent>[1],
+            {
+              seat: {
+                id: '',
+                tableId: '',
+                lobbyMemberId: '',
+                seatIndex: ctx.meSeatIndex,
+                chips: null,
+                joinedAt: 0,
+                seatState: 'active',
+              },
+              now: 0,
+            },
+          );
+        } catch {
+          enabled = false;
+        }
+      }
+      if (button.target === 'even_money' && !enabled) show = false;
       button.actor.pos = show
         ? ex.vec(button.box.x, button.box.y)
         : ex.vec(button.box.x, -200);
-      button.face.opacity = opacity;
-      button.caption.graphics.opacity = opacity;
+      button.face.opacity = enabled ? opacity : DIMMED;
+      button.caption.graphics.opacity = enabled ? opacity : DIMMED;
     }
   }
 
@@ -714,6 +800,18 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
         'bet',
       );
     }
+    for (const [index, entry] of [
+      { target: 'insurance:yes', label: 'Insurance' },
+      { target: 'insurance:no', label: 'No thanks' },
+      { target: 'even_money', label: 'Even money' },
+    ].entries())
+      this.addButton(
+        ctx,
+        actionBox(index),
+        entry.label,
+        entry.target,
+        'insurance',
+      );
     for (const action of ACT_BUTTONS) {
       this.addButton(ctx, action.box, action.label, action.target, 'act');
     }
@@ -724,7 +822,7 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
     box: { x: number; y: number; w: number; h: number },
     label: string,
     target: string,
-    group: 'bet' | 'act',
+    group: 'bet' | 'act' | 'insurance',
   ): void {
     const actor = new ex.Actor({
       pos: ex.vec(box.x, -200),
@@ -763,7 +861,10 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
         if (!state || !current) {
           return;
         }
-        this.handleInput({ type: 'pointerup', target }, state, current);
+        const actual =
+          this.buttons.find((button) => button.actor === actor)?.target ??
+          target;
+        this.handleInput({ type: 'pointerup', target: actual }, state, current);
       },
     );
     if (box.x >= 750 && box.y >= 300) anchorTableActor(actor, 'right', box.x);

@@ -27,8 +27,9 @@ export const blackjackStrategy: BotStrategy<BlackjackState, BlackjackIntent> = {
     return [state.turnSeatIndex];
   },
   choose(state, seatIndex) {
+    if (state.step === 'insurance') return { type: 'insurance', take: false };
     if (state.step === 'bet') {
-      return { type: 'bet', amount: 10 };
+      return { type: 'bet', amount: state.minBet ?? 10 };
     }
     const seat = state.seats[String(seatIndex)];
     const hand = seat?.hands[seat.handIndex];
@@ -39,7 +40,7 @@ export const blackjackStrategy: BotStrategy<BlackjackState, BlackjackIntent> = {
     const right = rankOfBlackjackCard(hand.cards[1] ?? '');
     const pair = hand.cards.length === 2 && left !== null && left === right;
     const canSplit =
-      pair && seat.hands.length === 1 && hand.bet > 0 && seat.chips >= hand.bet;
+      pair && seat.hands.length < 4 && hand.bet > 0 && seat.chips >= hand.bet;
     if (canSplit && (left === 'A' || left === '8')) {
       return { type: 'split' };
     }

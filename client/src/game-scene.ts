@@ -404,11 +404,10 @@ export function spectatingLine(
   return 'Spectating';
 }
 
-export function tableSubscriptionQueries(
-  tableId: string,
-): readonly [string, string, string, string, string] {
+export function tableSubscriptionQueries(tableId: string): readonly string[] {
   const id = quoteSqlString(tableId);
   return [
+    `SELECT * FROM GameSettlement WHERE tableId = ${id}`,
     `SELECT * FROM GameTable WHERE id = ${id}`,
     `SELECT * FROM GameSeat WHERE tableId = ${id}`,
     `SELECT * FROM GameEvent WHERE tableId = ${id}`,

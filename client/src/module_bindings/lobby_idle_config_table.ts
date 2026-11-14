@@ -12,7 +12,7 @@ import {
 
 export default __t.row({
   id: __t.string().primaryKey(),
-  idleTimeoutMicros: __t.u64().name("idle_timeout_micros"),
-  devTimeoutMicros: __t.u64().name("dev_timeout_micros"),
+  idleTimeoutMicros: __t.u64(),
+  devTimeoutMicros: __t.u64(),
   dev: __t.bool(),
 });

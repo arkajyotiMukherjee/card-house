@@ -88,10 +88,7 @@ export function withDiscordIdentity(
   return url.toString();
 }
 
-function firstQuery(
-  params: URLSearchParams,
-  ...keys: string[]
-): string | null {
+function firstQuery(params: URLSearchParams, ...keys: string[]): string | null {
   for (const key of keys) {
     if (params.has(key)) {
       return params.get(key);

@@ -12,9 +12,9 @@ import {
 
 export default __t.row({
   id: __t.string().primaryKey(),
-  lobbyId: __t.string().name("lobby_id"),
-  tableId: __t.string().name("table_id"),
-  lobbyMemberId: __t.string().name("lobby_member_id"),
-  isSpeaking: __t.bool().name("is_speaking"),
-  lastUpdatedAt: __t.timestamp().name("last_updated_at"),
+  lobbyId: __t.string(),
+  tableId: __t.string(),
+  lobbyMemberId: __t.string(),
+  isSpeaking: __t.bool(),
+  lastUpdatedAt: __t.timestamp(),
 });

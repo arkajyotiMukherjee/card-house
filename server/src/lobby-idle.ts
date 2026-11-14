@@ -49,22 +49,17 @@ export function newestMicros(stamps: readonly bigint[]): bigint | undefined {
 }
 
 /**
- * Newest lobby, table, or tournament stamp.
+ * Newest lobby or table stamp.
  * A missing lobby stamp stays missing so the sweep can stamp it and wait.
  */
 export function roomActivityMicros(
   lobbyActivity: bigint | undefined,
   tableActivities: readonly bigint[],
-  tournamentActivities: readonly bigint[],
 ): bigint | undefined {
   if (lobbyActivity === undefined) {
     return undefined;
   }
-  return newestMicros([
-    lobbyActivity,
-    ...tableActivities,
-    ...tournamentActivities,
-  ]);
+  return newestMicros([lobbyActivity, ...tableActivities]);
 }
 
 /** True while any Discord voice channel id is still stored. */

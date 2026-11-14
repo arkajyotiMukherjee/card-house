@@ -28,8 +28,14 @@ export const BLACKJACK_RANKS = [
 export const BLACKJACK_SUITS = ['S', 'H', 'D', 'C'] as const;
 
 const BLACKJACK_PHASES = ['lobby', 'play', 'finished'] as const;
-const BLACKJACK_STEPS = ['bet', 'act'] as const;
-const BLACKJACK_RESULTS = ['win', 'lose', 'push', 'blackjack'] as const;
+const BLACKJACK_STEPS = ['bet', 'insurance', 'act'] as const;
+const BLACKJACK_RESULTS = [
+  'win',
+  'lose',
+  'push',
+  'blackjack',
+  'surrender',
+] as const;
 
 const RANK_SET: ReadonlySet<string> = new Set(BLACKJACK_RANKS);
 const SUIT_SET: ReadonlySet<string> = new Set(BLACKJACK_SUITS);
@@ -48,12 +54,12 @@ export const BLACKJACK_BET_AMOUNTS = [10, 25, 50] as const;
 
 export const BLACKJACK_STARTING_CHIPS = 200;
 
-const BET_SET: ReadonlySet<number> = new Set(BLACKJACK_BET_AMOUNTS);
-
 export interface BlackjackHand {
   cards: string[];
   bet: number;
   done: boolean;
+  surrendered?: boolean;
+  splitAce?: boolean;
 }
 
 export interface BlackjackSeatState {
@@ -64,6 +70,9 @@ export interface BlackjackSeatState {
   /** Hand waiting for hit, stand, double, or split. */
   handIndex: number;
   results: BlackjackResult[];
+  insurance?: number;
+  insuranceDecided?: boolean;
+  evenMoney?: boolean;
 }
 
 export interface BlackjackState {
@@ -78,6 +87,8 @@ export interface BlackjackState {
   turnSeatIndex: number | null;
   /** Seats with a win or a natural. A push-only table leaves this empty. */
   winnerSeatIndexes: number[];
+  minBet?: number;
+  maxBet?: number;
 }
 
 export type BlackjackIntent =
@@ -85,7 +96,10 @@ export type BlackjackIntent =
   | { type: 'hit' }
   | { type: 'stand' }
   | { type: 'double' }
-  | { type: 'split' };
+  | { type: 'split' }
+  | { type: 'insurance'; take: boolean }
+  | { type: 'even_money' }
+  | { type: 'surrender' };
 
 /** What a table event says. Seat numbers stay indexes; clients add names. */
 export type BlackjackEventNote =
@@ -93,7 +107,8 @@ export type BlackjackEventNote =
   | { kind: 'hit'; seat: number; total: number; bust: boolean }
   | { kind: 'stand'; seat: number; total: number }
   | { kind: 'double'; seat: number; total: number; bust: boolean }
-  | { kind: 'split'; seat: number };
+  | { kind: 'split' | 'even_money' | 'surrender'; seat: number }
+  | { kind: 'insurance'; seat: number; take: boolean };
 
 export const blackjackGameDefinition = {
   gameType: BLACKJACK_GAME_TYPE,
@@ -101,7 +116,7 @@ export const blackjackGameDefinition = {
   minPlayers: 1,
   maxPlayers: 5,
   howToPlay:
-    '# Blackjack\n\nEach player bets 10, 25, or 50, then receives two cards. The dealer receives one face-up card and one hole card. Hit to take a card, stand to stop, double to take one card for twice the bet, or split a matching pair. Aces count as 1 or 11. Face cards count as 10. The dealer hits until 17. A higher hand wins even money. A two-card 21 pays 3 to 2. A bust loses. The round ends when every hand is scored.',
+    '# Blackjack\n\nBuy in with room coins and choose a whole-coin wager within the table limits. The house has unlimited funds. Six decks are used, reshuffled between hands after 75% usage. The dealer checks for blackjack and stands on soft 17. Hit, stand, or double a two-card hand, including after eligible splits. Equal-value pairs can split into at most four hands. Split aces receive one card and cannot be doubled or resplit. An unsplit natural pays exactly 3:2; split-hand 21 pays even money. With a dealer ace, insurance pays 2:1 and a natural may take even money. Late surrender returns half your initial unsplit wager after the dealer check. Remaining chips return to your room wallet when you leave after settlement.',
 } satisfies GameDefinition;
 
 function asRecord(value: unknown, message: string): Record<string, unknown> {
@@ -117,6 +132,12 @@ function isSeatIndex(value: unknown): value is number {
 
 function isCount(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
+function isMoney(value: unknown): value is number {
+  return (
+    typeof value === 'number' && value >= 0 && Number.isSafeInteger(value * 2)
+  );
 }
 
 function isStringArray(value: unknown): value is string[] {
@@ -150,10 +171,8 @@ function isResult(value: unknown): value is BlackjackResult {
   );
 }
 
-function isBetAmount(
-  value: unknown,
-): value is (typeof BLACKJACK_BET_AMOUNTS)[number] {
-  return typeof value === 'number' && BET_SET.has(value);
+function isBetAmount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
 }
 
 /** Rank encoded at the front of a card id. `10` is the only two-letter rank. */
@@ -224,13 +243,15 @@ function readHand(value: unknown): BlackjackHand {
     cards: record.cards.slice(),
     bet: record.bet,
     done: record.done,
+    ...(record.surrendered === true ? { surrendered: true } : {}),
+    ...(record.splitAce === true ? { splitAce: true } : {}),
   };
 }
 
 function readSeat(value: unknown): BlackjackSeatState {
   const record = asRecord(value, 'Invalid table state');
   if (
-    !isCount(record.chips) ||
+    !isMoney(record.chips) ||
     !isCount(record.bet) ||
     !isCount(record.handIndex)
   ) {
@@ -256,6 +277,9 @@ function readSeat(value: unknown): BlackjackSeatState {
     hands,
     handIndex: record.handIndex,
     results,
+    ...(isMoney(record.insurance) ? { insurance: record.insurance } : {}),
+    ...(record.insuranceDecided === true ? { insuranceDecided: true } : {}),
+    ...(record.evenMoney === true ? { evenMoney: true } : {}),
   };
 }
 
@@ -305,11 +329,18 @@ export function readBlackjackState(value: unknown): BlackjackState {
     seats,
     turnSeatIndex: record.turnSeatIndex,
     winnerSeatIndexes: readSeatIndexes(record.winnerSeatIndexes),
+    ...(isCount(record.minBet) && isCount(record.maxBet)
+      ? { minBet: record.minBet, maxBet: record.maxBet }
+      : {}),
   };
 }
 
 export function readBlackjackIntent(value: unknown): BlackjackIntent {
   const record = asRecord(value, 'Invalid intent');
+  if (record.type === 'insurance' && typeof record.take === 'boolean')
+    return { type: 'insurance', take: record.take };
+  if (record.type === 'even_money' || record.type === 'surrender')
+    return { type: record.type };
   if (record.type === 'hit') {
     return { type: 'hit' };
   }
@@ -341,8 +372,14 @@ export function readBlackjackEventNote(
   if (note.kind === 'bet' && isBetAmount(note.amount)) {
     return { kind: 'bet', seat: note.seat, amount: note.amount };
   }
-  if (note.kind === 'split') {
-    return { kind: 'split', seat: note.seat };
+  if (note.kind === 'insurance' && typeof note.take === 'boolean')
+    return { kind: 'insurance', seat: note.seat, take: note.take };
+  if (
+    note.kind === 'split' ||
+    note.kind === 'surrender' ||
+    note.kind === 'even_money'
+  ) {
+    return { kind: note.kind, seat: note.seat };
   }
   if (!isCount(note.total)) {
     return null;
@@ -452,25 +489,42 @@ function emptySeat(): BlackjackSeatState {
   };
 }
 
-function openingState(players: GameSeat[], tableId: string): BlackjackState {
+function openingState(players: GameSeat[], table: GameTable): BlackjackState {
   const ordered = seatsInOrder(players);
   if (ordered.length === 0) {
     return notStartedState();
   }
   const seats: Record<string, BlackjackSeatState> = {};
   for (const seat of ordered) {
-    seats[handKey(seat.seatIndex)] = emptySeat();
+    seats[handKey(seat.seatIndex)] = {
+      ...emptySeat(),
+      chips: seat.chips ?? BLACKJACK_STARTING_CHIPS,
+    };
   }
   return {
     phase: 'play',
     step: 'bet',
-    deck: shuffleDeck(freshDeck(), tableId),
+    deck: previousShoe(table),
+    minBet: table.economy?.minBet ?? 10,
+    maxBet: table.economy?.maxBet ?? 50,
     dealer: [],
     holeHidden: true,
     seats,
     turnSeatIndex: ordered[0].seatIndex,
     winnerSeatIndexes: [],
   };
+}
+
+function previousShoe(table: GameTable): string[] {
+  try {
+    const previous = readBlackjackState(JSON.parse(table.stateJson));
+    if (previous.phase === 'finished' && previous.deck.length > 78)
+      return previous.deck.slice();
+  } catch {
+    /* The initial table has no prior shoe. */
+  }
+  const cards = Array.from({ length: 6 }, () => freshDeck()).flat();
+  return shuffleDeck(cards, table.id + table.stateJson);
 }
 
 function takeCard(deck: readonly string[]): [string, string[]] {
@@ -487,6 +541,7 @@ function replaceSeat(
   seat: BlackjackSeatState,
 ): BlackjackState {
   return {
+    ...state,
     phase: state.phase,
     step: state.step,
     deck: state.deck,
@@ -524,7 +579,12 @@ function dealerShouldDraw(state: BlackjackState): boolean {
     const seat = state.seats[handKey(seatIndex)];
     const split = seat.hands.length > 1;
     for (const hand of seat.hands) {
-      if (liveHand(hand) && !isNatural(hand, split)) {
+      if (
+        liveHand(hand) &&
+        !hand.surrendered &&
+        !seat.evenMoney &&
+        !isNatural(hand, split)
+      ) {
         return true;
       }
     }
@@ -538,11 +598,12 @@ function dealerShouldDraw(state: BlackjackState): boolean {
  */
 function payout(hand: BlackjackHand, result: BlackjackResult): number {
   if (result === 'blackjack') {
-    return hand.bet + Math.floor((hand.bet * 3) / 2);
+    return hand.bet + (hand.bet * 3) / 2;
   }
   if (result === 'win') {
     return hand.bet * 2;
   }
+  if (result === 'surrender') return hand.bet / 2;
   if (result === 'push') {
     return hand.bet;
   }
@@ -556,6 +617,7 @@ function scoreHand(
   dealerTotal: number,
 ): BlackjackResult {
   const total = blackjackTotal(hand.cards);
+  if (hand.surrendered) return 'surrender';
   const natural = isNatural(hand, split);
   const dealerNatural = dealer.length === 2 && dealerTotal === 21;
   if (total > 21) {
@@ -596,11 +658,14 @@ function settle(state: BlackjackState): BlackjackState {
   const winners: number[] = [];
   for (const seatIndex of seatedIndexes(state.seats)) {
     const seat = state.seats[handKey(seatIndex)];
-    let chips = seat.chips;
+    let chips =
+      seat.chips + (dealerStartsNatural ? (seat.insurance ?? 0) * 3 : 0);
     const results: BlackjackResult[] = [];
     const split = seat.hands.length > 1;
     for (const hand of seat.hands) {
-      const result = scoreHand(hand, split, dealer, dealerTotal);
+      const result = seat.evenMoney
+        ? 'win'
+        : scoreHand(hand, split, dealer, dealerTotal);
       chips += payout(hand, result);
       results.push(result);
     }
@@ -620,6 +685,7 @@ function settle(state: BlackjackState): BlackjackState {
     };
   }
   return {
+    ...state,
     phase: 'finished',
     step: 'act',
     deck,
@@ -704,6 +770,7 @@ function dealRound(state: BlackjackState): BlackjackState {
     };
   }
   const dealtState: BlackjackState = {
+    ...state,
     phase: 'play',
     step: 'act',
     deck,
@@ -713,17 +780,73 @@ function dealRound(state: BlackjackState): BlackjackState {
     turnSeatIndex: null,
     winnerSeatIndexes: [],
   };
-  for (const seatIndex of order) {
-    const open = firstOpenHand(dealtState.seats[handKey(seatIndex)]);
-    if (open >= 0) {
-      return replaceSeat(
-        { ...dealtState, turnSeatIndex: seatIndex },
-        seatIndex,
-        { ...dealtState.seats[handKey(seatIndex)], handIndex: open },
-      );
-    }
+  if (rankOfBlackjackCard(dealer[0] ?? '') === 'A') {
+    return {
+      ...dealtState,
+      step: 'insurance',
+      turnSeatIndex: order[0] ?? null,
+    };
   }
-  return settle(dealtState);
+  return afterDealerCheck(dealtState);
+}
+
+function afterDealerCheck(state: BlackjackState): BlackjackState {
+  if (blackjackTotal(state.dealer) === 21) return settle(state);
+  for (const index of seatedIndexes(state.seats)) {
+    const open = firstOpenHand(state.seats[handKey(index)]);
+    if (open >= 0)
+      return replaceSeat(
+        { ...state, step: 'act', turnSeatIndex: index },
+        index,
+        { ...state.seats[handKey(index)], handIndex: open },
+      );
+  }
+  return settle(state);
+}
+
+function applyInsurance(
+  state: BlackjackState,
+  index: number,
+  take: boolean,
+  evenMoney = false,
+): BlackjackState {
+  const seat = state.seats[handKey(index)];
+  if (state.step !== 'insurance' || !seat || seat.insuranceDecided)
+    throw new Error('Invalid intent');
+  const cost = take ? seat.bet / 2 : 0;
+  if (cost > seat.chips || (evenMoney && !isNatural(seat.hands[0], false)))
+    throw new Error('Invalid intent');
+  const next = replaceSeat(state, index, {
+    ...seat,
+    chips: seat.chips - cost,
+    insurance: cost,
+    insuranceDecided: true,
+    evenMoney,
+  });
+  const pending = seatedIndexes(next.seats).find(
+    (candidate) => !next.seats[handKey(candidate)].insuranceDecided,
+  );
+  return pending === undefined
+    ? afterDealerCheck(next)
+    : { ...next, turnSeatIndex: pending };
+}
+
+function applySurrender(state: BlackjackState, index: number): BlackjackState {
+  const { seat, hand } = handAt(state, index);
+  if (
+    state.step !== 'act' ||
+    seat.hands.length !== 1 ||
+    hand.cards.length !== 2 ||
+    hand.done
+  )
+    throw new Error('Invalid intent');
+  return advanceFrom(
+    replaceSeat(state, index, {
+      ...seat,
+      hands: [{ ...hand, done: true, surrendered: true }],
+    }),
+    index,
+  );
 }
 
 function applyBet(
@@ -731,7 +854,12 @@ function applyBet(
   amount: number,
   seatIndex: number,
 ): BlackjackState {
-  if (state.step !== 'bet' || !isBetAmount(amount)) {
+  if (
+    state.step !== 'bet' ||
+    !Number.isSafeInteger(amount) ||
+    amount < (state.minBet ?? 10) ||
+    amount > (state.maxBet ?? 50)
+  ) {
     throw new Error('Invalid intent');
   }
   const seat = state.seats[handKey(seatIndex)];
@@ -794,7 +922,12 @@ function applyDouble(state: BlackjackState, seatIndex: number): BlackjackState {
     throw new Error('Invalid intent');
   }
   const { seat, hand } = handAt(state, seatIndex);
-  if (hand.cards.length !== 2 || seat.chips < hand.bet || hand.bet === 0) {
+  if (
+    hand.cards.length !== 2 ||
+    hand.splitAce ||
+    seat.chips < hand.bet ||
+    hand.bet === 0
+  ) {
     throw new Error('Invalid intent');
   }
   const [card, deck] = takeCard(state.deck);
@@ -818,14 +951,13 @@ function applySplit(state: BlackjackState, seatIndex: number): BlackjackState {
     throw new Error('Invalid intent');
   }
   const { seat, hand } = handAt(state, seatIndex);
-  if (seat.hands.length !== 1 || hand.cards.length !== 2) {
+  if (seat.hands.length >= 4 || hand.cards.length !== 2 || hand.splitAce) {
     throw new Error('Invalid intent');
   }
   const left = rankOfBlackjackCard(hand.cards[0] ?? '');
-  const right = rankOfBlackjackCard(hand.cards[1] ?? '');
   if (
     left === null ||
-    left !== right ||
+    blackjackTotal([hand.cards[0]]) !== blackjackTotal([hand.cards[1]]) ||
     seat.chips < hand.bet ||
     hand.bet === 0
   ) {
@@ -834,17 +966,30 @@ function applySplit(state: BlackjackState, seatIndex: number): BlackjackState {
   const [first, deckAfterFirst] = takeCard(state.deck);
   const [second, deck] = takeCard(deckAfterFirst);
   const aces = left === 'A';
-  const hands: BlackjackHand[] = [
-    { cards: [hand.cards[0], first], bet: hand.bet, done: aces },
-    { cards: [hand.cards[1], second], bet: hand.bet, done: aces },
-  ];
+  const hands = seat.hands.slice();
+  hands.splice(
+    seat.handIndex,
+    1,
+    {
+      cards: [hand.cards[0], first],
+      bet: hand.bet,
+      done: aces || blackjackTotal([hand.cards[0], first]) === 21,
+      ...(aces ? { splitAce: true } : {}),
+    },
+    {
+      cards: [hand.cards[1], second],
+      bet: hand.bet,
+      done: aces || blackjackTotal([hand.cards[1], second]) === 21,
+      ...(aces ? { splitAce: true } : {}),
+    },
+  );
   const next = replaceSeat({ ...state, deck }, seatIndex, {
     ...seat,
     chips: seat.chips - hand.bet,
     hands,
-    handIndex: 0,
+    handIndex: seat.handIndex,
   });
-  if (aces) {
+  if (hands[seat.handIndex].done) {
     return advanceFrom(next, seatIndex);
   }
   return next;
@@ -943,7 +1088,7 @@ export const blackjackRules = {
     if (players.length === 0) {
       return notStartedState();
     }
-    return openingState(players, table.id);
+    return openingState(players, table);
   },
   applyIntent(
     prev: BlackjackState,
@@ -959,6 +1104,11 @@ export const blackjackRules = {
       throw new Error('Not your turn');
     }
     const seatIndex = ctx.seat.seatIndex;
+    if (action.type === 'insurance')
+      return applyInsurance(state, seatIndex, action.take);
+    if (action.type === 'even_money')
+      return applyInsurance(state, seatIndex, false, true);
+    if (action.type === 'surrender') return applySurrender(state, seatIndex);
     if (action.type === 'bet') {
       return applyBet(state, action.amount, seatIndex);
     }
@@ -983,7 +1133,11 @@ export const blackjackRules = {
     const after = readBlackjackState(next);
     const action = readBlackjackIntent(intent);
     const seat = ctx.seat.seatIndex;
-    if (action.type === 'bet' && isBetAmount(action.amount)) {
+    if (action.type === 'insurance')
+      return { kind: 'insurance', seat, take: action.take };
+    if (action.type === 'even_money' || action.type === 'surrender')
+      return { kind: action.type, seat };
+    if (action.type === 'bet') {
       return { kind: 'bet', seat, amount: action.amount };
     }
     if (action.type === 'split') {

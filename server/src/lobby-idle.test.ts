@@ -132,15 +132,15 @@ assert(
   'the newest stamp is the room activity',
 );
 assert(
-  roomActivityMicros(undefined, [9n], [4n]) === undefined,
+  roomActivityMicros(undefined, [9n, 4n]) === undefined,
   'a missing lobby stamp waits to be stamped',
 );
 assert(
-  roomActivityMicros(5n, [9n], [4n]) === 9n,
+  roomActivityMicros(5n, [9n, 4n]) === 9n,
   'a later table action keeps the room',
 );
 assert(
-  roomActivityMicros(12n, [9n], [4n]) === 12n,
+  roomActivityMicros(12n, [9n, 4n]) === 12n,
   'a later lobby action keeps the room',
 );
 assert(

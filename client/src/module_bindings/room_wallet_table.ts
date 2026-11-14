@@ -9,20 +9,13 @@ import {
   type AlgebraicTypeType as __AlgebraicTypeType,
   type Infer as __Infer,
 } from "spacetimedb";
-import {
-  TournamentRoundStatus,
-} from "./types";
-
 
 export default __t.row({
   id: __t.string().primaryKey(),
-  lobbyId: __t.string().name("lobby_id"),
-  gameType: __t.string().name("game_type"),
+  lobbyId: __t.string(),
+  clientId: __t.string(),
   name: __t.string(),
-  currentRound: __t.u32().name("current_round"),
-  get roundStatus() {
-    return TournamentRoundStatus.name("round_status");
-  },
-  createdAt: __t.timestamp().name("created_at"),
-  lastActivityAt: __t.option(__t.timestamp()).name("last_activity_at"),
+  available: __t.i64(),
+  granted: __t.i64(),
+  profit: __t.i64(),
 });

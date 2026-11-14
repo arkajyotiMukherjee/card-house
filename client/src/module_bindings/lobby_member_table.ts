@@ -12,14 +12,15 @@ import {
 
 export default __t.row({
   id: __t.string().primaryKey(),
-  lobbyId: __t.string().name("lobby_id"),
-  clientId: __t.string().name("client_id"),
+  lobbyId: __t.string(),
+  clientId: __t.string(),
   name: __t.string(),
   connected: __t.bool(),
-  lastSeenAt: __t.timestamp().name("last_seen_at"),
-  discordUserId: __t.string().name("discord_user_id"),
-  discordUsername: __t.string().name("discord_username"),
-  discordGlobalName: __t.string().name("discord_global_name"),
-  discordDiscriminator: __t.option(__t.string()).name("discord_discriminator"),
-  isBot: __t.bool().name("is_bot"),
+  lastSeenAt: __t.timestamp(),
+  discordUserId: __t.string(),
+  discordUsername: __t.string(),
+  discordGlobalName: __t.string(),
+  discordDiscriminator: __t.option(__t.string()),
+  isBot: __t.bool(),
+  leftRoom: __t.bool(),
 });
