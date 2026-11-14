@@ -1,0 +1,153 @@
+[
+  {
+    "viewport": {
+      "width": 667,
+      "height": 375
+    },
+    "layout": {
+      "width": 960,
+      "canvas": {
+        "x": 60,
+        "y": 17,
+        "width": 607,
+        "height": 341,
+        "top": 17,
+        "right": 667,
+        "bottom": 358,
+        "left": 60
+      },
+      "boardScale": 1.25,
+      "handScale": 1.25,
+      "button": 752,
+      "frameLeft": 0
+    }
+  },
+  {
+    "viewport": {
+      "width": 932,
+      "height": 430
+    },
+    "layout": {
+      "width": 1095,
+      "canvas": {
+        "x": 60,
+        "y": 0,
+        "width": 871,
+        "height": 430,
+        "top": 0,
+        "right": 931,
+        "bottom": 430,
+        "left": 60
+      },
+      "boardScale": 1.25,
+      "handScale": 1.25,
+      "button": 819.5,
+      "frameLeft": -67.5
+    }
+  },
+  {
+    "viewport": {
+      "width": 1280,
+      "height": 720
+    },
+    "layout": {
+      "width": 960,
+      "canvas": {
+        "x": 60,
+        "y": 17,
+        "width": 1220,
+        "height": 686,
+        "top": 17,
+        "right": 1280,
+        "bottom": 703,
+        "left": 60
+      },
+      "boardScale": 1.25,
+      "handScale": 1.25,
+      "button": 752,
+      "frameLeft": 0
+    }
+  },
+  {
+    "viewport": {
+      "width": 844,
+      "height": 390
+    },
+    "layout": {
+      "width": 1085,
+      "canvas": {
+        "x": 60,
+        "y": 0,
+        "width": 783,
+        "height": 390,
+        "top": 0,
+        "right": 843,
+        "bottom": 390,
+        "left": 60
+      },
+      "boardScale": 1.25,
+      "handScale": 1.25,
+      "button": 814.5,
+      "frameLeft": -62.5
+    }
+  },
+  {
+    "variation": "holdem",
+    "maximumLabel": "All-in",
+    "phase": "finished",
+    "boardCards": 5,
+    "totalChips": 2000,
+    "remainingStacks": {
+      "0": 0,
+      "1": 2000
+    }
+  },
+  {
+    "variation": "omaha",
+    "maximumLabel": "Pot max",
+    "phase": "finished",
+    "boardCards": 5,
+    "totalChips": 2000,
+    "remainingStacks": {
+      "0": 1980,
+      "1": 20
+    }
+  },
+  {
+    "variation": "oklahoma",
+    "maximumLabel": "Pot max",
+    "phase": "finished",
+    "boardCards": 5,
+    "totalChips": 2000,
+    "remainingStacks": {
+      "0": 0,
+      "1": 2000
+    }
+  },
+  {
+    "threePlayer": true,
+    "pots": [
+      {
+        "amount": 2970,
+        "eligible": [
+          0,
+          1,
+          2
+        ]
+      },
+      {
+        "amount": 20,
+        "eligible": [
+          0,
+          2
+        ]
+      },
+      {
+        "amount": 10,
+        "eligible": [
+          2
+        ]
+      }
+    ]
+  }
+]

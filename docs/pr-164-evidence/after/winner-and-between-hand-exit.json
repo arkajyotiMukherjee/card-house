@@ -1,0 +1,15 @@
+{
+  "winner": {
+    "bannerY": 190,
+    "bannerZ": 90,
+    "text": "Winner is Bhodor Choda",
+    "opponentCards": 54,
+    "fixture": true
+  },
+  "normalHandLeave": {
+    "fundedPlayers": 2,
+    "bluffJoins": 2,
+    "pokerSeatsAfter": 0
+  },
+  "errors": []
+}

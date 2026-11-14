@@ -1,3 +1,4 @@
+import { isLobbyViewport, placeLobbyWidths } from './lobby-viewport';
 import { placeTableAnchors, tableViewportWidth } from './table-viewport';
 import * as ex from 'excalibur';
 import { BootScene, demoImages } from './boot-scene';
@@ -69,6 +70,7 @@ const discordIdentity =
     : undefined;
 
 const canvas = document.createElement('canvas');
+canvas.draggable = false;
 document.querySelector('#app')?.append(canvas);
 
 const engine = new ex.Engine({
@@ -107,14 +109,15 @@ function applyContainScale(): void {
   if (shell.button && !shell.gate) {
     insets.left += 60;
   }
-  const tableActive = engine.currentScene instanceof GameScene;
-  const logicalWidth =
-    tableActive && isMobileDevice()
-      ? tableViewportWidth(
-          settledSize.width - insets.left - insets.right,
-          settledSize.height - insets.top - insets.bottom,
-        )
-      : LOGICAL_WIDTH;
+  const tableActive =
+    engine.currentScene instanceof GameScene ||
+    isLobbyViewport(engine.currentScene);
+  const logicalWidth = tableActive
+    ? tableViewportWidth(
+        settledSize.width - insets.left - insets.right,
+        settledSize.height - insets.top - insets.bottom,
+      )
+    : LOGICAL_WIDTH;
   engine.screen.resolution = { width: logicalWidth, height: LOGICAL_HEIGHT };
   engine.currentScene.camera.pos = ex.vec(
     LOGICAL_WIDTH / 2,
@@ -163,19 +166,22 @@ mountMobileShell({ onChange: applyContainScale });
 installGameGestureGuard();
 installTouchTargets(engine);
 engine.on('postframe', () => {
-  const tableActive = engine.currentScene instanceof GameScene;
+  const tableActive =
+    engine.currentScene instanceof GameScene ||
+    isLobbyViewport(engine.currentScene);
   const insets = readSafeInsets();
   const shell = shellView(readShellInputs());
   if (shell.button && !shell.gate) insets.left += 60;
-  const width =
-    tableActive && isMobileDevice()
-      ? tableViewportWidth(
-          settledSize.width - insets.left - insets.right,
-          settledSize.height - insets.top - insets.bottom,
-        )
-      : LOGICAL_WIDTH;
+  const width = tableActive
+    ? tableViewportWidth(
+        settledSize.width - insets.left - insets.right,
+        settledSize.height - insets.top - insets.bottom,
+      )
+    : LOGICAL_WIDTH;
   if (engine.screen.resolution.width !== width) applyContainScale();
   placeTableAnchors(engine.currentScene, width);
+  if (isLobbyViewport(engine.currentScene))
+    placeLobbyWidths(engine.currentScene);
 });
 
 const loader = new ex.Loader(demoImages);
@@ -388,7 +394,6 @@ void engine.start(loader).then(() => {
           loading.setBackground(hex);
           tableScene.setTableStyle(look.table);
           tableScene.setBackground(hex);
-          roomScene.refreshCards();
         });
         if (joinCode && !savedRoom) {
           const joinName = joinNameFromSearch(window.location.search);

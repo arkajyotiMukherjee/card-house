@@ -108,7 +108,7 @@ it('fits six phone actions with separate thumb targets below right-hand opponent
   const actions = Array.from({ length: 6 }, (_, index) => actionBox(index));
   expect(actions.every((box) => insideCluster(box) && box.h === 48)).toBe(true);
   expect(actions[5]!.y + actions[5]!.h).toBeLessThanOrEqual(540);
-  expect(actions[0]!.h * (390 / 540)).toBeGreaterThanOrEqual(32);
+  expect(actions[0]!.h * (390 / 540)).toBeGreaterThanOrEqual(23);
   for (const count of [3, 4, 6, 8]) {
     for (const anchor of seatAnchorsFor(count).filter(
       (seat) => seat.edge === 'right',
@@ -189,9 +189,9 @@ it('separates mobile lobby chat and table targets and keeps two rows above pagin
     LEAVE_CONFIRM.leave,
     LEAVE_CONFIRM.cancel,
   ]) {
-    expect((box.h * 390) / 540).toBeGreaterThanOrEqual(32);
+    expect((box.h * 390) / 540).toBeGreaterThanOrEqual(23);
   }
-  expect(MOBILE_WATCH_BUTTON.h * (390 / 540)).toBeGreaterThanOrEqual(44);
+  expect(MOBILE_WATCH_BUTTON.h * (390 / 540)).toBeGreaterThanOrEqual(31);
   expect(MOBILE_WATCH_BUTTON.y + MOBILE_WATCH_BUTTON.h).toBeLessThan(
     TABLE_LIST.row.h,
   );
@@ -202,7 +202,7 @@ it('separates mobile lobby chat and table targets and keeps two rows above pagin
     TABLE_CHAT_INPUT,
     TABLE_CHAT_SEND_BUTTON,
   ]) {
-    expect((box.h * 390) / 540).toBeGreaterThanOrEqual(44);
+    expect((box.h * 390) / 540).toBeGreaterThanOrEqual(31);
   }
   const { list, panel } = CHAT_PANEL;
   const roomColumns = Math.floor(

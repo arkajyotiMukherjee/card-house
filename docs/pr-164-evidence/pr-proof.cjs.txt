@@ -1,0 +1,86 @@
+const BEFORE=process.env.QA_BEFORE==='1';const DB=BEFORE?'cardroom-before':'cardroom';const ORIGIN=BEFORE?'http://127.0.0.1:5174':'http://127.0.0.1:5173';const OUT='/workspace/test-tools/evidence-'+(BEFORE?'before':'after');require('fs').mkdirSync(OUT,{recursive:true});
+const {chromium}=require('playwright');const assert=require('assert/strict');const fs=require('fs');
+(async()=>{
+const browser=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
+const pages=[],errors=[],results=[];const stamp=Date.now();
+const timeout=setTimeout(()=>{console.error('TIMEOUT');browser.close();process.exitCode=1},360000);timeout.unref();
+async function connect(page){await page.evaluate(async(DB)=>{
+ const {DbConnection}=await import('/src/module_bindings/index.ts');
+ const b=DbConnection.builder().withUri('http://127.0.0.1:3000').withDatabaseName(DB);const t=localStorage.getItem('stdbToken');if(t)b.withToken(t);
+ window.testConn=await new Promise((resolve,reject)=>b.onConnect((conn,id,token)=>{localStorage.setItem('stdbToken',token);resolve(conn)}).onConnectError((c,e)=>reject(e)).build());
+ await new Promise((resolve,reject)=>window.testConn.subscriptionBuilder().onApplied(resolve).onError(reject).subscribe(['SELECT * FROM Lobby','SELECT * FROM LobbyMember','SELECT * FROM GameTable','SELECT * FROM GameSeat','SELECT * FROM GameEvent']));
+},DB);}
+async function client(name,mobile,width,height){
+ const ctx=await browser.newContext({viewport:{width,height},isMobile:mobile,hasTouch:mobile});const p=await ctx.newPage();
+ await p.route('**/src/main.ts*',async r=>{const s=await r.fetch();await r.fulfill({response:s,body:(await s.text()).replace('lobbyScene = roomScene;', 'lobbyScene = roomScene; window.__qaLobby = roomScene;')+'\nwindow.__qaEngine=engine;'});});
+ p.on('pageerror',e=>errors.push(`${name}: ${e.message}`));await p.goto(ORIGIN);await p.waitForFunction(()=>window.__qaEngine);await connect(p);pages.push(p);console.log('client',name);return p;
+}
+const ada=await client('Ada',true,844,390),bea=await client('Bea',false,1440,900),cam=await client('Cam',true,932,430);
+await ada.evaluate(()=>window.testConn.reducers.createLobby({}));
+const room=await ada.evaluate(()=>Array.from(window.testConn.db.lobby.iter()).sort((a,b)=>Number(b.createdAt.microsSinceUnixEpoch-a.createdAt.microsSinceUnixEpoch))[0]);
+for(const [p,name] of [[ada,'Bhodor Choda'],[bea,'Sani Kumar'],[cam,'Cam']])await p.evaluate(async({code,name})=>window.testConn.reducers.joinLobby({lobbyCode:code,name,clientId:localStorage.getItem('clientId')}),{code:room.code,name});
+console.log('room',room.code);
+async function state(tableId){return ada.evaluate(id=>JSON.parse(window.testConn.db.gameTable.id.find(id).stateJson),tableId)}
+async function act(p,tableId,intent){await p.evaluate(async({tableId,intent})=>window.testConn.reducers.handleGameIntent({tableId,clientId:localStorage.getItem('clientId'),intentPayload:JSON.stringify(intent)}),{tableId,intent});}
+async function open(p,name,tableId){
+ await p.waitForTimeout(400);
+ await p.evaluate(({code,name,tableId})=>{window.testConn.disconnect();localStorage.setItem('lastRoom',JSON.stringify({lobbyCode:code,name,tableId}))},{code:room.code,name,tableId});
+ await p.goto(ORIGIN+'/');await p.waitForFunction(()=>window.__qaEngine?.currentScene.pokerDriver?.state?.phase==='play');await p.waitForTimeout(400);await connect(p);
+}
+async function clickControl(p,target,stake=false){
+ const pos=await p.evaluate(({target,stake})=>{const e=window.__qaEngine,d=e.currentScene.pokerDriver;const b=(stake?d.stakeButtons:d.buttons).find(b=>b.target===target);const v=b.actor.pos.clone();v.x+=b.box.w/2;v.y+=b.box.h/2;const point=e.screen.worldToPageCoordinates(v);return {x:point.x,y:point.y};},{target,stake});
+ if(await p.evaluate(()=>matchMedia('(pointer: coarse) and (hover: none)').matches))await p.touchscreen.tap(pos.x,pos.y);else await p.mouse.click(pos.x,pos.y);
+ await p.waitForTimeout(150);
+}
+
+async function lobby(p,name){await p.evaluate(({code,name})=>{window.testConn?.disconnect();localStorage.setItem('lastRoom',JSON.stringify({lobbyCode:code,name,tableId:''}));},{code:room.code,name});await p.goto(ORIGIN+'/');await p.waitForFunction(()=>{const f=document.querySelector('[data-cardhouse-field="lobby-chat"]');return f&&f.getBoundingClientRect().left>=0&&window.__qaLobby});await p.waitForTimeout(200);await connect(p);}
+async function create(name,gameType,variation){await ada.evaluate(async({id,name,gameType,variation})=>window.testConn.reducers.createGameTable({lobbyId:id,gameType,settings:JSON.stringify({name,minPlayers:2,maxPlayers:gameType==='bluff'?6:2,...(variation?{variation}:{})})}),{id:room.id,name,gameType,variation});return ada.evaluate(name=>Array.from(testConn.db.gameTable.iter()).find(t=>t.lobbyId===localStorage.getItem('qaRoom')&&t.name===name)?.id||Array.from(testConn.db.gameTable.iter()).find(t=>t.name===name).id,name);}
+async function join(p,tableId){await p.evaluate(async tableId=>{const m=Array.from(testConn.db.lobbyMember.iter()).find(m=>m.clientId===localStorage.getItem('clientId'));await testConn.reducers.joinTable({tableId,lobbyMemberId:m.id})},tableId);}
+async function screen(p,name){await p.screenshot({path:OUT+'/'+name+'.png'});}
+for(const [p,body] of [[ada,'Hello, ready for a game?'],[bea,'Yes! Let us play Bluff.'],[cam,'I will join you.']])await p.evaluate(async({id,body})=>testConn.reducers.sendLobbyChatMessage({lobbyId:id,clientId:localStorage.getItem('clientId'),body}),{id:room.id,body});
+for(let n=0;n<3;n++)await bea.evaluate(async code=>testConn.reducers.joinLobby({lobbyCode:code,name:'Sani Kumar',clientId:localStorage.getItem('clientId')}),room.code);
+const hold=await create('Friday Holdem '+stamp,'poker','holdem'), bluff=await create('Bluff with friends '+stamp,'bluff'), omaha=await create('Omaha '+stamp,'poker','omaha');
+await lobby(ada,'Bhodor Choda');await lobby(bea,'Sani Kumar');
+for(const [p,width,height,name] of [[ada,844,390,'lobby-mobile'],[ada,932,430,'lobby-wide-mobile'],[bea,1440,900,'lobby-desktop'],[bea,1920,900,'lobby-wide-desktop']]){
+ await p.evaluate(()=>document.activeElement?.blur());await p.setViewportSize({width,height});await p.waitForTimeout(200);await screen(p,name);
+ results.push({case:name,viewport:{width,height},resolution:await p.evaluate(()=>window.__qaEngine.screen.resolution)});
+}
+await ada.setViewportSize({width:844,height:390});await bea.setViewportSize({width:1440,height:900});
+await join(ada,hold);await join(bea,hold);await act(ada,hold,{type:'start_game'});await open(ada,'Bhodor Choda',hold);await open(bea,'Sani Kumar',hold);await screen(ada,'poker-mobile-controls');await screen(bea,'poker-desktop-controls');
+await clickControl(ada,'raise');await clickControl(ada,'stake-max',true);assert.equal(await ada.evaluate(()=>window.__qaEngine.currentScene.pokerDriver.stake.amount),1000);await screen(ada,'holdem-all-in-maximum');await clickControl(ada,'stake-cancel',true);
+// A visible action announcement before ending the hand.
+await act(ada,hold,{type:'raise',amount:40});await ada.waitForTimeout(100);await screen(ada,'poker-action-announcement');
+await act(bea,hold,{type:'raise',amount:1000});await act(ada,hold,{type:'call'});
+await ada.waitForFunction(id=>JSON.parse(testConn.db.gameTable.id.find(id).stateJson).phase==='finished',hold,{timeout:6000});
+let done=await state(hold);assert(Object.values(done.seats).some(r=>r.chips===0),'seed should produce a terminal cash game');await screen(ada,'poker-terminal');
+const status=await ada.evaluate(id=>testConn.db.gameTable.id.find(id).status.tag.toLowerCase(),hold);if(!BEFORE)assert.equal(status,'finished');
+for(const p of [ada,bea]) {await p.evaluate(()=>window.__qaEngine.currentScene.leave());await p.waitForFunction(()=>window.__qaEngine.currentScene.constructor.name!=='GameScene');}
+const seatCount=await ada.evaluate(id=>Array.from(testConn.db.gameSeat.iter()).filter(s=>s.tableId===id).length,hold);
+const joinErrors=[];
+for(const p of [ada,bea]){try{await join(p,bluff);joinErrors.push(null)}catch(e){joinErrors.push(e.message)}}
+if(BEFORE){assert(joinErrors.every(e=>e?.includes('Already seated')));await ada.evaluate(id=>window.__qaLobby.joinTable(id),bluff);await screen(ada,'poker-leave-blocks-bluff');
+ // Clean up the baseline reservation only after recording the reproduced bug.
+ for(const [p,name] of [[ada,'Bhodor Choda'],[bea,'Sani Kumar']]){await p.evaluate(async id=>testConn.reducers.leaveLobby({lobbyId:id,clientId:localStorage.getItem('clientId')}),room.id);await p.evaluate(async({code,name})=>testConn.reducers.joinLobby({lobbyCode:code,name,clientId:localStorage.getItem('clientId')}),{code:room.code,name});await join(p,bluff);}
+}else{assert.deepEqual(joinErrors,[null,null]);assert.equal(seatCount,0);await ada.waitForFunction(id=>!testConn.db.gameTable.id.find(id),hold,{timeout:3000});}
+results.push({case:'terminal-poker-leave-then-bluff',terminalStatus:status,pokerSeatsAfterLeaving:seatCount,joinErrors,totalChips:Object.values(done.seats).reduce((n,r)=>n+r.chips,0)});
+if(BEFORE) await lobby(ada,'Bhodor Choda');
+await act(ada,bluff,{type:'start_game'});
+await ada.evaluate(({code,tableId})=>{testConn.disconnect();localStorage.setItem('lastRoom',JSON.stringify({lobbyCode:code,name:'Bhodor Choda',tableId}))},{code:room.code,tableId:bluff});await ada.goto(ORIGIN+'/');await ada.waitForFunction(()=>window.__qaEngine?.currentScene.bluffDriver?.state?.phase==='play').catch(async e=>{console.log('BLUFF DEBUG',await ada.evaluate(()=>({scene:window.__qaEngine?.currentScene.constructor.name,stored:localStorage.getItem('lastRoom'),client:localStorage.getItem('clientId'),lobby:window.__qaLobby?.lobbyId})));await ada.screenshot({path:OUT+'/bluff-open-debug.png'});throw e;});await ada.waitForTimeout(1500);await connect(ada);await screen(ada,'joined-bluff-after-poker');
+const selectedCard=await ada.evaluate(()=>{const e=window.__qaEngine,d=e.currentScene.bluffDriver,id=d.visibleHand[0],r=d.cards.get(id);const point=r.actor.pos.clone();point.y-=12;const p=e.screen.worldToPageCoordinates(point);return {id,x:p.x,y:p.y}});await ada.touchscreen.tap(selectedCard.x,selectedCard.y);await ada.waitForTimeout(200);await screen(ada,'bluff-card-selection');
+const selection=await ada.evaluate(id=>{const d=window.__qaEngine.currentScene.bluffDriver,r=d.cards.get(id);return {selected:d.selected.has(id),children:r.actor.children.length,offset:r.actor.graphics.offset.y}},selectedCard.id);assert(selection.selected);if(!BEFORE)assert.equal(selection.children,0);
+await ada.touchscreen.tap(selectedCard.x,selectedCard.y);await ada.waitForTimeout(200);
+// Real Chromium touch hold plus CSS/default-action checks; this does not emulate native iOS menus.
+const cdp=await ada.context().newCDPSession(ada);await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:selectedCard.x,y:selectedCard.y,id:1}]});await ada.waitForTimeout(1100);await screen(ada,'long-press-card');await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+const guard=await ada.evaluate(()=>{const c=document.querySelector('canvas');const s=getComputedStyle(c);const events={};for(const name of ['selectstart','contextmenu','dragstart']){const e=new Event(name,{bubbles:true,cancelable:true});c.dispatchEvent(e);events[name]=e.defaultPrevented;}return {userSelect:s.userSelect,events,selection:window.getSelection().toString()}});if(!BEFORE){assert.equal(guard.userSelect,'none');assert(Object.values(guard.events).every(Boolean));assert.equal(guard.selection,'');}
+results.push({case:'selection-and-long-press',selection,guard,engine:'Chromium mobile emulation; native iOS Safari not available'});
+// Stress the actual renderer with a completed Bluff hand and a 54-card opponent.
+const winner=await ada.evaluate(async()=>{const e=window.__qaEngine,d=e.currentScene.bluffDriver;const fixture=structuredClone(d.state);const cards=Object.values(fixture.hands).flat();fixture.hands={'0':[],'1':cards};fixture.phase='finished';fixture.winnerSeatIndex=0;fixture.turnSeatIndex=null;e.currentScene.paintBluff(JSON.stringify(fixture));const a=d.labels.find(a=>a.children.some(c=>c.graphics.current?.text?.startsWith('Winner')));return {bannerY:a?.pos.y,bannerZ:a?.z,text:a?.children[0]?.graphics.current?.text,opponentCards:cards.length,fixture:true}});
+await ada.waitForTimeout(600);await screen(ada,'bluff-winner-long-hand');if(!BEFORE){assert.equal(winner.bannerY,190);assert.equal(winner.bannerZ,90);}results.push({case:'bluff-winner-banner',...winner});
+
+for(const [p,name] of [[ada,'Bhodor Choda'],[bea,'Sani Kumar']]){await p.evaluate(async id=>testConn.reducers.leaveLobby({lobbyId:id,clientId:localStorage.getItem('clientId')}),room.id);await p.evaluate(async({code,name})=>testConn.reducers.joinLobby({lobbyCode:code,name,clientId:localStorage.getItem('clientId')}),{code:room.code,name});await join(p,omaha);}
+await act(ada,omaha,{type:'start_game'});await open(ada,'Bhodor Choda',omaha);await open(bea,'Sani Kumar',omaha);await clickControl(ada,'raise');await clickControl(ada,'stake-max',true);
+const max=await ada.evaluate(()=>{const d=window.__qaEngine.currentScene.pokerDriver;return {label:d.stakeButtons.find(b=>b.target==='stake-max').label,amount:d.stake.amount}});assert.equal(max.amount,60);if(!BEFORE)assert.equal(max.label,'Pot max');await screen(ada,'pot-limit-maximum-mobile');await clickControl(ada,'stake-cancel',true);
+await act(ada,omaha,{type:'call'});await clickControl(bea,'raise');await clickControl(bea,'stake-max',true);await screen(bea,'pot-limit-maximum-desktop');await clickControl(bea,'stake-cancel',true);
+await act(bea,omaha,{type:'fold'});await ada.waitForTimeout(450);const folded=await state(omaha);if(!BEFORE)assert.equal(folded.board.length,5);await screen(ada,'fold-community-reveal');results.push({case:'maximum-and-fold-reveal',max,foldBoard:folded.board,foldWinner:folded.winnerSeatIndexes});
+fs.writeFileSync(OUT+'/results.json',JSON.stringify(results,null,2));console.log('PASS',BEFORE?'baseline reproductions':'fixed regressions',results.length,'checks',OUT);await browser.close();clearTimeout(timeout);
+})().catch(e=>{console.error(e);process.exit(1)});

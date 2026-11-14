@@ -29,6 +29,23 @@
         -webkit-text-size-adjust: 100%;
       }
 
+      html,
+      body,
+      #app,
+      canvas {
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+      }
+
+      input,
+      textarea,
+      [contenteditable='true'] {
+        -webkit-user-select: text;
+        user-select: text;
+        -webkit-touch-callout: default;
+      }
+
       #app {
         position: fixed;
         inset: 0;

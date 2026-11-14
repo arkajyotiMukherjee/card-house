@@ -35,6 +35,24 @@ describe('game gesture guard', () => {
     expect(move(2).defaultPrevented).toBe(false);
   });
 
+  it('blocks selection, dragging, and callouts on the surface while preserving editable inputs', () => {
+    const remove = installGameGestureGuard(document, () => false);
+    const canvas = document.createElement('canvas');
+    const input = document.createElement('input');
+    document.body.append(canvas, input);
+    for (const name of ['selectstart', 'contextmenu', 'dragstart']) {
+      const surface = new Event(name, { bubbles: true, cancelable: true });
+      canvas.dispatchEvent(surface);
+      expect(surface.defaultPrevented).toBe(true);
+      const editable = new Event(name, { bubbles: true, cancelable: true });
+      input.dispatchEvent(editable);
+      expect(editable.defaultPrevented).toBe(false);
+    }
+    remove();
+    canvas.remove();
+    input.remove();
+  });
+
   it('leaves desktop browser gestures alone', () => {
     const remove = installGameGestureGuard(document, () => false);
     const event = new Event('gesturechange', { cancelable: true });

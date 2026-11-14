@@ -1,0 +1,11 @@
+{
+  "maximum": {
+    "maximumLabel": "All-in",
+    "amount": 60,
+    "fixture": true
+  },
+  "fold": {
+    "communityCards": 0,
+    "fixture": true
+  }
+}

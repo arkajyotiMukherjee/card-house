@@ -99,11 +99,26 @@ export function installGameGestureGuard(
   const preventPinch = (event: TouchEvent): void => {
     if (mobile() && event.touches.length > 1) event.preventDefault();
   };
+  const preventSelection = (event: Event): void => {
+    const target = event.target;
+    if (
+      target instanceof Element &&
+      target.closest('input, textarea, [contenteditable="true"]')
+    )
+      return;
+    event.preventDefault();
+  };
   const options = { passive: false };
+  doc.addEventListener('selectstart', preventSelection);
+  doc.addEventListener('contextmenu', preventSelection);
+  doc.addEventListener('dragstart', preventSelection);
   doc.addEventListener('gesturestart', preventGesture, options);
   doc.addEventListener('gesturechange', preventGesture, options);
   doc.addEventListener('touchmove', preventPinch, options);
   return () => {
+    doc.removeEventListener('selectstart', preventSelection);
+    doc.removeEventListener('contextmenu', preventSelection);
+    doc.removeEventListener('dragstart', preventSelection);
     doc.removeEventListener('gesturestart', preventGesture);
     doc.removeEventListener('gesturechange', preventGesture);
     doc.removeEventListener('touchmove', preventPinch);

@@ -1,3 +1,7 @@
+import {
+  pokerHandFinished,
+  pokerSessionFinished,
+} from './poker-table-lifecycle';
 import { strategyFor } from '../../src/shared/games/bots/registry';
 import {
   CaseConversionPolicy,
@@ -2425,6 +2429,20 @@ export const join_table = spacetimedb.reducer(
     }
     for (const seat of ctx.db.GameSeat.iter()) {
       if (seat.lobbyMemberId === member.id) {
+        const previous = ctx.db.GameTable.id.find(seat.tableId);
+        if (
+          previous?.gameType === POKER_GAME_TYPE &&
+          ctx.db.SeatAbsence.id.find(seat.id) &&
+          pokerSessionFinished(JSON.parse(previous.stateJson))
+        ) {
+          ctx.db.SeatAbsence.id.delete(seat.id);
+          ctx.db.GameSeat.id.delete(seat.id);
+          ctx.db.GameTable.id.update({
+            ...previous,
+            status: { tag: 'finished' },
+          });
+          continue;
+        }
         throw new SenderError('Already seated');
       }
     }
@@ -2743,7 +2761,14 @@ export const leave_table = spacetimedb.reducer(
       forgetLobby(ctx.db, ctx.sender.toHexString());
       return;
     }
-    if (gameTable.status.tag === 'in_progress' && seatIds.length > 0) {
+    if (
+      gameTable.status.tag === 'in_progress' &&
+      seatIds.length > 0 &&
+      !(
+        gameTable.gameType === POKER_GAME_TYPE &&
+        pokerHandFinished(JSON.parse(gameTable.stateJson))
+      )
+    ) {
       for (const seatId of seatIds) {
         const seat = ctx.db.GameSeat.id.find(seatId);
         if (!seat) continue;
@@ -2764,6 +2789,7 @@ export const leave_table = spacetimedb.reducer(
       return;
     }
     for (const seatId of seatIds) {
+      ctx.db.SeatAbsence.id.delete(seatId);
       ctx.db.GameSeat.id.delete(seatId);
     }
     for (const spectatorId of spectatorIds) {
@@ -2790,6 +2816,12 @@ export const leave_table = spacetimedb.reducer(
         status = gameTable.status;
       }
     }
+    if (
+      gameTable.gameType === POKER_GAME_TYPE &&
+      rowCount(ctx.db.GameSeat.byTable.filter(gameTable.id)) === 0 &&
+      pokerHandFinished(JSON.parse(stateJson))
+    )
+      status = { tag: 'finished' };
     ctx.db.GameTable.id.update({
       ...gameTable,
       stateJson,
@@ -2930,7 +2962,7 @@ function rulesSeat(seat: {
 
 /**
  * Poker is a cash game. A finished hand is the pause before the next deal,
- * so the table stays in progress while people are still seated.
+ * so the table stays in progress while at least two players can fund the next hand.
  */
 function tableStatusTag(
   gameType: string,
@@ -2939,7 +2971,7 @@ function tableStatusTag(
 ): TableStatusTag {
   const tag = statusTagForState(state, current);
   if (gameType === POKER_GAME_TYPE && tag === 'finished') {
-    return 'in_progress';
+    return pokerSessionFinished(state) ? 'finished' : 'in_progress';
   }
   return tag;
 }

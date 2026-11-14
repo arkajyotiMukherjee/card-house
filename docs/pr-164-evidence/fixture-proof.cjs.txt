@@ -1,0 +1,50 @@
+const BEFORE=process.env.QA_BEFORE==='1';const DB=BEFORE?'cardroom-before':'cardroom';const ORIGIN=BEFORE?'http://127.0.0.1:5174':'http://127.0.0.1:5173';const OUT='/workspace/test-tools/evidence-'+(BEFORE?'before':'after');require('fs').mkdirSync(OUT,{recursive:true});
+const {chromium}=require('playwright');const assert=require('assert/strict');const fs=require('fs');
+(async()=>{
+const browser=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
+const pages=[],errors=[],results=[];const stamp=Date.now();
+const timeout=setTimeout(()=>{console.error('TIMEOUT');browser.close();process.exitCode=1},360000);timeout.unref();
+async function connect(page){await page.evaluate(async(DB)=>{
+ const {DbConnection}=await import('/src/module_bindings/index.ts');
+ const b=DbConnection.builder().withUri('http://127.0.0.1:3000').withDatabaseName(DB);const t=localStorage.getItem('stdbToken');if(t)b.withToken(t);
+ window.testConn=await new Promise((resolve,reject)=>b.onConnect((conn,id,token)=>{localStorage.setItem('stdbToken',token);resolve(conn)}).onConnectError((c,e)=>reject(e)).build());
+ await new Promise((resolve,reject)=>window.testConn.subscriptionBuilder().onApplied(resolve).onError(reject).subscribe(['SELECT * FROM Lobby','SELECT * FROM LobbyMember','SELECT * FROM GameTable','SELECT * FROM GameSeat','SELECT * FROM GameEvent']));
+},DB);}
+async function client(name,mobile,width,height){
+ const ctx=await browser.newContext({viewport:{width,height},isMobile:mobile,hasTouch:mobile});const p=await ctx.newPage();
+ await p.route('**/src/main.ts*',async r=>{const s=await r.fetch();await r.fulfill({response:s,body:(await s.text()).replace('lobbyScene = roomScene;', 'lobbyScene = roomScene; window.__qaLobby = roomScene;')+'\nwindow.__qaEngine=engine;'});});
+ p.on('pageerror',e=>errors.push(`${name}: ${e.message}`));await p.goto(ORIGIN);await p.waitForFunction(()=>window.__qaEngine);await connect(p);pages.push(p);console.log('client',name);return p;
+}
+const ada=await client('Ada',true,844,390),bea=await client('Bea',false,1440,900),cam=await client('Cam',true,932,430);
+await ada.evaluate(()=>window.testConn.reducers.createLobby({}));
+const room=await ada.evaluate(()=>Array.from(window.testConn.db.lobby.iter()).sort((a,b)=>Number(b.createdAt.microsSinceUnixEpoch-a.createdAt.microsSinceUnixEpoch))[0]);
+for(const [p,name] of [[ada,'Bhodor Choda'],[bea,'Sani Kumar'],[cam,'Cam']])await p.evaluate(async({code,name})=>window.testConn.reducers.joinLobby({lobbyCode:code,name,clientId:localStorage.getItem('clientId')}),{code:room.code,name});
+console.log('room',room.code);
+async function state(tableId){return ada.evaluate(id=>JSON.parse(window.testConn.db.gameTable.id.find(id).stateJson),tableId)}
+async function act(p,tableId,intent){await p.evaluate(async({tableId,intent})=>window.testConn.reducers.handleGameIntent({tableId,clientId:localStorage.getItem('clientId'),intentPayload:JSON.stringify(intent)}),{tableId,intent});}
+async function open(p,name,tableId){
+ await p.waitForTimeout(400);
+ await p.evaluate(({code,name,tableId})=>{window.testConn.disconnect();localStorage.setItem('lastRoom',JSON.stringify({lobbyCode:code,name,tableId}))},{code:room.code,name,tableId});
+ await p.goto(ORIGIN+'/');await p.waitForFunction(()=>window.__qaEngine?.currentScene.pokerDriver?.state?.phase==='play');await p.waitForTimeout(400);await connect(p);
+}
+async function clickControl(p,target,stake=false){
+ const pos=await p.evaluate(({target,stake})=>{const e=window.__qaEngine,d=e.currentScene.pokerDriver;const b=(stake?d.stakeButtons:d.buttons).find(b=>b.target===target);const v=b.actor.pos.clone();v.x+=b.box.w/2;v.y+=b.box.h/2;const point=e.screen.worldToPageCoordinates(v);return {x:point.x,y:point.y};},{target,stake});
+ if(await p.evaluate(()=>matchMedia('(pointer: coarse) and (hover: none)').matches))await p.touchscreen.tap(pos.x,pos.y);else await p.mouse.click(pos.x,pos.y);
+ await p.waitForTimeout(150);
+}
+
+async function lobby(p,name){await p.evaluate(({code,name})=>{window.testConn?.disconnect();localStorage.setItem('lastRoom',JSON.stringify({lobbyCode:code,name,tableId:''}));},{code:room.code,name});await p.goto(ORIGIN+'/');await p.waitForFunction(()=>{const f=document.querySelector('[data-cardhouse-field="lobby-chat"]');return f&&f.getBoundingClientRect().left>=0&&window.__qaLobby});await p.waitForTimeout(200);await connect(p);}
+async function create(name,gameType,variation){await ada.evaluate(async({id,name,gameType,variation})=>window.testConn.reducers.createGameTable({lobbyId:id,gameType,settings:JSON.stringify({name,minPlayers:2,maxPlayers:gameType==='bluff'?6:2,...(variation?{variation}:{})})}),{id:room.id,name,gameType,variation});return ada.evaluate(name=>Array.from(testConn.db.gameTable.iter()).find(t=>t.lobbyId===localStorage.getItem('qaRoom')&&t.name===name)?.id||Array.from(testConn.db.gameTable.iter()).find(t=>t.name===name).id,name);}
+async function join(p,tableId){await p.evaluate(async tableId=>{const m=Array.from(testConn.db.lobbyMember.iter()).find(m=>m.clientId===localStorage.getItem('clientId'));await testConn.reducers.joinTable({tableId,lobbyMemberId:m.id})},tableId);}
+async function screen(p,name){await p.screenshot({path:OUT+'/'+name+'.png'});}
+
+const hold=await create('Exit between hands '+stamp,'poker','holdem'), bluff=await create('Winner fixture '+stamp,'bluff');
+await join(ada,hold);await join(bea,hold);await act(ada,hold,{type:'start_game'});await act(ada,hold,{type:'fold'});
+const stateBeforeLeave=await state(hold);assert.equal(stateBeforeLeave.phase,'finished');assert.equal(Object.values(stateBeforeLeave.seats).filter(r=>r.chips>0).length,2);
+for(const p of [ada,bea])await p.evaluate(async tableId=>{const m=Array.from(testConn.db.lobbyMember.iter()).find(m=>m.clientId===localStorage.getItem('clientId'));await testConn.reducers.leaveTable({tableId,lobbyMemberId:m.id})},hold);
+await join(ada,bluff);await join(bea,bluff);await act(ada,bluff,{type:'start_game'});
+await ada.evaluate(({code,tableId})=>{testConn.disconnect();localStorage.setItem('lastRoom',JSON.stringify({lobbyCode:code,name:'Bhodor Choda',tableId}))},{code:room.code,tableId:bluff});await ada.goto(ORIGIN+'/');await ada.waitForFunction(()=>window.__qaEngine?.currentScene.bluffDriver?.state?.phase==='play');await ada.waitForTimeout(1500);await connect(ada);
+const winner=await ada.evaluate(()=>{const e=window.__qaEngine,d=e.currentScene.bluffDriver;const fixture=structuredClone(d.state);const cards=Object.values(fixture.hands).flat();fixture.hands={'0':[],'1':cards};fixture.phase='finished';fixture.winnerSeatIndex=0;fixture.turnSeatIndex=null;e.currentScene.paintBluff(JSON.stringify(fixture));const a=d.labels.find(a=>a.children.some(c=>c.graphics.current?.text?.startsWith('Winner')));return {bannerY:a.pos.y,bannerZ:a.z,text:a.children[0].graphics.current.text,opponentCards:cards.length,fixture:true}});
+await ada.waitForTimeout(400);await screen(ada,'bluff-winner-long-hand');assert.equal(winner.bannerY,190);assert.equal(winner.text,'Winner is Bhodor Choda');assert.equal(winner.bannerZ,90);
+fs.writeFileSync(OUT+'/winner-and-between-hand-exit.json',JSON.stringify({winner,normalHandLeave:{fundedPlayers:2,bluffJoins:2,pokerSeatsAfter:await ada.evaluate(id=>Array.from(testConn.db.gameSeat.iter()).filter(s=>s.tableId===id).length,hold)},errors},null,2));assert.equal(errors.length,0);console.log('PASS winner fixture and permanent leave between cash-game hands');await browser.close();clearTimeout(timeout);
+})().catch(e=>{console.error(e);process.exit(1)});
