@@ -124,7 +124,6 @@ describe('shared button height', () => {
     LEAVE_TABLE_BUTTON,
     TABLE_CHAT_BUTTON,
     TABLE_CHAT_SEND_BUTTON,
-    HOW_TO_PLAY_BUTTON,
     BLUFF_PLAY_BUTTON,
     BLUFF_PASS_BUTTON,
     BLUFF_CHALLENGE_BUTTON,
@@ -154,6 +153,8 @@ describe('shared button height', () => {
   it('uses one face height and one pixel font', () => {
     expect(BUTTON_FONT_SIZE).toBe(8);
     expect(BUTTON_HEIGHT).toBe(28);
+    expect(HOW_TO_PLAY_BUTTON.h).toBe(52);
+    expect(HOW_TO_PLAY_BUTTON.w).toBe(52);
     expect(SUIT_BUTTON_H).toBe(BUTTON_HEIGHT);
     for (const box of standard) {
       expect(box.h).toBe(BUTTON_HEIGHT);

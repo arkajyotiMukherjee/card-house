@@ -248,7 +248,7 @@ describe('PokerDriver input', () => {
       },
     } satisfies PokerState;
     driver.render(oklahoma, ctx);
-    expect(driver['dropMarks']).toHaveLength(2);
+    expect(driver['dropMarks']).toHaveLength(1);
 
     driver.render({ ...oklahoma, step: 'bet' }, ctx);
     expect(driver['dropMarks']).toHaveLength(0);

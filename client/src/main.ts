@@ -1,3 +1,4 @@
+import { placeTableAnchors, tableViewportWidth } from './table-viewport';
 import * as ex from 'excalibur';
 import { BootScene, demoImages } from './boot-scene';
 import { getOrCreateClientId } from './client-id';
@@ -106,7 +107,26 @@ function applyContainScale(): void {
   if (shell.button && !shell.gate) {
     insets.left += 60;
   }
-  const fitted = fitViewport(settledSize.width, settledSize.height, insets);
+  const tableActive = engine.currentScene instanceof GameScene;
+  const logicalWidth =
+    tableActive && isMobileDevice()
+      ? tableViewportWidth(
+          settledSize.width - insets.left - insets.right,
+          settledSize.height - insets.top - insets.bottom,
+        )
+      : LOGICAL_WIDTH;
+  engine.screen.resolution = { width: logicalWidth, height: LOGICAL_HEIGHT };
+  engine.currentScene.camera.pos = ex.vec(
+    LOGICAL_WIDTH / 2,
+    LOGICAL_HEIGHT / 2,
+  );
+  placeTableAnchors(engine.currentScene, logicalWidth);
+  const fitted = fitViewport(
+    settledSize.width,
+    settledSize.height,
+    insets,
+    logicalWidth,
+  );
   engine.screen.viewport = { width: fitted.width, height: fitted.height };
   engine.screen.applyResolutionAndViewport();
   canvas.style.imageRendering = 'pixelated';
@@ -142,6 +162,21 @@ applyContainScale();
 mountMobileShell({ onChange: applyContainScale });
 installGameGestureGuard();
 installTouchTargets(engine);
+engine.on('postframe', () => {
+  const tableActive = engine.currentScene instanceof GameScene;
+  const insets = readSafeInsets();
+  const shell = shellView(readShellInputs());
+  if (shell.button && !shell.gate) insets.left += 60;
+  const width =
+    tableActive && isMobileDevice()
+      ? tableViewportWidth(
+          settledSize.width - insets.left - insets.right,
+          settledSize.height - insets.top - insets.bottom,
+        )
+      : LOGICAL_WIDTH;
+  if (engine.screen.resolution.width !== width) applyContainScale();
+  placeTableAnchors(engine.currentScene, width);
+});
 
 const loader = new ex.Loader(demoImages);
 void engine.start(loader).then(() => {

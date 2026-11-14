@@ -1,3 +1,4 @@
+import { anchorTableActor } from './table-viewport';
 import { bindButtonPress } from './button-press';
 import * as ex from 'excalibur';
 import { isMobileDevice } from './mobile-shell';
@@ -115,7 +116,7 @@ import {
 } from './sheets';
 
 const WARN_PLATE = ex.Color.fromHex('#4a1713');
-const STRIP_Y = 44;
+const STRIP_Y = 204;
 const STRIP_HOLD_MS = 3200;
 const STRIP_FADE_MS = 500;
 
@@ -190,6 +191,7 @@ export class GameScene extends ex.Scene {
     this.linkText.text = line;
     if (this.linkActor) {
       this.linkActor.pos = ex.vec(16, 4);
+      anchorTableActor(this.linkActor, 'left', 16);
     }
   }
 
@@ -297,6 +299,7 @@ export class GameScene extends ex.Scene {
       z: 30,
     });
     this.linkActor.graphics.use(this.linkText);
+    anchorTableActor(this.linkActor, 'left');
     this.add(this.linkActor);
 
     this.statsText = canvasText(
@@ -305,11 +308,12 @@ export class GameScene extends ex.Scene {
       GOLD,
     );
     const stats = new ex.Actor({
-      pos: ex.vec(isMobileDevice() ? 308 : 280, 22),
+      pos: ex.vec(isMobileDevice() ? 256 : 280, 22),
       anchor: ex.vec(0, 0),
       z: 21,
     });
     stats.graphics.use(this.statsText);
+    anchorTableActor(stats, 'left');
     this.add(stats);
 
     this.addLeaveButton();
@@ -604,6 +608,7 @@ export class GameScene extends ex.Scene {
       },
       () => this.leave(),
     );
+    anchorTableActor(actor, 'left');
     this.add(actor);
   }
 
@@ -692,21 +697,26 @@ export class GameScene extends ex.Scene {
     return '';
   }
 
-  /** One short line near the top center. It fades out on its own. */
+  /** Keep the latest accepted action visible; only warnings fade away. */
   private showStrip(message: string, warning: boolean): void {
     this.clearStrip();
-    const width = message.length * 8 + 24;
+    const poker = this.gameTypeOfTable() === 'poker';
+    const size = poker && isMobileDevice() ? 12 : 8;
+    const width = message.length * size + 24;
     const strip = new ex.Actor({
-      pos: ex.vec(Math.floor((LOGICAL_WIDTH - width) / 2), STRIP_Y),
+      pos: ex.vec(
+        Math.floor((LOGICAL_WIDTH - width) / 2),
+        poker ? STRIP_Y : 44,
+      ),
       anchor: ex.vec(0, 0),
       width,
-      height: 22,
+      height: 28,
       z: 26,
     });
     strip.graphics.use(
       panelRect(
         width,
-        22,
+        28,
         warning ? WARN_PLATE : PLATE,
         warning ? DANGER : STROKE_HOT,
       ),
@@ -715,17 +725,18 @@ export class GameScene extends ex.Scene {
       pos: ex.vec(12, 7),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText(message, 8, warning ? DANGER : GOLD));
+    caption.graphics.use(canvasText(message, size, warning ? DANGER : GOLD));
     strip.addChild(caption);
-    strip.actions
-      .delay(STRIP_HOLD_MS)
-      .fade(0, STRIP_FADE_MS)
-      .callMethod(() => {
-        strip.kill();
-        if (this.strip === strip) {
-          this.strip = null;
-        }
-      });
+    if (warning || !poker)
+      strip.actions
+        .delay(STRIP_HOLD_MS)
+        .fade(0, STRIP_FADE_MS)
+        .callMethod(() => {
+          strip.kill();
+          if (this.strip === strip) {
+            this.strip = null;
+          }
+        });
     this.add(strip);
     this.strip = strip;
   }
@@ -748,7 +759,14 @@ export class GameScene extends ex.Scene {
     }
     let waiting = false;
     try {
-      waiting = JSON.parse(row.stateJson).phase === 'lobby';
+      const state = JSON.parse(row.stateJson);
+      waiting = state.phase === 'lobby';
+      if (
+        row.gameType === 'poker' &&
+        this.lastRow?.gameType === 'poker' &&
+        JSON.parse(this.lastRow.stateJson).handNumber !== state.handNumber
+      )
+        this.clearStrip();
     } catch {
       // Invalid state is reported by the game driver.
     }
@@ -1232,6 +1250,7 @@ export class GameScene extends ex.Scene {
     this.hudPlate.pos = visible
       ? ex.vec(STATUS_HUD.x, STATUS_HUD.y)
       : ex.vec(STATUS_HUD.x, -200);
+    anchorTableActor(this.hudPlate, 'right', STATUS_HUD.x);
   }
 
   private addStatusHud(): void {

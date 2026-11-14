@@ -300,7 +300,8 @@ describe('poker layout', () => {
       );
     }
     const mine = blindChipLine(true, 480, 456, 'Ada', '980', 'BB');
-    expect(mine.mark?.x).toBeGreaterThan(480);
+    expect(mine.mark?.x).toBe(16);
+    expect(mine.mark?.y).toBe(518);
     expect(mine.chips.x).toBeGreaterThan(mine.mark?.x ?? 0);
   });
 

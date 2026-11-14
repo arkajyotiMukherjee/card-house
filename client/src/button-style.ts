@@ -13,10 +13,13 @@ export function buttonFontSize(
   width: number,
   height: number,
 ): number {
-  if (height < 60) return BUTTON_FONT_SIZE;
+  if (height < 44) return BUTTON_FONT_SIZE;
   return Math.max(
     BUTTON_FONT_SIZE,
-    Math.min(16, Math.floor((width - 12) / Math.max(1, label.length))),
+    Math.min(
+      height < 60 ? 12 : 16,
+      Math.floor((width - 12) / Math.max(1, label.length)),
+    ),
   );
 }
 

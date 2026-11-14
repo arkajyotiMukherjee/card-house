@@ -1,3 +1,8 @@
+import {
+  anchorTableActor,
+  TABLE_VIEWPORT_MAX_WIDTH,
+  TABLE_BACKDROP_LEFT,
+} from './table-viewport';
 import { bindButtonPress } from './button-press';
 import * as ex from 'excalibur';
 import {
@@ -42,7 +47,7 @@ import {
 import { wrapChatLines } from './chat-layout';
 import { wrapText } from './menu-layout';
 import type { DbConnection } from './module_bindings';
-import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from './sheets';
+import { LOGICAL_HEIGHT } from './sheets';
 import {
   applyChatKey,
   applyChatText,
@@ -414,6 +419,7 @@ export class TableChatOverlay {
     );
     this.button = actor;
     this.chatCaption = caption;
+    anchorTableActor(actor, 'left', box.x);
     this.scene.add(actor);
   }
 
@@ -439,14 +445,14 @@ export class TableChatOverlay {
     const text = TABLE_CHAT_TEXT;
 
     const backdrop = new ex.Actor({
-      pos: ex.vec(0, 0),
+      pos: ex.vec(TABLE_BACKDROP_LEFT, 0),
       anchor: ex.vec(0, 0),
-      width: LOGICAL_WIDTH,
+      width: TABLE_VIEWPORT_MAX_WIDTH,
       height: LOGICAL_HEIGHT,
       z: Z_BACKDROP,
     });
     const dim = new ex.Rectangle({
-      width: LOGICAL_WIDTH,
+      width: TABLE_VIEWPORT_MAX_WIDTH,
       height: LOGICAL_HEIGHT,
       color: BACKDROP,
       smoothing: false,

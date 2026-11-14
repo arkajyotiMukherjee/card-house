@@ -161,7 +161,7 @@ export const pokerGameDefinition = {
   minPlayers: 2,
   maxPlayers: 8,
   howToPlay:
-    "# Poker\n\nTexas Hold'em, Omaha, and Oklahoma share one table. Choose the variation when you create the table. Blinds are 10 and 20. Each player starts with 1000 chips.\n\n## Texas Hold'em\n\nTwo hole cards. The board is a flop of three, then the turn, then the river. At showdown you may use any mix of hole cards and community cards. Betting is no-limit.\n\n## Omaha\n\nFour hole cards. The board and the betting rounds match Hold'em. At showdown you must use exactly two hole cards and three community cards. Betting is pot-limit.\n\n## Oklahoma\n\nThe deal starts like Omaha, with four hole cards. Before betting on the flop, each player still in discards one hole card. Before betting on the turn, each player still in discards one more. Showdown uses the two remaining hole cards and exactly three community cards. Betting is pot-limit.\n\n## Betting\n\nThe button posts the small blind and the next seat posts the big blind. Those seats are marked SB and BB for the whole hand, including after a fold. On your turn you may fold, check, call, bet, or raise. Bet and Raise ask for an amount from the minimum through all-in. Call matches the current bet. A pot-limit bet or raise cannot exceed the pot. The hand ends when everyone else folds, or at showdown. The best hand wins. Side pots pay players who were all-in for less. The finished hand stays up so the winner and any showdown cards can be read, then the next hand deals while two or more players are still seated. A player with no chips sits out and can stay or leave.",
+    "# Poker\n\nTexas Hold'em, Omaha, and Oklahoma share one table. Choose the variation when you create the table. Blinds are 10 and 20. Each player starts with 1000 chips.\n\n## Texas Hold'em\n\nTwo hole cards. The board is a flop of three, then the turn, then the river. At showdown you may use any mix of hole cards and community cards. Betting is no-limit.\n\n## Omaha\n\nFour hole cards. The board and the betting rounds match Hold'em. At showdown you must use exactly two hole cards and three community cards. Betting is pot-limit.\n\n## Oklahoma\n\nThe deal starts like Omaha, with four hole cards. Before betting on the flop, each player still in discards one hole card. Before betting on the turn, each player still in discards one more. Showdown uses the two remaining hole cards and exactly three community cards. Betting is pot-limit.\n\n## Betting\n\nThe button posts the small blind and the next seat posts the big blind. Those seats are marked SB and BB for the whole hand, including after a fold. On your turn you may fold, check, call, bet, or raise. Bet and Raise ask for an amount from the minimum through all-in. Call matches the current bet. The maximum button reads Pot max when the pot-limit ceiling is below your full stack, and All-in when your full stack is legal. Once all remaining opponents are all-in and calls are settled, live hands turn face up and the board runs out without extra checks. Oklahoma still requires its flop and turn discards. The hand ends when everyone else folds, or at showdown. The best hand wins. Side pots pay players who were all-in for less. After a fold win, any undealt community cards are revealed without changing the winner. The finished hand stays up so the winner and any showdown cards can be read, then the next hand deals while two or more players are still seated. A player with no chips sits out and can stay or leave.",
 } satisfies GameDefinition;
 
 function asRecord(value: unknown, message: string): Record<string, unknown> {
@@ -672,6 +672,20 @@ function aliveCount(state: PokerState): number {
   return count;
 }
 
+/** A side pot needs another live player who can still put chips into it. */
+function canContestBet(state: PokerState, seatIndex: number): boolean {
+  return state.order.some((index) => {
+    const other = state.seats[seatKey(index)];
+    return (
+      index !== seatIndex &&
+      other &&
+      !other.folded &&
+      !other.allIn &&
+      other.chips > 0
+    );
+  });
+}
+
 function needsAction(state: PokerState, seatIndex: number): boolean {
   const seat = state.seats[seatKey(seatIndex)];
   if (!seat || seat.folded || seat.allIn) {
@@ -680,7 +694,7 @@ function needsAction(state: PokerState, seatIndex: number): boolean {
   if (seat.streetBet < state.currentBet) {
     return true;
   }
-  return !seat.acted;
+  return canContestBet(state, seatIndex) && !seat.acted;
 }
 
 function firstToAct(
@@ -1032,6 +1046,7 @@ export function pokerBetTo(
     seat.folded ||
     seat.allIn ||
     state.currentBet !== 0 ||
+    !canContestBet(state, seatIndex) ||
     seat.chips <= 0
   ) {
     return null;
@@ -1062,7 +1077,8 @@ export function pokerRaiseTo(
     state.step !== 'bet' ||
     seat.folded ||
     seat.allIn ||
-    state.currentBet <= 0
+    state.currentBet <= 0 ||
+    !canContestBet(state, seatIndex)
   ) {
     return null;
   }
@@ -1178,6 +1194,7 @@ function awardFold(state: PokerState): PokerState {
   if (!seat) {
     throw new Error('Invalid table state');
   }
+  takeBoard(state, Math.max(0, 5 - state.board.length));
   seat.chips += state.pot;
   state.phase = 'finished';
   state.end = 'fold';
@@ -1459,7 +1476,11 @@ function applyBet(
     throw new Error('Invalid intent');
   }
   const seat = requireSeat(state, seatIndex);
-  if (seat.allIn || amount <= seat.streetBet) {
+  if (
+    seat.allIn ||
+    !canContestBet(state, seatIndex) ||
+    amount <= seat.streetBet
+  ) {
     throw new Error('Invalid intent');
   }
   const add = amount - seat.streetBet;
@@ -1492,7 +1513,11 @@ function applyRaise(
     throw new Error('Invalid intent');
   }
   const seat = requireSeat(state, seatIndex);
-  if (seat.allIn || amount <= state.currentBet) {
+  if (
+    seat.allIn ||
+    !canContestBet(state, seatIndex) ||
+    amount <= state.currentBet
+  ) {
     throw new Error('Invalid intent');
   }
   const add = amount - seat.streetBet;
@@ -1543,14 +1568,25 @@ function applyDiscard(
 
 /**
  * Hole cards the table may see.
- * A fold keeps every hole down. Showdown shows only the seats still in.
+ * Show live hands as soon as all-in betting closes, and at showdown.
+ * Folded and uncalled winning hands stay private.
  */
 export function pokerHoleFaceUp(state: PokerState, seatIndex: number): boolean {
-  if (state.phase !== 'finished' || state.end !== 'showdown') {
-    return false;
-  }
+  const showdown = state.phase === 'finished' && state.end === 'showdown';
+  const locked =
+    state.phase === 'play' &&
+    aliveCount(state) > 1 &&
+    state.order.every((index) => {
+      const row = state.seats[seatKey(index)];
+      return (
+        !row ||
+        row.folded ||
+        row.allIn ||
+        (!canContestBet(state, index) && row.streetBet >= state.currentBet)
+      );
+    });
   const seat = state.seats[seatKey(seatIndex)];
-  return Boolean(seat && !seat.folded);
+  return Boolean((showdown || locked) && seat && !seat.folded);
 }
 
 function fundedSeats(state: PokerState, seated: readonly number[]): number[] {

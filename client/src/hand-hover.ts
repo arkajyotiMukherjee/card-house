@@ -121,7 +121,7 @@ export function inspectionPose(
   return {
     lift: mobile
       ? amount * 2.4 + (selected ? 12 : 0) + (personal ? 12 : 0)
-      : amount,
+      : amount + (selected ? 12 : 0),
     scale: mobile
       ? (personal ? 1.25 : 1) + Math.min(1, amount / HOVER_LIFT) * 0.65
       : 1,
@@ -129,7 +129,6 @@ export function inspectionPose(
 }
 
 const graphicScales = new WeakMap<ex.Graphic, ex.Vector>();
-const selectionFrames = new WeakMap<ex.Actor, ex.Actor>();
 const enlargedColliders = new WeakMap<ex.Actor, boolean>();
 
 /** Remove inspection artwork before a card travels to a pile or another seat. */
@@ -138,8 +137,6 @@ export function resetCardLift(actor: ex.Actor): void {
   const graphic = actor.graphics.current;
   const base = graphic && graphicScales.get(graphic);
   if (graphic && base) graphic.scale = base.clone();
-  const frame = selectionFrames.get(actor);
-  if (frame) frame.graphics.isVisible = false;
 }
 
 /**
@@ -365,31 +362,9 @@ export function placeCardLift(
     graphic.scale = ex.vec(base.x * pose.scale, base.y * pose.scale);
   }
   const pixels = Math.round(pose.lift);
-  let frame = selectionFrames.get(actor);
-  if (selected && !frame) {
-    frame = new ex.Actor({ anchor: ex.vec(0.5, 0.5), z: 1 });
-    frame.pointer.useColliderShape = false;
-    frame.pointer.useGraphicsBounds = false;
-    frame.graphics.use(
-      new ex.Rectangle({
-        width: CARD_DRAW,
-        height: CARD_DRAW,
-        color: ex.Color.Transparent,
-        strokeColor: ex.Color.fromHex('#ffdf54'),
-        lineWidth: 3,
-      }),
-    );
-    actor.addChild(frame);
-    selectionFrames.set(actor, frame);
-  }
-  if (frame) {
-    frame.graphics.isVisible = selected;
-    frame.pos = ex.vec(0, -pixels);
-    frame.scale = ex.vec(pose.scale, pose.scale);
-  }
   if (pixels > 0) {
     // Excalibur multiplies a graphics offset by the graphic's own scale.
-    // Keep the lift in actor coordinates so the selection frame stays aligned.
+    // Keep the lift in actor coordinates even when the card is enlarged.
     actor.graphics.offset = ex.vec(0, -pixels / (graphic?.scale.y || 1));
     actor.z = lift > 0 ? LIFT_Z + pixels / 100 : restZ;
     return;

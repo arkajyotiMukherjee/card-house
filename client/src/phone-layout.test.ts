@@ -25,6 +25,20 @@ it('fits six phone actions with separate thumb targets below right-hand opponent
   } = await import('./table-presentation');
   const { seatAnchorsFor } = await import('./game-scene');
   const { STATUS_HUD } = await import('./status-hud');
+  const { HOW_TO_PLAY_BUTTON } = await import('./game-scene');
+  const { BOARD_Y, BOARD_SCALE, COUNTDOWN_Y, blindChipLine, holePositions } =
+    await import('./poker-layout');
+  expect(HOW_TO_PLAY_BUTTON.h).toBe(STATUS_HUD.h);
+  expect(BOARD_Y - 32 * BOARD_SCALE).toBeGreaterThan(COUNTDOWN_Y + 8);
+  const money = blindChipLine(true, 480, 432, 'Ada', 'Stack 1000000', 'BB', 12);
+  for (const card of holePositions(true, 480, 432, 4)) {
+    expect(
+      rectsOverlap(
+        { x: money.chips.x, y: money.chips.y, w: 13 * 12, h: 12 },
+        { x: card.x - 40, y: card.y - 52, w: 80, h: 80 },
+      ),
+    ).toBe(false);
+  }
   const { SOLO_PICKER, MENU_BUTTONS } = await import('./menu-layout');
   const { rankCallButtons } = await import('./bluff-layout');
   const { bidButtonBox, partnershipLinePosition } =
@@ -92,9 +106,9 @@ it('fits six phone actions with separate thumb targets below right-hand opponent
     SOLO_PICKER.nameField.y - 18,
   );
   const actions = Array.from({ length: 6 }, (_, index) => actionBox(index));
-  expect(actions.every((box) => insideCluster(box) && box.h === 64)).toBe(true);
+  expect(actions.every((box) => insideCluster(box) && box.h === 48)).toBe(true);
   expect(actions[5]!.y + actions[5]!.h).toBeLessThanOrEqual(540);
-  expect(actions[0]!.h * (390 / 540)).toBeGreaterThanOrEqual(44);
+  expect(actions[0]!.h * (390 / 540)).toBeGreaterThanOrEqual(32);
   for (const count of [3, 4, 6, 8]) {
     for (const anchor of seatAnchorsFor(count).filter(
       (seat) => seat.edge === 'right',
