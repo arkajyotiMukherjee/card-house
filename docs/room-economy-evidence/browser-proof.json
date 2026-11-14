@@ -1,0 +1,11 @@
+{
+  "chromiumDesktop": true,
+  "mobileViewport": "844x390",
+  "users": 2,
+  "liveCountdown": true,
+  "liveCasinoWallets": true,
+  "blackjackInsurance": true,
+  "blackjackSplit": true,
+  "renderingErrors": [],
+  "trackedRefillKeepsProfit": true
+}

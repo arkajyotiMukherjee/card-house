@@ -13,6 +13,7 @@ export interface RenderContext {
   scene: Scene;
   seats: readonly DriverSeat[];
   meSeatIndex: number | null;
+  finishedMessage?: string;
   /**
    * Card front and back for this browser. The table scene sets this to the
    * saved Theme, so the menu, the lobby, and every card on the table match.

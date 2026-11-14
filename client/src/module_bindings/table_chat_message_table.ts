@@ -12,8 +12,8 @@ import {
 
 export default __t.row({
   id: __t.string().primaryKey(),
-  tableId: __t.string().name("table_id"),
-  lobbyMemberId: __t.string().name("lobby_member_id"),
+  tableId: __t.string(),
+  lobbyMemberId: __t.string(),
   body: __t.string(),
-  createdAt: __t.timestamp().name("created_at"),
+  createdAt: __t.timestamp(),
 });

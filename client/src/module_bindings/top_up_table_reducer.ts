@@ -11,8 +11,6 @@ import {
 } from "spacetimedb";
 
 export default {
-  lobbyId: __t.string(),
-  gameType: __t.string(),
-  tableCount: __t.u32(),
-  settings: __t.option(__t.string()),
+  tableId: __t.string(),
+  amount: __t.u32(),
 };

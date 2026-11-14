@@ -1,3 +1,7 @@
+# Room economy implementation
+
+The current multiplayer release adds shared room wallets, net-profit rankings, configurable entry fees and casino stakes, creator hosting, full-table countdowns, and Discord leaderboard delivery. See [behavior](room-economy.md) and [migration](room-economy-migration.md). Solo practice remains outside the economy. The retired competition mode is removed.
+
 # [implementation.md](http://implementation.md)
 
 ## Overview
@@ -310,6 +314,5 @@ These aren’t needed for v1, but the architecture supports them cleanly:
   - color theme (done: `theme` in localStorage, keyed by `clientId`, stores the table felt and the background color; the menu Theme panel sets both, and the menu, lobby, and every table paint them. Background choices are green, purple, red, and black. The default stays green),
   - card customizations (done: `cardAppearance` in localStorage stores a front style and a back style from the Pixel Poker Pack. The Theme panel saves them, and this browser draws that front and back on the menu, the lobby, and the table. Not sent to SpacetimeDB),
   - simple stats (hands played, games won). `ClientStats` stores both for a `clientId`. A finished hand adds one hand for each seated player, and a game win adds one win for each winner.
-- **Tournaments** (done): one event groups several tables of one `gameType` into numbered rounds. A `Tournament` row holds `lobbyId`, `gameType`, `currentRound`, and `roundStatus` (`in_progress` or `complete`). `create_tournament(lobbyId, gameType, tableCount, settings?)` opens round 1 and creates `tableCount` `GameTable` rows tagged with that `tournamentId` and `round`. `handle_game_intent` recomputes `roundStatus` after a tournament table's status changes, so it reports `complete` once every table in the current round is `finished`. `create_tournament_round(tournamentId, tableCount, settings?)` rejects the next round (`Round is not complete`) until that happens, then creates the next round's tables and advances `currentRound`.
 
 You can schedule other optional milestones after the core loop (lobby → tables → play → back to lobby) is rock solid.

@@ -103,6 +103,35 @@ assert(Object.keys(empty.seats).length === 0, 'no seats deals no players');
 assert(empty.deck.length === 0, 'no seats keeps the deck closed');
 assert(empty.turnSeatIndex === null, 'no seats has no turn');
 
+// A new shoe contains six complete decks, and the cut is applied between hands.
+const freshShoe = blackjackRules.initialState([seat(0)], table()).deck;
+assert(freshShoe.length === 312, 'six decks contain 312 cards');
+for (const face of standardDeck())
+  assert(
+    freshShoe.filter((card) => card === face).length === 6,
+    'each face occurs six times',
+  );
+for (const remaining of [79, 78]) {
+  const shoe = freshShoe.slice(0, remaining);
+  const previous = acting(
+    { '0': player(['10S', '7H'], 10, 200) },
+    { phase: 'finished', deck: shoe },
+  );
+  const next = blackjackRules.initialState([seat(0)], {
+    ...table(),
+    stateJson: JSON.stringify(previous),
+  });
+  assert(
+    next.deck.length === (remaining > 78 ? remaining : 312),
+    'reshuffle at the 75 percent cut',
+  );
+  if (remaining > 78)
+    assert(
+      JSON.stringify(next.deck) === JSON.stringify(shoe),
+      'preserve shoe order before the cut',
+    );
+}
+
 const deck = standardDeck();
 const ordered = [2, 0].map(seat);
 const bought = blackjackRules.initialState(ordered, table());
@@ -110,8 +139,8 @@ assert(bought.phase === 'play', 'a seated table starts in play');
 assert(bought.step === 'bet', 'the first action is a bet');
 assert(bought.turnSeatIndex === 0, 'the lowest seat bets first');
 assert(Object.keys(bought.seats).length === 2, 'both seats buy in');
-assert(bought.deck.length === 52, 'the shoe is one deck');
-assert(new Set(bought.deck).size === 52, 'shuffled cards are unique');
+assert(bought.deck.length === 312, 'the shoe has six decks');
+assert(new Set(bought.deck).size === 52, 'the shoe has all 52 card faces');
 for (const card of bought.deck) {
   assert(deck.has(card), `shuffled card ${card} belongs to the deck`);
 }
@@ -245,8 +274,8 @@ const used = [
   ...dealt.dealer,
   ...dealt.deck,
 ];
-assert(used.length === 52, 'the deal accounts for every card');
-assert(new Set(used).size === 52, 'the deal does not repeat a card');
+assert(used.length === 312, 'the deal accounts for every card in the shoe');
+assert(new Set(used).size === 52, 'the dealt shoe retains all 52 faces');
 
 let guard = 0;
 let finished = blackjackRules.initialState([seat(0), seat(1)], table());
@@ -264,7 +293,9 @@ while (finished.phase === 'play' && guard < 30) {
   }
   finished = blackjackRules.applyIntent(
     finished,
-    { type: 'stand' },
+    finished.step === 'insurance'
+      ? { type: 'insurance', take: false }
+      : { type: 'stand' },
     context(actor),
   );
 }
@@ -478,14 +509,14 @@ assert(
 let badSplit = false;
 try {
   blackjackRules.applyIntent(
-    acting({ '0': player(['10S', 'JH'], 10, 190) }, { deck: ['2C', '3D'] }),
+    acting({ '0': player(['10S', '9H'], 10, 190) }, { deck: ['2C', '3D'] }),
     { type: 'split' },
     context(0),
   );
 } catch (error) {
   badSplit = error instanceof Error && error.message === 'Invalid intent';
 }
-assert(badSplit, 'a ten and a face card do not split');
+assert(badSplit, 'unequal card values do not split');
 
 const splitAces = blackjackRules.applyIntent(
   acting(

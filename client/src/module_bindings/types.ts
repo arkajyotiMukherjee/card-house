@@ -31,6 +31,13 @@ export const ConnectionRate = __t.object("ConnectionRate", {
 });
 export type ConnectionRate = __Infer<typeof ConnectionRate>;
 
+export const DiscordLeaderboard = __t.object("DiscordLeaderboard", {
+  lobbyId: __t.string(),
+  messageId: __t.string(),
+  revision: __t.string(),
+});
+export type DiscordLeaderboard = __Infer<typeof DiscordLeaderboard>;
+
 export const GameEvent = __t.object("GameEvent", {
   id: __t.string(),
   tableId: __t.string(),
@@ -54,6 +61,16 @@ export const GameSeat = __t.object("GameSeat", {
 });
 export type GameSeat = __Infer<typeof GameSeat>;
 
+export const GameSettlement = __t.object("GameSettlement", {
+  id: __t.string(),
+  lobbyId: __t.string(),
+  tableId: __t.string(),
+  handNumber: __t.u32(),
+  summaryJson: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type GameSettlement = __Infer<typeof GameSettlement>;
+
 export const GameTable = __t.object("GameTable", {
   id: __t.string(),
   lobbyId: __t.string(),
@@ -65,11 +82,14 @@ export const GameTable = __t.object("GameTable", {
   minPlayers: __t.u32(),
   maxPlayers: __t.u32(),
   stateJson: __t.string(),
+  economyJson: __t.string(),
+  hostMemberId: __t.string(),
+  hostAwaySince: __t.option(__t.u64()),
+  startsAt: __t.option(__t.u64()),
+  handNumber: __t.u32(),
   createdAt: __t.timestamp(),
   discordVoiceChannelId: __t.string(),
   lastActivityAt: __t.option(__t.timestamp()),
-  tournamentId: __t.string(),
-  round: __t.u32(),
 });
 export type GameTable = __Infer<typeof GameTable>;
 
@@ -85,6 +105,8 @@ export const Lobby = __t.object("Lobby", {
   discordLobbyVoiceChannelId: __t.string(),
   lastActivityAt: __t.option(__t.timestamp()),
   solo: __t.bool(),
+  startingCoins: __t.u32(),
+  creatorIdentity: __t.string(),
 });
 export type Lobby = __Infer<typeof Lobby>;
 
@@ -123,6 +145,7 @@ export const LobbyMember = __t.object("LobbyMember", {
   discordGlobalName: __t.string(),
   discordDiscriminator: __t.option(__t.string()),
   isBot: __t.bool(),
+  leftRoom: __t.bool(),
 });
 export type LobbyMember = __Infer<typeof LobbyMember>;
 
@@ -149,6 +172,24 @@ export const RoomCaps = __t.object("RoomCaps", {
   maxSeatsPerTable: __t.u32(),
 });
 export type RoomCaps = __Infer<typeof RoomCaps>;
+
+export const RoomUpgrade = __t.object("RoomUpgrade", {
+  id: __t.string(),
+  ownerIdentity: __t.string(),
+  phase: __t.string(),
+});
+export type RoomUpgrade = __Infer<typeof RoomUpgrade>;
+
+export const RoomWallet = __t.object("RoomWallet", {
+  id: __t.string(),
+  lobbyId: __t.string(),
+  clientId: __t.string(),
+  name: __t.string(),
+  available: __t.i64(),
+  granted: __t.i64(),
+  profit: __t.i64(),
+});
+export type RoomWallet = __Infer<typeof RoomWallet>;
 
 export const SeatAbsence = __t.object("SeatAbsence", {
   id: __t.string(),
@@ -184,6 +225,12 @@ export const Spectator = __t.object("Spectator", {
 });
 export type Spectator = __Infer<typeof Spectator>;
 
+export const TableBackup = __t.object("TableBackup", {
+  id: __t.string(),
+  payloadJson: __t.string(),
+});
+export type TableBackup = __Infer<typeof TableBackup>;
+
 export const TableChatMessage = __t.object("TableChatMessage", {
   id: __t.string(),
   tableId: __t.string(),
@@ -200,6 +247,18 @@ export const TableCleanupSchedule = __t.object("TableCleanupSchedule", {
 });
 export type TableCleanupSchedule = __Infer<typeof TableCleanupSchedule>;
 
+export const TableFunding = __t.object("TableFunding", {
+  id: __t.string(),
+  tableId: __t.string(),
+  walletId: __t.string(),
+  seatIndex: __t.u32(),
+  units: __t.i64(),
+  committed: __t.bool(),
+  cpu: __t.bool(),
+  leaving: __t.bool(),
+});
+export type TableFunding = __Infer<typeof TableFunding>;
+
 // The tagged union or sum type for the algebraic type `TableStatus`.
 export const TableStatus = __t.enum("TableStatus", {
   WaitingForPlayers: __t.unit(),
@@ -207,27 +266,6 @@ export const TableStatus = __t.enum("TableStatus", {
   Finished: __t.unit(),
 });
 export type TableStatus = __Infer<typeof TableStatus>;
-
-export const Tournament = __t.object("Tournament", {
-  id: __t.string(),
-  lobbyId: __t.string(),
-  gameType: __t.string(),
-  name: __t.string(),
-  currentRound: __t.u32(),
-  get roundStatus() {
-    return TournamentRoundStatus;
-  },
-  createdAt: __t.timestamp(),
-  lastActivityAt: __t.option(__t.timestamp()),
-});
-export type Tournament = __Infer<typeof Tournament>;
-
-// The tagged union or sum type for the algebraic type `TournamentRoundStatus`.
-export const TournamentRoundStatus = __t.enum("TournamentRoundStatus", {
-  InProgress: __t.unit(),
-  Complete: __t.unit(),
-});
-export type TournamentRoundStatus = __Infer<typeof TournamentRoundStatus>;
 
 export const VoicePresence = __t.object("VoicePresence", {
   id: __t.string(),
@@ -238,4 +276,21 @@ export const VoicePresence = __t.object("VoicePresence", {
   updatedAt: __t.timestamp(),
 });
 export type VoicePresence = __Infer<typeof VoicePresence>;
+
+export const WalletLedger = __t.object("WalletLedger", {
+  id: __t.string(),
+  walletId: __t.string(),
+  tableId: __t.string(),
+  kind: __t.string(),
+  amount: __t.i64(),
+  profit: __t.i64(),
+  createdAt: __t.timestamp(),
+});
+export type WalletLedger = __Infer<typeof WalletLedger>;
+
+export const WalletOwner = __t.object("WalletOwner", {
+  id: __t.string(),
+  identity: __t.string(),
+});
+export type WalletOwner = __Infer<typeof WalletOwner>;
 

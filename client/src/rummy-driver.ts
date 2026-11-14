@@ -427,7 +427,8 @@ export class RummyDriver implements GameDriver<RummyState> {
       return;
     }
     if (state.phase === 'finished') {
-      const line = finishedLine(state, ctx.seats) ?? 'Finished';
+      const line =
+        ctx.finishedMessage ?? finishedLine(state, ctx.seats) ?? 'Finished';
       this.labels.push(this.banner(ctx, line));
     } else {
       const mine =

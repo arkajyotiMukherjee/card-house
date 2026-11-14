@@ -20,10 +20,12 @@ export default __t.row({
   get status() {
     return LobbyStatus;
   },
-  createdAt: __t.timestamp().name("created_at"),
-  discordChannelId: __t.string().name("discord_channel_id"),
-  discordGuildId: __t.string().name("discord_guild_id"),
-  discordLobbyVoiceChannelId: __t.string().name("discord_lobby_voice_channel_id"),
-  lastActivityAt: __t.option(__t.timestamp()).name("last_activity_at"),
+  createdAt: __t.timestamp(),
+  discordChannelId: __t.string(),
+  discordGuildId: __t.string(),
+  discordLobbyVoiceChannelId: __t.string(),
+  lastActivityAt: __t.option(__t.timestamp()),
   solo: __t.bool(),
+  startingCoins: __t.u32(),
+  creatorIdentity: __t.string(),
 });

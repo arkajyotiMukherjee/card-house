@@ -494,6 +494,7 @@ function readOwnMembers(
 ): { clientId: string; isBot: boolean }[] {
   const rows: { clientId: string; isBot: boolean }[] = [];
   for (const member of connection.db.lobbyMember.iter()) {
+    if (member.leftRoom) continue;
     rows.push({ clientId: member.clientId, isBot: member.isBot });
   }
   return rows;

@@ -7,7 +7,7 @@ test('the registered command set is /cardhouse create, status, and close', () =>
   assert.equal(CARDHOUSE_COMMAND.name, 'cardhouse');
   assert.deepEqual(
     CARDHOUSE_COMMAND.options.map((option) => option.name),
-    ['create', 'status', 'close'],
+    ['create', 'status', 'close', 'leaderboard'],
   );
   const status = CARDHOUSE_COMMAND.options[1];
   assert.equal(status.name, 'status');

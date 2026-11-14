@@ -13,4 +13,5 @@ import {
 export default {
   tableId: __t.string(),
   lobbyMemberId: __t.string(),
+  buyIn: __t.option(__t.u32()),
 };

@@ -411,3 +411,10 @@ A phone or tablet is any device matching `(pointer: coarse) and (hover: none)`. 
   - When the page runs as an installed app (`display-mode: standalone`), the button is hidden.
 - **Touch targets.** Pixel buttons are about 28px tall. On a coarse pointer the hit area grows to at least 44px around the same face; the pixel font and art do not change. Where two targets are close, the extra area is split between them so they never overlap. A card tap selects and Play fires on `pointerup`, so neither needs a hover. The hover lift is cosmetic.
 - **Keyboard.** Tapping a text field puts the finger on a real HTML input already placed over the canvas box, so iOS opens its keyboard. The input is 16px text (no iOS zoom) with a hidden caret. The canvas label is the text the player reads, and a gold block caret sits on the pixel-font insertion point for the name, the room code, and chat. When the keyboard is up the page lifts, using `visualViewport`, so the focused box stays above it.
+
+
+## Room economy lobby
+
+The default lobby has a personal wallet summary, table browser, and player leaderboard. Use the full safe viewport width. Rank by settled net winnings and display available and committed coins separately. Chat is initially closed and replaces its column only after a button press; new messages have an unread indicator. Table cards show the host, fee or stakes, and an independent start countdown. Keep these labels readable rather than shrinking them beneath the action buttons.
+
+Numeric coin dialogs stay on the canvas, use native text inputs with numeric keyboards, and grow with the number of settings. Creation confirms stakes and seats the creator as host. Joining confirms a fee or chosen casino buy-in before reserving coins. Show room balance and the between-hand top-up action in the table margin. Completed paid games retain a participant snapshot so releasing seats never removes winner names.

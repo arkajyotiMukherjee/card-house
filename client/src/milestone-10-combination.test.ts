@@ -50,8 +50,8 @@ describe('milestone 10 together', () => {
       tableToReopen('table_lobby_1', [], [], 'member_ada', 'lobby_1'),
     ).toBe('');
 
-    expect(
-      shouldRemoveEmptyTable(1, 'waiting_for_players', timeout, 1n),
-    ).toBe(false);
+    expect(shouldRemoveEmptyTable(1, 'waiting_for_players', timeout, 1n)).toBe(
+      false,
+    );
   });
 });

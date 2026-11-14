@@ -1,3 +1,5 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+import { attachLeaderboardWatch, readLeaderboard } from './leaderboard.ts';
 import { createServer, type Server } from 'node:http';
 import { pathToFileURL } from 'node:url';
 import { registerSlashCommands } from './commands.ts';
@@ -43,7 +45,7 @@ export async function main(attached?: Server): Promise<void> {
   let connection: Awaited<ReturnType<typeof connectLobby>> | undefined;
   const app = createApp({
     publicKey,
-    createLobby: (discordChannelId, guildId) => {
+    createLobby: (discordChannelId, guildId, startingCoins) => {
       if (!connection) {
         return Promise.reject(new Error('Still connecting to SpacetimeDB'));
       }
@@ -53,6 +55,8 @@ export async function main(attached?: Server): Promise<void> {
         discordChannelId,
         guildId,
         publicUrl,
+        undefined,
+        startingCoins,
       );
     },
     lookupPlayerName: (discordUserId) =>
@@ -62,6 +66,10 @@ export async function main(attached?: Server): Promise<void> {
         return Promise.reject(new Error('Still connecting to SpacetimeDB'));
       }
       return readLobbyStatus(connection, roomCode);
+    },
+    leaderboard: (channelId, roomCode, page) => {
+      if (!connection) throw new Error('Still connecting to SpacetimeDB');
+      return readLeaderboard(connection, channelId, roomCode, page);
     },
     closeRoom: (roomCode) => {
       if (!connection) {
@@ -92,7 +100,7 @@ export async function main(attached?: Server): Promise<void> {
         guildId: process.env.DISCORD_GUILD_ID,
       });
       console.log(
-        'Registered /cardhouse create, /cardhouse status, and /cardhouse close',
+        'Registered /cardhouse create, /cardhouse status, and /cardhouse leaderboard',
       );
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Bot failed';
@@ -110,13 +118,38 @@ export async function main(attached?: Server): Promise<void> {
       undici.WebSocket as unknown as typeof globalThis.WebSocket;
   }
   try {
-    connection = await connectLobby(host, database);
+    const sessionFile =
+      process.env.CARDHOUSE_BOT_SESSION_FILE ??
+      new URL('../.session-token', import.meta.url).pathname;
+    connection = await connectLobby(host, database, {
+      read() {
+        try {
+          return readFileSync(sessionFile, 'utf8').trim() || undefined;
+        } catch {
+          return undefined;
+        }
+      },
+      write(value) {
+        writeFileSync(sessionFile, value, { mode: 0o600 });
+      },
+    });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Bot failed';
     console.error(redact(message, token));
     return;
   }
   const lobby = connection;
+  if (token.length > 0)
+    attachLeaderboardWatch(lobby, discordRestApi({ token }), (error) =>
+      console.error(
+        redact(
+          error instanceof Error
+            ? error.message
+            : 'Leaderboard delivery failed',
+          token,
+        ),
+      ),
+    );
   if (voice) {
     try {
       attachVoiceWatch(lobby, voice);

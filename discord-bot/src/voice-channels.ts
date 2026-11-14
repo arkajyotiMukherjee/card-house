@@ -138,12 +138,14 @@ export async function createDiscordLobbyWithVoice(
   guildId: string | undefined,
   publicBase: string,
   hooks?: CreateLobbyHooks,
+  startingCoins?: number,
 ): Promise<CreatedLobby> {
   const created = await createDiscordLobby(
     connection,
     discordChannelId,
     publicBase,
     hooks,
+    startingCoins,
   );
   if (discord && (guildId?.trim().length ?? 0) > 0) {
     await attachLobbyVoice(connection, discord, created.code, guildId ?? '');

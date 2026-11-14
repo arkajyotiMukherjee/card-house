@@ -161,7 +161,7 @@ export const pokerGameDefinition = {
   minPlayers: 2,
   maxPlayers: 8,
   howToPlay:
-    "# Poker\n\nTexas Hold'em, Omaha, and Oklahoma share one table. Choose the variation when you create the table. Blinds are 10 and 20. Each player starts with 1000 chips.\n\n## Texas Hold'em\n\nTwo hole cards. The board is a flop of three, then the turn, then the river. At showdown you may use any mix of hole cards and community cards. Betting is no-limit.\n\n## Omaha\n\nFour hole cards. The board and the betting rounds match Hold'em. At showdown you must use exactly two hole cards and three community cards. Betting is pot-limit.\n\n## Oklahoma\n\nThe deal starts like Omaha, with four hole cards. Before betting on the flop, each player still in discards one hole card. Before betting on the turn, each player still in discards one more. Showdown uses the two remaining hole cards and exactly three community cards. Betting is pot-limit.\n\n## Betting\n\nThe button posts the small blind and the next seat posts the big blind. Those seats are marked SB and BB for the whole hand, including after a fold. On your turn you may fold, check, call, bet, or raise. Bet and Raise ask for an amount from the minimum through all-in. Call matches the current bet. The maximum button reads Pot max when the pot-limit ceiling is below your full stack, and All-in when your full stack is legal. Once all remaining opponents are all-in and calls are settled, live hands turn face up and the board runs out without extra checks. Oklahoma still requires its flop and turn discards. The hand ends when everyone else folds, or at showdown. The best hand wins. Side pots pay players who were all-in for less. After a fold win, any undealt community cards are revealed without changing the winner. The finished hand stays up so the winner and any showdown cards can be read, then the next hand deals while two or more players are still seated. A player with no chips sits out and can stay or leave.",
+    "# Poker\n\nTexas Hold'em, Omaha, and Oklahoma share one table. Choose the variation when you create the table. The host sets blinds and buy-in limits. Your buy-in comes from your room wallet; remaining chips return after a safe cash-out.\n\n## Texas Hold'em\n\nTwo hole cards. The board is a flop of three, then the turn, then the river. At showdown you may use any mix of hole cards and community cards. Betting is no-limit.\n\n## Omaha\n\nFour hole cards. The board and the betting rounds match Hold'em. At showdown you must use exactly two hole cards and three community cards. Betting is pot-limit.\n\n## Oklahoma\n\nThe deal starts like Omaha, with four hole cards. Before betting on the flop, each player still in discards one hole card. Before betting on the turn, each player still in discards one more. Showdown uses the two remaining hole cards and exactly three community cards. Betting is pot-limit.\n\n## Betting\n\nThe button posts the small blind and the next seat posts the big blind. Those seats are marked SB and BB for the whole hand, including after a fold. On your turn you may fold, check, call, bet, or raise. Bet and Raise ask for an amount from the minimum through all-in. Call matches the current bet. The maximum button reads Pot max when the pot-limit ceiling is below your full stack, and All-in when your full stack is legal. Once all remaining opponents are all-in and calls are settled, live hands turn face up and the board runs out without extra checks. Oklahoma still requires its flop and turn discards. The hand ends when everyone else folds, or at showdown. The best hand wins. Side pots pay players who were all-in for less. After a fold win, any undealt community cards are revealed without changing the winner. The finished hand stays up so the winner and any showdown cards can be read, then the next hand deals while two or more players are still seated. A player with no chips leaves the paid seat and may buy in again between hands.",
 } satisfies GameDefinition;
 
 function asRecord(value: unknown, message: string): Record<string, unknown> {
@@ -761,13 +761,18 @@ function openingDeal(players: GameSeat[], table: GameTable): PokerState {
   const order = ordered.map((seat) => seat.seatIndex);
   const dealer = order[0] ?? 0;
   const state = lobbyState(variation);
+  state.smallBlind = table.economy?.smallBlind ?? state.smallBlind;
+  state.bigBlind = table.economy?.bigBlind ?? state.bigBlind;
   state.phase = 'play';
   state.handNumber = 1;
   state.order = order;
   state.dealerSeatIndex = dealer;
   state.deck = shuffleDeck(freshDeck(), table.id, 1);
   for (const seat of ordered) {
-    state.seats[seatKey(seat.seatIndex)] = emptySeat();
+    state.seats[seatKey(seat.seatIndex)] = {
+      ...emptySeat(),
+      chips: seat.chips ?? POKER_STARTING_CHIPS,
+    };
   }
   dealHole(state, holes);
   const blinds = blindSeats(order, dealer);
@@ -1589,6 +1594,21 @@ export function pokerHoleFaceUp(state: PokerState, seatIndex: number): boolean {
   return Boolean((showdown || locked) && seat && !seat.folded);
 }
 
+/** Import server-held stacks only between hands, including newcomers and top-ups. */
+export function pokerBankrolls(
+  state: PokerState,
+  bankrolls: readonly { seatIndex: number; chips: number }[],
+): PokerState {
+  if (state.phase !== 'finished') return state;
+  const seats: Record<string, PokerSeatState> = {};
+  for (const row of bankrolls)
+    seats[seatKey(row.seatIndex)] = {
+      ...(state.seats[seatKey(row.seatIndex)] ?? emptySeat()),
+      chips: row.chips,
+    };
+  return { ...state, seats };
+}
+
 function fundedSeats(state: PokerState, seated: readonly number[]): number[] {
   const live: number[] = [];
   for (const index of seated) {
@@ -1650,6 +1670,8 @@ function dealNextHand(
   const handNumber = (prev.handNumber || 1) + 1;
   const dealer = nextButton(prev.order, prev.dealerSeatIndex, live);
   const state = lobbyState(prev.variation);
+  state.smallBlind = prev.smallBlind;
+  state.bigBlind = prev.bigBlind;
   state.phase = 'play';
   state.handNumber = handNumber;
   state.order = live.slice();

@@ -14,6 +14,16 @@ export const CARDHOUSE_COMMAND = {
       type: SUB_COMMAND,
       name: 'create',
       description: 'Create a lobby and get a code and join link',
+      options: [
+        {
+          type: 4,
+          name: 'startingcoins',
+          description: 'Starting room coins per player (default 10000)',
+          required: false,
+          min_value: 1,
+          max_value: 1000000000,
+        },
+      ],
     },
     {
       type: SUB_COMMAND,
@@ -38,6 +48,26 @@ export const CARDHOUSE_COMMAND = {
           name: ROOM_CODE_OPTION,
           description: 'Lobby room code',
           required: true,
+        },
+      ],
+    },
+    {
+      type: SUB_COMMAND,
+      name: 'leaderboard',
+      description: 'Show room rankings by net winnings',
+      options: [
+        {
+          type: STRING_OPTION,
+          name: ROOM_CODE_OPTION,
+          description: 'Room code; optional with one room in this channel',
+          required: false,
+        },
+        {
+          type: 4,
+          name: 'page',
+          description: 'Leaderboard page',
+          required: false,
+          min_value: 1,
         },
       ],
     },

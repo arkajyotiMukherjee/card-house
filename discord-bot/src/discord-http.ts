@@ -15,7 +15,7 @@ export class DiscordHttpError extends Error {
 }
 
 export interface DiscordRequest {
-  method: 'GET' | 'POST' | 'DELETE';
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   path: string;
   body?: unknown;
 }

@@ -429,7 +429,7 @@ export class SpadesDriver implements GameDriver<SpadesState> {
       return;
     }
     if (state.phase === 'finished') {
-      const line = finishedLine(state) ?? 'Finished';
+      const line = ctx.finishedMessage ?? finishedLine(state) ?? 'Finished';
       this.labels.push(this.banner(ctx, line));
     }
     const board = partnershipBoard(state, ctx.meSeatIndex);

@@ -1,3 +1,4 @@
+import { formatCoins } from '../../src/shared/economy';
 import { anchorLobbyActor, lobbyFieldGeometry } from './lobby-viewport';
 import { anchorTableActor } from './table-viewport';
 import * as ex from 'excalibur';
@@ -45,20 +46,11 @@ import { roomComposer } from './room-composer';
 import { readPreferredName, rememberPreferredName } from './preferred-name';
 import { wrapText } from './menu-layout';
 import type { DbConnection } from './module_bindings';
-import { lobbySpeakers, SpeakingFader, type SpeakingRow } from './speaking';
-import { speechBubble } from './speaking-view';
-import {
-  headsetActor,
-  HEADSET_HEIGHT,
-  HEADSET_WIDTH,
-  lobbyVoiceMemberIds,
-  type PresenceRef,
-} from './voice-presence';
+import { lobbyVoiceMemberIds, type PresenceRef } from './voice-presence';
 
 const PHONE_LAYOUT = isMobileDevice();
 
 const GOLD = ex.Color.fromHex('#f4e4b3');
-const SELF = ex.Color.fromHex('#fff6d0');
 const DIM = ex.Color.fromHex('#d7c08a');
 const FIELD = ex.Color.fromHex('#0b2418');
 const BUTTON = ex.Color.fromHex('#1b5c38');
@@ -252,16 +244,7 @@ export function mountLobbyPanel(
   let joinedCode = '';
   let formVisible = handlers.returning !== true;
   const nameActors: ex.Actor[] = [];
-  const fader = new SpeakingFader();
   let joinedLobbyId = '';
-  let speaking = new Set<string>();
-
-  const refreshSpeaking = (): void => {
-    speaking =
-      joinedLobbyId.length === 0
-        ? new Set<string>()
-        : lobbySpeakers(readSpeaking(connection), joinedLobbyId);
-  };
 
   const paintLobbyValue = (
     text: ex.Text,
@@ -388,56 +371,52 @@ export function mountLobbyPanel(
     roomLabel.text = '';
     roomCode.text = '';
     void room;
-    playersLabel.text = 'Players';
+    playersLabel.text = 'Your wallet';
     for (const actor of nameActors) {
       actor.kill();
     }
     nameActors.length = 0;
-    for (let index = 0; index < lines.length; index += 1) {
-      const line = lines[index];
-      const y = 126 + index * (PHONE_LAYOUT ? 24 : 20);
-      if (!line) {
-        continue;
-      }
-      if (y >= 372) {
-        break;
-      }
-      const displayName =
-        line.name.length > 14 ? `${line.name.slice(0, 13)}…` : line.name;
-      const size = PHONE_LAYOUT ? 10 : 8;
-      const graphic = canvasText(displayName, size, line.self ? SELF : GOLD);
-      const actor = new ex.Actor({
-        pos: ex.vec(16, y),
-        anchor: ex.vec(0, 0),
-        z: 21,
-      });
-      actor.graphics.use(graphic);
-      anchorLobbyActor(actor);
-      scene.add(actor);
-      nameActors.push(actor);
-      let markerX = 16 + displayName.length * size + 4;
-      if (line.inVoice) {
-        const headset = headsetActor(
-          markerX,
-          y + Math.floor((size - HEADSET_HEIGHT) / 2) + 1,
-          21,
+    const wallet = [...connection.db.roomWallet.iter()].find(
+      (row) => row.lobbyId === joinedLobbyId && row.clientId === clientId,
+    );
+    if (wallet) {
+      const committed = [...connection.db.tableFunding.iter()]
+        .filter((row) => row.walletId === wallet.id)
+        .reduce((sum, row) => sum + row.units, 0n);
+      const summary = [
+        'Available',
+        formatCoins(wallet.available),
+        'At tables',
+        formatCoins(committed),
+        'Net winnings',
+        `${wallet.profit > 0n ? '+' : ''}${formatCoins(wallet.profit)}`,
+        'Grants received',
+        formatCoins(wallet.granted),
+      ];
+      summary.forEach((value, index) => {
+        const actor = new ex.Actor({
+          pos: ex.vec(20, 132 + index * 28),
+          anchor: ex.vec(0, 0),
+          z: 21,
+        });
+        const preferred = PHONE_LAYOUT
+          ? index % 2
+            ? 16
+            : 11
+          : index % 2
+            ? 12
+            : 8;
+        actor.graphics.use(
+          canvasText(
+            value,
+            Math.min(preferred, Math.floor(160 / Math.max(1, value.length))),
+            index % 2 ? GOLD : DIM,
+          ),
         );
-        anchorLobbyActor(headset);
-        scene.add(headset);
-        nameActors.push(headset);
-        markerX += HEADSET_WIDTH + 4;
-      }
-      const bubble = speechBubble(
-        ex.vec(markerX, y - 2),
-        21,
-        1,
-        fader,
-        line.id,
-        () => speaking.has(line.id),
-      );
-      anchorLobbyActor(bubble);
-      scene.add(bubble);
-      nameActors.push(bubble);
+        anchorLobbyActor(actor);
+        scene.add(actor);
+        nameActors.push(actor);
+      });
     }
     const self = lines.find((line) => line.self);
     if (self && !renameFocused && !busy) {
@@ -446,6 +425,11 @@ export function mountLobbyPanel(
     paintRename();
   };
 
+  connection.db.roomWallet.onInsert(() => syncJoinedLobby());
+  connection.db.roomWallet.onUpdate(() => syncJoinedLobby());
+  connection.db.tableFunding.onInsert(() => syncJoinedLobby());
+  connection.db.tableFunding.onUpdate(() => syncJoinedLobby());
+  connection.db.tableFunding.onDelete(() => syncJoinedLobby());
   const syncJoinedLobby = (): void => {
     if (joinedCode.length === 0) {
       return;
@@ -455,7 +439,6 @@ export function mountLobbyPanel(
       return;
     }
     joinedLobbyId = lobby.id;
-    refreshSpeaking();
     renderLobby(
       lobby.code,
       memberLines(
@@ -806,9 +789,6 @@ export function mountLobbyPanel(
   connection.db.lobbyMember.onDelete(() => {
     syncJoinedLobby();
   });
-  connection.db.speakingState.onInsert(refreshSpeaking);
-  connection.db.speakingState.onUpdate(refreshSpeaking);
-  connection.db.speakingState.onDelete(refreshSpeaking);
 
   paintFields();
   if (handlers.returning) {
@@ -833,7 +813,6 @@ export function mountLobbyPanel(
     resetAfterLeave: () => {
       joinedCode = '';
       joinedLobbyId = '';
-      speaking = new Set();
       roomComposer.clear();
       for (const actor of nameActors) {
         actor.kill();
@@ -928,22 +907,10 @@ function readLobbies(connection: DbConnection): LobbyRow[] {
   return rows;
 }
 
-function readSpeaking(connection: DbConnection): SpeakingRow[] {
-  const rows: SpeakingRow[] = [];
-  for (const row of connection.db.speakingState.iter()) {
-    rows.push({
-      lobbyId: row.lobbyId,
-      tableId: row.tableId,
-      lobbyMemberId: row.lobbyMemberId,
-      isSpeaking: row.isSpeaking,
-    });
-  }
-  return rows;
-}
-
 function readMembers(connection: DbConnection): MemberRecord[] {
   const rows: MemberRecord[] = [];
   for (const member of connection.db.lobbyMember.iter()) {
+    if (member.leftRoom) continue;
     rows.push({
       id: member.id,
       lobbyId: member.lobbyId,
@@ -973,7 +940,9 @@ async function createThenJoin(
   discordIdentity: DiscordJoinIdentity | undefined,
 ): Promise<string> {
   const knownIds = new Set(readLobbies(connection).map((lobby) => lobby.id));
-  await connection.reducers.createLobby({});
+  await connection.reducers.createLobby({
+    startingCoins: Number(localStorage.getItem('roomStartingCoins') ?? 10_000),
+  });
   const created = findCreatedLobby(
     readLobbies(connection),
     knownIds,

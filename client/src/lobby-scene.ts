@@ -1,4 +1,11 @@
 import {
+  casinoGame,
+  formatCoins,
+  tableEconomy,
+  type TableEconomy,
+} from '../../src/shared/economy';
+import { coinDialog, type CoinField } from './coin-dialog';
+import {
   anchorLobbyActor,
   enableLobbyViewport,
   lobbyFieldGeometry,
@@ -205,6 +212,13 @@ export class LobbyScene {
     8,
     DIM,
   );
+  private chatOpen = false;
+  private chatUnread = 0;
+  private chatToggleText?: ex.Text;
+  private readonly chatActors: { actor: ex.Actor; y: number }[] = [];
+  private readonly leaderboardActors: ex.Actor[] = [];
+  private leaderboardPage = 0;
+  private fundingDialog = false;
   private chatBody = '';
   private chatFocused = false;
   private chatField: CanvasTextFieldHandle | undefined;
@@ -234,7 +248,9 @@ export class LobbyScene {
   ) {}
 
   get dialogOpen(): boolean {
-    return this.creating || this.leaveConfirm !== undefined;
+    return (
+      this.creating || this.fundingDialog || this.leaveConfirm !== undefined
+    );
   }
 
   setStats(line: string): void {
@@ -265,6 +281,9 @@ export class LobbyScene {
       if (second !== lastSecond) {
         lastSecond = second;
         if (
+          [...this.connection.db.gameTable.iter()].some(
+            (row) => row.startsAt !== undefined,
+          ) ||
           [...this.connection.db.seatAbsence.iter()].some(
             (absence) => absence.deadlineMicros !== undefined,
           )
@@ -327,7 +346,19 @@ export class LobbyScene {
         this.finishLeave();
       }
     });
-    this.connection.db.lobbyChatMessage.onInsert(() => {
+    this.connection.db.lobbyChatMessage.onInsert((ctx, message) => {
+      const me = memberByClient(
+        this.readMembers(),
+        this.lobbyId,
+        this.clientId,
+      );
+      if (
+        !this.chatOpen &&
+        ctx.event.tag !== 'SubscribeApplied' &&
+        message.lobbyMemberId !== me?.id
+      )
+        this.chatUnread += 1;
+      this.renderLeaderboard();
       this.renderChat();
     });
     this.connection.db.lobbyChatMessage.onUpdate(() => {
@@ -339,9 +370,19 @@ export class LobbyScene {
     this.connection.db.lobbyMember.onInsert(() => {
       this.renderChat();
     });
-    this.connection.db.lobbyMember.onUpdate(() => {
+    this.connection.db.lobbyMember.onUpdate((_ctx, previous, member) => {
+      if (
+        !previous.leftRoom &&
+        member.leftRoom &&
+        member.clientId === this.clientId &&
+        member.lobbyId === this.lobbyId
+      )
+        this.finishLeave();
       this.renderChat();
     });
+    this.connection.db.roomWallet.onInsert(() => this.renderLeaderboard());
+    this.connection.db.roomWallet.onUpdate(() => this.renderLeaderboard());
+    this.connection.db.tableFunding.onUpdate(() => this.renderLeaderboard());
     this.bindChatKeyboard();
     roomComposer.watch(() => {
       this.chatFocused = roomComposer.active() === 'chat';
@@ -482,7 +523,33 @@ export class LobbyScene {
     this.buildPopup();
     this.buildBanner();
 
+    const beforeChat = new Set(this.scene.actors);
     this.buildChatPanel();
+    for (const actor of this.scene.actors)
+      if (!beforeChat.has(actor))
+        this.chatActors.push({ actor, y: actor.pos.y });
+    const chatToggle = this.button(
+      { x: 656, y: 16, w: 144, h: PHONE_LAYOUT ? 40 : 28 },
+      'Chat',
+      () => {
+        this.chatOpen = !this.chatOpen;
+        this.chatUnread = 0;
+        roomComposer.blur('chat');
+        this.setChatVisible();
+        this.renderChat();
+        this.renderLeaderboard();
+      },
+    );
+    anchorTableActor(chatToggle, 'right', 656);
+    // The caption is updated with the unread count.
+    this.chatToggleText = (chatToggle.children[0] as ex.Actor | undefined)
+      ?.graphics.current as ex.Text | undefined;
+    this.setChatVisible();
+    this.button({ x: 20, y: 366, w: 160, h: 30 }, 'Refill coins', () => {
+      void this.connection.reducers
+        .refillRoomCoins({ lobbyId: this.lobbyId, clientId: this.clientId })
+        .catch((error) => this.setError(errorMessage(error)));
+    });
     this.buildLeaveRoom();
     const stats = new ex.Actor({
       pos: ex.vec(20, 518),
@@ -493,6 +560,107 @@ export class LobbyScene {
     anchorLobbyActor(stats);
     this.statsActor = stats;
     this.scene.add(stats);
+  }
+
+  private setChatVisible(): void {
+    for (const { actor, y } of this.chatActors) {
+      actor.graphics.isVisible = this.chatOpen;
+      actor.pos.y = this.chatOpen ? y : -2000;
+    }
+    if (!this.chatOpen && this.chatCaret) this.chatCaret.graphics.opacity = 0;
+    refreshCanvasTextFields();
+  }
+
+  private renderLeaderboard(): void {
+    if (!this.panelReady) return;
+    for (const actor of this.leaderboardActors) actor.kill();
+    this.leaderboardActors.length = 0;
+    if (this.chatToggleText)
+      this.chatToggleText.text = this.chatOpen
+        ? 'Rankings'
+        : this.chatUnread
+          ? `Chat (${this.chatUnread})`
+          : 'Chat';
+    if (this.chatOpen) return;
+    const box = CHAT_PANEL.panel;
+    const panel = new ex.Actor({
+      pos: ex.vec(box.x, box.y),
+      anchor: ex.vec(0, 0),
+      width: box.w,
+      height: box.h,
+      z: 15,
+    });
+    panel.graphics.use(panelRect(box.w, box.h, PANEL, STROKE));
+    anchorLobbyActor(panel);
+    this.scene.add(panel);
+    this.leaderboardActors.push(panel);
+    const label = (
+      y: number,
+      value: string,
+      size: number,
+      color = GOLD,
+    ): void => {
+      const actor = this.addChatLabel(CHAT_PANEL.list.x, y, value, size, color);
+      this.leaderboardActors.push(actor);
+    };
+    label(98, 'Leaderboard', PHONE_LAYOUT ? 16 : 12);
+    label(122, 'Ranked by net winnings', PHONE_LAYOUT ? 11 : 8, DIM);
+    const wallets = [...this.connection.db.roomWallet.iter()]
+      .filter((row) => row.lobbyId === this.lobbyId)
+      .sort((a, b) =>
+        a.profit === b.profit
+          ? a.id.localeCompare(b.id)
+          : a.profit > b.profit
+            ? -1
+            : 1,
+      );
+    const capacity = PHONE_LAYOUT ? 4 : 5;
+    const pages = Math.max(1, Math.ceil(wallets.length / capacity));
+    this.leaderboardPage %= pages;
+    const start = this.leaderboardPage * capacity;
+    wallets.slice(start, start + capacity).forEach((wallet, index) => {
+      const rank = wallets.findIndex((row) => row.profit === wallet.profit) + 1;
+      const y = 158 + index * (PHONE_LAYOUT ? 70 : 54);
+      const mine = wallet.clientId === this.clientId;
+      label(
+        y,
+        `${rank}. ${wallet.name.slice(0, PHONE_LAYOUT ? 15 : 20)}`,
+        PHONE_LAYOUT ? 14 : 10,
+        mine ? SELF : GOLD,
+      );
+      const committed = [...this.connection.db.tableFunding.iter()]
+        .filter((row) => row.walletId === wallet.id)
+        .reduce((sum, row) => sum + row.units, 0n);
+      if (PHONE_LAYOUT) {
+        label(
+          y + 22,
+          `Net ${wallet.profit > 0n ? '+' : ''}${formatCoins(wallet.profit)}`,
+          12,
+          DIM,
+        );
+        label(
+          y + 40,
+          `Coins ${formatCoins(wallet.available + committed)}`,
+          12,
+          DIM,
+        );
+      } else
+        label(
+          y + 20,
+          `${wallet.profit > 0n ? '+' : ''}${formatCoins(wallet.profit)} net | ${formatCoins(wallet.available + committed)} total`,
+          8,
+          DIM,
+        );
+    });
+    const next = this.button(
+      { x: 668, y: 454, w: 272, h: 30 },
+      `Players ${this.leaderboardPage + 1}/${pages}`,
+      () => {
+        this.leaderboardPage += 1;
+        this.renderLeaderboard();
+      },
+    );
+    this.leaderboardActors.push(next);
   }
 
   private buildChatPanel(): void {
@@ -548,7 +716,9 @@ export class LobbyScene {
         this.engine.currentScene === this.scene &&
         this.lobbyId.length > 0 &&
         !this.leaveConfirm &&
-        !this.creating,
+        !this.creating &&
+        this.chatOpen &&
+        !this.fundingDialog,
       read: () => this.chatBody,
       sanitize: (value) => applyChatText(value),
       write: (value) => {
@@ -821,7 +991,8 @@ export class LobbyScene {
   }
 
   private renderChat(): void {
-    if (!this.panelReady || this.lobbyId.length === 0) {
+    for (const actor of this.chatMessageActors) actor.kill();
+    if (!this.panelReady || this.lobbyId.length === 0 || !this.chatOpen) {
       return;
     }
     for (const actor of this.chatMessageActors) {
@@ -838,7 +1009,6 @@ export class LobbyScene {
     const capacity = Math.floor((list.bottom - list.y) / list.lineHeight);
     const columns = Math.floor((panel.w - 2 * (list.x - panel.x)) / list.size);
     const visible = lines
-      .filter(({ name }) => name.length > 0)
       .flatMap(({ name, body, self }) =>
         wrapChatLines(name, body, columns).map((line) => ({
           ...line,
@@ -1155,7 +1325,10 @@ export class LobbyScene {
       label: 'Table name (optional)',
       box: name,
       maxLength: 32,
-      active: () => this.creating && this.engine.currentScene === this.scene,
+      active: () =>
+        this.creating &&
+        !this.fundingDialog &&
+        this.engine.currentScene === this.scene,
       read: () => this.tableNameDraft,
       sanitize: (value) => applyChatText(value).slice(0, 32),
       write: (value) => {
@@ -1274,11 +1447,67 @@ export class LobbyScene {
     }
   }
 
-  private async createTable(): Promise<void> {
+  private async createTable(stakes?: Record<string, number>): Promise<void> {
     if (this.busy || !this.creating || this.lobbyId.length === 0) {
       return;
     }
     const game = gameOption(this.gameIndex);
+    if (this.fundingDialog) return;
+    if (!stakes) {
+      this.fundingDialog = true;
+      const defaults = tableEconomy(game.gameType);
+      const fields: CoinField[] = casinoGame(game.gameType)
+        ? [
+            ...(game.gameType === 'poker'
+              ? [
+                  {
+                    key: 'smallBlind',
+                    label: 'Small blind',
+                    value: defaults.smallBlind,
+                  },
+                  {
+                    key: 'bigBlind',
+                    label: 'Big blind',
+                    value: defaults.bigBlind,
+                  },
+                ]
+              : [
+                  {
+                    key: 'minBet',
+                    label: 'Minimum wager',
+                    value: defaults.minBet,
+                  },
+                  {
+                    key: 'maxBet',
+                    label: 'Maximum wager',
+                    value: defaults.maxBet,
+                  },
+                ]),
+            {
+              key: 'minBuyIn',
+              label: 'Minimum buy-in',
+              value: defaults.minBuyIn,
+            },
+            {
+              key: 'maxBuyIn',
+              label: 'Maximum buy-in',
+              value: defaults.maxBuyIn,
+            },
+            { key: 'buyIn', label: 'Your buy-in', value: defaults.minBuyIn },
+          ]
+        : [{ key: 'entryFee', label: 'Entry fee', value: defaults.entryFee }];
+      const selected = await coinDialog(
+        this.engine,
+        this.scene,
+        'Table stakes',
+        'Create and join as host. Coins are reserved immediately.',
+        fields,
+        'Create and join',
+      );
+      this.fundingDialog = false;
+      if (selected) await this.createTable(selected);
+      return;
+    }
     const maxPlayers = clampPlayerCount(game, this.maxPlayers);
     const tableName =
       this.tableNameDraft.trim() ||
@@ -1293,12 +1522,17 @@ export class LobbyScene {
       await this.connection.reducers.createGameTable({
         lobbyId: this.lobbyId,
         gameType: game.gameType,
-        settings: tableSettingsJson(
-          game.minPlayers,
-          maxPlayers,
-          tableName,
-          variation,
-        ),
+        settings: JSON.stringify({
+          ...JSON.parse(
+            tableSettingsJson(
+              game.minPlayers,
+              maxPlayers,
+              tableName,
+              variation,
+            ),
+          ),
+          ...stakes,
+        }),
       });
     } catch (error: unknown) {
       this.setError(errorMessage(error));
@@ -1308,6 +1542,17 @@ export class LobbyScene {
     }
     this.closeCreate();
     this.render();
+    const member = memberByClient(
+      this.readMembers(),
+      this.lobbyId,
+      this.clientId,
+    );
+    const seat = member
+      ? [...this.connection.db.gameSeat.iter()].find(
+          (row) => row.lobbyMemberId === member.id,
+        )
+      : undefined;
+    if (seat && member) this.onSeated(seat.tableId, member.id);
   }
 
   async followTableLink(code: string): Promise<boolean> {
@@ -1334,17 +1579,42 @@ export class LobbyScene {
       this.setError('Join the room first');
       return false;
     }
-    const table = fromLink
+    const linkedTable = fromLink
       ? [...this.connection.db.gameTable.iter()].find(
           (row) => row.id === tableId,
         )
       : undefined;
     if (
       fromLink &&
-      table?.status.tag !== 'WaitingForPlayers' &&
+      linkedTable?.status.tag !== 'WaitingForPlayers' &&
       !this.memberSeatedHere(tableId, member.id)
     ) {
       return this.spectateTable(tableId);
+    }
+    if (this.fundingDialog) return false;
+    const table = [...this.connection.db.gameTable.iter()].find(
+      (row) => row.id === tableId,
+    );
+    let buyIn: number | undefined;
+    if (table?.economyJson && !this.memberSeatedHere(tableId, member.id)) {
+      this.fundingDialog = true;
+      const settings = JSON.parse(table.economyJson) as TableEconomy;
+      const casino = casinoGame(table.gameType);
+      const selected = await coinDialog(
+        this.engine,
+        this.scene,
+        casino ? 'Buy in' : 'Join paid game',
+        casino
+          ? `Buy-in range: ${settings.minBuyIn} to ${settings.maxBuyIn} coins`
+          : `Entry: ${settings.entryFee} coins. Winner takes the pool.`,
+        casino
+          ? [{ key: 'buyIn', label: 'Your buy-in', value: settings.minBuyIn }]
+          : [],
+        'Join table',
+      );
+      this.fundingDialog = false;
+      if (!selected) return false;
+      buyIn = selected.buyIn;
     }
     this.busy = true;
     this.setError('');
@@ -1352,6 +1622,7 @@ export class LobbyScene {
       await this.connection.reducers.joinTable({
         tableId,
         lobbyMemberId: member.id,
+        buyIn,
       });
     } catch (error: unknown) {
       if (
@@ -1437,6 +1708,7 @@ export class LobbyScene {
   }
 
   private render(): void {
+    this.renderLeaderboard();
     if (!this.panelReady || this.lobbyId.length === 0) {
       return;
     }
@@ -1535,6 +1807,34 @@ export class LobbyScene {
       line.seated ? STROKE_HOT : STROKE,
     );
     actor.graphics.use(face);
+    const dbTable = [...this.connection.db.gameTable.iter()].find(
+      (row) => row.id === line.id,
+    );
+    if (dbTable?.economyJson) {
+      const settings = JSON.parse(dbTable.economyJson) as TableEconomy;
+      const host =
+        this.readMembers().find((row) => row.id === dbTable.hostMemberId)
+          ?.name ?? 'Away';
+      const stakes =
+        dbTable.gameType === 'poker'
+          ? `${settings.smallBlind}/${settings.bigBlind} | Buy-in ${settings.minBuyIn}+`
+          : dbTable.gameType === 'blackjack'
+            ? `Bet ${settings.minBet}-${settings.maxBet}`
+            : `Entry ${settings.entryFee} coins`;
+      const countdown =
+        dbTable.startsAt === undefined
+          ? `Host ${host.slice(0, 12)}`
+          : `Starts ${Math.max(0, Math.ceil((Number(dbTable.startsAt / 1000n) - Date.now()) / 1000))}s`;
+      this.childLabel(
+        actor,
+        8,
+        58,
+        stakes.slice(0, PHONE_LAYOUT ? 18 : 25),
+        DIM,
+        PHONE_LAYOUT ? 12 : 8,
+      );
+      this.childLabel(actor, 8, 78, countdown, DIM, PHONE_LAYOUT ? 12 : 8);
+    }
     const full = line.currentSeats >= line.maxPlayers;
     const dot = new ex.Rectangle({
       width: 6,

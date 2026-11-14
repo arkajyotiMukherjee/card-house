@@ -375,7 +375,8 @@ export class PresidentDriver implements GameDriver<PresidentState> {
     this.addRankOrder(state, ctx);
     if (state.phase === 'play') this.addStrengthStrip(state, ctx);
     if (state.phase === 'finished') {
-      const line = finishedLine(state, ctx.seats) ?? 'Finished';
+      const line =
+        ctx.finishedMessage ?? finishedLine(state, ctx.seats) ?? 'Finished';
       this.labels.push(this.banner(ctx, line));
       return;
     }

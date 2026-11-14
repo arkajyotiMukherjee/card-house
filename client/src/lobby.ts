@@ -147,7 +147,7 @@ export const TABLE_LIST = {
   create: { x: 488, y: 92, w: 140, h: PHONE_LAYOUT ? 40 : BUTTON_HEIGHT },
   list: { x: 220, y: 148, bottom: 458 },
   header: { h: 18, gap: 4 },
-  row: { w: 408, h: 72, gap: 8 },
+  row: { w: 408, h: 96, gap: 8 },
   more: { x: 220, y: 478 },
   error: { x: 220, y: 514 },
 } as const;
@@ -736,6 +736,8 @@ export function listLayout(
 export function lobbyTableQueries(lobbyId: string): string[] {
   const id = `'${lobbyId.replaceAll("'", "''")}'`;
   return [
+    `SELECT * FROM "RoomWallet" WHERE "lobbyId" = ${id}`,
+    `SELECT "TableFunding".* FROM "GameTable" JOIN "TableFunding" ON "TableFunding"."tableId" = "GameTable"."id" WHERE "GameTable"."lobbyId" = ${id}`,
     `SELECT * FROM "GameTable" WHERE "lobbyId" = ${id}`,
     `SELECT "GameSeat".* FROM "GameTable" JOIN "GameSeat" ON "GameSeat"."tableId" = "GameTable"."id" WHERE "GameTable"."lobbyId" = ${id}`,
     `SELECT "Spectator".* FROM "GameTable" JOIN "Spectator" ON "Spectator"."tableId" = "GameTable"."id" WHERE "GameTable"."lobbyId" = ${id}`,

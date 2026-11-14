@@ -11,7 +11,6 @@ import {
   rulesErrorLine,
   rulesReason,
   tableCreatedLine,
-  tournamentCreatedLine,
   type ActivityDb,
   type ConnectionRateRow,
   type OperatorSessionRow,
@@ -75,11 +74,6 @@ assert(
   tableCreatedLine(tableId, lobbyId) ===
     `table created tableId=${tableId} lobbyId=${lobbyId}`,
   'table creation names the table',
-);
-assert(
-  tournamentCreatedLine('tournament_abc', lobbyId) ===
-    `tournament created tournamentId=tournament_abc lobbyId=${lobbyId}`,
-  'tournament creation names the tournament',
 );
 assert(
   rulesErrorLine(tableId, lobbyId, 'Invalid intent') ===

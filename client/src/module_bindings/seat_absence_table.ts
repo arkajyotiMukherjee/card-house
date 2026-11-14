@@ -12,7 +12,7 @@ import {
 
 export default __t.row({
   id: __t.string().primaryKey(),
-  tableId: __t.string().name("table_id"),
-  lobbyMemberId: __t.string().name("lobby_member_id"),
-  deadlineMicros: __t.option(__t.u64()).name("deadline_micros"),
+  tableId: __t.string(),
+  lobbyMemberId: __t.string(),
+  deadlineMicros: __t.option(__t.u64()),
 });

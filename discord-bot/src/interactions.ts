@@ -41,10 +41,16 @@ export interface InteractionDeps {
   createLobby: (
     discordChannelId: string,
     guildId?: string,
+    startingCoins?: number,
   ) => Promise<CreatedLobby>;
   lobbyStatus: (
     roomCode: string,
   ) => Promise<LobbyStatusReport> | LobbyStatusReport;
+  leaderboard?: (
+    channelId: string,
+    roomCode: string,
+    page: number,
+  ) => string | Promise<string>;
   closeRoom: (roomCode: string) => Promise<CloseRoomReport> | CloseRoomReport;
 }
 
@@ -54,6 +60,22 @@ type Subcommand = (
 ) => Promise<DiscordReply>;
 
 const subcommands: Record<string, Subcommand> = {
+  leaderboard: async (interaction, deps) => {
+    if (!interaction.channel_id || !deps.leaderboard)
+      return ephemeral('Leaderboard is unavailable.');
+    const page = interaction.data?.options?.[0]?.options?.find(
+      (option) => option.name === 'page',
+    )?.value;
+    const content = await deps.leaderboard(
+      interaction.channel_id,
+      optionValue(interaction, ROOM_CODE_OPTION),
+      typeof page === 'number' ? page : 1,
+    );
+    return {
+      type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+      data: { content },
+    };
+  },
   create: handleCreate,
   status: handleStatus,
   close: handleClose,
@@ -95,7 +117,14 @@ async function handleCreate(
     return ephemeral('This command needs a Discord channel');
   }
   const guildId = interaction.guild_id?.trim() ?? '';
-  const created = await deps.createLobby(channelId, guildId);
+  const coins = interaction.data?.options?.[0]?.options?.find(
+    (option) => option.name === 'startingcoins',
+  )?.value;
+  const created = await deps.createLobby(
+    channelId,
+    guildId,
+    typeof coins === 'number' ? coins : undefined,
+  );
   return {
     type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
     data: {

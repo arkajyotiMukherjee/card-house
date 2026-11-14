@@ -10,8 +10,8 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default {
-  tournamentId: __t.string(),
-  tableCount: __t.u32(),
-  settings: __t.option(__t.string()),
-};
+export default __t.row({
+  lobbyId: __t.string().primaryKey(),
+  messageId: __t.string(),
+  revision: __t.string(),
+});

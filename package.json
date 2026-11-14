@@ -8,12 +8,15 @@
     "build": "pnpm --filter client build",
     "lint": "eslint . && prettier --check .",
     "test": "pnpm --filter client test && pnpm --filter server test && pnpm --filter discord-bot test",
-    "typecheck": "pnpm -r typecheck && tsc -p src/shared/tsconfig.json --noEmit"
+    "typecheck": "pnpm -r typecheck && tsc -p src/shared/tsconfig.json --noEmit",
+    "test:economy:live": "pnpm --filter discord-bot exec tsx ../scripts/room-economy.live.ts && pnpm --filter discord-bot exec tsx ../scripts/room-economy-lifecycle.live.ts",
+    "test:economy:browser": "node scripts/room-economy-browser.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
     "eslint": "^9.39.4",
     "eslint-config-prettier": "^10.1.8",
+    "playwright": "1.65.1",
     "prettier": "^3.6.2",
     "typescript": "5.9.3",
     "typescript-eslint": "^8.46.4"

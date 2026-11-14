@@ -15,7 +15,13 @@ export interface AppOptions {
   createLobby: (
     discordChannelId: string,
     guildId?: string,
+    startingCoins?: number,
   ) => Promise<CreatedLobby>;
+  leaderboard?: (
+    channelId: string,
+    roomCode: string,
+    page: number,
+  ) => string | Promise<string>;
   lookupPlayerName?: (discordUserId: string) => Promise<PlayerNameLookup>;
   lobbyStatus: (
     roomCode: string,
@@ -73,6 +79,7 @@ export function createApp(options: AppOptions): Express {
         createLobby: options.createLobby,
         lobbyStatus: options.lobbyStatus,
         closeRoom: options.closeRoom,
+        leaderboard: options.leaderboard,
       })
         .then((body) => {
           res.json(body);

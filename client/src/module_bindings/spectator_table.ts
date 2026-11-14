@@ -12,7 +12,7 @@ import {
 
 export default __t.row({
   id: __t.string().primaryKey(),
-  tableId: __t.string().name("table_id"),
-  lobbyMemberId: __t.string().name("lobby_member_id"),
-  joinedAt: __t.timestamp().name("joined_at"),
+  tableId: __t.string(),
+  lobbyMemberId: __t.string(),
+  joinedAt: __t.timestamp(),
 });
