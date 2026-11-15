@@ -1,0 +1,15 @@
+{
+  "players": 2,
+  "noLimitFullStacksBeyondPot": true,
+  "noLimitSliderAllIn": true,
+  "additionalChipsShownAndSpent": 395,
+  "mobileActing": false,
+  "allInRunsOutWithoutChecks": true,
+  "discardActions": 4,
+  "zeroStackTopUp": true,
+  "errorContainedInPersonalBar": true,
+  "uncalledHandPrivate": true,
+  "remainingBoardRevealed": true,
+  "leaveViaHeader": true,
+  "errors": []
+}

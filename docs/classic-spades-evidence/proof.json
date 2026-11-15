@@ -1,0 +1,29 @@
+{
+  "status": "passed",
+  "players": 4,
+  "concurrentWebGLReview": {
+    "views": 2,
+    "desktopCanvasPlay": true,
+    "mobileCanvasBidAndPlay": true,
+    "stages": "01\u201306 in this directory",
+    "viewportSizes": [
+      "1440x900",
+      "844x390 touch",
+      "667x375 touch"
+    ]
+  },
+  "completeRetainedMatch": {
+    "proof": "canvas-final/proof.json",
+    "renderer": "WebGL first hand; public engine Canvas2D fallback for long replay only",
+    "finalHand": 8,
+    "finalScore": {
+      "ns": 380,
+      "ew": 507
+    },
+    "freshFinalSpectatorRenderer": "WebGL",
+    "navigation": "Help, Chat, Leave passed",
+    "runtimeErrors": []
+  },
+  "profile": "canvas-final/profile.json",
+  "productionRendererChanged": false
+}

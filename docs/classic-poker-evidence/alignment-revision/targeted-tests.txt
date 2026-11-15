@@ -1,0 +1,15 @@
+
+ RUN  v3.2.7 /workspace/card-house/client
+
+ ✓ src/poker-layout.test.ts (14 tests) 110ms
+ ✓ src/poker-driver.test.ts (6 tests) 93ms
+ ✓ src/poker-table-ui.test.ts (4 tests) 11ms
+ ✓ src/card-hit.test.ts (5 tests) 7ms
+ ✓ src/hand-hover.test.ts (14 tests) 27ms
+ ✓ src/phone-layout.test.ts (2 tests) 1448ms
+   ✓ fits six phone actions with separate thumb targets below right-hand opponents  1317ms
+
+ Test Files  6 passed (6)
+      Tests  45 passed (45)
+   Start at  07:49:05
+   Duration  4.24s (transform 1.90s, setup 50ms, collect 3.66s, tests 1.70s, environment 1.01s, prepare 539ms)

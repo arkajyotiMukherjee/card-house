@@ -1,5 +1,6 @@
 import type { BluffState } from '../../src/shared/games/bluff';
-import { pileFaceUp, pilePositions, PILE_X, PILE_Y } from './bluff-layout';
+import { pileFaceUp } from './bluff-layout';
+import { pilePositions, PILE_X, PILE_Y } from './bluff-classic-layout';
 
 /** The line is up, and the pile is still in the center. */
 export const CHALLENGE_MESSAGE_MS = 280;

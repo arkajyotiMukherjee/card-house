@@ -109,7 +109,7 @@ const editNumber = async (label, value) => {
   await createPage.keyboard.press('Backspace');
   await createPage.keyboard.type(String(value));
 };
-await editNumber('Starting coins', 10000);
+await editNumber('Starting chips', 10000);
 await tap(createPage, 334, 344);
 await createPage.waitForTimeout(1500);
 await capture(createPage, '02-leaderboard-desktop');

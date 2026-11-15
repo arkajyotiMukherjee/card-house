@@ -1,0 +1,47 @@
+[
+  {
+    "stage": "webgl-first-hand-complete",
+    "heap": {
+      "usedSize": 108447304,
+      "totalSize": 152072192,
+      "embedderHeapUsedSize": 188333944,
+      "backingStorageSize": 17939507
+    },
+    "engine": {
+      "renderer": "ExcaliburGraphicsContextWebGL",
+      "actors": 113,
+      "cards": 11,
+      "fps": 17.574692443342503
+    }
+  },
+  {
+    "stage": "canvas2d-start",
+    "heap": {
+      "usedSize": 112954600,
+      "totalSize": 152334336,
+      "embedderHeapUsedSize": 188667048,
+      "backingStorageSize": 17942066
+    },
+    "engine": {
+      "renderer": "ExcaliburGraphicsContext2DCanvas",
+      "actors": 113,
+      "cards": 11,
+      "fps": 14.295925661338831
+    }
+  },
+  {
+    "stage": "retained-finished",
+    "heap": {
+      "usedSize": 274975112,
+      "totalSize": 339042304,
+      "embedderHeapUsedSize": 861595192,
+      "backingStorageSize": 19035309
+    },
+    "engine": {
+      "renderer": "ExcaliburGraphicsContext2DCanvas",
+      "actors": 97,
+      "cards": 0,
+      "fps": 9.47867298578199
+    }
+  }
+]

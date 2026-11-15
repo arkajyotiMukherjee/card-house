@@ -1,0 +1,27 @@
+{
+  "players": 4,
+  "longReplayRenderer": "Canvas2D (test-only public engine fallback)",
+  "freshSpectatorRenderer": "WebGL",
+  "browserViews": 1,
+  "finalHandNumber": 8,
+  "finalScores": {
+    "ns": 380,
+    "ew": 507
+  },
+  "uniqueIdentities": 4,
+  "thirteenCardPaging": true,
+  "nilCanvasBid": true,
+  "touchCanvasPlay": true,
+  "desktopCanvasPlay": false,
+  "holdDoesNotSelect": true,
+  "emptyPlayDisabled": true,
+  "completeTrick": true,
+  "scoresModal": true,
+  "spadesBroken": true,
+  "nextHandScoring": true,
+  "finished": true,
+  "remainingHandsPrivate": true,
+  "spectator": true,
+  "navigation": true,
+  "errors": []
+}

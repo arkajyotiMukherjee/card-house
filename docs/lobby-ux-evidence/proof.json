@@ -1,0 +1,16 @@
+{
+  "players": 12,
+  "desktop": "1440x900",
+  "mobile": [
+    "844x390",
+    "667x375"
+  ],
+  "desktopWheel": true,
+  "mobileSwipe": true,
+  "clearLeaderAfterPaidGame": true,
+  "emptyHostGraceSeconds": 60,
+  "abandonedTableRemoved": true,
+  "refundPreserved": true,
+  "occupiedGamePreserved": true,
+  "renderingErrors": []
+}

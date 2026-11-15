@@ -144,12 +144,12 @@ export interface ListLayout {
 
 export const TABLE_LIST = {
   panel: { x: 208, y: 80, w: 432, h: 424 },
-  create: { x: 488, y: 92, w: 140, h: PHONE_LAYOUT ? 40 : BUTTON_HEIGHT },
+  create: { x: 484, y: 92, w: 140, h: PHONE_LAYOUT ? 40 : BUTTON_HEIGHT },
   list: { x: 220, y: 148, bottom: 458 },
   header: { h: 18, gap: 4 },
   row: { w: 408, h: 96, gap: 8 },
   more: { x: 220, y: 478 },
-  error: { x: 220, y: 514 },
+  error: { x: 220, y: 504 },
 } as const;
 
 export const JOIN_BUTTON = { x: 232, y: 22, w: 80, h: BUTTON_HEIGHT } as const;
@@ -185,6 +185,14 @@ export const CHAT_PANEL = {
   send: { x: 876, y: 448, w: 64, h: PHONE_LAYOUT ? 44 : BUTTON_HEIGHT },
 } as const;
 
+export const REFILL_CHIPS_BUTTON = { x: 20, y: 346, w: 160, h: 30 } as const;
+export const WALLET_SUMMARY = { y: 132, rowHeight: 26 } as const;
+export const CHAT_TOGGLE = {
+  x: 656,
+  y: 16,
+  w: 144,
+  h: PHONE_LAYOUT ? 40 : 28,
+} as const;
 export const CHAT_BODY_MAX = 240;
 export const LEAVE_ROOM = {
   x: 812,
@@ -349,16 +357,16 @@ export function discordBadgeBox(): {
 }
 
 export const CREATE_TABLE = {
-  panel: { x: 188, y: 140, w: 440, h: 272 },
-  prev: { x: 204, y: 220, w: 72, h: BUTTON_HEIGHT },
-  next: { x: 284, y: 220, w: 72, h: BUTTON_HEIGHT },
-  minus: { x: 420, y: 220, w: 40, h: BUTTON_HEIGHT },
-  plus: { x: 468, y: 220, w: 40, h: BUTTON_HEIGHT },
-  varPrev: { x: 204, y: 268, w: 72, h: BUTTON_HEIGHT },
-  varNext: { x: 284, y: 268, w: 72, h: BUTTON_HEIGHT },
-  name: { x: 204, y: 322, w: 408, h: BUTTON_HEIGHT },
-  create: { x: 204, y: 366, w: 160, h: BUTTON_HEIGHT },
-  cancel: { x: 376, y: 366, w: 160, h: BUTTON_HEIGHT },
+  panel: { x: 260, y: 134, w: 440, h: 272 },
+  prev: { x: 276, y: 214, w: 72, h: BUTTON_HEIGHT },
+  next: { x: 356, y: 214, w: 72, h: BUTTON_HEIGHT },
+  minus: { x: 492, y: 214, w: 40, h: BUTTON_HEIGHT },
+  plus: { x: 540, y: 214, w: 40, h: BUTTON_HEIGHT },
+  varPrev: { x: 276, y: 262, w: 72, h: BUTTON_HEIGHT },
+  varNext: { x: 356, y: 262, w: 72, h: BUTTON_HEIGHT },
+  name: { x: 276, y: 316, w: 408, h: BUTTON_HEIGHT },
+  create: { x: 276, y: 360, w: 198, h: BUTTON_HEIGHT },
+  cancel: { x: 486, y: 360, w: 198, h: BUTTON_HEIGHT },
 } as const;
 
 /** Wide landscape dialog with separate thumb-sized selectors. */

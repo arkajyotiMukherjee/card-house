@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyChatKey,
+  waitingHeaderLayout,
   applyChatText,
   showTableChatButton,
   tableChatButtonVisible,
@@ -135,4 +136,13 @@ describe('tableChatLine', () => {
     };
     expect(tableChatLine(row, members, 'm1')).toBe('Player: ghost');
   });
+});
+
+it('packs visible waiting-room actions together for hosts and guests', () => {
+  const host = waitingHeaderLayout(true),
+    guest = waitingHeaderLayout(false);
+  expect(host.startX - (host.copyX + 116)).toBe(10);
+  expect(host.leaveX - (host.startX + 130)).toBe(10);
+  expect(guest.leaveX - (guest.copyX + 116)).toBe(10);
+  expect(guest.leaveX).toBe(host.leaveX);
 });

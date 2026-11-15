@@ -17,6 +17,7 @@ import {
   opponentCountAnchor,
   opponentNameAnchor,
   seatFan,
+  revealedHandSlots,
   seatPlateWidth,
 } from './table-presentation';
 
@@ -30,6 +31,30 @@ function overlaps(
 }
 
 describe('table presentation', () => {
+  it('spreads revealed poker hands at local-hand scale below the header and away from names', () => {
+    for (let count = 2; count <= 8; count++) {
+      for (const seat of seatAnchorsFor(count).slice(1)) {
+        const nameAt = opponentNameAnchor(seat.x, seat.y, 'Ada');
+        for (const slot of revealedHandSlots(seat.x, seat.y, 4)) {
+          expect(slot.scale).toBe(1.1);
+          const side = Math.abs(slot.rotation) > 0;
+          const w = (side ? 56 : 41) * slot.scale;
+          const h = (side ? 41 : 56) * slot.scale;
+          const face = { x: slot.x - w / 2, y: slot.y - h / 2, w, h };
+          expect(face.x).toBeGreaterThanOrEqual(0);
+          expect(face.x + w).toBeLessThanOrEqual(960);
+          expect(face.y).toBeGreaterThanOrEqual(46);
+          expect(face.y + h).toBeLessThan(540);
+          expect(
+            overlaps(face, { ...nameAt, w: seatPlateWidth('Ada'), h: 20 }),
+          ).toBe(false);
+        }
+      }
+    }
+    const top = revealedHandSlots(480, 78, 4);
+    expect(top.every((slot) => slot.rotation === 0)).toBe(true);
+    expect(top[1].x - top[0].x).toBeGreaterThan(41 * top[0].scale);
+  });
   it('keeps seating with you at the bottom and the fourth player at the top', () => {
     const seats = seatAnchorsFor(4);
     expect(seats.map((seat) => fanEdge(seat.x, seat.y))).toEqual([

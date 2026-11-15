@@ -80,3 +80,48 @@ assert(
 assert(idleTimeoutAllowed(EMPTY_TABLE_IDLE_MICROS), 'the default is allowed');
 
 console.log(JSON.stringify({ ok: true }));
+
+assert(
+  !shouldRemoveEmptyTable(
+    0,
+    'waiting_for_players',
+    60_000_000n,
+    EMPTY_TABLE_IDLE_MICROS,
+    '',
+    59_999_999n,
+  ),
+  'an absent host can return during the grace period',
+);
+assert(
+  shouldRemoveEmptyTable(
+    0,
+    'waiting_for_players',
+    60_000_000n,
+    EMPTY_TABLE_IDLE_MICROS,
+    '',
+    60_000_000n,
+  ),
+  'an abandoned empty table is removed after host grace',
+);
+assert(
+  !shouldRemoveEmptyTable(
+    1,
+    'in_progress',
+    EMPTY_TABLE_IDLE_MICROS,
+    EMPTY_TABLE_IDLE_MICROS,
+    '',
+    90_000_000n,
+  ),
+  'host absence never removes an occupied game',
+);
+assert(
+  !shouldRemoveEmptyTable(
+    0,
+    'waiting_for_players',
+    90_000_000n,
+    EMPTY_TABLE_IDLE_MICROS,
+    '123456789012345678',
+    90_000_000n,
+  ),
+  'voice channel must be released before its abandoned table',
+);

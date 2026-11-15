@@ -118,7 +118,8 @@ async function handleCreate(
   }
   const guildId = interaction.guild_id?.trim() ?? '';
   const coins = interaction.data?.options?.[0]?.options?.find(
-    (option) => option.name === 'startingcoins',
+    (option) =>
+      option.name === 'startingchips' || option.name === 'startingcoins',
   )?.value;
   const created = await deps.createLobby(
     channelId,

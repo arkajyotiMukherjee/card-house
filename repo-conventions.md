@@ -76,13 +76,17 @@ The client throws `Error` for a missing sheet or an unknown denomination. Reduce
 
 Do not commit an auth token. `README.md` says a hosted database is selected later with `SPACETIMEDB_HOST` and `SPACETIMEDB_DB`.
 
+## Approved table design
+
+[docs/design-system.md](docs/design-system.md) owns the approved classic-table visual system, shared primitives, per-game information, validation and staged adoption. Poker (Oklahoma) is the approved reference; Bluff and President have passed their review checkpoints. Go Fish is approved. The user now authorizes Crazy Eights, Rummy, Blackjack, Spades and Hearts in parallel, one agent each. All catalog games use the mature classic family; review the batch before any separately requested PR or deployment.
+
 ## Client canvas
 
 Excalibur `0.32.0`. Logical resolution is `960×540` (`LOGICAL_WIDTH` and `LOGICAL_HEIGHT` in `client/src/sheets.ts`).
 
-`client/src/main.ts` builds the engine with `DisplayMode.Fixed`, `antialiasing: false`, `snapToPixel: true`, `suppressHiDPIScaling: true`, `pixelRatio: 1`, and `suppressPlayButton: true`. Felt color is `#145c38`. Sprites use `{ filtering: ex.ImageFiltering.Pixel }`.
+`client/src/main.ts` builds the engine with `DisplayMode.Fixed`, `antialiasing: false`, `snapToPixel: true`, `suppressHiDPIScaling: true`, `pixelRatio: 2`, and `suppressPlayButton: true`. Felt color is `#145c38`. Sprites use `{ filtering: ex.ImageFiltering.Pixel }`.
 
-`fitViewport` in `client/src/sheets.ts` is the CSS size `main.ts` applies on every browser. It scales the 960×540 canvas uniformly until the whole frame fits inside `visualViewport` and the safe-area insets, then centers it. A narrower window leaves bars on the top and bottom. A shorter window leaves bars on the left and right. The frame is never cropped. The canvas style is `image-rendering: pixelated`. `client/index.html` sets the same on `canvas`, hides overflow, and paints the page `--cardhouse-bg` (default `#145c38`) so those bars match the saved background. `integerScale` is still the largest integer that fits, and at least `1`. On a phone or tablet (`(pointer: coarse) and (hover: none)`) `client/src/mobile-shell.ts` adds the rotate panel and fullscreen button. That shell is the only phone-only path. The contain scale is shared.
+`fitViewport` in `client/src/sheets.ts` is the CSS size `main.ts` applies on every browser. It scales the 960×540 canvas uniformly until the whole frame fits inside `visualViewport` and the safe-area insets, then centers it. A narrower window leaves bars on the top and bottom. A shorter window leaves bars on the left and right. The frame is never cropped. The runtime canvas style is `image-rendering: auto` for readable proportional text. `client/index.html` provides a pixelated fallback before boot, hides overflow, and paints the page `--cardhouse-bg` (default `#145c38`) so those bars match the saved background. `integerScale` is still the largest integer that fits, and at least `1`. On a phone or tablet (`(pointer: coarse) and (hover: none)`) `client/src/mobile-shell.ts` adds the rotate panel and fullscreen button. That shell is the only phone-only path. The contain scale is shared.
 
 `docs/ui-ux.md` draws menus and buttons in the canvas. `index.html` is the host, not a UI kit. Text fields are the exception: `client/src/html-field.ts` puts a real HTML input on the focused box so a touch keyboard can type, and the canvas label shows that same value. The visible caret is a canvas block on the pixel-font boundary; the input's own caret stays hidden. The phone shell in `mobile-shell.ts` is the other HTML exception.
 
@@ -110,6 +114,8 @@ The client loads copies in `client/public/assets/`, not the pack directory:
 - `card-back-01.png`, `card-back-02.png` — 192×128, three columns by two rows. The first cell is the back. `card-appearance.ts` offers these as the `classic` and `bold` back styles.
 - `chips-no-outline.png` — 192×44, six 32×44 chips, left to right: green, red, blue, yellow, black, white.
 - `table-green.png`, `table-purple.png`, `table-red.png` — 129×80, no guide overlay.
+- `bree-serif.ttf` and `bree-serif-LICENSE.txt` — Bree Serif by TypeTogether, SIL Open Font License 1.1, for the approved classic table.
+- `chakra-petch-semibold.ttf` and `chakra-petch-LICENSE.txt` — Chakra Petch SemiBold by Cadson Demak, SIL Open Font License 1.1, for readable table information and controls. `ui-text.ts` renders it with blended filtering at quality 2; game sprites retain pixel filtering.
 - `press-start-2p.ttf` and `press-start-2p-LICENSE.txt` — Press Start 2P by Cody Boisclair, SIL Open Font License 1.1. The pack has no pixel font.
 
 Copy a new sheet into `client/public/assets/` when the client needs it. Keep the pack as the source art.

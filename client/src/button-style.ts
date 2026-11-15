@@ -12,14 +12,11 @@ export function buttonFontSize(
   label: string,
   width: number,
   height: number,
+  preferred = height < 44 ? BUTTON_FONT_SIZE : height < 60 ? 12 : 16,
 ): number {
-  if (height < 44) return BUTTON_FONT_SIZE;
   return Math.max(
     BUTTON_FONT_SIZE,
-    Math.min(
-      height < 60 ? 12 : 16,
-      Math.floor((width - 12) / Math.max(1, label.length)),
-    ),
+    Math.min(preferred, Math.floor((width - 16) / Math.max(1, label.length))),
   );
 }
 

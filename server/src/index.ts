@@ -112,6 +112,7 @@ import {
 import { stubIntentRules } from './stub-rules';
 import {
   EMPTY_TABLE_IDLE_MICROS,
+  ABANDONED_TABLE_GRACE_MICROS,
   TABLE_CLEANUP_INTERVAL_MICROS,
   idleTimeoutAllowed,
   shouldRemoveEmptyTable,
@@ -176,6 +177,7 @@ const TABLE_SETTING_KEYS = [
   'minPlayers',
   'maxPlayers',
   'variation',
+  'limit',
   'buyIn',
   'entryFee',
   'smallBlind',
@@ -427,6 +429,12 @@ const OperatorSession = table(
   },
 );
 
+/** One row per socket, so overlapping reconnects do not disconnect a live identity. */
+const ActiveConnection = table(
+  { name: 'ActiveConnection', public: false },
+  { id: t.string().primaryKey(), identity: t.string().index('btree') },
+);
+
 const ConnectionRate = table(
   { name: 'ConnectionRate', public: false },
   {
@@ -599,6 +607,7 @@ const spacetimedb = schema(
     VoicePresence,
     SpeakingState,
     OperatorSession,
+    ActiveConnection,
     ConnectionRate,
     RoomCaps,
     TableCleanupSchedule,
@@ -963,6 +972,12 @@ export const on_connect = spacetimedb.clientConnected(
     ensureRoomCaps(ctx);
     ensureLobbyIdleJob(ctx);
     ensureTableCleanup(ctx);
+    const connectionId = ctx.connectionId?.toHexString();
+    if (connectionId && !ctx.db.ActiveConnection.id.find(connectionId))
+      ctx.db.ActiveConnection.insert({
+        id: connectionId,
+        identity: ctx.sender.toHexString(),
+      });
     const returning = ctx.db.OperatorSession.identity.find(
       ctx.sender.toHexString(),
     );
@@ -988,6 +1003,10 @@ export const client_disconnected = spacetimedb.clientDisconnected(
   { name: 'client_disconnected' },
   (ctx) => {
     const identity = ctx.sender.toHexString();
+    const connectionId = ctx.connectionId?.toHexString();
+    if (connectionId) ctx.db.ActiveConnection.id.delete(connectionId);
+    // A reload may connect its replacement before the prior socket closes.
+    if (rowCount(ctx.db.ActiveConnection.identity.filter(identity)) > 0) return;
     const session = ctx.db.OperatorSession.identity.find(identity);
     const lobbyId = session?.lobbyId ?? '';
     const clientId = session?.clientId ?? '';
@@ -1428,6 +1447,19 @@ function sweepAbsentSeats(ctx: ModuleCtx): void {
       continue;
     }
     if (now < absence.deadlineMicros) continue;
+    if (
+      funding &&
+      table.gameType === POKER_GAME_TYPE &&
+      JSON.parse(table.stateJson).phase === 'finished'
+    ) {
+      // A disconnected player gets the same return grace while choosing a rebuy.
+      // Once it expires, settled chips must not stay reserved at an idle table.
+      releaseFunding(ctx, seat.id);
+      ctx.db.GameSeat.id.delete(seat.id);
+      ctx.db.SeatAbsence.id.delete(seat.id);
+      queueTableBeat(ctx, table.id);
+      continue;
+    }
     if (cashOutUnbetBlackjack(ctx, table.id, seat.id)) continue;
     if (funding && !funding.cpu)
       ctx.db.TableFunding.id.update({ ...funding, cpu: true });
@@ -1791,6 +1823,7 @@ function tableSettings(raw: string | undefined): Partial<TableEconomy> & {
   minPlayers?: number;
   maxPlayers?: number;
   variation?: string;
+  limit?: string;
 } {
   if (raw === undefined || raw.trim().length === 0) {
     return {};
@@ -1820,6 +1853,7 @@ function tableSettings(raw: string | undefined): Partial<TableEconomy> & {
     minPlayers?: number;
     maxPlayers?: number;
     variation?: string;
+    limit?: string;
     buyIn?: number;
     entryFee?: number;
     smallBlind?: number;
@@ -1840,6 +1874,11 @@ function tableSettings(raw: string | undefined): Partial<TableEconomy> & {
   }
   if ('maxPlayers' in record) {
     settings.maxPlayers = playerLimit(record.maxPlayers, 'maxPlayers');
+  }
+  if ('limit' in record) {
+    if (record.limit !== 'no-limit' && record.limit !== 'pot-limit')
+      throw new SenderError('Unknown poker betting limit');
+    settings.limit = record.limit;
   }
   if ('variation' in record) {
     if (
@@ -1934,20 +1973,23 @@ function openTableRow(
   const micros = ctx.timestamp.microsSinceUnixEpoch;
   const id = `table_${lobby.id}_${micros.toString()}_${idSuffix}`;
   const name = settings.name ?? `${gameType} #${sameTypeInLobby + 1}`;
-  const stateJson = storedState(
-    openingTableState(
-      gameType,
-      {
-        id,
-        lobbyId: lobby.id,
-        name,
-        minPlayers,
-        maxPlayers,
-        createdAt: Number(ctx.timestamp.toMillis()),
-      },
-      pokerVariation(gameType, settings.variation),
-    ),
+  if (settings.limit && gameType !== 'poker')
+    throw new SenderError('limit is only for poker');
+  const opening = openingTableState(
+    gameType,
+    {
+      id,
+      lobbyId: lobby.id,
+      name,
+      minPlayers,
+      maxPlayers,
+      createdAt: Number(ctx.timestamp.toMillis()),
+    },
+    pokerVariation(gameType, settings.variation),
   );
+  if (gameType === 'poker' && settings.limit)
+    (opening as { limit: string }).limit = settings.limit;
+  const stateJson = storedState(opening);
   return {
     id,
     lobbyId: lobby.id,
@@ -2244,6 +2286,27 @@ export const clean_empty_tables = spacetimedb.reducer(
       for (const _seat of ctx.db.GameSeat.byTable.filter(gameTable.id)) {
         seats += 1;
       }
+      // Paid claims always settle before an abandoned table can be removed.
+      if (rowCount(ctx.db.TableFunding.tableId.filter(gameTable.id)) > 0)
+        continue;
+      const hostAbsentMicros =
+        gameTable.hostAwaySince === undefined
+          ? undefined
+          : now - gameTable.hostAwaySince;
+      if (
+        seats === 0 &&
+        hostAbsentMicros !== undefined &&
+        hostAbsentMicros >= ABANDONED_TABLE_GRACE_MICROS &&
+        gameTable.discordVoiceChannelId &&
+        gameTable.status.tag !== 'finished'
+      ) {
+        // Let the bot delete and clear the channel before removing its table row.
+        ctx.db.GameTable.id.update({
+          ...gameTable,
+          status: { tag: 'finished' },
+        });
+        continue;
+      }
       const activity = gameTable.lastActivityAt ?? gameTable.createdAt;
       const idleMicros = now - activity.microsSinceUnixEpoch;
       if (
@@ -2260,6 +2323,7 @@ export const clean_empty_tables = spacetimedb.reducer(
           idleMicros,
           idleLimit,
           gameTable.discordVoiceChannelId,
+          hostAbsentMicros,
         )
       ) {
         doomed.push(gameTable.id);
@@ -2343,6 +2407,12 @@ export const join_table = spacetimedb.reducer(
     if (caller?.clientId !== member.clientId || caller.lobbyId !== lobby.id) {
       throw new SenderError('Join this room before taking a seat');
     }
+    if (
+      gameTable.economyJson &&
+      gameTable.gameType === POKER_GAME_TYPE &&
+      gameTable.status.tag === 'finished'
+    )
+      throw new SenderError('Game already ended');
     for (const existing of ctx.db.GameSeat.byTable.filter(gameTable.id)) {
       if (existing.lobbyMemberId !== member.id) continue;
       ctx.db.SeatAbsence.id.delete(existing.id);
@@ -2381,6 +2451,8 @@ export const join_table = spacetimedb.reducer(
     if (
       blocked &&
       !(
+        (gameTable.status.tag === 'in_progress' ||
+          gameTable.gameType !== POKER_GAME_TYPE) &&
         gameTable.economyJson &&
         casinoGame(gameTable.gameType) &&
         JSON.parse(gameTable.stateJson).phase === 'finished'
@@ -3173,6 +3245,7 @@ function queueTableBeat(ctx: ModuleCtx, tableId: string): void {
   if (!gameTable || gameTable.gameType !== POKER_GAME_TYPE) {
     return;
   }
+  if (gameTable.economyJson && closeFinishedPokerSession(ctx, tableId)) return;
   if (
     gameTable.economyJson &&
     JSON.parse(gameTable.stateJson).phase === 'finished'
@@ -3186,6 +3259,7 @@ function queueTableBeat(ctx: ModuleCtx, tableId: string): void {
       }
     }
   }
+  if (gameTable.economyJson && closeFinishedPokerSession(ctx, tableId)) return;
   let parsed: unknown;
   try {
     parsed = JSON.parse(gameTable.stateJson);
@@ -3225,6 +3299,7 @@ function advancePokerTable(ctx: ModuleCtx, tableId: string): void {
   if (!gameTable || gameTable.gameType !== POKER_GAME_TYPE) {
     return;
   }
+  if (gameTable.economyJson && closeFinishedPokerSession(ctx, tableId)) return;
   if (
     gameTable.economyJson &&
     JSON.parse(gameTable.stateJson).phase === 'finished'
@@ -3238,6 +3313,7 @@ function advancePokerTable(ctx: ModuleCtx, tableId: string): void {
       }
     }
   }
+  if (gameTable.economyJson && closeFinishedPokerSession(ctx, tableId)) return;
   let parsed: unknown;
   try {
     parsed = JSON.parse(gameTable.stateJson);
@@ -3728,7 +3804,7 @@ function requireWalletOwner(ctx: ModuleCtx, walletId: string): void {
   if (
     ctx.db.WalletOwner.id.find(walletId)?.identity !== ctx.sender.toHexString()
   )
-    throw new SenderError('You can only use your own coins');
+    throw new SenderError('You can only use your own chips');
 }
 
 function walletChange(
@@ -3743,7 +3819,7 @@ function walletChange(
   if (ctx.db.WalletLedger.id.find(id)) return;
   const wallet = ctx.db.RoomWallet.id.find(walletId);
   if (!wallet || wallet.available + amount < 0n)
-    throw new SenderError('Not enough room coins');
+    throw new SenderError('Not enough room chips');
   ctx.db.RoomWallet.id.update({
     ...wallet,
     available: wallet.available + amount,
@@ -3964,7 +4040,11 @@ function settleEconomy(ctx: ModuleCtx, tableId: string, after: unknown): void {
       const member = seat
         ? ctx.db.LobbyMember.id.find(seat.lobbyMemberId)
         : null;
-      if (funding.leaving || !member?.connected || funding.units === 0n) {
+      if (
+        funding.leaving ||
+        !member?.connected ||
+        (table.gameType !== POKER_GAME_TYPE && funding.units === 0n)
+      ) {
         if (member?.connected && !member.leftRoom) {
           const id = spectatorRowId(tableId, member.id);
           if (!ctx.db.Spectator.id.find(id))
@@ -3981,6 +4061,11 @@ function settleEconomy(ctx: ModuleCtx, tableId: string, after: unknown): void {
         if (member?.leftRoom) ctx.db.LobbyMember.id.delete(member.id);
       }
     }
+    if (
+      table.gameType === POKER_GAME_TYPE &&
+      !closeFinishedPokerSession(ctx, tableId)
+    )
+      ctx.db.GameTable.id.update({ ...table, status: { tag: 'in_progress' } });
   }
   ctx.db.GameSettlement.insert({
     id,
@@ -3990,6 +4075,37 @@ function settleEconomy(ctx: ModuleCtx, tableId: string, after: unknown): void {
     summaryJson: JSON.stringify(summary),
     createdAt: ctx.timestamp,
   });
+}
+
+/** A settled poker session needs two retained seats, including players choosing to top up. */
+function closeFinishedPokerSession(ctx: ModuleCtx, tableId: string): boolean {
+  const table = ctx.db.GameTable.id.find(tableId);
+  if (!table?.economyJson || table.gameType !== POKER_GAME_TYPE) return false;
+  if (JSON.parse(table.stateJson).phase !== 'finished') return false;
+  const fundings = [...ctx.db.TableFunding.tableId.filter(tableId)];
+  if (fundings.length >= 2) return false;
+  for (const funding of fundings) {
+    const member = ctx.db.LobbyMember.id.find(funding.walletId);
+    if (member?.connected && !member.leftRoom) {
+      const id = spectatorRowId(tableId, member.id);
+      if (!ctx.db.Spectator.id.find(id))
+        ctx.db.Spectator.insert({
+          id,
+          tableId,
+          lobbyMemberId: member.id,
+          joinedAt: ctx.timestamp,
+        });
+    }
+    releaseFunding(ctx, funding.id);
+    ctx.db.GameSeat.id.delete(funding.id);
+    ctx.db.SeatAbsence.id.delete(funding.id);
+  }
+  ctx.db.GameTable.id.update({
+    ...table,
+    status: { tag: 'finished' },
+    startsAt: undefined,
+  });
+  return true;
 }
 
 export const refill_room_coins = spacetimedb.reducer(
@@ -4035,6 +4151,8 @@ export const top_up_table = spacetimedb.reducer(
     const table = ctx.db.GameTable.id.find(tableId);
     if (!table?.economyJson || !casinoGame(table.gameType))
       throw new SenderError('Not a casino table');
+    if (table.status.tag === 'finished' && table.gameType === POKER_GAME_TYPE)
+      throw new SenderError('Game already ended');
     const session = ctx.db.OperatorSession.identity.find(
       ctx.sender.toHexString(),
     );
@@ -4301,7 +4419,7 @@ function validCoins(value: unknown, fallback: number): number {
     return coinSetting(value, fallback);
   } catch (error) {
     throw new SenderError(
-      error instanceof Error ? error.message : 'Invalid coins',
+      error instanceof Error ? error.message : 'Invalid chips',
     );
   }
 }

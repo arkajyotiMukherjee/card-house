@@ -1,0 +1,144 @@
+{
+  "844-fullscreen-alignment": {
+    "fullscreenHeight": 31.765625,
+    "leaveHeight": 31.77777777777778,
+    "fullscreenTop": 11.546875,
+    "leaveTop": 11.555555555555555
+  },
+  "667-fullscreen-alignment": {
+    "fullscreenHeight": 27.78125,
+    "leaveHeight": 27.785185185185185,
+    "fullscreenTop": 27.09375,
+    "leaveTop": 27.103703703703705
+  },
+  "desktop-showdown-scales": [
+    {
+      "self": true,
+      "scale": 1.1,
+      "rotation": 0
+    },
+    {
+      "self": true,
+      "scale": 1.1,
+      "rotation": 0
+    },
+    {
+      "self": true,
+      "scale": 1.1,
+      "rotation": 0
+    },
+    {
+      "self": true,
+      "scale": 1.1,
+      "rotation": 0
+    },
+    {
+      "self": false,
+      "scale": 1.1,
+      "rotation": 0
+    },
+    {
+      "self": false,
+      "scale": 1.1,
+      "rotation": 0
+    },
+    {
+      "self": false,
+      "scale": 1.1,
+      "rotation": 0
+    },
+    {
+      "self": false,
+      "scale": 1.1,
+      "rotation": 0
+    }
+  ],
+  "mobile-showdown-scales": [
+    {
+      "self": false,
+      "scale": 1.35,
+      "rotation": 0
+    },
+    {
+      "self": false,
+      "scale": 1.35,
+      "rotation": 0
+    },
+    {
+      "self": false,
+      "scale": 1.35,
+      "rotation": 0
+    },
+    {
+      "self": false,
+      "scale": 1.35,
+      "rotation": 0
+    },
+    {
+      "self": true,
+      "scale": 1.35,
+      "rotation": 0
+    },
+    {
+      "self": true,
+      "scale": 1.35,
+      "rotation": 0
+    },
+    {
+      "self": true,
+      "scale": 1.35,
+      "rotation": 0
+    },
+    {
+      "self": true,
+      "scale": 1.35,
+      "rotation": 0
+    }
+  ],
+  "blackjack-desktop-revealed-scales": [
+    1.1,
+    1.1,
+    1.1,
+    1.1,
+    1.1,
+    1.1,
+    1.1,
+    1.1,
+    1.1
+  ],
+  "blackjack-mobile-revealed-scales": [
+    1.35,
+    1.35,
+    1.35,
+    1.35,
+    1.35,
+    1.35,
+    1.35,
+    1.35,
+    1.35
+  ],
+  "blackjack-result-replicated": true,
+  "rummy-desktop-revealed-scales": [
+    1.1
+  ],
+  "rummy-mobile-revealed-scales": [],
+  "rummy-result-replicated": true,
+  "bluff-desktop-revealed-scales": [],
+  "bluff-mobile-revealed-scales": [
+    1.35,
+    1.35,
+    1.35,
+    1.35,
+    1.35,
+    1.35,
+    1.35,
+    1.35,
+    1.35,
+    1.35,
+    1.35,
+    1.35,
+    1.35
+  ],
+  "bluff-result-replicated": true,
+  "errors": []
+}

@@ -27,7 +27,7 @@ describe('front card under the pointer', () => {
     const boxes = localHandHitBoxes(['AS'], cards, 64, true);
     expect(frontCardAt(boxes, { x: 100, y: 465 })).toBe('AS');
     expect(frontCardAt(boxes, { x: 100, y: 420 })).toBeNull();
-    expect(boxes[0]?.height).toBe(80);
+    expect(boxes[0]?.height).toBe(86.4);
   });
   it('keeps one tap on the same card when selection raises its artwork', () => {
     const ids = ['back', 'front'];

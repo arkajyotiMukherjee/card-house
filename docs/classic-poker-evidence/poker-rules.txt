@@ -1,0 +1,1 @@
+{"holdem":true,"omaha":true,"oklahoma":true,"sidePots":2}

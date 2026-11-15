@@ -35,6 +35,10 @@ import {
   normalizeRoomCode,
   seatedTableIds,
   TABLE_LIST,
+  CREATE_TABLE,
+  LOBBY_PANEL,
+  REFILL_CHIPS_BUTTON,
+  WALLET_SUMMARY,
   tableGroups,
   tableLines,
   tableSettingsJson,
@@ -646,4 +650,29 @@ describe('Launched from Discord badge', () => {
     expect(box.x + box.w / 2).toBeCloseTo(banner.x + banner.w / 2, 0);
     expect(box.w).toBeLessThanOrEqual(banner.w);
   });
+});
+
+it('keeps wallet controls separated and Create Table inside its panel', () => {
+  const lastValueBottom = WALLET_SUMMARY.y + 7 * WALLET_SUMMARY.rowHeight + 16;
+  expect(REFILL_CHIPS_BUTTON.y - lastValueBottom).toBeGreaterThanOrEqual(12);
+  expect(
+    392 - (REFILL_CHIPS_BUTTON.y + REFILL_CHIPS_BUTTON.h),
+  ).toBeGreaterThanOrEqual(16);
+  expect(LOBBY_PANEL.renameField.y).toBeGreaterThan(392 + 12);
+  expect(
+    TABLE_LIST.panel.x +
+      TABLE_LIST.panel.w -
+      TABLE_LIST.create.x -
+      TABLE_LIST.create.w,
+  ).toBeGreaterThanOrEqual(16);
+});
+
+it('centers the desktop Create Table dialog and keeps its input and actions inset', () => {
+  const box = CREATE_TABLE.panel;
+  expect(box.x + box.w / 2).toBe(480);
+  expect(box.y + box.h / 2).toBe(270);
+  expect(CREATE_TABLE.name.x).toBe(box.x + 16);
+  expect(CREATE_TABLE.cancel.x + CREATE_TABLE.cancel.w).toBe(
+    box.x + box.w - 16,
+  );
 });

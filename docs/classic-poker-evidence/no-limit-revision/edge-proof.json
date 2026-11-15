@@ -1,0 +1,13 @@
+{
+  "players": 2,
+  "noLimitFullStacksBeyondPot": true,
+  "noLimitSliderAllIn": true,
+  "allInRunsOutWithoutChecks": true,
+  "discardActions": 4,
+  "zeroStackTopUp": true,
+  "errorContainedInPersonalBar": true,
+  "uncalledHandPrivate": true,
+  "remainingBoardRevealed": true,
+  "leaveViaHeader": true,
+  "errors": []
+}

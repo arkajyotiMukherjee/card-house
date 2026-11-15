@@ -117,6 +117,13 @@ describe('CrazyEightsDriver input', () => {
       context(sent, 0),
     );
     expect(sent).toEqual([{ type: 'pass' }]);
+    table.discardPile = ['9C', '5S'];
+    driver.handleInput(
+      { type: 'pointerup', target: 'draw' },
+      table,
+      context(sent, 0),
+    );
+    expect(sent).toEqual([{ type: 'pass' }, { type: 'draw' }]);
   });
 
   it('does not send a move after the rules finish', () => {

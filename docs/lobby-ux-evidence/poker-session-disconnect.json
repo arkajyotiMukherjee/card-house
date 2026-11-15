@@ -1,0 +1,6 @@
+{
+  "zeroStackRetainedDuringGrace": true,
+  "pausedDisconnectClosesAfterGrace": true,
+  "allStacksCashedOut": true,
+  "chipsConserved": true
+}

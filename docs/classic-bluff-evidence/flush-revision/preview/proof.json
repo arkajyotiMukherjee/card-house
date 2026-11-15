@@ -1,0 +1,11 @@
+{
+  "nineOpeningCardsVisible": true,
+  "denseHandCardsVisible": 11,
+  "largerHand": 25,
+  "denseResizeFromThreeToFourPages": true,
+  "compactWinnerReadable": true,
+  "tableNameHeader": true,
+  "disabledPlayCannotSubmit": true,
+  "activePlayConfirmed": true,
+  "errors": []
+}

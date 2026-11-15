@@ -1,0 +1,36 @@
+{
+  "desktopCentered": true,
+  "desktopCaret": true,
+  "mobileCaret": true,
+  "startingChipsWording": true,
+  "automaticMinimumBuyIn": true,
+  "manualLowerBuyInShowsInlineError": true,
+  "chatCaret": {
+    "endX": 780,
+    "leftX": 772,
+    "startX": 676
+  },
+  "guestActions": {
+    "startVisible": false,
+    "copyX": 580
+  },
+  "hostAndGuestBothSeeTwoOfFive": true,
+  "releasedSeatCanLeave": true,
+  "hostStartsAfterRejoin": true,
+  "tableErrorBelowHeader": "Top-up is outside the buy-in limits",
+  "desktop": {
+    "x": 260,
+    "w": 440,
+    "y": 134,
+    "h": 272,
+    "caretX": 112
+  },
+  "mobile": {
+    "x": 160,
+    "w": 640,
+    "y": 32,
+    "h": 496,
+    "caretX": 164
+  },
+  "errors": []
+}

@@ -1,3 +1,4 @@
+import { STATUS_HUD } from './status-hud';
 import {
   DUMMY_GAME_TYPE,
   readDummyState,
@@ -21,7 +22,16 @@ export const HOW_TO_PLAY_BUTTON = {
   x: PHONE_LAYOUT ? 908 : 900,
   y: 16,
   w: PHONE_LAYOUT ? 44 : 52,
-  h: PHONE_LAYOUT ? 44 : 52,
+  h: STATUS_HUD.h,
+} as const;
+
+/** Variant text has its own row below the navigation controls. */
+export const TABLE_VARIATION_LABEL = {
+  x: 16,
+  y: PHONE_LAYOUT ? 76 : 56,
+  w: 144,
+  h: 16,
+  size: PHONE_LAYOUT ? 12 : 8,
 } as const;
 
 /** The `Chat` control, top center. Opens the per-table chat overlay. */

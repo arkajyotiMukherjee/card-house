@@ -1,16 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import type { PokerState } from '../../src/shared/games/poker';
-import { HAND_Y } from './bluff-layout';
 import { pokerBlindMark } from '../../src/shared/games/poker';
 import {
   BANNER_Y,
   BET_BUTTON,
   BOARD_Y,
+  BOARD_SCALE,
+  BOARD_STEP,
+  potBadge,
   CALL_BUTTON,
   CARD_DRAW,
   COUNTDOWN_Y,
   CHECK_BUTTON,
   FOLD_BUTTON,
+  POKER_USER_Y,
   RAISE_BUTTON,
   STAKE_AMOUNT,
   STAKE_CANCEL,
@@ -29,12 +32,12 @@ import {
   holePositions,
   moveStake,
   nextHandCountdown,
-  POT_CHIP_BOTTOM,
+  potChipStacks,
   seatNote,
 } from './poker-layout';
 import { POKER_HAND_PAUSE_MS } from '../../src/shared/games/poker';
+import { inspectionPose } from './hand-hover';
 import {
-  FELT_BOTTOM,
   belowFelt,
   fanCardRect,
   fanGapLine,
@@ -80,16 +83,16 @@ describe('poker layout', () => {
     expect(nextHandCountdown(9_999)).toBe('Next hand in 1');
     expect(nextHandCountdown(POKER_HAND_PAUSE_MS)).toBeNull();
     expect(nextHandCountdown(POKER_HAND_PAUSE_MS + 500)).toBeNull();
-    const boardTop = BOARD_Y - CARD_DRAW / 2;
-    const boardBottom = BOARD_Y + CARD_DRAW / 2;
-    expect(boardTop).toBeGreaterThan(POT_CHIP_BOTTOM);
-    expect(BANNER_Y).toBeGreaterThanOrEqual(POT_CHIP_BOTTOM);
+    const boardTop = BOARD_Y - 28 * BOARD_SCALE;
+    const boardBottom = BOARD_Y + 28 * BOARD_SCALE;
+    expect(boardTop).toBeGreaterThan(264);
+    expect(BANNER_Y).toBeGreaterThan(boardBottom);
     expect(COUNTDOWN_Y).toBeGreaterThan(BANNER_Y);
-    expect(boardTop).toBeGreaterThan(COUNTDOWN_Y);
-    expect(boardBottom).toBeLessThan(FELT_BOTTOM);
+    expect(COUNTDOWN_Y).toBeGreaterThanOrEqual(POKER_USER_Y);
+    expect(boardBottom).toBeLessThan(POKER_USER_Y);
     const board = boardPositions(5);
     expect(board.every((slot) => slot.y === BOARD_Y)).toBe(true);
-    expect(BOARD_Y).toBeGreaterThan(POT_CHIP_BOTTOM);
+    expect(BOARD_Y).toBeGreaterThan(264);
   });
 
   it('puts the board in the center and your hole cards on the shared hand row', () => {
@@ -104,11 +107,42 @@ describe('poker layout', () => {
     expect(boardFlip(280)).toEqual({ scaleX: 1, face: true, done: true });
     const mine = holePositions(true, 480, 456, 2);
     expect(mine).toHaveLength(2);
-    expect(mine.every((slot) => slot.y === HAND_Y)).toBe(true);
+    for (const mobile of [false, true]) {
+      const positions = holePositions(true, 480, 456, 4, 'Seat', false, mobile);
+      const rest = inspectionPose(0, mobile, false, true);
+      expect(positions.every((slot) => slot.y - rest.lift === 484)).toBe(true);
+    }
     const theirs = holePositions(false, 180, 310, 4, 'Ada');
     expect(theirs).toHaveLength(4);
     expect(theirs.every((slot) => slot.rotation !== 0)).toBe(true);
     expect(mine.every((slot) => slot.rotation === 0)).toBe(true);
+    for (const count of [2, 3, 4]) {
+      const hand = holePositions(true, 480, 456, count);
+      expect((hand[0].x + hand[hand.length - 1].x) / 2).toBe(372);
+    }
+  });
+
+  it('draws actual pot denominations in bounded stacks, including an empty pot', () => {
+    expect(potChipStacks(0)).toEqual([]);
+    for (const amount of [1, 15, 30, 140, 380, 395, 990, 9999, 10000]) {
+      const stacks = potChipStacks(amount);
+      expect(
+        stacks.reduce((sum, stack) => sum + stack.value * stack.count, 0),
+      ).toBe(amount);
+      expect(stacks.every((stack) => stack.count > 0 && stack.count <= 4)).toBe(
+        true,
+      );
+      expect(stacks.length).toBeLessThanOrEqual(9);
+    }
+    expect(potChipStacks(10000)).toEqual([
+      { value: 1000, count: 4 },
+      { value: 1000, count: 3 },
+      { value: 1000, count: 3 },
+    ]);
+    const huge = potChipStacks(1_000_000_395);
+    expect(huge.length).toBeLessThanOrEqual(9);
+    expect(huge.every((stack) => stack.count <= 4)).toBe(true);
+    expect(huge.some((stack) => stack.value === 10)).toBe(true);
   });
 
   it('maps a card id onto the shared suit sheet', () => {
@@ -179,8 +213,10 @@ describe('poker layout', () => {
       BET_BUTTON,
       RAISE_BUTTON,
     ]) {
-      expect(belowFelt(button)).toBe(true);
-      expect(insideCluster(button)).toBe(true);
+      expect(button.y).toBeGreaterThanOrEqual(POKER_USER_Y);
+      expect(button.x).toBeGreaterThanOrEqual(568);
+      expect(button.x + button.w).toBeLessThanOrEqual(944);
+      expect(button.y + button.h).toBeLessThanOrEqual(540);
     }
   });
 
@@ -193,8 +229,10 @@ describe('poker layout', () => {
       STAKE_CONFIRM,
       STAKE_CANCEL,
     ]) {
-      expect(belowFelt(button)).toBe(true);
-      expect(insideCluster(button)).toBe(true);
+      expect(button.y).toBeGreaterThanOrEqual(POKER_USER_Y);
+      expect(button.x).toBeGreaterThanOrEqual(568);
+      expect(button.x + button.w).toBeLessThanOrEqual(944);
+      expect(button.y + button.h).toBeLessThanOrEqual(540);
     }
     expect(moveStake(20, -20, 20, 980)).toBe(20);
     expect(moveStake(20, 20, 20, 980)).toBe(40);
@@ -340,4 +378,18 @@ describe('poker layout', () => {
     expect(seatNote(showdown, 0)).toBe('Flush');
     expect(seatNote(showdown, 1)).toBe('Fold');
   });
+});
+
+it('enlarges the board inside the community band and highlights even large pots', () => {
+  expect(BOARD_SCALE).toBe(1.65);
+  expect(BOARD_STEP).toBeGreaterThan(40 * BOARD_SCALE);
+  expect(BOARD_Y + (CARD_DRAW * BOARD_SCALE) / 2).toBeLessThan(432);
+  for (const mobile of [false, true])
+    for (const amount of [0, 20, 1234567890]) {
+      const badge = potBadge(amount, mobile);
+      expect(badge.label.length * badge.size + 24).toBe(badge.w);
+      expect(badge.x).toBeGreaterThanOrEqual(156);
+      expect(badge.x + badge.w).toBeLessThan(440);
+      expect(badge.size).toBeGreaterThanOrEqual(10);
+    }
 });

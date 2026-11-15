@@ -1,0 +1,17 @@
+OPEN desktop
+OPEN mobile
+CAPTURED 01-four-player-pass
+SELECT 9C {"selected":["9C"],"page":0,"visible":["9C","KC","AC","2D","4D","6D","7D","KD","3S","7S","JS"]}
+SELECT 10H {"selected":["9C","10H"],"page":1,"visible":["KS","10H"]}
+SELECT KC {"selected":["9C","10H","KC"],"page":0,"visible":["9C","KC","AC","2D","4D","6D","7D","KD","3S","7S","JS"]}
+CAPTURED 02-three-selected-across-pages
+CAPTURED 03-pass-submitted
+CAPTURED 04-opening-play
+SELECT 5C {"selected":["5C"],"page":0,"visible":["5C","7C","JC","AC","2D","4D","6D","7D","KD","3S","7S"]}
+SELECT 9C {"selected":["9C"],"page":0,"visible":["9C","KC","8D","2S","8S","9S","QS","3H","8H"]}
+CAPTURED 05-owner-labelled-trick
+CAPTURED 07-scores-and-queen
+CAPTURED 06-hearts-broken
+CAPTURED 08-pass-right
+CAPTURED 09-pass-across
+CAPTURED 10-hold-hand

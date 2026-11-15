@@ -1055,3 +1055,218 @@ console.log(
     sidePots: sideDone.pots.length,
   }),
 );
+
+// Host-selected limits apply independently of the card variation and survive deals.
+for (const variation of POKER_VARIATIONS) {
+  const configured = {
+    ...table(variation),
+    stateJson: JSON.stringify({ variation, limit: 'no-limit' }),
+  };
+  const open = pokerRules.initialState(pair, configured);
+  assert(open.limit === 'no-limit', 'host selects no-limit for any variation');
+  assert(
+    pokerRaiseRange(open, open.turnSeatIndex!)?.max === 1000,
+    'no pot cap on a legal all-in',
+  );
+  const won = pokerRules.applyIntent(
+    open,
+    { type: 'fold' },
+    context(open.turnSeatIndex!),
+  );
+  assert(
+    advancePoker(won, configured, [0, 1]).limit === 'no-limit',
+    'limit survives the next hand',
+  );
+}
+function shortRaiseTable(): PokerState {
+  const s = pokerRules.initialState(
+    [seat(0), seat(1), seat(2), seat(3)],
+    table(),
+  );
+  s.currentBet = 100;
+  s.minRaise = 100;
+  s.pot = 400;
+  s.turnSeatIndex = 1;
+  for (const row of Object.values(s.seats)) {
+    row.streetBet = 100;
+    row.committed = 100;
+    row.chips = 900;
+    row.acted = true;
+    row.actedAtBet = 100;
+    row.allIn = false;
+  }
+  s.seats['1']!.chips = 40;
+  s.seats['1']!.acted = false;
+  s.seats['2']!.chips = 100;
+  s.seats['2']!.acted = false;
+  return s;
+}
+let partial = pokerRules.applyIntent(
+  shortRaiseTable(),
+  { type: 'raise', amount: 140 },
+  context(1),
+);
+partial = pokerRules.applyIntent(partial, { type: 'call' }, context(2));
+partial = pokerRules.applyIntent(partial, { type: 'call' }, context(3));
+assert(
+  pokerRaiseRange(partial, 0) === null,
+  'a single short all-in does not reopen a prior caller',
+);
+rejects(
+  () =>
+    pokerRules.applyIntent(partial, { type: 'raise', amount: 240 }, context(0)),
+  'Invalid intent',
+);
+let cumulative = pokerRules.applyIntent(
+  shortRaiseTable(),
+  { type: 'raise', amount: 140 },
+  context(1),
+);
+cumulative = pokerRules.applyIntent(
+  cumulative,
+  { type: 'raise', amount: 200 },
+  context(2),
+);
+cumulative = pokerRules.applyIntent(cumulative, { type: 'call' }, context(3));
+assert(
+  pokerRaiseRange(cumulative, 0)?.min === 300,
+  'cumulative short raises reopen at the last full raise size',
+);
+assert(
+  pokerRules.applyIntent(cumulative, { type: 'raise', amount: 300 }, context(0))
+    .currentBet === 300,
+  'reopened full raise accepted',
+);
+console.log('Configurable limits and all-in reopening matrix passed');
+
+// A check is an action too: a sub-minimum opening all-in does not reopen it.
+const checkedShort = shortRaiseTable();
+checkedShort.currentBet = 0;
+checkedShort.minRaise = 20;
+checkedShort.pot = 80;
+for (const row of Object.values(checkedShort.seats)) {
+  row.streetBet = 0;
+  row.committed = 20;
+  row.actedAtBet = 0;
+}
+checkedShort.seats['1']!.chips = 5;
+let checkedAction = pokerRules.applyIntent(
+  checkedShort,
+  { type: 'bet', amount: 5 },
+  context(1),
+);
+assert(
+  pokerRaiseRange(checkedAction, 2)?.min === 25,
+  'an unacted player can raise a short opening all-in',
+);
+checkedAction = pokerRules.applyIntent(
+  checkedAction,
+  { type: 'call' },
+  context(2),
+);
+checkedAction = pokerRules.applyIntent(
+  checkedAction,
+  { type: 'call' },
+  context(3),
+);
+assert(
+  pokerRaiseRange(checkedAction, 0) === null,
+  'a prior check is not reopened by a sub-minimum wager',
+);
+
+const blindShort = pokerRules.initialState(
+  [
+    { ...seat(0), chips: 1000 },
+    { ...seat(1), chips: 1000 },
+    { ...seat(2), chips: 5 },
+  ],
+  table(),
+);
+assert(
+  blindShort.currentBet === POKER_BIG_BLIND,
+  'short big blind retains full bring-in with two funded players',
+);
+const headsUpBlind = pokerRules.initialState(
+  [
+    { ...seat(0), chips: 1000 },
+    { ...seat(1), chips: 5 },
+  ],
+  table(),
+);
+assert(
+  headsUpBlind.turnSeatIndex === null && headsUpBlind.step === 'runout',
+  'no unnecessary call against a covered short blind',
+);
+let excessReturn = headsUpBlind;
+while (excessReturn.phase === 'play')
+  excessReturn = advancePoker(excessReturn, table(), [0, 1]);
+assert(
+  excessReturn.pot === 10,
+  'unmatched blind excess returned before settlement',
+);
+assert(
+  excessReturn.pots.every((pot) => pot.eligible.length === 2),
+  'a refund is not a one-player side pot',
+);
+assert(
+  chipSum(excessReturn) === 1005,
+  'short blind settlement conserves chips',
+);
+console.log('Short opening, short blind and unmatched return checks passed');
+
+assert(
+  potLimitCeiling(blindShort, 0) === 70,
+  'preflop pot ceiling assumes full blinds despite a short all-in',
+);
+rejects(
+  () =>
+    pokerRules.initialState(pair, {
+      ...table(),
+      stateJson: JSON.stringify({ limit: 'unlimited' }),
+    }),
+  'Invalid betting limit',
+);
+const announceBefore = shortRaiseTable();
+const announceAfter = pokerRules.applyIntent(
+  announceBefore,
+  { type: 'raise', amount: 140 },
+  context(1),
+);
+const announced = pokerRules.eventNote(
+  announceBefore,
+  { type: 'raise', amount: 140 },
+  announceAfter,
+  context(1),
+);
+assert(
+  announced?.kind === 'raise' && announced.allIn === true,
+  'accepted short all-in publishes an explicit all-in event',
+);
+// A larger all-in followed by a short call returns the uncontested part, even if the shover loses.
+const overShove = structuredClone(dealt);
+overShove.seats['0']!.chips = 990;
+overShove.seats['1']!.chips = 80;
+let overDone = pokerRules.applyIntent(
+  overShove,
+  { type: 'raise', amount: 1000 },
+  context(0),
+);
+overDone = pokerRules.applyIntent(overDone, { type: 'call' }, context(1));
+while (overDone.phase === 'play')
+  overDone = advancePoker(overDone, table(), [0, 1]);
+assert(
+  overDone.pot === 200,
+  'a 1000 shove facing a 100 stack contests only 200',
+);
+assert(
+  overDone.seats['0']!.chips >= 900,
+  '900 uncalled chips return to the shover',
+);
+assert(
+  overDone.pots.length === 1 && overDone.pots[0]!.eligible.length === 2,
+  'returned excess creates no false side-pot winner',
+);
+assert(
+  chipSum(overDone) === 1100,
+  'unequal all-in settlement conserves every chip',
+);

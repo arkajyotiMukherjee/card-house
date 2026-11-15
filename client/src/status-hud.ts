@@ -28,7 +28,7 @@ export const STATUS_HUD = {
   x: PHONE_LAYOUT ? 632 : 652,
   y: 16,
   w: PHONE_LAYOUT ? 260 : 240,
-  h: PHONE_LAYOUT ? 44 : 52,
+  h: PHONE_LAYOUT ? 56 : 52,
 } as const;
 export const STATUS_FONT_SIZE = PHONE_LAYOUT ? 10 : 8;
 export const STATUS_LINE_HEIGHT = 12;

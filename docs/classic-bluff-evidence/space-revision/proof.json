@@ -1,0 +1,22 @@
+{
+  "players": 6,
+  "uniqueIdentities": 6,
+  "desktopAndTwoTouchSizes": true,
+  "crossPageSelection": true,
+  "disabledPlayCannotSubmit": true,
+  "opponentResizeAlignment": true,
+  "holdDoesNotSelect": true,
+  "outOfTurnChallenge": true,
+  "pilePickup25Cards": true,
+  "responsiveHandPages": true,
+  "nineOpeningCardsVisible": true,
+  "tableNameHeader": true,
+  "noRepeatedBottomClaim": true,
+  "compactControls": true,
+  "claimCardSpacing": true,
+  "winnerInPersonalBand": true,
+  "remainingHandsPrivate": true,
+  "sixPlayerSpectator": true,
+  "headerChatHelpLeave": true,
+  "errors": []
+}

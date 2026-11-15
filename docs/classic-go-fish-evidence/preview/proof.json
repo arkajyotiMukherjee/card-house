@@ -1,0 +1,18 @@
+{
+  "players": 6,
+  "uniqueIdentities": 6,
+  "desktopAndBothTouchSizes": false,
+  "holdDoesNotSelect": true,
+  "disabledAskCannotSubmit": true,
+  "rankAndTargetCanvasAsk": true,
+  "secondPlayerCanvasAsk": false,
+  "longTargetNamesFit": true,
+  "denseHand": true,
+  "selectedTriple": true,
+  "bookCollection": true,
+  "finished": true,
+  "remainingHandsPrivate": true,
+  "spectator": false,
+  "headerNavigation": false,
+  "errors": []
+}

@@ -270,12 +270,28 @@ const SHELL_CSS = `
   position: fixed;
   z-index: 10;
   left: max(8px, env(safe-area-inset-left));
-  top: max(8px, env(safe-area-inset-top));
+  top: var(--cardhouse-control-top, max(8px, env(safe-area-inset-top)));
   opacity: 0.9;
-  width: 44px;
+  min-width: 0;
+  min-height: 0;
+  width: var(--cardhouse-control-height, 44px);
+  height: var(--cardhouse-control-height, 44px);
   padding: 0;
-  font-family: sans-serif;
-  font-size: 24px;
+  display: grid;
+  place-items: center;
+  line-height: 1;
+}
+#cardhouse-shell .ch-fab svg { width: 58%; height: 58%; display: block; }
+#cardhouse-shell .ch-fab::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 100%;
+  height: 100%;
+  min-width: 44px;
+  min-height: 44px;
+  transform: translate(-50%, -50%);
 }
 #cardhouse-shell .ch-toast {
   position: fixed;
@@ -323,7 +339,7 @@ export function mountMobileShell(
         <p class="ch-note" data-cardhouse-shell="gate-note" hidden>${ADD_TO_HOME_NOTE}</p>
       </div>
     </div>
-    <button type="button" class="ch-button ch-fab" data-cardhouse-shell="fab" aria-label="${FULLSCREEN_LABEL}" title="${FULLSCREEN_LABEL}" hidden>⛶</button>
+    <button type="button" class="ch-button ch-fab" data-cardhouse-shell="fab" aria-label="${FULLSCREEN_LABEL}" title="${FULLSCREEN_LABEL}" hidden><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><path d="M8 3H3V8M16 3H21V8M3 16V21H8M21 16V21H16"/></svg></button>
     <p class="ch-note ch-toast" data-cardhouse-shell="toast" hidden>${ADD_TO_HOME_NOTE}</p>
   `;
   doc.body.append(root);

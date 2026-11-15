@@ -1,0 +1,33 @@
+
+> server@ test /workspace/card-house/server
+> node --experimental-strip-types src/rules-by-type.test.ts && node --experimental-strip-types src/dummy-counter.test.ts && node --experimental-strip-types src/lobby-deal.test.ts && node --experimental-strip-types src/bluff.test.ts && node --experimental-strip-types src/president.test.ts && node --experimental-strip-types src/go-fish.test.ts && node --experimental-strip-types src/crazy-eights.test.ts && node --experimental-strip-types src/rummy.test.ts && node --experimental-strip-types src/blackjack.test.ts && node --experimental-strip-types src/blackjack-casino.test.ts && node --experimental-strip-types src/economy.test.ts && node --experimental-strip-types src/spades.test.ts && node --experimental-strip-types src/hearts.test.ts && node --experimental-strip-types src/poker.test.ts && node --experimental-strip-types src/poker-table-lifecycle.test.ts && node --experimental-strip-types src/table-status.test.ts && node --experimental-strip-types src/spectator.test.ts && node --experimental-strip-types src/table-cleanup.test.ts && node --experimental-strip-types src/discord-member.test.ts && node --experimental-strip-types src/voice-presence.test.ts && node --experimental-strip-types src/speaking-state.test.ts && node --experimental-strip-types src/lobby-idle.test.ts && node --experimental-strip-types src/lobby-idle.live.test.ts && node --experimental-strip-types src/room-caps.test.ts && node --experimental-strip-types src/activity-log.test.ts && node --experimental-strip-types src/lobby-presence.test.ts && node --experimental-strip-types src/lobby-chat.test.ts && node --experimental-strip-types src/table-chat.test.ts && node --experimental-strip-types src/player-stats.test.ts && node --experimental-strip-types src/player-stats.live.test.ts && node --experimental-strip-types src/bots.test.ts && node --experimental-strip-types src/solo.test.ts
+
+{"registeredGameType":"stub","resolvedStubRules":true,"unknownGameType":"unknown-game","unknownReturnedStubRules":false}
+{"gameType":"dummy","opened":{"count":0},"once":{"count":1},"twice":{"count":2}}
+{"lobbyPhase":"lobby","dealtPhase":"play","seat0":27,"seat1":27}
+{"gameType":"bluff","emptyPhase":"lobby","dealtCount":54,"turnSeatIndex":0,"playedRank":"10","finished":"finished","winnerSeatIndex":0}
+{"gameType":"president","emptyPhase":"lobby","dealtCount":52,"turnSeatIndex":5,"openedRank":"3","finished":"finished","winnerSeatIndex":0,"scores":[3,2,1]}
+{"gameType":"go_fish","emptyPhase":"lobby","dealtCount":52,"turnSeatIndex":0,"stock":38,"books":1,"finished":"finished","winnerSeatIndex":0,"tie":null}
+{"gameType":"crazy_eights","emptyPhase":"lobby","dealtCount":52,"turnSeatIndex":0,"playedSuit":"H","wildSuit":"D","drawn":"3C","finished":"finished","winnerSeatIndex":0,"winnerScore":63,"blockedWinner":1}
+{"gameType":"rummy","emptyPhase":"lobby","dealtCount":52,"turnSeatIndex":0,"stock":31,"finished":"finished","winnerSeatIndex":0,"winnerScore":0}
+{"gameType":"blackjack","emptyPhase":"lobby","shoe":312,"dealtHole":true,"finished":"finished","winners":[],"natural":215}
+Blackjack casino: exact payouts, insurance, even money, surrender, split limits and soft 17 passed
+Economy: exact money, limits, conservation, tied prizes and team prizes passed
+{"gameType":"spades","emptyPhase":"lobby","dealtCount":52,"turnSeatIndex":1,"finished":"finished","winnerTeam":"ns","scores":{"ns":600,"ew":-20},"hand2":2}
+{"gameType":"hearts","emptyPhase":"lobby","dealtCount":52,"passPhase":"pass","exchangedTurn":0,"scored":14,"finished":"finished","winnerSeatIndex":1,"moon":{"0":0,"1":26,"2":26,"3":26},"playedSum":26}
+{"holdem":true,"omaha":true,"oklahoma":true,"sidePots":2}
+Poker completed-hand/session lifecycle checks passed
+{"ok":true}
+{"ok":true}
+{"ok":true}
+discord member identity ok
+voice-presence ok
+speaking state place ok
+{"ok":true}
+{"ok":true,"skipped":true}
+{"defaultCaps":{"maxLobbies":64,"maxTablesPerLobby":16,"maxSeatsPerTable":8},"heartsMax":4,"looseCap":8,"keptHeartsMax":4}
+{"ok":true,"lobby":"lobby created lobbyId=lobby_abc","table":"table created tableId=table_abc lobbyId=lobby_abc","rules":"rules error tableId=table_abc lobbyId=lobby_abc reason=Invalid intent","disconnect":"disconnect lobbyId=lobby_abc tableId=table_abc disconnectsPerMinute=1"}
+{"ok":true}
+{"ok":true}
+{"ok":true}
+{"ok":true,"skipped":true}

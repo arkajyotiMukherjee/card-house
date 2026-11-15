@@ -18,6 +18,7 @@ it('fits six phone actions with separate thumb targets below right-hand opponent
     actionBox,
     insideCluster,
     seatFan,
+    revealedHandSlots,
     fanCardRect,
     fanLabelBox,
     opponentNameAnchor,
@@ -25,11 +26,39 @@ it('fits six phone actions with separate thumb targets below right-hand opponent
   } = await import('./table-presentation');
   const { seatAnchorsFor } = await import('./game-scene');
   const { STATUS_HUD } = await import('./status-hud');
-  const { HOW_TO_PLAY_BUTTON } = await import('./game-scene');
+  const {
+    HOW_TO_PLAY_BUTTON,
+    TABLE_VARIATION_LABEL,
+    LEAVE_TABLE_BUTTON,
+    TABLE_CHAT_BUTTON,
+  } = await import('./game-scene');
+  expect(TABLE_VARIATION_LABEL.y).toBeGreaterThanOrEqual(
+    Math.max(
+      LEAVE_TABLE_BUTTON.y + LEAVE_TABLE_BUTTON.h,
+      TABLE_CHAT_BUTTON.y + TABLE_CHAT_BUTTON.h,
+    ) + 12,
+  );
   const { BOARD_Y, BOARD_SCALE, COUNTDOWN_Y, blindChipLine, holePositions } =
     await import('./poker-layout');
   expect(HOW_TO_PLAY_BUTTON.h).toBe(STATUS_HUD.h);
-  expect(BOARD_Y - 32 * BOARD_SCALE).toBeGreaterThan(COUNTDOWN_Y + 8);
+  for (let players = 2; players <= 8; players++) {
+    for (const seat of seatAnchorsFor(players).slice(1)) {
+      for (const slot of revealedHandSlots(seat.x, seat.y, 4)) {
+        expect(slot.scale).toBe(1.35);
+        const side = Math.abs(slot.rotation) > 0;
+        const w = (side ? 56 : 41) * slot.scale;
+        const h = (side ? 41 : 56) * slot.scale;
+        const face = { x: slot.x - w / 2, y: slot.y - h / 2, w, h };
+        for (const control of [
+          STATUS_HUD,
+          HOW_TO_PLAY_BUTTON,
+          TABLE_VARIATION_LABEL,
+        ])
+          expect(rectsOverlap(face, control)).toBe(false);
+      }
+    }
+  }
+  expect(BOARD_Y + 28 * BOARD_SCALE).toBeLessThan(COUNTDOWN_Y);
   const money = blindChipLine(true, 480, 432, 'Ada', 'Stack 1000000', 'BB', 12);
   for (const card of holePositions(true, 480, 432, 4)) {
     expect(

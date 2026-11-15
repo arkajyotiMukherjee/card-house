@@ -1,0 +1,19 @@
+{
+  "players": 4,
+  "uniqueIdentities": 4,
+  "thirteenCardPaging": true,
+  "nilCanvasBid": true,
+  "touchCanvasPlay": true,
+  "desktopCanvasPlay": false,
+  "holdDoesNotSelect": true,
+  "emptyPlayDisabled": true,
+  "completeTrick": true,
+  "scoresModal": true,
+  "spadesBroken": true,
+  "nextHandScoring": true,
+  "finished": false,
+  "remainingHandsPrivate": true,
+  "spectator": false,
+  "navigation": false,
+  "errors": []
+}

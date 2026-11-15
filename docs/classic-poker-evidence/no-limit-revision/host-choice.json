@@ -1,0 +1,14 @@
+[
+  {
+    "mobile": false,
+    "variation": "holdem",
+    "limit": "pot-limit",
+    "hostCreatedAndSeated": true
+  },
+  {
+    "mobile": true,
+    "variation": "oklahoma",
+    "limit": "no-limit",
+    "hostCreatedAndSeated": true
+  }
+]

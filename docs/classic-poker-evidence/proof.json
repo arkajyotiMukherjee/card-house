@@ -1,0 +1,15 @@
+{
+  "helpAndChatTouchControls": true,
+  "mobileHeaderAndSafeMargins": true,
+  "touchDiscard": true,
+  "longPressDoesNotDiscardOrSelect": true,
+  "touchBetStepper": true,
+  "players": 8,
+  "uniqueIdentities": 8,
+  "foldedHandsPrivate": true,
+  "fourThreeTwoCardProgression": true,
+  "allViewsSameState": true,
+  "eightPlayerSpectator": true,
+  "spectatorLeaveViaHeader": true,
+  "errors": []
+}

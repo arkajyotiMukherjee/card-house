@@ -18,6 +18,7 @@ import {
   BUTTON_HEIGHT,
   BUTTON_PRESS_SHIFT,
   buttonCaptionPos,
+  buttonFontSize,
 } from './button-style';
 import { SUIT_BUTTON_H } from './crazy-eights-layout';
 import {
@@ -98,6 +99,18 @@ describe('button captions', () => {
   });
 });
 
+it('fits mobile captions and centers each dynamic Chat/Rankings label independently', () => {
+  for (const label of ['Create Table', 'Chat', 'Chat (99+)', 'Rankings']) {
+    const width = label === 'Create Table' ? 140 : 144;
+    const size = buttonFontSize(label, width, 40, 12);
+    const pos = buttonCaptionPos(label, width, 40, size);
+    expect(label.length * size).toBeLessThanOrEqual(width - 16);
+    expect(
+      Math.abs(pos.x + 2 + (label.length * size) / 2 - width / 2),
+    ).toBeLessThanOrEqual(0.5);
+  }
+});
+
 describe('shared button height', () => {
   const standard = [
     PROMPT.submit,
@@ -142,11 +155,6 @@ describe('shared button height', () => {
     BET_10_BUTTON,
     BET_25_BUTTON,
     BET_50_BUTTON,
-    FOLD_BUTTON,
-    CHECK_BUTTON,
-    CALL_BUTTON,
-    BET_BUTTON,
-    RAISE_BUTTON,
     bidButtonBox(0),
   ];
 
@@ -156,6 +164,14 @@ describe('shared button height', () => {
     expect(HOW_TO_PLAY_BUTTON.h).toBe(52);
     expect(HOW_TO_PLAY_BUTTON.w).toBe(52);
     expect(SUIT_BUTTON_H).toBe(BUTTON_HEIGHT);
+    for (const box of [
+      FOLD_BUTTON,
+      CHECK_BUTTON,
+      CALL_BUTTON,
+      BET_BUTTON,
+      RAISE_BUTTON,
+    ])
+      expect(box.h).toBe(42);
     for (const box of standard) {
       expect(box.h).toBe(BUTTON_HEIGHT);
     }

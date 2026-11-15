@@ -1,3 +1,5 @@
+import { uiText, uiCaption } from './ui-text';
+import { waitingHeaderLayout } from './table-chat';
 import {
   anchorTableActor,
   TABLE_VIEWPORT_MAX_WIDTH,
@@ -84,6 +86,7 @@ interface WaitingTable {
   seated: number;
   capacity: number;
   minimum: number;
+  participation: 'seated' | 'watching' | 'released';
   startsAt?: bigint;
   start?: () => void;
   leave: () => void;
@@ -102,12 +105,14 @@ export class TableChatOverlay {
   private waitingDetails?: ex.Text;
   private waitingSeats?: ex.Text;
   private startControl?: ex.Actor;
+  private copyLinkControl?: ex.Actor;
   private startLabel?: ex.Text;
   private tableId = '';
   private lobbyMemberId = '';
   private draft = '';
   private sending = false;
   private chatAvailable = true;
+  private triggerVisible = true;
   private button!: ex.Actor;
   private chatCaption!: ex.Actor;
   private overlayActors: ex.Actor[] = [];
@@ -150,8 +155,8 @@ export class TableChatOverlay {
       enterKeyHint: 'send',
       autoCapitalize: 'off',
       metrics: tableChatLabel(),
-      onCaret: () => {
-        this.paintInput();
+      onCaret: (index) => {
+        this.paintInput(index);
       },
     });
     this.buildButton();
@@ -169,6 +174,15 @@ export class TableChatOverlay {
 
   get isOpen(): boolean {
     return this.opened;
+  }
+
+  get available(): boolean {
+    return this.chatAvailable;
+  }
+
+  setTriggerVisible(visible: boolean): void {
+    this.triggerVisible = visible;
+    this.refreshChatButton();
   }
 
   /** Resets the draft and clears stale history when the table changes. */
@@ -197,11 +211,13 @@ export class TableChatOverlay {
     if (this.waitingSeats) {
       this.waitingSeats.text =
         waiting.startsAt === undefined
-          ? `${waiting.seated}/${waiting.capacity} seated`
+          ? `${waiting.seated}/${waiting.capacity} seated${waiting.participation === 'watching' ? ' | Watching' : waiting.participation === 'released' ? ' | Seat released' : ''}`
           : `Starting in ${Math.max(0, Math.ceil((Number(waiting.startsAt / 1000n) - Date.now()) / 1000))}s`;
     }
     if (this.startControl && this.startLabel) {
       const visible = waiting.start !== undefined;
+      if (this.copyLinkControl)
+        this.copyLinkControl.pos.x = waitingHeaderLayout(visible).copyX;
       this.startControl.graphics.isVisible = visible;
       this.startControl.pointer.useColliderShape = visible;
       this.startControl.pointer.useGraphicsBounds = visible;
@@ -244,6 +260,7 @@ export class TableChatOverlay {
     this.waitingDetails = undefined;
     this.waitingSeats = undefined;
     this.startControl = undefined;
+    this.copyLinkControl = undefined;
     this.startLabel = undefined;
     this.inputField = undefined;
     this.inputCaret = undefined;
@@ -343,14 +360,14 @@ export class TableChatOverlay {
       });
   }
 
-  private paintInput(): void {
+  private paintInput(caretIndex?: number): void {
     if (!this.inputField || !this.inputCaret) {
       return;
     }
     const metrics = tableChatLabel();
     const layout = layoutFieldCaret({
       value: this.draft,
-      index: this.composer.selectionIndex(),
+      index: caretIndex ?? this.composer.selectionIndex(),
       size: metrics.size,
       originX: metrics.x,
       originY: metrics.y,
@@ -386,13 +403,13 @@ export class TableChatOverlay {
     });
     const face = panelRect(box.w, box.h, PLATE, STROKE);
     actor.graphics.use(face);
-    const size = buttonFontSize('Chat', box.w, box.h);
-    const rest = buttonCaptionPos('Chat', box.w, box.h, size);
+    const size = 20;
+    const rest = uiCaption('Chat', box.w, box.h, size);
     const caption = new ex.Actor({
       pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText('Chat', size, GOLD));
+    caption.graphics.use(uiText('Chat', size, GOLD));
     actor.addChild(caption);
     actor.on('pointerenter', () => {
       if (!this.chatAvailable) {
@@ -435,10 +452,10 @@ export class TableChatOverlay {
       readChatLobbies(this.connection),
     );
     this.chatAvailable = show;
-    this.button.graphics.isVisible = show;
-    this.chatCaption.graphics.isVisible = show;
-    this.button.pointer.useColliderShape = show;
-    this.button.pointer.useGraphicsBounds = show;
+    this.button.graphics.isVisible = show && this.triggerVisible;
+    this.chatCaption.graphics.isVisible = show && this.triggerVisible;
+    this.button.pointer.useColliderShape = show && this.triggerVisible;
+    this.button.pointer.useGraphicsBounds = show && this.triggerVisible;
     if (!show) {
       this.close();
     }
@@ -499,26 +516,35 @@ export class TableChatOverlay {
       };
       this.waitingDetails = label(48, GOLD);
       this.waitingSeats = label(66, SELF);
-      this.track(
-        this.buildHeaderButton(440, 116, 'Copy Link', () => {
-          const url = new URL(window.location.pathname, window.location.origin);
-          void navigator.clipboard?.writeText(url.href).then(
-            () => this.showError('Table link copied', GOLD),
-            () => this.showError('Copy the table link from the address bar'),
-          );
-          if (!navigator.clipboard)
-            this.showError('Copy the table link from the address bar');
-        }),
+      this.copyLinkControl = this.track(
+        this.buildHeaderButton(
+          waitingHeaderLayout(Boolean(this.waiting.start)).copyX,
+          116,
+          'Copy Link',
+          () => {
+            const url = new URL(
+              window.location.pathname,
+              window.location.origin,
+            );
+            void navigator.clipboard?.writeText(url.href).then(
+              () => this.showError('Table link copied', GOLD),
+              () => this.showError('Copy the table link from the address bar'),
+            );
+            if (!navigator.clipboard)
+              this.showError('Copy the table link from the address bar');
+          },
+        ),
       );
-      const start = this.buildHeaderButton(566, 130, 'Start Game', () => {
-        const waiting = this.waiting;
-        if (!waiting?.start) return;
-        if (waiting.seated < waiting.minimum) {
-          this.showError(`Waiting for at least ${waiting.minimum} players`);
-          return;
-        }
-        waiting.start();
-      });
+      const start = this.buildHeaderButton(
+        waitingHeaderLayout(true).startX,
+        130,
+        'Start Game',
+        () => {
+          const waiting = this.waiting;
+          if (!waiting?.start) return;
+          waiting.start();
+        },
+      );
       this.startControl = this.track(start);
     }
 
@@ -588,10 +614,15 @@ export class TableChatOverlay {
     this.track(errorActor);
 
     this.track(
-      this.buildHeaderButton(706, 110, this.waiting ? 'Leave' : 'Close', () => {
-        if (this.waiting) this.waiting.leave();
-        else this.close();
-      }),
+      this.buildHeaderButton(
+        waitingHeaderLayout(false).leaveX,
+        110,
+        this.waiting ? 'Leave' : 'Close',
+        () => {
+          if (this.waiting) this.waiting.leave();
+          else this.close();
+        },
+      ),
     );
   }
 

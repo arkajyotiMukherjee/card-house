@@ -1,0 +1,46 @@
+{
+  "proofs": [
+    {
+      "pending": true,
+      "pot": 610,
+      "entries": [
+        {
+          "key": "pot-0",
+          "title": "Main pot",
+          "amount": 310,
+          "eligible": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "winners": [],
+          "pending": false
+        },
+        {
+          "key": "pot-1",
+          "title": "Side pot 1",
+          "amount": 200,
+          "eligible": [
+            1,
+            2,
+            3
+          ],
+          "winners": [],
+          "pending": false
+        },
+        {
+          "key": "unmatched",
+          "title": "Awaiting calls",
+          "amount": 100,
+          "eligible": [
+            3
+          ],
+          "winners": [],
+          "pending": true
+        }
+      ]
+    }
+  ],
+  "errors": []
+}

@@ -1,0 +1,10 @@
+
+> discord-card-games@ lint /workspace/card-house
+> eslint . && prettier --check .
+
+Checking formatting...
+All matched files use Prettier code style!
+
+Final proof and shared-header checks: ESLint passed.
+Checking formatting...
+All matched files use Prettier code style!

@@ -1,3 +1,4 @@
+import { anchorTableActor, tableGutter } from './table-viewport';
 import { bindButtonPress } from './button-press';
 import { isMobileDevice } from './mobile-shell';
 import * as ex from 'excalibur';
@@ -5,26 +6,28 @@ import {
   SPADES_GAME_TYPE,
   type SpadesState,
 } from '../../src/shared/games/spades';
+import { CARD_DRAW, PILE_X, PILE_Y, faceForCard } from './bluff-layout';
+import { OPPONENT_FAN_CARD } from './table-presentation';
+import { BUTTON_PRESS_SHIFT } from './button-style';
+import { uiText, uiCaption } from './ui-text';
+import { CLASSIC, classicSeats } from './classic-table-design';
 import {
-  CARD_DRAW,
-  PILE_X,
-  PILE_Y,
-  cardLift,
-  faceForCard,
+  HAND_PREV,
+  HAND_NEXT,
+  handPageSize,
   handPositions,
-} from './bluff-layout';
+  classicBackSlots,
+  classicControlBoxes,
+} from './classic-card-layout';
 import {
-  OPPONENT_FAN_CARD,
-  TURN_LINE,
-  fanGapLine,
-  seatFan,
-} from './table-presentation';
-import {
-  BUTTON_PRESS_SHIFT,
-  buttonCaptionPos,
-  buttonFontSize,
-} from './button-style';
-import { chipAtlas, pixelFont } from './boot-scene';
+  spadesBidBoxes,
+  spadesRailSeats,
+  orderedSpadesHand,
+  spadesPublicCards,
+  spadesTrickPositions,
+  SPADES_PUBLIC_SCALE,
+} from './spades-classic-layout';
+import { SpadesTableUi } from './spades-table-ui';
 import type { CardAtlas } from './card-atlas';
 import type { GameDriver, InputEvent, RenderContext } from './game-driver';
 import {
@@ -39,36 +42,17 @@ import {
   resetCardLift,
   startHandHoverClock,
 } from './hand-hover';
-import { LOGICAL_WIDTH } from './sheets';
-import {
-  BID_PROMPT,
-  bidButtonBox,
-  bidButtonLabel,
-  finishedLine,
-  legalCard,
-  partnershipBoard,
-  partnershipLinePosition,
-  handResultLine,
-  seatBidText,
-  seatTeam,
-  PLAY_BUTTON,
-  trickPosition,
-  wonTrickPosition,
-} from './spades-layout';
-
-const GOLD = ex.Color.fromHex('#f4e4b3');
-const DIM = ex.Color.fromHex('#d7c08a');
-const NS_TEXT = ex.Color.fromHex('#b8e994');
-const EW_TEXT = ex.Color.fromHex('#9ccbff');
+import { legalCard, handResultLine } from './spades-layout';
+const [PLAY_BUTTON, SCORES_BUTTON] = classicControlBoxes(2);
+const GOLD = ex.Color.fromHex(CLASSIC.cream);
 const BUTTON = ex.Color.fromHex('#1b5c38');
 const BUTTON_DOWN = ex.Color.fromHex('#0e3d24');
-const STROKE = ex.Color.fromHex('#e6c27a');
-const STROKE_HOT = ex.Color.fromHex('#fff6d0');
+const STROKE = ex.Color.fromHex(CLASSIC.softBorder);
+const STROKE_HOT = ex.Color.fromHex(CLASSIC.gold);
 const FLASH_FILL = ex.Color.fromRGB(232, 60, 48, 0.8);
 const FLASH_STROKE = ex.Color.fromHex('#ff3b2f');
 
 const TRAVEL_MS = 420;
-const WON_HOLD_MS = 900;
 const FLASH_ON_MS = 130;
 const FLASH_OFF_MS = 80;
 const FLASH_BLINKS = 3;
@@ -124,8 +108,6 @@ interface CardRecord {
   personal: boolean;
   moving: boolean;
   placed: boolean;
-  /** A finished trick: sweep it off the felt a moment after it lands. */
-  sweep: boolean;
   restZ: number;
 }
 
@@ -135,29 +117,16 @@ interface CardPlace {
   faceUp: boolean;
   delay: number;
   z: number;
-  sweep?: boolean;
   personal: boolean;
 }
 
-interface BidButton {
-  tricks: number;
+interface ControlFace {
   actor: ex.Actor;
-}
-
-function canvasText(text: string, size: number, color: ex.Color): ex.Text {
-  const graphic = new ex.Text({
-    text,
-    color,
-    font: pixelFont.toFont({
-      family: '"Press Start 2P"',
-      size,
-      color,
-      quality: 1,
-      filtering: ex.ImageFiltering.Pixel,
-    }),
-  });
-  graphic.origin = ex.vec(0, 0);
-  return graphic;
+  face: ex.Rectangle;
+  caption: ex.Actor;
+  text: ex.Text;
+  setLabel?: (label: string) => void;
+  place?: (box: { x: number; y: number; w: number; h: number }) => void;
 }
 
 function panelRect(
@@ -204,18 +173,24 @@ export class SpadesDriver implements GameDriver<SpadesState> {
   private cards = new Map<string, CardRecord>();
   private backs = new Map<string, ex.Actor>();
   private backTargets = new Map<string, string>();
-  private labels: ex.Actor[] = [];
-  private bidButtons: BidButton[] = [];
-  private playButton: ex.Actor | null = null;
-  private chips: ex.Actor[] = [];
+  private readonly tableUi = new SpadesTableUi();
+  private controls: ex.Actor[] = [];
+  private bidButtons: { tricks: number; control: ControlFace }[] = [];
+  private playControl: ControlFace | null = null;
+  private scoresControl: ControlFace | null = null;
+  private prevHandControl: ControlFace | null = null;
+  private nextHandControl: ControlFace | null = null;
+  private scoresOpen = false;
+  private handPage = 0;
+  private handPageCount = 1;
+  private handLayoutKey = '';
+  private visibleHand: string[] = [];
   private flashes: ex.Actor[] = [];
   private selected: string | null = null;
   private hover: string | null = null;
   private readonly handHover = new HandHover();
   private hoverClock: ex.Actor | null = null;
   private buttonsReady = false;
-  private wonKey: string | null = null;
-  private sweptKey: string | null = null;
   private state: SpadesState | null = null;
   private ctx: RenderContext | null = null;
   private handResult: string | null = null;
@@ -234,26 +209,71 @@ export class SpadesDriver implements GameDriver<SpadesState> {
     this.ctx = ctx;
     this.ensureHoverClock(ctx);
     if (!this.buttonsReady) {
-      this.addPlayButton(ctx);
-      for (let tricks = 0; tricks <= 13; tricks += 1) {
-        this.addBidButton(ctx, tricks);
-      }
+      this.playControl = this.addButton(ctx, PLAY_BUTTON, 'Play', 'play');
+      this.scoresControl = this.addButton(
+        ctx,
+        SCORES_BUTTON,
+        'Scores',
+        'scores',
+      );
+      this.prevHandControl = this.addButton(ctx, HAND_PREV, '<', 'hand-prev');
+      this.nextHandControl = this.addButton(ctx, HAND_NEXT, '>', 'hand-next');
+      anchorTableActor(this.prevHandControl.actor, 'left', HAND_PREV.x);
+      for (const box of spadesBidBoxes())
+        this.bidButtons.push({
+          tricks: box.tricks,
+          control: this.addButton(
+            ctx,
+            box,
+            box.tricks === 0 ? 'Nil' : String(box.tricks),
+            `bid:${box.tricks}`,
+          ),
+        });
       this.buttonsReady = true;
     }
-    this.placeControls(state, ctx);
-    this.syncLabels(state, ctx);
-    this.syncChips(state, ctx);
     if (state.phase === 'lobby') {
       this.clearTableCards();
+      this.syncLabels(state, ctx);
       return;
     }
     this.syncCards(state, ctx);
     this.syncBacks(state, ctx);
+    this.syncLabels(state, ctx);
   }
+
+  /** The current trick and team board already own public state feedback. */
+  setAnnouncement(_text: string): void {}
 
   handleInput(event: InputEvent, state: SpadesState, ctx: RenderContext): void {
     this.state = state;
     this.ctx = ctx;
+    if (
+      event.type === 'pointerup' &&
+      (event.target === 'hand-prev' || event.target === 'hand-next')
+    ) {
+      if (ctx.inputBlocked() || this.handPageCount < 2) return;
+      this.handPage =
+        (this.handPage +
+          (event.target === 'hand-prev' ? -1 : 1) +
+          this.handPageCount) %
+        this.handPageCount;
+      this.handHover.clear();
+      this.syncCards(state, ctx, true);
+      this.syncLabels(state, ctx);
+      return;
+    }
+    if (ctx.inputBlocked() && event.type !== 'pointerleave') return;
+    if (
+      event.type === 'pointerup' &&
+      (event.target === 'scores' || event.target === 'scores-close')
+    ) {
+      this.scoresOpen = event.target === 'scores';
+      this.handHover.clear();
+      this.syncCards(state, ctx, true);
+      this.syncLabels(state, ctx);
+      return;
+    }
+    if (this.scoresOpen) return;
     if (state.phase !== 'play') {
       return;
     }
@@ -303,6 +323,7 @@ export class SpadesDriver implements GameDriver<SpadesState> {
         this.applyLift(previous, state, ctx);
       }
       this.applyLift(event.target, state, ctx);
+      this.syncLabels(state, ctx);
     }
   }
 
@@ -327,7 +348,7 @@ export class SpadesDriver implements GameDriver<SpadesState> {
       if (!button) {
         return;
       }
-      const box = bidButtonBox(button.tricks);
+      const box = spadesBidBoxes()[button.tricks];
       this.flashBox(ctx, box.x, box.y, box.w, box.h);
       return;
     }
@@ -365,23 +386,21 @@ export class SpadesDriver implements GameDriver<SpadesState> {
     }
     this.flashes = [];
     this.clearTableCards();
-    for (const actor of this.labels) {
-      actor.kill();
-    }
-    this.labels = [];
-    for (const button of this.bidButtons) {
-      button.actor.kill();
-    }
+    this.tableUi.clear();
+    for (const actor of this.controls) actor.kill();
+    this.controls = [];
     this.bidButtons = [];
-    this.playButton?.kill();
-    this.playButton = null;
-    for (const chip of this.chips) {
-      chip.kill();
-    }
-    this.chips = [];
+    this.playControl =
+      this.scoresControl =
+      this.prevHandControl =
+      this.nextHandControl =
+        null;
     this.buttonsReady = false;
-    this.wonKey = null;
-    this.sweptKey = null;
+    this.scoresOpen = false;
+    this.handPage = 0;
+    this.handPageCount = 1;
+    this.handLayoutKey = '';
+    this.visibleHand = [];
     this.selected = null;
     this.hover = null;
     this.stopHoverClock();
@@ -402,240 +421,123 @@ export class SpadesDriver implements GameDriver<SpadesState> {
     ctx.sendIntent({ type: 'play', card });
   }
 
-  private placeControls(state: SpadesState, ctx: RenderContext): void {
+  private setShown(control: ControlFace | null, shown: boolean): void {
+    if (!control) {
+      return;
+    }
+    control.actor.graphics.isVisible = shown;
+    control.caption.graphics.isVisible = shown;
+    control.actor.pointer.useColliderShape = shown;
+    control.actor.pointer.useGraphicsBounds = shown;
+  }
+
+  private syncLabels(state: SpadesState, ctx: RenderContext): void {
+    if (!this.buttonsReady) return;
     const acting =
       state.phase === 'play' &&
       ctx.meSeatIndex !== null &&
       state.turnSeatIndex === ctx.meSeatIndex;
-    const bidding = acting && state.stage === 'bid';
-    const playing = acting && state.stage === 'trick';
-    for (const button of this.bidButtons) {
-      const box = bidButtonBox(button.tricks);
-      button.actor.pos = bidding ? ex.vec(box.x, box.y) : ex.vec(box.x, -300);
-    }
-    if (this.playButton) {
-      this.playButton.pos = playing
-        ? ex.vec(PLAY_BUTTON.x, PLAY_BUTTON.y)
-        : ex.vec(PLAY_BUTTON.x, -300);
-    }
-  }
-
-  private syncLabels(state: SpadesState, ctx: RenderContext): void {
-    for (const actor of this.labels) {
-      actor.kill();
-    }
-    this.labels = [];
-    if (state.phase === 'lobby') {
-      return;
-    }
-    if (state.phase === 'finished') {
-      const line = ctx.finishedMessage ?? finishedLine(state) ?? 'Finished';
-      this.labels.push(this.banner(ctx, line));
-    }
-    const board = partnershipBoard(state, ctx.meSeatIndex);
-    const lines: { text: string; color: ex.Color }[] = [
-      { text: board.trump, color: DIM },
-      { text: board.nsHead, color: NS_TEXT },
-      { text: board.nsBid, color: GOLD },
-      { text: board.nsScore, color: GOLD },
-      { text: board.ewHead, color: EW_TEXT },
-      { text: board.ewBid, color: GOLD },
-      { text: board.ewScore, color: GOLD },
-    ];
-    for (let index = 0; index < lines.length; index += 1) {
-      const line = lines[index];
-      if (!line || !line.text) {
-        continue;
-      }
-      const position = partnershipLinePosition(index);
-      this.labels.push(
-        this.textActor(
-          ctx,
-          position.x,
-          position.y,
-          line.text,
-          line.color,
-          position.size,
-        ),
+    const playing = acting && state.stage === 'trick' && !this.scoresOpen;
+    const scores = state.phase === 'play' && !this.scoresOpen;
+    this.setShown(this.playControl, playing);
+    this.setShown(this.scoresControl, scores);
+    this.playControl?.place?.(classicControlBoxes(2)[0]);
+    this.scoresControl?.place?.(
+      playing ? classicControlBoxes(2)[1] : classicControlBoxes(1)[0],
+    );
+    for (const row of this.bidButtons)
+      this.setShown(
+        row.control,
+        acting && state.stage === 'bid' && !this.scoresOpen,
       );
+    if (this.playControl) {
+      const enabled = playing && this.selected !== null;
+      this.playControl.actor.graphics.opacity = enabled ? 1 : 0.45;
+      this.playControl.caption.graphics.opacity = enabled ? 1 : 0.45;
+      this.playControl.actor.pointer.useColliderShape = enabled;
+      this.playControl.actor.pointer.useGraphicsBounds = enabled;
     }
-    if (state.phase === 'play') {
-      const mine =
-        ctx.meSeatIndex !== null && state.turnSeatIndex === ctx.meSeatIndex;
-      if (state.stage === 'bid') {
-        if (this.handResult) {
-          const size = isMobileDevice() ? 12 : 8;
-          this.labels.push(
-            this.textActor(
-              ctx,
-              Math.round((LOGICAL_WIDTH - this.handResult.length * size) / 2),
-              isMobileDevice() ? 396 : 350,
-              this.handResult,
-              GOLD,
-              size,
-            ),
-          );
-        }
-        const turn = mine ? 'Your bid' : 'Wait';
-        this.labels.push(
-          this.textActor(ctx, BID_PROMPT.x, BID_PROMPT.y, turn, GOLD),
-        );
-      } else {
-        const turn = mine ? 'Your play' : 'Wait';
-        this.labels.push(
-          this.textActor(ctx, TURN_LINE.x, TURN_LINE.y, turn, GOLD),
-        );
-      }
-    }
-    for (const seat of ctx.seats) {
-      const text = seatBidText(state, seat.seatIndex);
-      if (text.length === 0) {
-        continue;
-      }
-      const color = seatTeam(seat.seatIndex) === 'ns' ? NS_TEXT : EW_TEXT;
-      const at = seat.self
-        ? {
-            x: Math.round(seat.x - (text.length * 8) / 2),
-            y: seat.y - 14,
-          }
-        : fanGapLine(seat.x, seat.y, seat.name, text, 0);
-      const label = this.textActor(ctx, at.x, at.y, text, color);
-      if (!seat.self) {
-        label.z = 80;
-      }
-      this.labels.push(label);
-    }
-  }
-
-  private syncChips(state: SpadesState, ctx: RenderContext): void {
-    if (state.phase === 'lobby' || isMobileDevice()) {
-      for (const chip of this.chips) {
-        chip.kill();
-      }
-      this.chips = [];
-      return;
-    }
-    if (this.chips.length > 0) {
-      return;
-    }
-    const ns = partnershipLinePosition(1);
-    const ew = partnershipLinePosition(4);
-    this.chips.push(this.chipActor(ctx, 'green', ns.x - 40, ns.y));
-    this.chips.push(this.chipActor(ctx, 'blue', ew.x + 180, ew.y));
-  }
-
-  private chipActor(
-    ctx: RenderContext,
-    color: 'green' | 'blue',
-    x: number,
-    y: number,
-  ): ex.Actor {
-    const sprite = chipAtlas.sprite(color);
-    sprite.scale = ex.vec(2, 2);
-    const actor = new ex.Actor({
-      pos: ex.vec(x, y),
-      anchor: ex.vec(0, 0),
-      width: 32,
-      height: 32,
-      z: 3,
+    this.tableUi.render(state, ctx, {
+      page: this.handPage,
+      pages: this.handPageCount,
+      scoresOpen: this.scoresOpen,
+      handResult: this.handResult,
+      close: () =>
+        this.handleInput(
+          { type: 'pointerup', target: 'scores-close' },
+          state,
+          ctx,
+        ),
     });
-    actor.graphics.use(sprite);
-    ctx.scene.add(actor);
-    return actor;
   }
 
-  private syncCards(state: SpadesState, ctx: RenderContext): void {
+  private syncCards(
+    state: SpadesState,
+    ctx: RenderContext,
+    pageChanged = false,
+  ): void {
     const desired = new Map<string, CardPlace>();
     const hand =
       ctx.meSeatIndex === null
         ? []
-        : (state.hands[String(ctx.meSeatIndex)] ?? []);
-    const handSlots = handPositions(hand.length);
-    for (let index = 0; index < hand.length; index += 1) {
-      const cardId = hand[index];
-      const slot = handSlots[index];
-      if (!cardId || !slot) {
-        continue;
-      }
-      desired.set(cardId, {
-        x: slot.x,
-        y: slot.y,
+        : orderedSpadesHand(state.hands[String(ctx.meSeatIndex)] ?? []);
+    this.handLayoutKey = `${isMobileDevice()}:${tableGutter()}`;
+    const capacity = handPageSize(hand.length, isMobileDevice(), tableGutter());
+    this.handPageCount = this.nextHandControl
+      ? Math.max(1, Math.ceil(hand.length / capacity))
+      : 1;
+    this.handPage = Math.min(this.handPage, this.handPageCount - 1);
+    this.visibleHand =
+      this.handPageCount > 1
+        ? hand.slice(this.handPage * capacity, (this.handPage + 1) * capacity)
+        : hand;
+    this.setShown(this.prevHandControl, this.handPageCount > 1);
+    this.setShown(this.nextHandControl, this.handPageCount > 1);
+    const slots = handPositions(this.visibleHand.length, isMobileDevice());
+    this.visibleHand.forEach((card, index) =>
+      desired.set(card, {
+        ...slots[index],
         faceUp: true,
         delay: index * 16,
         z: 12 + index,
         personal: true,
-      });
-    }
-    const trick = state.trick.length > 0 ? state.trick : [];
-    for (let index = 0; index < trick.length; index += 1) {
-      const played = trick[index];
-      if (!played) {
-        continue;
-      }
-      const seat = ctx.seats.find((row) => row.seatIndex === played.seat);
-      const slot = trickPosition(seat?.x ?? PILE_X, seat?.y ?? PILE_Y);
-      desired.set(played.card, {
-        x: slot.x,
-        y: slot.y,
-        faceUp: true,
-        delay: 0,
-        z: 20 + index,
-        personal: false,
-      });
-    }
-    const won = state.trick.length === 0 ? state.lastTrick : null;
-    this.wonKey = won
-      ? `${state.handNumber}:${won.cards.map((row) => row.card).join(',')}`
-      : null;
-    if (won && this.wonKey !== this.sweptKey) {
-      const seat = ctx.seats.find((row) => row.seatIndex === won.winner);
-      for (let index = 0; index < won.cards.length; index += 1) {
-        const played = won.cards[index];
-        if (!played) {
-          continue;
-        }
-        const slot = wonTrickPosition(
-          seat?.x ?? PILE_X,
-          seat?.y ?? PILE_Y,
-          index,
-        );
+      }),
+    );
+    if (!this.scoresOpen) {
+      const publicCards = spadesPublicCards(state),
+        positions = spadesTrickPositions(publicCards.length);
+      publicCards.forEach((played, index) =>
         desired.set(played.card, {
-          x: slot.x,
-          y: slot.y,
+          ...positions[index],
           faceUp: true,
           delay: 0,
-          z: 18 + index,
-          sweep: true,
+          z: 8 + index,
           personal: false,
-        });
-      }
+        }),
+      );
     }
-    if (this.selected !== null && !hand.includes(this.selected)) {
+    if (this.selected !== null && !hand.includes(this.selected))
       this.selected = null;
-    }
-    for (const [cardId, record] of this.cards) {
-      if (!desired.has(cardId)) {
+    for (const [card, record] of this.cards)
+      if (!desired.has(card)) {
         record.actor.kill();
-        this.cards.delete(cardId);
-        if (this.selected === cardId) {
-          this.selected = null;
-        }
+        this.cards.delete(card);
       }
-    }
-    for (const [cardId, place] of desired) {
-      this.placeCard(cardId, place, ctx);
-    }
+    for (const [card, place] of desired)
+      this.placeCard(card, place, ctx, pageChanged && place.personal);
   }
 
   private placeCard(
     cardId: string,
     place: CardPlace,
     ctx: RenderContext,
+    instant: boolean,
   ): void {
     const atlas = place.personal ? ctx.myCards : ctx.cards;
     let record = this.cards.get(cardId);
     if (!record) {
       const actor = new ex.Actor({
+        name: `spades-card-${cardId}`,
         pos: ex.vec(PILE_X, PILE_Y),
         anchor: ex.vec(0.5, 0.5),
         width: CARD_DRAW,
@@ -692,21 +594,27 @@ export class SpadesDriver implements GameDriver<SpadesState> {
         personal: place.personal,
         moving: false,
         placed: false,
-        sweep: false,
         restZ: place.z,
       };
       this.cards.set(cardId, record);
     }
-    record.sweep = place.sweep === true;
     if (record.faceUp !== place.faceUp || record.personal !== place.personal) {
       record.faceUp = place.faceUp;
       record.personal = place.personal;
       record.actor.graphics.use(cardSprite(atlas, cardId, place.faceUp));
     }
+    record.actor.pointer.useColliderShape = place.personal;
     const moved = record.restX !== place.x || record.restY !== place.y;
     record.restX = place.x;
     record.restY = place.y;
     record.restZ = place.z;
+    if (instant) {
+      record.actor.actions.clearActions();
+      record.moving = false;
+      record.placed = true;
+      this.applyLift(cardId, this.state, ctx);
+      return;
+    }
     if (!record.placed || moved) {
       const fromDeal = !record.placed;
       record.placed = true;
@@ -740,21 +648,7 @@ export class SpadesDriver implements GameDriver<SpadesState> {
       .callMethod(() => {
         record.moving = false;
         this.applyLift(cardId, this.state, this.ctx);
-        if (record.sweep) {
-          this.sweepCard(cardId, record);
-        }
       });
-  }
-
-  private sweepCard(cardId: string, record: CardRecord): void {
-    const key = this.wonKey;
-    record.actor.actions.delay(WON_HOLD_MS).callMethod(() => {
-      record.actor.kill();
-      if (this.cards.get(cardId) === record) {
-        this.cards.delete(cardId);
-      }
-      this.sweptKey = key;
-    });
   }
 
   private applyLift(
@@ -766,14 +660,19 @@ export class SpadesDriver implements GameDriver<SpadesState> {
     if (!record || record.moving || !state || !ctx) {
       return;
     }
-    const legal = legalCard(state, ctx.meSeatIndex, cardId);
-    const held = cardLift({
-      legal,
-      hovered: false,
-      selected: this.selected === cardId,
-    });
+    if (!record.personal) {
+      record.actor.pos = ex.vec(record.restX, record.restY);
+      record.actor.scale = ex.vec(SPADES_PUBLIC_SCALE, SPADES_PUBLIC_SCALE);
+      record.actor.z = record.restZ;
+      return;
+    }
+    record.actor.scale = ex.vec(1, 1);
+    const selected =
+      legalCard(state, ctx.meSeatIndex, cardId) &&
+      this.selected === cardId &&
+      !this.scoresOpen;
     const hover =
-      record.personal && !ctx.inputBlocked() && held === 0
+      !this.scoresOpen && !ctx.inputBlocked()
         ? this.handHover.current(cardId)
         : 0;
     placeCardLift(
@@ -781,9 +680,9 @@ export class SpadesDriver implements GameDriver<SpadesState> {
       record.restX,
       record.restY,
       record.restZ,
-      held > 0 ? held : hover,
-      legal && this.selected === cardId,
-      record.personal,
+      hover,
+      selected,
+      true,
     );
   }
 
@@ -796,6 +695,7 @@ export class SpadesDriver implements GameDriver<SpadesState> {
       !state ||
       !ctx ||
       ctx.inputBlocked() ||
+      this.scoresOpen ||
       ctx.meSeatIndex === null ||
       !state.hands[String(ctx.meSeatIndex)]?.includes(cardId)
     ) {
@@ -830,11 +730,13 @@ export class SpadesDriver implements GameDriver<SpadesState> {
     if (!state || !ctx) {
       return;
     }
-    const hand =
-      ctx.meSeatIndex === null
-        ? []
-        : (state.hands[String(ctx.meSeatIndex)] ?? []);
-    const slots = handPositions(hand.length);
+    if (this.handLayoutKey !== `${isMobileDevice()}:${tableGutter()}`) {
+      this.handHover.clear();
+      this.syncCards(state, ctx, true);
+      this.syncLabels(state, ctx);
+    }
+    const hand = this.visibleHand;
+    const slots = this.visibleHandSlots();
     const centers: number[] = [];
     for (let index = 0; index < slots.length; index += 1) {
       centers.push(slots[index]?.x ?? 0);
@@ -855,8 +757,11 @@ export class SpadesDriver implements GameDriver<SpadesState> {
     if (!state || !ctx || ctx.meSeatIndex === null) {
       return [];
     }
-    const hand = state.hands[String(ctx.meSeatIndex)] ?? [];
-    return localHandHitBoxes(hand, this.cards, CARD_DRAW);
+    return localHandHitBoxes(this.visibleHand, this.cards, CARD_DRAW);
+  }
+
+  private visibleHandSlots(): { x: number; y: number }[] {
+    return handPositions(this.visibleHand.length, isMobileDevice());
   }
 
   private onCard(
@@ -876,25 +781,21 @@ export class SpadesDriver implements GameDriver<SpadesState> {
       string,
       { x: number; y: number; z: number; rotation: number; scale: number }
     >();
-    for (const seat of ctx.seats) {
-      if (seat.self) {
-        continue;
-      }
-      const count = state.hands[String(seat.seatIndex)]?.length ?? 0;
-      const slots = seatFan(seat.x, seat.y, count, seat.name);
-      for (let index = 0; index < slots.length; index += 1) {
-        const slot = slots[index];
-        if (!slot) {
-          continue;
-        }
-        desired.set(`${seat.seatIndex}:${index}`, {
-          x: slot.x,
-          y: slot.y,
-          z: 4 + index,
-          rotation: slot.rotation,
-          scale: slot.scale,
-        });
-      }
+    for (const slot of classicBackSlots(
+      spadesRailSeats(ctx.seats),
+      state.hands,
+    )) {
+      const { key, ...place } = slot;
+      const box = classicSeats(spadesRailSeats(ctx.seats)).find((row) =>
+        key.startsWith(`${row.seat.seatIndex}:`),
+      );
+      place.x +=
+        box?.edge === 'left'
+          ? -tableGutter()
+          : box?.edge === 'right'
+            ? tableGutter()
+            : 0;
+      desired.set(key, place);
     }
     for (const [key, actor] of this.backs) {
       if (!desired.has(key)) {
@@ -906,8 +807,22 @@ export class SpadesDriver implements GameDriver<SpadesState> {
     for (const [key, place] of desired) {
       const target = `${place.x}:${place.y}:${place.rotation}:${place.scale}`;
       let actor = this.backs.get(key);
+      const edge = classicSeats(spadesRailSeats(ctx.seats)).find((box) =>
+        key.startsWith(`${box.seat.seatIndex}:`),
+      )?.edge;
+      const baseX =
+        place.x +
+        (edge === 'left'
+          ? tableGutter()
+          : edge === 'right'
+            ? -tableGutter()
+            : 0);
+      const dock = (): void => {
+        if (actor && edge) anchorTableActor(actor, edge, baseX);
+      };
       if (!actor) {
         actor = new ex.Actor({
+          name: `spades-back-${key}`,
           pos: ex.vec(PILE_X, PILE_Y),
           anchor: ex.vec(0.5, 0.5),
           width: OPPONENT_FAN_CARD,
@@ -918,14 +833,18 @@ export class SpadesDriver implements GameDriver<SpadesState> {
         actor.scale = ex.vec(place.scale, place.scale);
         const back = ctx.cards.back();
         actor.graphics.use(back);
+        actor.pointer.useGraphicsBounds = false;
+        actor.pointer.useColliderShape = false;
         ctx.scene.add(actor);
         this.backs.set(key, actor);
         this.backTargets.set(key, target);
-        actor.actions.moveTo({
-          pos: ex.vec(place.x, place.y),
-          duration: TRAVEL_MS,
-          easing: ex.EasingFunctions.EaseOutCubic,
-        });
+        actor.actions
+          .moveTo({
+            pos: ex.vec(place.x, place.y),
+            duration: TRAVEL_MS,
+            easing: ex.EasingFunctions.EaseOutCubic,
+          })
+          .callMethod(dock);
         continue;
       }
       actor.z = place.z;
@@ -936,11 +855,13 @@ export class SpadesDriver implements GameDriver<SpadesState> {
       }
       this.backTargets.set(key, target);
       actor.actions.clearActions();
-      actor.actions.moveTo({
-        pos: ex.vec(place.x, place.y),
-        duration: TRAVEL_MS,
-        easing: ex.EasingFunctions.EaseOutCubic,
-      });
+      actor.actions
+        .moveTo({
+          pos: ex.vec(place.x, place.y),
+          duration: TRAVEL_MS,
+          easing: ex.EasingFunctions.EaseOutCubic,
+        })
+        .callMethod(dock);
     }
   }
 
@@ -959,47 +880,6 @@ export class SpadesDriver implements GameDriver<SpadesState> {
     this.handHover.clear();
   }
 
-  private banner(ctx: RenderContext, text: string): ex.Actor {
-    const size = isMobileDevice()
-      ? Math.max(8, Math.min(16, Math.floor(700 / Math.max(1, text.length))))
-      : 8;
-    const width = text.length * size + 16;
-    const actor = new ex.Actor({
-      pos: ex.vec(Math.floor((LOGICAL_WIDTH - width) / 2), 112),
-      anchor: ex.vec(0, 0),
-      width,
-      height: size + 16,
-      z: 16,
-    });
-    actor.graphics.use(panelRect(width, size + 16, BUTTON, STROKE));
-    const caption = new ex.Actor({
-      pos: ex.vec(8, 8),
-      anchor: ex.vec(0, 0),
-    });
-    caption.graphics.use(canvasText(text, size, GOLD));
-    actor.addChild(caption);
-    ctx.scene.add(actor);
-    return actor;
-  }
-
-  private textActor(
-    ctx: RenderContext,
-    x: number,
-    y: number,
-    text: string,
-    color: ex.Color,
-    size = 8,
-  ): ex.Actor {
-    const actor = new ex.Actor({
-      pos: ex.vec(x, y),
-      anchor: ex.vec(0, 0),
-      z: 14,
-    });
-    actor.graphics.use(canvasText(text, size, color));
-    ctx.scene.add(actor);
-    return actor;
-  }
-
   private flashBox(
     ctx: RenderContext,
     x: number,
@@ -1014,62 +894,44 @@ export class SpadesDriver implements GameDriver<SpadesState> {
     this.flashes.push(actor);
   }
 
-  private addPlayButton(ctx: RenderContext): void {
-    const box = PLAY_BUTTON;
-    const actor = new ex.Actor({
-      pos: ex.vec(box.x, -300),
-      anchor: ex.vec(0, 0),
-      width: box.w,
-      height: box.h,
-      z: 24,
-    });
-    const face = panelRect(box.w, box.h, BUTTON, STROKE);
-    actor.graphics.use(face);
-    const size = buttonFontSize('Play', box.w, box.h);
-    const rest = buttonCaptionPos('Play', box.w, box.h, size);
-    const caption = new ex.Actor({
-      pos: ex.vec(rest.x, rest.y),
-      anchor: ex.vec(0, 0),
-    });
-    caption.graphics.use(canvasText('Play', size, GOLD));
-    actor.addChild(caption);
-    this.bindButton(actor, face, caption, rest, 'play');
-    ctx.scene.add(actor);
-    this.playButton = actor;
-  }
-
-  private addBidButton(ctx: RenderContext, tricks: number): void {
-    const box = bidButtonBox(tricks);
-    const actor = new ex.Actor({
-      pos: ex.vec(box.x, -300),
-      anchor: ex.vec(0, 0),
-      width: box.w,
-      height: box.h,
-      z: 24,
-    });
-    const face = panelRect(box.w, box.h, BUTTON, STROKE);
-    actor.graphics.use(face);
-    const label = bidButtonLabel(tricks);
-    const size = buttonFontSize(label, box.w, box.h);
-    const rest = buttonCaptionPos(label, box.w, box.h, size);
-    const caption = new ex.Actor({
-      pos: ex.vec(rest.x, rest.y),
-      anchor: ex.vec(0, 0),
-    });
-    caption.graphics.use(canvasText(label, size, GOLD));
-    actor.addChild(caption);
-    this.bindButton(actor, face, caption, rest, `bid:${tricks}`);
-    ctx.scene.add(actor);
-    this.bidButtons.push({ tricks, actor });
-  }
-
-  private bindButton(
-    actor: ex.Actor,
-    face: ex.Rectangle,
-    caption: ex.Actor,
-    rest: { x: number; y: number },
+  private addButton(
+    ctx: RenderContext,
+    box: { x: number; y: number; w: number; h: number },
+    label: string,
     target: string,
-  ): void {
+  ): ControlFace {
+    let currentBox = { ...box };
+    const actor = new ex.Actor({
+      name: `spades-control-${target}`,
+      pos: ex.vec(box.x, box.y),
+      anchor: ex.vec(0, 0),
+      width: box.w,
+      height: box.h,
+      z: 24,
+    });
+    const face = panelRect(box.w, box.h, BUTTON, STROKE);
+    actor.graphics.use(face);
+    let size = target.startsWith('target:') ? 17 : 18;
+    while (uiText(label, size, GOLD).width > box.w - 12 && size > 16) size--;
+    if (uiText(label, size, GOLD).width > box.w - 12) {
+      let short = label;
+      while (
+        uiText(short + '…', size, GOLD).width > box.w - 12 &&
+        short.length > 1
+      )
+        short = short.slice(0, -1);
+      label = short + '…';
+    }
+    const rest = uiCaption(label, currentBox.w, currentBox.h, size);
+    const text = uiText(label, size, GOLD);
+    const caption = new ex.Actor({
+      pos: ex.vec(rest.x, rest.y),
+      anchor: ex.vec(0, 0),
+    });
+    caption.graphics.use(text);
+    caption.pointer.useGraphicsBounds = false;
+    caption.pointer.useColliderShape = false;
+    actor.addChild(caption);
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;
     });
@@ -1080,9 +942,9 @@ export class SpadesDriver implements GameDriver<SpadesState> {
         caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
       },
       () => {
+        caption.pos = ex.vec(rest.x, rest.y);
         face.strokeColor = STROKE;
         face.color = BUTTON;
-        caption.pos = ex.vec(rest.x, rest.y);
       },
       () => {
         const state = this.state;
@@ -1093,5 +955,35 @@ export class SpadesDriver implements GameDriver<SpadesState> {
         this.handleInput({ type: 'pointerup', target }, state, current);
       },
     );
+    if (box.x >= 600 && box.y >= 400) anchorTableActor(actor, 'right', box.x);
+    ctx.scene.add(actor);
+    this.controls.push(actor);
+    return {
+      actor,
+      face,
+      caption,
+      text,
+      place: (nextBox) => {
+        currentBox = { ...nextBox };
+        face.width = nextBox.w;
+        face.height = nextBox.h;
+        actor.collider.useBoxCollider(nextBox.w, nextBox.h, ex.vec(0, 0));
+        actor.pos.y = nextBox.y;
+        anchorTableActor(actor, 'right', nextBox.x);
+        const next = uiCaption(text.text, nextBox.w, nextBox.h, size);
+        rest.x = next.x;
+        rest.y = next.y;
+        caption.pos = ex.vec(rest.x, rest.y);
+      },
+      setLabel: (nextLabel) => {
+        text.text = nextLabel;
+        const nextSize = 18;
+        text.font = uiText(nextLabel, nextSize, GOLD).font;
+        const next = uiCaption(nextLabel, currentBox.w, currentBox.h, nextSize);
+        rest.x = next.x;
+        rest.y = next.y;
+        caption.pos = ex.vec(rest.x, rest.y);
+      },
+    };
   }
 }

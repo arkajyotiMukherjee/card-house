@@ -1,0 +1,16 @@
+{
+  "players": 6,
+  "uniqueIdentities": 6,
+  "desktopAndTwoTouchSizes": true,
+  "crossPageSelection": true,
+  "disabledPlayCannotSubmit": true,
+  "holdDoesNotSelect": true,
+  "outOfTurnChallenge": true,
+  "pilePickup25Cards": true,
+  "fiveCardPages": true,
+  "winnerInPersonalBand": true,
+  "remainingHandsPrivate": true,
+  "sixPlayerSpectator": true,
+  "headerChatHelpLeave": true,
+  "errors": []
+}

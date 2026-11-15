@@ -75,6 +75,16 @@ describe('eventMessage', () => {
     ).toBe('Ada played 1 card as A');
   });
 
+  it('keeps full Bluff names for the personal action area', () => {
+    expect(
+      eventMessage(
+        'bluff',
+        { kind: 'play', seat: 0, count: 2, claimRank: 'A' },
+        () => 'Alexandra Johnson',
+      ),
+    ).toBe('Alexandra Johnson played 2 cards as A');
+  });
+
   it('announces a President play, pass, and finish', () => {
     expect(
       eventMessage(
@@ -234,6 +244,33 @@ describe('eventMessage', () => {
         names,
       ),
     ).toBe('Ada wins');
+  });
+
+  it('announces all-in calls and raises to everyone', () => {
+    expect(
+      eventMessage(
+        'poker',
+        { kind: 'call', seat: 0, amount: 40, allIn: true },
+        names,
+      ),
+    ).toBe('Ada calls 40 · All-in');
+    expect(
+      eventMessage(
+        'poker',
+        { kind: 'raise', seat: 1, amount: 400, allIn: true },
+        names,
+      ),
+    ).toBe('Bea raises to 400 · All-in');
+  });
+
+  it('keeps full player names in the poker personal-bar action summary', () => {
+    expect(
+      eventMessage(
+        'poker',
+        { kind: 'call', seat: 0, amount: 120 },
+        () => 'Ava Bennett',
+      ),
+    ).toBe('Ava Bennett calls 120');
   });
 
   it('keeps dummy and unknown events silent', () => {

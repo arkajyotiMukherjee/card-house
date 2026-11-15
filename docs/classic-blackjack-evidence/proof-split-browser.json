@@ -1,0 +1,29 @@
+{
+  "source": "Captured browser split run, retained independently of the later SDK-only audit deal",
+  "players": 5,
+  "dealer": 1,
+  "log": "run-split.log",
+  "verifiedComparisons": [
+    "VERIFIED_REPLICA split 04-live-multiplayer",
+    "VERIFIED_REPLICA split 05-settled-results"
+  ],
+  "screenshots": [
+    "split-02-four-split-hands-mobile.png",
+    "split-02-four-split-hands-small-mobile.png",
+    "split-04-live-multiplayer-replica-desktop.png",
+    "split-05-settled-results-mobile.png",
+    "split-05-settled-results-small-mobile.png",
+    "split-05-settled-results-replica-desktop.png"
+  ],
+  "observedInSettledSmallMobileScreenshot": {
+    "localPlayer": "Ava Bennett",
+    "hand": "4/4",
+    "total": 23,
+    "bet": 50,
+    "result": "Lose",
+    "chips": 975,
+    "allHandBets": 125,
+    "dealerTotal": 26
+  },
+  "scope": "Live independent browser state comparisons and captured four split hands plus settlement. Exact full hand state for a different audit deal is in proof-split.json."
+}

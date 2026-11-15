@@ -1,0 +1,3 @@
+{"holdem":true,"omaha":true,"oklahoma":true,"sidePots":2}
+Configurable limits and all-in reopening matrix passed
+Short opening, short blind and unmatched return checks passed

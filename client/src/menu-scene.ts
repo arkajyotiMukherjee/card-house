@@ -799,9 +799,9 @@ export class MenuScene extends ex.Scene {
       const grant = await coinDialog(
         this.engine,
         this,
-        'Room coins',
+        'Room chips',
         'Each player receives this grant once per room.',
-        [{ key: 'startingCoins', label: 'Starting coins', value: 10_000 }],
+        [{ key: 'startingCoins', label: 'Starting chips', value: 10_000 }],
         'Create room',
       );
       if (!grant) {

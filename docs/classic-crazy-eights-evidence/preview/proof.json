@@ -1,0 +1,16 @@
+{
+  "players": 7,
+  "independentIdentities": 7,
+  "desktopAndTwoTouchSizes": false,
+  "wildEightCanvasPlay": true,
+  "canvasDraw": true,
+  "actualLargestHand": 14,
+  "largeHandPaging": true,
+  "passObserved": false,
+  "independentSecondPlayer": false,
+  "finished": true,
+  "remainingHandsPrivate": true,
+  "spectator": false,
+  "headerNavigation": false,
+  "errors": []
+}

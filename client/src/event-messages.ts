@@ -147,17 +147,20 @@ export function eventMessage(
     return null;
   }
   if (parsed.kind === 'pass') {
-    return clip(`${shortName(seatName(parsed.seat))} passed`);
+    return clip(`${seatName(parsed.seat).trim() || 'Player'} passed`);
   }
   if (parsed.kind === 'play') {
     const cards = parsed.count === 1 ? 'card' : 'cards';
     return clip(
-      `${shortName(seatName(parsed.seat))} played ${parsed.count} ${cards} as ${parsed.claimRank}`,
+      `${seatName(parsed.seat).trim() || 'Player'} played ${parsed.count} ${cards} as ${parsed.claimRank}`,
     );
   }
   return clip(
-    challengeLine(parsed.challenger, parsed.accused, viewerSeat, (seatIndex) =>
-      shortName(seatName(seatIndex)),
+    challengeLine(
+      parsed.challenger,
+      parsed.accused,
+      viewerSeat,
+      (seatIndex) => seatName(seatIndex).trim() || 'Player',
     ),
   );
 }
@@ -363,13 +366,15 @@ function pokerEventMessage(
     if (parsed.winners.length === 0) {
       return clip('Hand over');
     }
-    const names = parsed.winners.map((seat) => shortName(seatName(seat)));
+    const names = parsed.winners.map(
+      (seat) => seatName(seat).trim() || 'Player',
+    );
     if (parsed.winners.length === 1) {
       return clip(`${names[0]} wins`);
     }
     return clip(`${names.join(', ')} split`);
   }
-  const name = shortName(seatName(parsed.seat));
+  const name = seatName(parsed.seat).trim() || 'Player';
   if (parsed.kind === 'fold') {
     return clip(`${name} folds`);
   }
@@ -377,13 +382,19 @@ function pokerEventMessage(
     return clip(`${name} checks`);
   }
   if (parsed.kind === 'call') {
-    return clip(`${name} calls ${parsed.amount}`);
+    return clip(
+      `${name} calls ${parsed.amount}${parsed.allIn ? ' · All-in' : ''}`,
+    );
   }
   if (parsed.kind === 'bet') {
-    return clip(`${name} bets ${parsed.amount}`);
+    return clip(
+      `${name} bets ${parsed.amount}${parsed.allIn ? ' · All-in' : ''}`,
+    );
   }
   if (parsed.kind === 'raise') {
-    return clip(`${name} raises to ${parsed.amount}`);
+    return clip(
+      `${name} raises to ${parsed.amount}${parsed.allIn ? ' · All-in' : ''}`,
+    );
   }
   return clip(`${name} discards`);
 }

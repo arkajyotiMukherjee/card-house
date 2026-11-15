@@ -4,57 +4,137 @@ import {
   rankOfPokerCard,
   type PokerState,
 } from '../../src/shared/games/poker';
-import { handPositions } from './bluff-layout';
 import { CHIP_HEIGHT } from './sheets';
-import { isMobileDevice } from './mobile-shell';
+import type { ChipValue } from './chip-atlas';
+import { inspectionPose } from './hand-hover';
 
-export const BOARD_SCALE =
-  typeof window !== 'undefined' && isMobileDevice() ? 1.25 : 1;
+export const BOARD_SCALE = 1.65;
 import {
   FELT_BOTTOM,
-  actionBox,
   fanGapLine,
   opponentNameAnchor,
   seatFan,
+  revealedHandSlots,
   seatPlateWidth,
 } from './table-presentation';
 
-export const BOARD_STEP = 70 * BOARD_SCALE;
+export const BOARD_STEP = 88;
 export const BOARD_SLOTS = 5;
 /** Half the card closes, then the face opens. Short enough to finish before the next street. */
 export const BOARD_FLIP_MS = 280;
 export const POT_X = 480;
-export const POT_Y = 272;
+export const POT_Y = 256;
 /** Pot chips are drawn at this scale. The stack grows upward from `POT_Y`. */
-export const POT_CHIP_SCALE = 2;
+export const POT_CHIP_SCALE = 1.25;
+/** Shared face artwork and stacking rhythm for the pot and betting preview. */
+export const POKER_CHIP_FACE_SCALE = 1.6;
+export const POKER_CHIP_LAYER_GAP = 4;
 /** Bottom of the lowest pot chip. The board sits in the band under this. */
 export const POT_CHIP_BOTTOM = POT_Y + (CHIP_HEIGHT * POT_CHIP_SCALE) / 2;
 export const CARD_DRAW = 64;
-/** Winner line, just under the pot chips. */
-export const BANNER_Y = POT_CHIP_BOTTOM + 8;
-/** Countdown line under the winner, still above the community cards. */
-export const COUNTDOWN_Y = BANNER_Y + 14;
+/** Results and countdowns belong in the personal bar, below the public cards. */
+export const BANNER_Y = 440;
+export const COUNTDOWN_Y = 478;
 /** Community cards, below the pot. The top of the table is the opponent fans. */
-export const BOARD_Y = COUNTDOWN_Y + 8 + 12 + CARD_DRAW / 2;
+export const BOARD_Y = 350;
 export const DROPPED_SCALE = 0.75;
 export const DROPPED_Y = FELT_BOTTOM + 28;
 export const DROPPED_LABEL = { x: 16, y: FELT_BOTTOM + 8 } as const;
 const DROPPED_X = [48, 108] as const;
 export const DISCARD_PROMPT = { x: 16, y: FELT_BOTTOM } as const;
 
-export const FOLD_BUTTON = actionBox(0);
-export const CHECK_BUTTON = actionBox(1);
-export const CALL_BUTTON = actionBox(2);
-export const BET_BUTTON = actionBox(3);
-export const RAISE_BUTTON = actionBox(4);
+export const POKER_USER_Y = 436;
+export type PokerPersonalMode =
+  'waiting' | 'acting' | 'discard' | 'stake' | 'result' | 'watching';
+
+/** The same bottom-bar state governs both its content and visible betting controls. */
+export function pokerPersonalMode(
+  state: PokerState,
+  seat: number | null,
+  staking = false,
+): PokerPersonalMode {
+  if (state.phase === 'finished') return 'result';
+  if (seat === null) return 'watching';
+  const row = state.seats[String(seat)];
+  if (
+    state.phase !== 'play' ||
+    state.turnSeatIndex !== seat ||
+    !row ||
+    row.folded
+  )
+    return 'waiting';
+  // All-in Oklahoma players must still make their mandatory discards.
+  if (state.step === 'discard') return 'discard';
+  if (row.allIn) return 'waiting';
+  return staking ? 'stake' : 'acting';
+}
+/** All personal controls share the bottom band; opponent panels end above it. */
+export function pokerActionBox(index: number): {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+} {
+  return {
+    x: 568 + index * 74,
+    y: 478,
+    w: 68,
+    h: 42,
+  };
+}
+export const FOLD_BUTTON = pokerActionBox(0);
+export const CHECK_BUTTON = pokerActionBox(1);
+export const CALL_BUTTON = pokerActionBox(2);
+export const BET_BUTTON = pokerActionBox(3);
+export const RAISE_BUTTON = pokerActionBox(4);
 
 /** Amount stepper that replaces the action buttons while a bet or raise is open. */
-export const STAKE_DOWN = actionBox(0);
-export const STAKE_UP = actionBox(1);
-export const STAKE_AMOUNT = actionBox(2);
-export const STAKE_MAX = actionBox(3);
-export const STAKE_CONFIRM = actionBox(4);
-export const STAKE_CANCEL = actionBox(5);
+export const STAKE_DOWN = { x: 568, y: 478, w: 64, h: 42 };
+export const STAKE_UP = { x: 638, y: 478, w: 64, h: 42 };
+export const STAKE_AMOUNT = { x: 568, y: 478, w: 120, h: 50 };
+export const STAKE_MAX = { x: 708, y: 478, w: 76, h: 42 };
+export const STAKE_CONFIRM = { x: 790, y: 478, w: 68, h: 42 };
+export const STAKE_CANCEL = { x: 864, y: 478, w: 72, h: 42 };
+export const STAKE_SLIDER = { x: 568, y: 438, w: 368, h: 36 };
+
+/** The server uses street totals; the composer shows chips leaving the remaining stack now. */
+export function stakeContribution(
+  state: PokerState,
+  seatIndex: number,
+  total: number,
+): number {
+  const seat = state.seats[String(seatIndex)];
+  return seat ? Math.min(seat.chips, Math.max(0, total - seat.streetBet)) : 0;
+}
+
+/** Exact denomination counts for a betting preview; rendering may bound the stack height. */
+export function betChipStacks(
+  amount: number,
+): { value: ChipValue; count: number }[] {
+  let remaining = Math.max(0, Math.floor(amount));
+  return ([1000, 100, 25, 10, 5, 1] as const).flatMap((value) => {
+    const count = Math.floor(remaining / value);
+    remaining %= value;
+    return count ? [{ value, count }] : [];
+  });
+}
+export function sliderStake(
+  fraction: number,
+  min: number,
+  max: number,
+  step: number,
+): number {
+  if (fraction >= 1) return max;
+  return Math.max(
+    min,
+    Math.min(
+      max,
+      min +
+        Math.round((Math.max(0, fraction) * (max - min)) / Math.max(1, step)) *
+          Math.max(1, step),
+    ),
+  );
+}
 
 export interface StakeHitBox {
   id: string;
@@ -191,7 +271,10 @@ export function nextHandCountdown(elapsedMs: number): string | null {
 }
 
 /** Community cards in a row under the pot, across the middle of the table. */
-export function boardPositions(count: number): { x: number; y: number }[] {
+export function boardPositions(
+  count: number,
+  sidePots = false,
+): { x: number; y: number }[] {
   if (count <= 0) {
     return [];
   }
@@ -199,7 +282,10 @@ export function boardPositions(count: number): { x: number; y: number }[] {
   const origin = 480 - span / 2;
   const positions: { x: number; y: number }[] = [];
   for (let index = 0; index < count; index += 1) {
-    positions.push({ x: Math.round(origin + index * BOARD_STEP), y: BOARD_Y });
+    positions.push({
+      x: Math.round(origin + index * BOARD_STEP),
+      y: BOARD_Y + (sidePots ? 12 : 0),
+    });
   }
   return positions;
 }
@@ -211,15 +297,47 @@ export function holePositions(
   seatY: number,
   count: number,
   name = 'Seat',
+  revealed = false,
+  mobile = false,
 ): { x: number; y: number; rotation: number; scale: number }[] {
   if (self) {
-    return handPositions(count).map((slot) => ({
-      ...slot,
+    return Array.from({ length: count }, (_, index) => ({
+      x: 372 + (index - (count - 1) / 2) * 68,
+      // Cancel the shared resting inspection lift, keeping the visible hand
+      // at the personal band's center on both desktop and touch devices.
+      y: 484 + inspectionPose(0, mobile, false, true).lift,
       rotation: 0,
       scale: 1,
     }));
   }
-  return seatFan(seatX, seatY, count, name);
+  return revealed
+    ? revealedHandSlots(seatX, seatY, count)
+    : seatFan(seatX, seatY, count, name);
+}
+
+/** Spread denominations into short horizontal piles; bound very large illustrations. */
+export function potChipStacks(
+  amount: number,
+): { value: ChipValue; count: number }[] {
+  const groups = betChipStacks(amount).map((stack) => ({ ...stack, piles: 1 }));
+  let piles = groups.length;
+  while (piles < 9) {
+    const next = groups
+      .filter((group) => group.count > group.piles * 4)
+      .sort((a, b) => b.count / b.piles - a.count / a.piles)[0];
+    if (!next) break;
+    next.piles++;
+    piles++;
+  }
+  return groups.flatMap((group) => {
+    const visible = Math.min(group.count, group.piles * 4);
+    const base = Math.floor(visible / group.piles);
+    const extra = visible % group.piles;
+    return Array.from({ length: group.piles }, (_, index) => ({
+      value: group.value,
+      count: base + (index < extra ? 1 : 0),
+    }));
+  });
 }
 
 export function faceForPokerCard(cardId: string): CardFace | null {
@@ -309,4 +427,15 @@ export function droppedPositions(count: number): { x: number; y: number }[] {
 /** Banner start x, centered under the pot and kept clear of side seats. */
 export function bannerX(text: string, fontSize = 8): number {
   return Math.max(280, Math.round(480 - (text.length * fontSize) / 2));
+}
+
+/** A solid badge separates the amount from felt decoration and the chip artwork. */
+export function potBadge(
+  amount: number,
+  mobile = false,
+): { x: number; y: number; w: number; h: number; label: string; size: number } {
+  const label = `Pot ${amount.toLocaleString('en-US')}`;
+  const size = Math.min(mobile ? 14 : 12, Math.floor(216 / label.length));
+  const w = label.length * size + 24;
+  return { x: POT_X - 84 - w, y: POT_Y - 18, w, h: 36, label, size };
 }

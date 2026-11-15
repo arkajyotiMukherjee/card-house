@@ -1,3 +1,4 @@
+import { wrapText } from './menu-layout';
 import { isMobileDevice } from './mobile-shell';
 import * as ex from 'excalibur';
 import {
@@ -27,6 +28,18 @@ export interface CoinField {
   label: string;
   value: number;
 }
+export interface CoinDialogOptions {
+  choice?: {
+    values: string[];
+    index: number;
+    onChange: (index: number) => void;
+  };
+  onChange?: (
+    key: string,
+    values: Readonly<Record<string, string>>,
+  ) => Record<string, string>;
+  validate?: (values: Record<string, number>) => void;
+}
 /** Numeric canvas form shared by table creation, buy-ins, and top-ups. */
 export function coinDialog(
   engine: ex.Engine,
@@ -35,6 +48,7 @@ export function coinDialog(
   note: string,
   fields: readonly CoinField[],
   confirm = 'Confirm',
+  options: CoinDialogOptions = {},
 ): Promise<Record<string, number> | null> {
   return new Promise((resolve) => {
     const mobile = isMobileDevice();
@@ -48,6 +62,8 @@ export function coinDialog(
     openDialogs.add(scene);
     const actors: ex.Actor[] = [];
     const inputs: CanvasTextFieldHandle[] = [];
+    const keyedInputs = new Map<string, CanvasTextFieldHandle>();
+    const labels = new Map<string, ex.Text>();
     const values = Object.fromEntries(
       fields.map((field) => [field.key, String(field.value)]),
     );
@@ -99,11 +115,44 @@ export function coinDialog(
     add(panel);
     text(left, panelY + 20, title, mobile ? 16 : 14);
     text(left, panelY + 52, note, mobile ? 10 : 8, DIM);
+    if (options.choice) {
+      const choice = options.choice;
+      let index = choice.index;
+      const actor = new ex.Actor({
+        pos: ex.vec(panelX + panelWidth - 270, panelY + 14),
+        anchor: ex.vec(0, 0),
+        width: 246,
+        height: 32,
+        z: 104,
+      });
+      actor.graphics.use(
+        panelRect(246, 32, ex.Color.fromHex('#1b5c38'), STROKE),
+      );
+      const size = mobile ? 10 : 8;
+      const caption = canvasText('', size, GOLD);
+      const captionActor = new ex.Actor({ anchor: ex.vec(0, 0), z: 1 });
+      captionActor.graphics.use(caption);
+      captionActor.pointer.useGraphicsBounds = false;
+      captionActor.pointer.useColliderShape = false;
+      actor.addChild(captionActor);
+      const paintChoice = (): void => {
+        caption.text = `Betting: ${choice.values[index]} ↔`;
+        const pos = buttonCaptionPos(caption.text, 246, 32, size);
+        captionActor.pos = ex.vec(pos.x, pos.y);
+      };
+      paintChoice();
+      bindButtonPress(actor, undefined, undefined, () => {
+        index = (index + 1) % choice.values.length;
+        paintChoice();
+        choice.onChange(index);
+      });
+      add(actor);
+    }
     const error = text(
       left,
-      panelY + panelHeight - (mobile ? 90 : 70),
+      panelY + panelHeight - (mobile ? 116 : 82),
       '',
-      8,
+      mobile ? 10 : 8,
       ex.Color.fromHex('#e85d4c'),
     );
     const finish = (result: Record<string, number> | null): void => {
@@ -124,9 +173,15 @@ export function coinDialog(
             Number(values[field.key]),
             field.value,
           );
+        options.validate?.(result);
         finish(result);
       } catch (reason) {
-        error.text = reason instanceof Error ? reason.message : 'Invalid coins';
+        const message =
+          reason instanceof Error ? reason.message : 'Invalid chips';
+        error.text = wrapText(
+          message,
+          Math.floor((panelWidth - 48) / (mobile ? 10 : 8)),
+        ).join('\n');
       }
     };
     const key = (event: KeyboardEvent): void => {
@@ -154,6 +209,7 @@ export function coinDialog(
       );
       add(actor);
       const label = text(box.x + 10, box.y + 12, values[field.key], 12);
+      labels.set(field.key, label);
       const caret = makeFieldCaret(12, 104);
       add(caret);
       const paintCaret = (index: number): void => {
@@ -172,6 +228,15 @@ export function coinDialog(
         write: (value) => {
           values[field.key] = value;
           label.text = value || '0';
+          error.text = '';
+          const updates = options.onChange?.(field.key, values) ?? {};
+          for (const [key, next] of Object.entries(updates)) {
+            if (!(key in values) || next === values[key]) continue;
+            values[key] = next;
+            const target = labels.get(key);
+            if (target) target.text = next || '0';
+            keyedInputs.get(key)?.sync();
+          }
         },
         submit,
         cancel: () => finish(null),
@@ -185,6 +250,7 @@ export function coinDialog(
         onCaret: paintCaret,
       });
       inputs.push(input);
+      keyedInputs.set(field.key, input);
     });
     const button = (x: number, label: string, action: () => void): void => {
       const actor = new ex.Actor({

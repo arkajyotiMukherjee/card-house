@@ -1,0 +1,86 @@
+✔ the registered command set is /cardhouse create, status, and close (2.572921ms)
+﹣ one /interactions create mints the code, stores the channel, and returns that join URL (1.006582ms) # set CARDROOM_LIVE=1 to call the published module
+✔ createLobby mints the code and the channel is stored on that lobby (3.911433ms)
+✔ rejects a channel id that is not a Discord snowflake (1.805742ms)
+✔ a short 429 is retried once (3.298275ms)
+✔ a long 429 fails without waiting it out (1.391678ms)
+✔ an exhausted bucket waits until reset (0.635466ms)
+✔ 401 from Discord does not invent a channel id (0.541289ms)
+✔ probe keeps the token out of the recorded body (0.419812ms)
+﹣ the live Discord token lookup returns 401 and no invented user (1.142455ms) # set DISCORD_NAME_LIVE=1 to call Discord
+✔ an empty token does not call Discord or invent a name (2.335699ms)
+✔ a 401 from Discord returns no user and no name (5.202751ms)
+✔ a Discord user becomes the default player name (1.524019ms)
+✔ a user payload for a different id is not used (0.718807ms)
+✔ the name route reports a 401 without a player name (62.749294ms)
+✔ a create interaction replies with the code and join URL (2.309518ms)
+✔ ping replies with pong (1.430677ms)
+✔ the interactions endpoint checks the Discord signature (106.68106ms)
+✔ status names a live lobby from the room code (0.780167ms)
+✔ status says the room was not found for a missing code (0.324552ms)
+✔ status asks for a room code when the option is empty (0.331764ms)
+✔ close refuses a room that still has a player (0.439117ms)
+✔ close reports an empty room as closed (0.485904ms)
+✔ create forwards startingchips while accepting commands registered before the rename (1.044364ms)
+✔ join URL is the public origin plus the lobby code (1.160887ms)
+✔ reply content contains the code and the URL (0.448561ms)
+✔ rank by profit, split tied ranks, count committed coins, suppress mentions and paginate (18.48579ms)
+✔ refresh one durable message, coalesce hands, recover restarts and retry rate limits (8.232256ms)
+✔ recover an accepted POST when the process stopped before recording its id (1.313575ms)
+✔ leaderboard commands use the linked channel and forward code/page (1.12472ms)
+✔ an empty room closes (4.299827ms)
+✔ a lobby player blocks close (0.671152ms)
+✔ a seated player in this room blocks close (0.402406ms)
+✔ players in another room do not block close (0.684966ms)
+✔ a missing code does not close a room (0.543882ms)
+✔ an already closed room is not closed again (0.351365ms)
+✔ an open lobby is live and counts only that room (2.470168ms)
+✔ a closed lobby is found and is not live (0.286353ms)
+✔ a missing code says the room was not found (0.326621ms)
+✔ a blank code does not match a lobby (0.214108ms)
+✔ a documented Discord user maps to the username when global name is unset (1.679029ms)
+✔ the global name is the default player name when Discord set one (0.277026ms)
+✔ a long Discord name is cut to the lobby name length (0.331588ms)
+✔ username punctuation becomes spaces and an unreadable global name is skipped (0.144773ms)
+✔ an id that is not a Discord user id does not invent a name (0.1268ms)
+✔ a join URL keeps a known Discord profile for the default name (0.49384ms)
+✔ a user id alone is not treated as a known profile (1.026599ms)
+﹣ speaking state follows each discord user and a hand still plays (1.884844ms) # set CARDROOM_LIVE=1 to call the published module
+✔ a speaking signal keeps only the user, the channel, and the boolean (1.699658ms)
+✔ rapid speaking toggles send the latest boolean once (80.549226ms)
+✔ voice control frames do not forward audio fields (0.477478ms)
+✔ discovery reads an address and drops other datagrams (0.313277ms)
+✔ a voice join is deafened and muted (0.343584ms)
+✔ an unauthorized gateway does not open a socket (0.355247ms)
+✔ a gateway probe redacts the token (0.658326ms)
+✔ watched channels include lobby and table voice (0.598849ms)
+﹣ one /interactions status names the lobby createLobby just minted, and a bogus code is not found (1.549284ms) # set CARDROOM_LIVE=1 to call the published module
+﹣ cardhouse create stores a lobby voice channel, and closing a table or lobby deletes it (0.832587ms) # set CARDROOM_LIVE=1 to call the published module
+Lobby voice channel skipped: Discord request failed (401)
+Lobby voice channel skipped: Discord rate limited
+Lobby voice channel skipped: write failed
+✔ voice channel names follow the lobby and table examples (7.480437ms)
+✔ a create interaction forwards the guild id (2.243783ms)
+✔ attach stores the lobby voice channel from the Discord API (1.614674ms)
+✔ a Discord 401 leaves the lobby without a voice channel (1.266391ms)
+✔ a rate limit leaves the lobby without a voice channel (0.278991ms)
+✔ a failed voice write deletes the channel it just created (0.718219ms)
+✔ a Discord table gets a voice channel and a web table does not (1.282969ms)
+✔ finishing a table deletes its voice channel and clears the id (0.503621ms)
+✔ removing a table deletes its voice channel (0.529435ms)
+✔ deleting a lobby deletes its voice channel (0.466758ms)
+✔ closing a lobby deletes the lobby channel and remaining table channels (0.721477ms)
+✔ a user joining the table voice channel is recorded with ids only (2.478789ms)
+✔ leaving voice sends an empty channel only for a user with a headset (0.351156ms)
+✔ a channel the module does not store is ignored (0.315638ms)
+✔ a guild snapshot records members and clears a user who is gone (0.498863ms)
+✔ the gateway identifies for voice states and passes ids through (1.433908ms)
+﹣ a web lobby still deals with the bot stopped (0.806292ms) # set CARDROOM_LIVE=1 to call the published module
+ℹ tests 75
+ℹ suites 0
+ℹ pass 69
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 6
+ℹ todo 0
+ℹ duration_ms 2403.459081

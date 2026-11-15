@@ -18,6 +18,7 @@ import {
   CODE_MAX,
   findCreatedLobby,
   LOBBY_PANEL,
+  WALLET_SUMMARY,
   lobbyByCode,
   memberLines,
   NAME_MAX,
@@ -395,7 +396,7 @@ export function mountLobbyPanel(
       ];
       summary.forEach((value, index) => {
         const actor = new ex.Actor({
-          pos: ex.vec(20, 132 + index * 28),
+          pos: ex.vec(20, WALLET_SUMMARY.y + index * WALLET_SUMMARY.rowHeight),
           anchor: ex.vec(0, 0),
           z: 21,
         });

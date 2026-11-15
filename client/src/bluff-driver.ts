@@ -10,54 +10,41 @@ import {
   type BluffState,
 } from '../../src/shared/games/bluff';
 import {
-  BLUFF_CHALLENGE_BUTTON,
-  BLUFF_PASS_BUTTON,
-  BLUFF_PLAY_BUTTON,
-  BLUFF_TURN_LABEL,
   CARD_DRAW,
   HOVER_LIFT,
-  HAND_NEXT,
-  HAND_PREV,
-  HAND_PAGE_SIZE,
-  pagedHandPositions,
-  PILE_NOTICE_Y,
-  PILE_X,
-  PILE_Y,
-  PROMPT_Y,
   canChallenge,
   canPass,
   canPlay,
   cardLift,
   faceForCard,
-  finishedLine,
-  WINNER_BANNER_Y,
-  WINNER_BANNER_Z,
-  handPositions,
   orderedBluffHand,
-  leadRankHint,
   legalCard,
   pileFaceUp,
-  pileNotice,
-  pilePositions,
   rankButtonColors,
-  rankCallButtons,
-  rankHintPos,
   selectedPlayCards,
   showRankPicker,
-  tablePrompt,
-  turnLine,
 } from './bluff-layout';
 import {
-  OPPONENT_FAN_CARD,
-  opponentCountAnchor,
-  seatFan,
-} from './table-presentation';
-import {
-  BUTTON_PRESS_SHIFT,
-  buttonCaptionPos,
-  buttonFontSize,
-} from './button-style';
-import { pixelFont } from './boot-scene';
+  BLUFF_CHALLENGE_BUTTON,
+  BLUFF_PASS_BUTTON,
+  BLUFF_PLAY_BUTTON,
+  HAND_NEXT,
+  HAND_PREV,
+  handPageSize,
+  bluffControlBoxes,
+  PILE_X,
+  PILE_Y,
+  handPositions,
+  pilePositions,
+  rankCallButtons,
+  bluffBackSlots,
+} from './bluff-classic-layout';
+import { BluffTableUi } from './bluff-table-ui';
+import { classicSeats } from './classic-table-design';
+import { uiText, uiCaption } from './ui-text';
+
+import { OPPONENT_FAN_CARD } from './table-presentation';
+import { BUTTON_PRESS_SHIFT } from './button-style';
 import type { CardAtlas } from './card-atlas';
 import type { GameDriver, InputEvent, RenderContext } from './game-driver';
 import {
@@ -79,10 +66,9 @@ import {
   resetCardLift,
   startHandHoverClock,
 } from './hand-hover';
-import { LOGICAL_WIDTH } from './sheets';
+import { tableGutter } from './table-viewport';
 
 const GOLD = ex.Color.fromHex('#f4e4b3');
-const DIM = ex.Color.fromHex('#d7c08a');
 const BUTTON = ex.Color.fromHex('#1b5c38');
 const BUTTON_DOWN = ex.Color.fromHex('#0e3d24');
 const STROKE = ex.Color.fromHex('#e6c27a');
@@ -143,6 +129,7 @@ interface ControlFace {
   caption: ex.Actor;
   text: ex.Text;
   setLabel?: (label: string) => void;
+  place?: (box: { x: number; y: number; w: number; h: number }) => void;
 }
 
 interface CardRecord {
@@ -155,22 +142,6 @@ interface CardRecord {
   moving: boolean;
   placed: boolean;
   restZ: number;
-}
-
-function canvasText(text: string, size: number, color: ex.Color): ex.Text {
-  const graphic = new ex.Text({
-    text,
-    color,
-    font: pixelFont.toFont({
-      family: '"Press Start 2P"',
-      size,
-      color,
-      quality: 1,
-      filtering: ex.ImageFiltering.Pixel,
-    }),
-  });
-  graphic.origin = ex.vec(0, 0);
-  return graphic;
 }
 
 function panelRect(
@@ -222,7 +193,8 @@ export class BluffDriver implements GameDriver<BluffState> {
   private cards = new Map<string, CardRecord>();
   private backs = new Map<string, ex.Actor>();
   private backTargets = new Map<string, string>();
-  private labels: ex.Actor[] = [];
+  private readonly tableUi = new BluffTableUi();
+  private announcement = '';
   private buttons: ex.Actor[] = [];
   private flashes: ex.Actor[] = [];
   private selected = new Set<string>();
@@ -238,10 +210,10 @@ export class BluffDriver implements GameDriver<BluffState> {
   private challengeControl: ControlFace | null = null;
   private handPage = 0;
   private handPageCount = 1;
+  private handLayoutKey = '';
   private visibleHand: string[] = [];
   private prevHandControl: ControlFace | null = null;
   private nextHandControl: ControlFace | null = null;
-  private hintActor: ex.Actor | null = null;
   private rankActors: {
     rank: BluffRank;
     actor: ex.Actor;
@@ -285,7 +257,7 @@ export class BluffDriver implements GameDriver<BluffState> {
           text: made.text,
         });
       }
-      if (isMobileDevice()) {
+      {
         this.prevHandControl = this.addButton(ctx, HAND_PREV, '<', 'hand-prev');
         this.nextHandControl = this.addButton(
           ctx,
@@ -293,10 +265,10 @@ export class BluffDriver implements GameDriver<BluffState> {
           '1/1 >',
           'hand-next',
         );
+        anchorTableActor(this.prevHandControl.actor, 'left', HAND_PREV.x);
       }
       this.buttonsReady = true;
     }
-    this.syncLabels(state, ctx);
     if (state.phase === 'lobby') {
       this.clearTableCards();
       this.syncCalls(state, ctx);
@@ -305,6 +277,7 @@ export class BluffDriver implements GameDriver<BluffState> {
     this.syncCards(state, ctx);
     this.syncCalls(state, ctx);
     this.syncBacks(state, ctx);
+    this.syncLabels(state, ctx);
   }
 
   handleInput(event: InputEvent, state: BluffState, ctx: RenderContext): void {
@@ -320,6 +293,7 @@ export class BluffDriver implements GameDriver<BluffState> {
         (this.handPage + direction + this.handPageCount) % this.handPageCount;
       this.handHover.clear();
       this.syncCards(state, ctx, true);
+      this.syncLabels(state, ctx);
       return;
     }
     if (state.phase !== 'play') {
@@ -372,6 +346,8 @@ export class BluffDriver implements GameDriver<BluffState> {
       this.playControl?.setLabel?.(
         this.selected.size > 0 ? `Play ${this.selected.size}` : 'Play',
       );
+      this.syncCalls(state, ctx);
+      this.syncLabels(state, ctx);
       for (const cardId of new Set([...previous, event.target])) {
         this.applyLift(cardId, state, ctx);
       }
@@ -454,10 +430,8 @@ export class BluffDriver implements GameDriver<BluffState> {
     }
     this.flashes = [];
     this.clearTableCards();
-    for (const actor of this.labels) {
-      actor.kill();
-    }
-    this.labels = [];
+    this.tableUi.clear();
+    this.announcement = '';
     for (const actor of this.buttons) {
       actor.kill();
     }
@@ -468,8 +442,6 @@ export class BluffDriver implements GameDriver<BluffState> {
     this.challengeControl = null;
     this.prevHandControl = null;
     this.nextHandControl = null;
-    this.hintActor?.kill();
-    this.hintActor = null;
     this.rankActors = [];
     this.claimRank = 'A';
     this.claimTouched = false;
@@ -505,13 +477,15 @@ export class BluffDriver implements GameDriver<BluffState> {
     this.claimRank = rank as BluffRank;
     this.claimTouched = true;
     this.paintRanks(true);
-    this.hintActor?.kill();
-    this.hintActor = null;
+    if (this.ctx) {
+      this.syncCalls(state, this.ctx);
+      this.syncLabels(state, this.ctx);
+    }
   }
 
   private syncCalls(state: BluffState, ctx: RenderContext): void {
     const seat = ctx.meSeatIndex;
-    const calling = showRankPicker(state, seat);
+    const calling = showRankPicker(state, seat) && !this.arrival;
     if (!calling) {
       this.claimTouched = false;
     }
@@ -521,7 +495,27 @@ export class BluffDriver implements GameDriver<BluffState> {
     this.setShown(this.playControl, canPlay(state, seat));
     this.setShown(this.passControl, canPass(state, seat));
     this.setShown(this.challengeControl, canChallenge(state, seat));
+    const controls = [
+      ...(canPlay(state, seat) && this.playControl ? [this.playControl] : []),
+      ...(canPass(state, seat) && this.passControl ? [this.passControl] : []),
+      ...(canChallenge(state, seat) && this.challengeControl
+        ? [this.challengeControl]
+        : []),
+    ];
+    const boxes = bluffControlBoxes(controls.length);
+    controls.forEach((control, index) => control.place?.(boxes[index]));
     this.paintRanks(calling);
+    const enabled =
+      canPlay(state, seat) &&
+      this.selected.size > 0 &&
+      (!calling || this.claimTouched) &&
+      !this.arrival;
+    if (this.playControl) {
+      this.playControl.actor.graphics.opacity = enabled ? 1 : 0.45;
+      this.playControl.caption.graphics.opacity = enabled ? 1 : 0.45;
+      this.playControl.actor.pointer.useColliderShape = enabled;
+      this.playControl.actor.pointer.useGraphicsBounds = enabled;
+    }
   }
 
   private setShown(control: ControlFace | null, shown: boolean): void {
@@ -550,59 +544,21 @@ export class BluffDriver implements GameDriver<BluffState> {
     }
   }
 
+  setAnnouncement(text: string): void {
+    this.announcement = text;
+    if (this.state && this.ctx) this.syncLabels(this.state, this.ctx);
+  }
+
   private syncLabels(state: BluffState, ctx: RenderContext): void {
-    for (const actor of this.labels) {
-      actor.kill();
-    }
-    this.labels = [];
-    if (state.phase === 'lobby') {
-      return;
-    }
-    if (state.phase === 'finished') {
-      const line =
-        ctx.finishedMessage ?? finishedLine(state, ctx.seats) ?? 'Finished';
-      this.labels.push(this.banner(ctx, line, WINNER_BANNER_Y));
-      return;
-    }
-    const turn = turnLine(state, ctx.meSeatIndex);
-    this.labels.push(
-      this.textActor(ctx, BLUFF_TURN_LABEL.x, BLUFF_TURN_LABEL.y, turn, GOLD),
-    );
-    const prompt = tablePrompt(state, ctx.meSeatIndex);
-    if (prompt !== null) {
-      this.labels.push(this.centeredLine(ctx, PROMPT_Y, prompt, GOLD));
-    }
-    this.syncHint(state, ctx);
-    const notice = pileNotice(state, ctx.seats);
-    if (notice) {
-      this.labels.push(this.banner(ctx, notice, PILE_NOTICE_Y));
-    }
-    const arrival = this.arrival;
-    if (arrival && challengeFrame(arrival.elapsed).phase !== 'settled') {
-      this.labels.push(
-        this.banner(
-          ctx,
-          arrival.line,
-          isMobileDevice() && state.requiredRank === null ? 370 : PILE_NOTICE_Y,
-        ),
-      );
-    }
-    for (const seat of ctx.seats) {
-      if (seat.self) {
-        continue;
-      }
-      const count = state.hands[String(seat.seatIndex)]?.length ?? 0;
-      const countAt = opponentCountAnchor(seat.x, seat.y, count, seat.name);
-      const countLabel = this.textActor(
-        ctx,
-        countAt.x,
-        countAt.y,
-        `x${count}`,
-        DIM,
-      );
-      countLabel.z = 80;
-      this.labels.push(countLabel);
-    }
+    if (!this.buttonsReady) return;
+    this.tableUi.render(state, ctx, {
+      selected: this.selected.size,
+      page: this.handPage,
+      pages: this.handPageCount,
+      claim: this.claimTouched ? this.claimRank : null,
+      announcement: this.announcement,
+      arrival: this.arrival?.line ?? null,
+    });
   }
 
   private syncCards(
@@ -638,19 +594,18 @@ export class BluffDriver implements GameDriver<BluffState> {
       holding && this.arrival?.local
         ? owned.filter((cardId) => !holding.has(cardId))
         : owned;
+    this.handLayoutKey = `${isMobileDevice()}:${tableGutter()}`;
+    const pageSize = handPageSize(hand.length, isMobileDevice(), tableGutter());
     this.handPageCount = this.nextHandControl
-      ? Math.max(1, Math.ceil(hand.length / HAND_PAGE_SIZE))
+      ? Math.max(1, Math.ceil(hand.length / pageSize))
       : 1;
     this.handPage = Math.min(this.handPage, this.handPageCount - 1);
     const paged = this.handPageCount > 1;
-    const first = this.handPage * HAND_PAGE_SIZE;
-    this.visibleHand = paged ? hand.slice(first, first + HAND_PAGE_SIZE) : hand;
+    const first = this.handPage * pageSize;
+    this.visibleHand = paged ? hand.slice(first, first + pageSize) : hand;
     this.setShown(this.prevHandControl, paged);
     this.setShown(this.nextHandControl, paged);
-    if (paged)
-      this.nextHandControl?.setLabel?.(
-        `${this.handPage + 1}/${this.handPageCount} >`,
-      );
+    if (paged) this.nextHandControl?.setLabel?.('>');
     const handSlots = this.visibleHandSlots();
     for (let index = 0; index < this.visibleHand.length; index += 1) {
       const cardId = this.visibleHand[index];
@@ -702,13 +657,21 @@ export class BluffDriver implements GameDriver<BluffState> {
         });
       }
     } else if (this.arrival && frame?.cardsInHand && !this.arrival.local) {
-      const seat = ctx.seats.find(
-        (row) => row.seatIndex === this.arrival?.seat,
+      const box = classicSeats(ctx.seats).find(
+        (row) => row.seat.seatIndex === this.arrival?.seat,
       );
       for (const cardId of this.arrival.cards) {
         desired.set(cardId, {
-          x: seat?.x ?? PILE_X,
-          y: seat?.y ?? PILE_Y,
+          x: box
+            ? box.x +
+              box.w / 2 +
+              (box.edge === 'left'
+                ? -tableGutter()
+                : box.edge === 'right'
+                  ? tableGutter()
+                  : 0)
+            : PILE_X,
+          y: box ? box.y - 54 : PILE_Y,
           faceUp: false,
           delay: 0,
           z: 6,
@@ -751,6 +714,7 @@ export class BluffDriver implements GameDriver<BluffState> {
     let record = this.cards.get(cardId);
     if (!record) {
       const actor = new ex.Actor({
+        name: `bluff-card-${cardId}`,
         pos: ex.vec(PILE_X, PILE_Y),
         anchor: ex.vec(0.5, 0.5),
         width: CARD_DRAW,
@@ -987,6 +951,7 @@ export class BluffDriver implements GameDriver<BluffState> {
     this.syncLabels(state, ctx);
     this.syncCards(state, ctx);
     this.syncBacks(state, ctx);
+    this.syncCalls(state, ctx);
   }
 
   private easeHand(elapsedMs: number): void {
@@ -995,6 +960,11 @@ export class BluffDriver implements GameDriver<BluffState> {
     const ctx = this.ctx;
     if (!state || !ctx) {
       return;
+    }
+    if (this.handLayoutKey !== `${isMobileDevice()}:${tableGutter()}`) {
+      this.handHover.clear();
+      this.syncCards(state, ctx, true);
+      this.syncLabels(state, ctx);
     }
     const hand = this.visibleHand;
     const slots = this.visibleHandSlots();
@@ -1022,9 +992,7 @@ export class BluffDriver implements GameDriver<BluffState> {
   }
 
   private visibleHandSlots(): { x: number; y: number }[] {
-    return this.handPageCount > 1
-      ? pagedHandPositions(this.visibleHand.length)
-      : handPositions(this.visibleHand.length);
+    return handPositions(this.visibleHand.length, isMobileDevice());
   }
 
   private onCard(
@@ -1039,50 +1007,23 @@ export class BluffDriver implements GameDriver<BluffState> {
     this.handleInput({ type, target: cardId }, state, ctx);
   }
 
-  private syncHint(state: BluffState, ctx: RenderContext): void {
-    this.hintActor?.kill();
-    this.hintActor = null;
-    const hint = leadRankHint(state, ctx.meSeatIndex, this.claimTouched);
-    if (!hint) {
-      return;
-    }
-    const pos = rankHintPos();
-    this.hintActor = this.textActor(ctx, pos.x, pos.y, hint, GOLD);
-  }
-
   private syncBacks(state: BluffState, ctx: RenderContext): void {
     const desired = new Map<
       string,
       { x: number; y: number; z: number; rotation: number; scale: number }
     >();
-    for (const seat of ctx.seats) {
-      if (seat.self) {
-        continue;
-      }
-      let count = state.hands[String(seat.seatIndex)]?.length ?? 0;
-      const arrival = this.arrival;
-      if (
-        arrival &&
-        !arrival.local &&
-        arrival.seat === seat.seatIndex &&
-        !challengeFrame(arrival.elapsed).cardsInHand
-      ) {
-        count = Math.max(0, count - arrival.cards.length);
-      }
-      const slots = seatFan(seat.x, seat.y, count, seat.name);
-      for (let index = 0; index < slots.length; index += 1) {
-        const slot = slots[index];
-        if (!slot) {
-          continue;
-        }
-        desired.set(`${seat.seatIndex}:${index}`, {
-          x: slot.x,
-          y: slot.y,
-          z: 4 + index,
-          rotation: slot.rotation,
-          scale: slot.scale,
-        });
-      }
+    for (const slot of bluffBackSlots(ctx.seats, state)) {
+      const { key, ...place } = slot;
+      const box = classicSeats(ctx.seats).find((row) =>
+        key.startsWith(`${row.seat.seatIndex}:`),
+      );
+      place.x +=
+        box?.edge === 'left'
+          ? -tableGutter()
+          : box?.edge === 'right'
+            ? tableGutter()
+            : 0;
+      desired.set(key, place);
     }
     for (const [key, actor] of this.backs) {
       if (!desired.has(key)) {
@@ -1094,8 +1035,22 @@ export class BluffDriver implements GameDriver<BluffState> {
     for (const [key, place] of desired) {
       const target = `${place.x}:${place.y}:${place.rotation}:${place.scale}`;
       let actor = this.backs.get(key);
+      const edge = classicSeats(ctx.seats).find((box) =>
+        key.startsWith(`${box.seat.seatIndex}:`),
+      )?.edge;
+      const baseX =
+        place.x +
+        (edge === 'left'
+          ? tableGutter()
+          : edge === 'right'
+            ? -tableGutter()
+            : 0);
+      const dock = (): void => {
+        if (actor && edge) anchorTableActor(actor, edge, baseX);
+      };
       if (!actor) {
         actor = new ex.Actor({
+          name: `bluff-back-${key}`,
           pos: ex.vec(PILE_X, PILE_Y),
           anchor: ex.vec(0.5, 0.5),
           width: OPPONENT_FAN_CARD,
@@ -1106,14 +1061,18 @@ export class BluffDriver implements GameDriver<BluffState> {
         actor.scale = ex.vec(place.scale, place.scale);
         const back = ctx.cards.back();
         actor.graphics.use(back);
+        actor.pointer.useGraphicsBounds = false;
+        actor.pointer.useColliderShape = false;
         ctx.scene.add(actor);
         this.backs.set(key, actor);
         this.backTargets.set(key, target);
-        actor.actions.moveTo({
-          pos: ex.vec(place.x, place.y),
-          duration: TRAVEL_MS,
-          easing: ex.EasingFunctions.EaseOutCubic,
-        });
+        actor.actions
+          .moveTo({
+            pos: ex.vec(place.x, place.y),
+            duration: TRAVEL_MS,
+            easing: ex.EasingFunctions.EaseOutCubic,
+          })
+          .callMethod(dock);
         continue;
       }
       actor.z = place.z;
@@ -1124,11 +1083,13 @@ export class BluffDriver implements GameDriver<BluffState> {
       }
       this.backTargets.set(key, target);
       actor.actions.clearActions();
-      actor.actions.moveTo({
-        pos: ex.vec(place.x, place.y),
-        duration: TRAVEL_MS,
-        easing: ex.EasingFunctions.EaseOutCubic,
-      });
+      actor.actions
+        .moveTo({
+          pos: ex.vec(place.x, place.y),
+          duration: TRAVEL_MS,
+          easing: ex.EasingFunctions.EaseOutCubic,
+        })
+        .callMethod(dock);
     }
   }
 
@@ -1152,61 +1113,6 @@ export class BluffDriver implements GameDriver<BluffState> {
     this.handHover.clear();
   }
 
-  private banner(ctx: RenderContext, text: string, y = 112): ex.Actor {
-    const size = isMobileDevice()
-      ? Math.max(8, Math.min(16, Math.floor(620 / Math.max(1, text.length))))
-      : 8;
-    const width = text.length * size + 16;
-    const actor = new ex.Actor({
-      pos: ex.vec(
-        Math.floor(
-          ((isMobileDevice() && y === 370 ? 860 : LOGICAL_WIDTH) - width) / 2,
-        ),
-        y,
-      ),
-      anchor: ex.vec(0, 0),
-      width,
-      height: size + 16,
-      z: y === WINNER_BANNER_Y ? WINNER_BANNER_Z : 16,
-    });
-    actor.graphics.use(panelRect(width, size + 16, BUTTON, STROKE));
-    const caption = new ex.Actor({
-      pos: ex.vec(8, 8),
-      anchor: ex.vec(0, 0),
-    });
-    caption.graphics.use(canvasText(text, size, GOLD));
-    actor.addChild(caption);
-    ctx.scene.add(actor);
-    return actor;
-  }
-
-  private centeredLine(
-    ctx: RenderContext,
-    y: number,
-    text: string,
-    color: ex.Color,
-  ): ex.Actor {
-    const width = text.length * 8;
-    return this.textActor(ctx, Math.round(PILE_X - width / 2), y, text, color);
-  }
-
-  private textActor(
-    ctx: RenderContext,
-    x: number,
-    y: number,
-    text: string,
-    color: ex.Color,
-  ): ex.Actor {
-    const actor = new ex.Actor({
-      pos: ex.vec(x, y),
-      anchor: ex.vec(0, 0),
-      z: 14,
-    });
-    actor.graphics.use(canvasText(text, 8, color));
-    ctx.scene.add(actor);
-    return actor;
-  }
-
   private addButton(
     ctx: RenderContext,
     box: { x: number; y: number; w: number; h: number },
@@ -1219,7 +1125,9 @@ export class BluffDriver implements GameDriver<BluffState> {
       | 'hand-next'
       | `rank:${BluffRank}`,
   ): ControlFace {
+    let currentBox = { ...box };
     const actor = new ex.Actor({
+      name: `bluff-control-${target}`,
       pos: ex.vec(box.x, box.y),
       anchor: ex.vec(0, 0),
       width: box.w,
@@ -1228,14 +1136,16 @@ export class BluffDriver implements GameDriver<BluffState> {
     });
     const face = panelRect(box.w, box.h, BUTTON, STROKE);
     actor.graphics.use(face);
-    const size = buttonFontSize(label, box.w, box.h);
-    const rest = buttonCaptionPos(label, box.w, box.h, size);
-    const text = canvasText(label, size, GOLD);
+    const size = target.startsWith('rank:') ? 22 : 18;
+    const rest = uiCaption(label, currentBox.w, currentBox.h, size);
+    const text = uiText(label, size, GOLD);
     const caption = new ex.Actor({
       pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
     caption.graphics.use(text);
+    caption.pointer.useGraphicsBounds = false;
+    caption.pointer.useColliderShape = false;
     actor.addChild(caption);
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;
@@ -1267,7 +1177,7 @@ export class BluffDriver implements GameDriver<BluffState> {
         this.handleInput({ type: 'pointerup', target }, state, current);
       },
     );
-    if (box.x >= 750 && box.y >= 300) anchorTableActor(actor, 'right', box.x);
+    if (box.x >= 600 && box.y >= 400) anchorTableActor(actor, 'right', box.x);
     ctx.scene.add(actor);
     this.buttons.push(actor);
     return {
@@ -1275,17 +1185,23 @@ export class BluffDriver implements GameDriver<BluffState> {
       face,
       caption,
       text,
+      place: (nextBox) => {
+        currentBox = { ...nextBox };
+        face.width = nextBox.w;
+        face.height = nextBox.h;
+        actor.collider.useBoxCollider(nextBox.w, nextBox.h, ex.vec(0, 0));
+        actor.pos.y = nextBox.y;
+        anchorTableActor(actor, 'right', nextBox.x);
+        const next = uiCaption(text.text, nextBox.w, nextBox.h, size);
+        rest.x = next.x;
+        rest.y = next.y;
+        caption.pos = ex.vec(rest.x, rest.y);
+      },
       setLabel: (nextLabel) => {
         text.text = nextLabel;
-        const nextSize = buttonFontSize(nextLabel, box.w, box.h);
-        text.font = pixelFont.toFont({
-          family: '"Press Start 2P"',
-          size: nextSize,
-          color: GOLD,
-          quality: 1,
-          filtering: ex.ImageFiltering.Pixel,
-        });
-        const next = buttonCaptionPos(nextLabel, box.w, box.h, nextSize);
+        const nextSize = target.startsWith('rank:') ? 22 : 18;
+        text.font = uiText(nextLabel, nextSize, GOLD).font;
+        const next = uiCaption(nextLabel, currentBox.w, currentBox.h, nextSize);
         rest.x = next.x;
         rest.y = next.y;
         caption.pos = ex.vec(rest.x, rest.y);

@@ -1,4 +1,6 @@
 import * as ex from 'excalibur';
+import { tableFont } from './ui-text';
+import { classicFont } from './classic-table-design';
 import {
   getCardAppearance,
   type CardBackStyle,
@@ -184,6 +186,8 @@ export const demoImages = [
   chipsImage,
   ...TABLE_STYLES.map((style) => tableSprites[style].image),
   pixelFont,
+  tableFont,
+  classicFont,
 ];
 
 export class BootScene extends ex.Scene {

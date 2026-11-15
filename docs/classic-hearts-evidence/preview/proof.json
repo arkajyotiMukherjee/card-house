@@ -1,0 +1,23 @@
+{
+  "players": 4,
+  "identities": 4,
+  "desktopAndBothPhoneSizes": false,
+  "initialCards": 13,
+  "widePages": 2,
+  "passThreeAcrossPages": true,
+  "holdDoesNotSelect": true,
+  "canvasPass": true,
+  "canvasPlayIdentities": 1,
+  "trick": true,
+  "broken": true,
+  "queen": true,
+  "right": true,
+  "across": false,
+  "hold": false,
+  "moonObserved": false,
+  "finished": false,
+  "remainingHandsPrivate": true,
+  "spectatorAndNavigation": false,
+  "moves": 53,
+  "errors": []
+}

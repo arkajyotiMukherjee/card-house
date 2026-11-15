@@ -104,6 +104,28 @@ describe('crazy eights layout', () => {
         0,
       ),
     ).toBe(true);
+    expect(
+      passInsteadOfDraw(
+        state({
+          hands: { '0': ['QH'], '1': ['AD'] },
+          stock: [],
+          discardPile: ['9C', '5S'],
+          currentSuit: 'S',
+        }),
+        0,
+      ),
+    ).toBe(false);
+    expect(
+      passInsteadOfDraw(
+        state({
+          hands: { '0': ['QH'], '1': ['AD'] },
+          stock: ['9C'],
+          discardPile: ['5S'],
+          currentSuit: 'S',
+        }),
+        0,
+      ),
+    ).toBe(false);
   });
 
   it('names the subscribed winner and score', () => {

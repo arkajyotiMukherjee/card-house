@@ -1,6 +1,9 @@
 /** Empty tables with nobody seated are removed after this long with no activity. */
 export const EMPTY_TABLE_IDLE_MICROS = 15n * 60n * 1_000_000n;
 
+/** Empty abandoned tables retain the same return grace as their host. */
+export const ABANDONED_TABLE_GRACE_MICROS = 60_000_000n;
+
 /** How often the sweep looks for those tables. */
 export const TABLE_CLEANUP_INTERVAL_MICROS = 1_000_000n;
 
@@ -34,6 +37,7 @@ export function shouldRemoveEmptyTable(
   idleMicros: bigint,
   idleLimitMicros: bigint,
   discordVoiceChannelId = '',
+  hostAbsentMicros?: bigint,
 ): boolean {
   if (tableHeldForVoice(discordVoiceChannelId)) {
     return false;
@@ -44,5 +48,9 @@ export function shouldRemoveEmptyTable(
   if (status === 'finished') {
     return true;
   }
-  return idleMicros >= idleLimitMicros;
+  return (
+    idleMicros >= idleLimitMicros ||
+    (hostAbsentMicros !== undefined &&
+      hostAbsentMicros >= ABANDONED_TABLE_GRACE_MICROS)
+  );
 }
