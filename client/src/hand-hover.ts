@@ -106,6 +106,7 @@ export class CardTouchGesture {
 }
 
 const LIFT_Z = 30;
+const FOCUS_Z = 40;
 const WINDOW = 3;
 
 /** Shared smooth inspection lift and magnification, with a larger resting hand on phones. */
@@ -233,42 +234,63 @@ export class HandHover {
       : null;
   readonly touch = new CardTouchGesture(() => this.release());
   private pointerX: number | null = null;
-  private readonly over = new Set<string>();
+  private focusedId: string | null = null;
+  private ids: readonly string[] = [];
+  private centers: readonly number[] = [];
   private readonly drawn = new Map<string, number>();
 
   enter(cardId: string, pointerX: number): void {
-    this.over.add(cardId);
     this.pointerX = pointerX;
+    this.focusedId = this.focusAtPointer() ?? cardId;
   }
 
   move(pointerX: number): void {
-    if (this.over.size === 0) {
-      return;
-    }
     this.pointerX = pointerX;
+    this.focusedId = this.focusAtPointer();
   }
 
   leave(cardId: string): void {
-    this.over.delete(cardId);
-    if (this.over.size === 0) {
-      this.pointerX = null;
-    }
+    // Overlapping actors do not always receive symmetric enter/leave events.
+    // Only the actual focused card owns inspection; stale neighbours cannot keep it open.
+    if (this.focusedId === cardId) this.release();
   }
 
   clear(): void {
     this.touch.cancel();
     this.release();
+    this.ids = [];
+    this.centers = [];
     this.drawn.clear();
   }
 
   /** A lifted finger ends inspection; the next frames ease back to rest. */
   release(): void {
-    this.over.clear();
     this.pointerX = null;
+    this.focusedId = null;
   }
 
   current(cardId: string): number {
     return this.drawn.get(cardId) ?? 0;
+  }
+
+  /** Focus follows the pointer, independently of selection and easing height. */
+  isFocused(cardId: string): boolean {
+    return this.focusedId === cardId;
+  }
+
+  private focusAtPointer(): string | null {
+    if (this.pointerX === null) return null;
+    let nearest = -1;
+    let distance = Infinity;
+    this.centers.forEach((center, index) => {
+      const gap = Math.abs(center - this.pointerX!);
+      // At a midpoint prefer the right-hand card, preserving its left rank corner.
+      if (gap <= distance) {
+        nearest = index;
+        distance = gap;
+      }
+    });
+    return this.ids[nearest] ?? null;
   }
 
   /**
@@ -282,18 +304,13 @@ export class HandHover {
     maxLift = HOVER_LIFT,
   ): void {
     const targets = handHoverLifts(centers, this.pointerX, maxLift);
+    this.ids = ids;
+    this.centers = centers;
+    this.focusedId = this.focusAtPointer();
     if (this.touch.active && this.pointerX !== null) {
       // A finger inspects one card; mouse hover retains the neighboring dock curve.
-      let nearest = -1;
-      let distance = Infinity;
-      centers.forEach((center, index) => {
-        const gap = Math.abs(center - this.pointerX!);
-        if (gap < distance) {
-          nearest = index;
-          distance = gap;
-        }
-      });
       targets.fill(0);
+      const nearest = ids.indexOf(this.focusedId ?? '');
       if (nearest >= 0) targets[nearest] = maxLift;
     }
     const live = new Set<string>();
@@ -327,8 +344,8 @@ export class HandHover {
 /**
  * Draw `lift` pixels above the rest position. The actor stays put, so the
  * collider (the hit target) stays on the card. Graphics bounds are off so
- * the raised art does not grow that hit box. Lifted cards stack just above
- * the hand, tallest on top.
+ * the raised art does not grow that hit box. Pointer focus always draws on top;
+ * selection never outranks inspection. Equal inspection lifts retain hand order.
  */
 export function placeCardLift(
   actor: ex.Actor,
@@ -338,6 +355,7 @@ export function placeCardLift(
   lift: number,
   selected = false,
   personal = false,
+  focused = false,
 ): void {
   actor.pointer.useGraphicsBounds = false;
   actor.pos = ex.vec(restX, restY);
@@ -368,7 +386,12 @@ export function placeCardLift(
     // Excalibur multiplies a graphics offset by the graphic's own scale.
     // Keep the lift in actor coordinates even when the card is enlarged.
     actor.graphics.offset = ex.vec(0, -pixels / (graphic?.scale.y || 1));
-    actor.z = lift > 0 ? LIFT_Z + pixels / 100 : restZ;
+    actor.z =
+      focused && lift > 0
+        ? FOCUS_Z + restZ / 10000
+        : lift > 0
+          ? LIFT_Z + lift / 100 + restZ / 10000
+          : restZ;
     return;
   }
   actor.graphics.offset = ex.vec(0, 0);

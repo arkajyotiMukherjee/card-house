@@ -666,6 +666,7 @@ export class GoFishDriver implements GameDriver<GoFishState> {
       hover,
       !this.booksOpen && legal && rankOfCard(cardId) === this.selectedRank,
       record.personal,
+      this.handHover.isFocused(cardId),
     );
   }
 

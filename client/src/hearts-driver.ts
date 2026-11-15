@@ -702,6 +702,7 @@ export class HeartsDriver implements GameDriver<HeartsState> {
       hover,
       !this.scoresOpen && legal && this.selected.has(cardId),
       true,
+      this.handHover.isFocused(cardId),
     );
   }
 

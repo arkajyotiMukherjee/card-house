@@ -1180,6 +1180,7 @@ export class PokerDriver implements GameDriver<PokerState> {
       lift,
       false,
       place.personal,
+      this.handHover.isFocused(cardId),
     );
     if (
       record.faceUp !== place.faceUp ||
@@ -1297,6 +1298,7 @@ export class PokerDriver implements GameDriver<PokerState> {
         lift,
         false,
         record.personal,
+        this.handHover.isFocused(cardId),
       );
     }
     this.refreshDropMarks(ctx);

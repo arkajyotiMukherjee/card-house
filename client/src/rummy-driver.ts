@@ -782,6 +782,7 @@ export class RummyDriver implements GameDriver<RummyState> {
       hover,
       legal && !this.meldOpen && this.selected.has(cardId),
       true,
+      this.handHover.isFocused(cardId),
     );
   }
 

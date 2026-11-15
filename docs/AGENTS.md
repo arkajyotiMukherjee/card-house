@@ -13,6 +13,7 @@ Conventions: [../repo-conventions.md](../repo-conventions.md).
 - `poker-side-pots.md` — live main/side caps, pending calls, eligibility, independent payouts and bounded main-table presentation.
 - `classic-<game>-evidence/` — unretouched maximum-player desktop/phone screenshots, privacy/input checks and local multiplayer proofs for each classic game. `poker-side-pot-evidence/` covers unequal all-ins and independent pot awards.
 - `design-system.md` — approved classic-table design, typography, layout, privacy, interaction, evidence and rollout authorization.
+- `hand-layering-evidence/` — shared nine-game focus/selection layering regression, actual desktop/touch screenshots and two-player proof.
 - `classic-games-review.md` — remaining five-game UI batch, supported maxima and linked running-app evidence.
 - `release-review.md` / `release-evidence/` — complete pending release fix-to-proof index and final combined validation logs.
 - `ui-ux.md` — in-canvas layout, 960×540, contain scaling, pixel buttons.
