@@ -6,6 +6,10 @@ dist/
 coverage/
 *.log
 .playwright-mcp/
+__pycache__/
+.env
+.env.*
+!.env.example
 
 # Discord session credentials stay on the bot host.
 discord-bot/.session-token

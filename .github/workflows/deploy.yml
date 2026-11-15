@@ -1,0 +1,84 @@
+name: Deploy production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Never interrupt a publish half way through. Keep one pending release.
+concurrency:
+  group: cardhouse-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: https://cardhouse.arkaive.studio
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - name: Test deployment transport
+        run: python3 -m unittest discover -s scripts -p 'test_deploy_hostinger.py'
+      - name: Build client with public production settings
+        run: pnpm build
+        env:
+          SPACETIMEDB_HOST: wss://maincloud.spacetimedb.com
+          SPACETIMEDB_DB: cardhouse
+          CARDROOM_BOT_URL: https://bot.arkaive.studio
+      - name: Install pinned SpacetimeDB CLI
+        shell: bash
+        run: |
+          curl --fail --silent --show-error --location \
+            https://github.com/clockworklabs/SpacetimeDB/releases/download/v2.12.0/spacetime-x86_64-unknown-linux-gnu.tar.gz \
+            --output "$RUNNER_TEMP/spacetime.tar.gz"
+          echo '154853dd882abe1e6f8b96e169f9ca43a075df006dd33116b85d03c59a912f89  '"$RUNNER_TEMP/spacetime.tar.gz" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/spacetime-bin"
+          tar -xzf "$RUNNER_TEMP/spacetime.tar.gz" -C "$RUNNER_TEMP/spacetime-bin"
+          echo "$RUNNER_TEMP/spacetime-bin" >> "$GITHUB_PATH"
+      - name: Check deployment credentials
+        env:
+          HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
+          SPACETIMEDB_TOKEN: ${{ secrets.SPACETIMEDB_TOKEN }}
+        run: |
+          test -n "$HOSTINGER_API_TOKEN" || { echo 'Missing HOSTINGER_API_TOKEN secret'; exit 1; }
+          test -n "$SPACETIMEDB_TOKEN" || { echo 'Missing SPACETIMEDB_TOKEN secret'; exit 1; }
+          python3 scripts/deploy_hostinger.py --check
+      - name: Publish Maincloud without deleting data
+        env:
+          SPACETIMEDB_TOKEN: ${{ secrets.SPACETIMEDB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          config="$RUNNER_TEMP/spacetime-ci.toml"
+          trap 'rm -f "$config"' EXIT
+          umask 077
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          Path(os.environ['RUNNER_TEMP'], 'spacetime-ci.toml').write_text(
+              'spacetimedb_token = ' + json.dumps(os.environ['SPACETIMEDB_TOKEN']) + '\n'
+          )
+          PY
+          spacetimedb-cli --config-path "$config" publish \
+            --server https://maincloud.spacetimedb.com \
+            --module-path server --delete-data=never --yes=remote,migrate,break-clients,skip-login cardhouse
+      - name: Deploy and verify Hostinger client
+        env:
+          HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
+        run: python3 scripts/deploy_hostinger.py
