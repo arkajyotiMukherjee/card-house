@@ -34,7 +34,12 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 def request(url, method="GET", headers=None, data=None, expected=(200,)):
     try:
-        req = urllib.request.Request(url, data=data, headers=headers or {}, method=method)
+        # Hostinger's edge rejects Python-urllib with Cloudflare error 1010.
+        req = urllib.request.Request(
+            url, data=data,
+            headers={"User-Agent": "cardhouse-deploy/1.0", **(headers or {})},
+            method=method,
+        )
         with urllib.request.build_opener(NoRedirect).open(req, timeout=120) as response:
             if response.status not in expected:
                 raise DeploymentError("Unexpected HTTP status")
