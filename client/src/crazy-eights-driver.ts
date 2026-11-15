@@ -700,6 +700,7 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
       hover,
       legal && this.selected.has(cardId),
       record.personal,
+      this.handHover.isFocused(cardId),
     );
   }
 

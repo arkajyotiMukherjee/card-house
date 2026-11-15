@@ -683,6 +683,7 @@ export class SpadesDriver implements GameDriver<SpadesState> {
       hover,
       selected,
       true,
+      this.handHover.isFocused(cardId),
     );
   }
 

@@ -557,6 +557,7 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
         this.handHover.current(place.id),
         false,
         true,
+        this.handHover.isFocused(place.id),
       );
     } else {
       resetCardLift(record.actor);
@@ -598,6 +599,7 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
         this.handHover.current(id),
         false,
         true,
+        this.handHover.isFocused(id),
       );
   }
   private clearCards(): void {

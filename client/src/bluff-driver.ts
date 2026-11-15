@@ -15,7 +15,6 @@ import {
   canChallenge,
   canPass,
   canPlay,
-  cardLift,
   faceForCard,
   orderedBluffHand,
   legalCard,
@@ -842,14 +841,7 @@ export class BluffDriver implements GameDriver<BluffState> {
       return;
     }
     const legal = legalCard(state, ctx.meSeatIndex, cardId);
-    const held = Math.max(
-      cardLift({
-        legal,
-        hovered: false,
-        selected: this.selected.has(cardId),
-      }),
-      this.arrivalRaised.has(cardId) ? HOVER_LIFT : 0,
-    );
+    const held = this.arrivalRaised.has(cardId) ? HOVER_LIFT : 0;
     const hover =
       record.personal && !ctx.inputBlocked() && held === 0
         ? this.handHover.current(cardId)
@@ -862,6 +854,7 @@ export class BluffDriver implements GameDriver<BluffState> {
       held > 0 ? held : hover,
       legal && this.selected.has(cardId),
       record.personal,
+      hover > 0 && this.handHover.isFocused(cardId),
     );
   }
 

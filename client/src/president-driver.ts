@@ -6,12 +6,7 @@ import {
   PRESIDENT_GAME_TYPE,
   type PresidentState,
 } from '../../src/shared/games/president';
-import {
-  CARD_DRAW,
-  cardLift,
-  faceForCard,
-  selectedPlayCards,
-} from './bluff-layout';
+import { CARD_DRAW, faceForCard, selectedPlayCards } from './bluff-layout';
 import { OPPONENT_FAN_CARD } from './table-presentation';
 import { BUTTON_PRESS_SHIFT } from './button-style';
 import { uiText, uiCaption } from './ui-text';
@@ -639,13 +634,8 @@ export class PresidentDriver implements GameDriver<PresidentState> {
       return;
     }
     const legal = legalCard(state, ctx.meSeatIndex, cardId);
-    const held = cardLift({
-      legal,
-      hovered: false,
-      selected: this.selected.has(cardId),
-    });
     const hover =
-      record.personal && !ctx.inputBlocked() && held === 0
+      record.personal && !ctx.inputBlocked()
         ? this.handHover.current(cardId)
         : 0;
     placeCardLift(
@@ -653,9 +643,10 @@ export class PresidentDriver implements GameDriver<PresidentState> {
       record.restX,
       record.restY,
       record.restZ,
-      held > 0 ? held : hover,
+      hover,
       legal && this.selected.has(cardId),
       record.personal,
+      hover > 0 && this.handHover.isFocused(cardId),
     );
   }
 

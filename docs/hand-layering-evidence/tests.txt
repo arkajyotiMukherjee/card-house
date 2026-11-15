@@ -1,0 +1,221 @@
+
+> discord-card-games@ test /workspace/card-house
+> pnpm --filter client test && pnpm --filter server test && pnpm --filter discord-bot test
+
+$ vitest run
+
+ RUN  v3.2.7 /workspace/card-house/client
+
+ ✓ src/mobile-shell.test.ts (21 tests) 109ms
+ ✓ src/html-field.test.ts (24 tests) 193ms
+ ✓ src/phone-layout.test.ts (2 tests) 2061ms
+   ✓ fits six phone actions with separate thumb targets below right-hand opponents  2011ms
+ ✓ src/hand-hover.test.ts (14 tests) 39ms
+ ✓ src/hand-layering.test.ts (16 tests) 43ms
+ ✓ src/table-atlas.test.ts (1 test) 27ms
+ ✓ src/room-url.test.ts (3 tests) 34ms
+ ✓ src/page-background.test.ts (2 tests) 16ms
+ ✓ src/card-atlas.test.ts (1 test) 728ms
+   ✓ CardAtlas > returns the Ace of hearts from the Ace cell, not the blank cell  725ms
+ ✓ src/table-presentation.test.ts (6 tests) 102ms
+ ✓ src/poker-driver.test.ts (8 tests) 137ms
+ ✓ src/speaking.test.ts (11 tests) 60ms
+ ✓ src/poker-layout.test.ts (14 tests) 154ms
+ ✓ src/hearts-layout.test.ts (10 tests) 50ms
+ ✓ src/seat-layout.test.ts (4 tests) 33ms
+ ✓ src/bluff-layout.test.ts (13 tests) 29ms
+ ✓ src/bluff-classic-layout.test.ts (4 tests) 55ms
+ ✓ src/lobby.test.ts (27 tests) 39ms
+ ✓ src/status-hud.test.ts (23 tests) 28ms
+ ✓ src/sheets.test.ts (9 tests) 9ms
+ ✓ src/stake-form.test.ts (2 tests) 33ms
+ ✓ src/live-connection.test.ts (4 tests) 21ms
+ ✓ src/leaderboard.test.ts (2 tests) 18ms
+ ✓ src/go-fish-driver.test.ts (7 tests) 18ms
+ ✓ src/rummy-classic-layout.test.ts (4 tests) 31ms
+ ✓ src/president-classic-layout.test.ts (4 tests) 28ms
+ ✓ src/crazy-eights-classic-layout.test.ts (3 tests) 24ms
+ ✓ src/menu-layout.test.ts (17 tests) 23ms
+ ✓ src/go-fish-classic-layout.test.ts (4 tests) 19ms
+ ✓ src/poker-table-ui.test.ts (8 tests) 13ms
+ ✓ src/touch-targets.test.ts (10 tests) 15ms
+ ✓ src/how-to-play.test.ts (21 tests) 12ms
+ ✓ src/crazy-eights-driver.test.ts (8 tests) 19ms
+ ✓ src/rummy-layout.test.ts (7 tests) 17ms
+ ✓ src/blackjack-layout.test.ts (7 tests) 11ms
+ ✓ src/game-scene.test.ts (13 tests) 11ms
+ ✓ src/join-path.test.ts (7 tests) 8ms
+ ✓ src/event-messages.test.ts (19 tests) 11ms
+ ✓ src/crazy-eights-layout.test.ts (6 tests) 10ms
+ ✓ src/hand-inspection.test.ts (9 tests) 9ms
+ ✓ src/button-press.test.ts (1 test) 10ms
+ ✓ src/rummy-driver.test.ts (7 tests) 7ms
+ ✓ src/card-appearance.test.ts (8 tests) 8ms
+ ✓ src/table-chat.test.ts (14 tests) 7ms
+ ✓ src/blackjack-driver.test.ts (6 tests) 6ms
+ ✓ src/button-style.test.ts (6 tests) 10ms
+ ✓ src/theme.test.ts (12 tests) 7ms
+ ✓ src/poker-chip-motion.test.ts (6 tests) 8ms
+ ✓ src/go-fish-layout.test.ts (6 tests) 10ms
+ ✓ src/settled-seats.test.ts (3 tests) 8ms
+ ✓ src/connection-session.test.ts (11 tests) 7ms
+ ✓ src/lobby-ambience.test.ts (2 tests) 17ms
+ ✓ src/poker-pots.test.ts (3 tests) 7ms
+ ✓ src/blackjack-classic-layout.test.ts (4 tests) 15ms
+ ✓ src/spades-layout.test.ts (6 tests) 8ms
+ ✓ src/bluff-driver.test.ts (9 tests) 9ms
+ ✓ src/preferred-name.test.ts (6 tests) 6ms
+ ✓ src/join-errors.test.ts (5 tests) 8ms
+ ✓ src/hearts-classic-layout.test.ts (5 tests) 8ms
+ ✓ src/spades-classic-layout.test.ts (5 tests) 9ms
+ ✓ src/last-room.test.ts (11 tests) 9ms
+ ✓ src/table-viewport.test.ts (3 tests) 8ms
+ ✓ src/president-layout.test.ts (7 tests) 7ms
+ ✓ src/chip-atlas.test.ts (2 tests) 7ms
+ ✓ src/card-hit.test.ts (5 tests) 14ms
+ ✓ src/room-composer.test.ts (3 tests) 4ms
+ ✓ src/reload-landing.test.ts (2 tests) 9ms
+ ✓ src/milestone-10-combination.test.ts (1 test) 4ms
+ ✓ src/table-notice.test.ts (4 tests) 16ms
+ ✓ src/client-stats.test.ts (5 tests) 8ms
+ ✓ src/client-look.test.ts (3 tests) 7ms
+ ✓ src/hearts-driver.test.ts (6 tests) 12ms
+ ✓ src/president-driver.test.ts (5 tests) 5ms
+ ✓ src/prize-pool.test.ts (4 tests) 8ms
+ ✓ src/discord-join.test.ts (5 tests) 7ms
+ ✓ src/client-id.test.ts (3 tests) 9ms
+ ✓ src/spades-driver.test.ts (5 tests) 9ms
+ ✓ src/result-notice.test.ts (1 test) 5ms
+ ✓ src/lobby-viewport.test.ts (1 test) 3ms
+ ✓ src/hand-transition.test.ts (2 tests) 8ms
+ ✓ src/solo-room.test.ts (3 tests) 4ms
+ ✓ src/bluff-challenge.test.ts (2 tests) 4ms
+ ✓ src/voice-presence.test.ts (4 tests) 9ms
+ ✓ src/connect.test.ts (3 tests) 6ms
+ ↓ src/seat-return.live.test.ts (1 test | 1 skipped)
+
+ Test Files  84 passed | 1 skipped (85)
+      Tests  590 passed | 1 skipped (591)
+   Start at  17:36:02
+   Duration  18.67s (transform 6.11s, setup 652ms, collect 17.58s, tests 4.65s, environment 3.92s, prepare 8.50s)
+
+$ node --experimental-strip-types src/rules-by-type.test.ts && node --experimental-strip-types src/dummy-counter.test.ts && node --experimental-strip-types src/lobby-deal.test.ts && node --experimental-strip-types src/bluff.test.ts && node --experimental-strip-types src/president.test.ts && node --experimental-strip-types src/go-fish.test.ts && node --experimental-strip-types src/crazy-eights.test.ts && node --experimental-strip-types src/rummy.test.ts && node --experimental-strip-types src/blackjack.test.ts && node --experimental-strip-types src/blackjack-casino.test.ts && node --experimental-strip-types src/economy.test.ts && node --experimental-strip-types src/spades.test.ts && node --experimental-strip-types src/hearts.test.ts && node --experimental-strip-types src/poker.test.ts && node --experimental-strip-types src/poker-side-pots.test.ts && node --experimental-strip-types src/poker-table-lifecycle.test.ts && node --experimental-strip-types src/table-status.test.ts && node --experimental-strip-types src/spectator.test.ts && node --experimental-strip-types src/table-cleanup.test.ts && node --experimental-strip-types src/discord-member.test.ts && node --experimental-strip-types src/voice-presence.test.ts && node --experimental-strip-types src/speaking-state.test.ts && node --experimental-strip-types src/lobby-idle.test.ts && node --experimental-strip-types src/lobby-idle.live.test.ts && node --experimental-strip-types src/room-caps.test.ts && node --experimental-strip-types src/activity-log.test.ts && node --experimental-strip-types src/lobby-presence.test.ts && node --experimental-strip-types src/lobby-chat.test.ts && node --experimental-strip-types src/table-chat.test.ts && node --experimental-strip-types src/player-stats.test.ts && node --experimental-strip-types src/player-stats.live.test.ts && node --experimental-strip-types src/bots.test.ts && node --experimental-strip-types src/solo.test.ts
+{"registeredGameType":"stub","resolvedStubRules":true,"unknownGameType":"unknown-game","unknownReturnedStubRules":false}
+{"gameType":"dummy","opened":{"count":0},"once":{"count":1},"twice":{"count":2}}
+{"lobbyPhase":"lobby","dealtPhase":"play","seat0":27,"seat1":27}
+{"gameType":"bluff","emptyPhase":"lobby","dealtCount":54,"turnSeatIndex":0,"playedRank":"10","finished":"finished","winnerSeatIndex":0}
+{"gameType":"president","emptyPhase":"lobby","dealtCount":52,"turnSeatIndex":5,"openedRank":"3","finished":"finished","winnerSeatIndex":0,"scores":[3,2,1]}
+{"gameType":"go_fish","emptyPhase":"lobby","dealtCount":52,"turnSeatIndex":0,"stock":38,"books":1,"finished":"finished","winnerSeatIndex":0,"tie":null}
+{"gameType":"crazy_eights","emptyPhase":"lobby","dealtCount":52,"turnSeatIndex":0,"playedSuit":"H","wildSuit":"D","drawn":"3C","finished":"finished","winnerSeatIndex":0,"winnerScore":63,"blockedWinner":1}
+{"gameType":"rummy","emptyPhase":"lobby","dealtCount":52,"turnSeatIndex":0,"stock":31,"finished":"finished","winnerSeatIndex":0,"winnerScore":0}
+{"gameType":"blackjack","emptyPhase":"lobby","shoe":312,"dealtHole":true,"finished":"finished","winners":[],"natural":215}
+Blackjack casino: exact payouts, insurance, even money, surrender, split limits and soft 17 passed
+Economy: exact money, limits, conservation, tied prizes and team prizes passed
+{"gameType":"spades","emptyPhase":"lobby","dealtCount":52,"turnSeatIndex":1,"finished":"finished","winnerTeam":"ns","scores":{"ns":600,"ew":-20},"hand2":2}
+{"gameType":"hearts","emptyPhase":"lobby","dealtCount":52,"passPhase":"pass","exchangedTurn":0,"scored":14,"finished":"finished","winnerSeatIndex":1,"moon":{"0":0,"1":26,"2":26,"3":26},"playedSum":26}
+{"holdem":true,"omaha":true,"oklahoma":true,"sidePots":2}
+Configurable limits and all-in reopening matrix passed
+Short opening, short blind and unmatched return checks passed
+Side pots: transient calls, folded contributions, 8-player layers, independent winners, odd chips and returns passed
+Poker completed-hand/session lifecycle checks passed
+{"ok":true}
+{"ok":true}
+{"ok":true}
+discord member identity ok
+voice-presence ok
+speaking state place ok
+{"ok":true}
+{"ok":true,"skipped":true}
+{"defaultCaps":{"maxLobbies":64,"maxTablesPerLobby":16,"maxSeatsPerTable":8},"heartsMax":4,"looseCap":8,"keptHeartsMax":4}
+{"ok":true,"lobby":"lobby created lobbyId=lobby_abc","table":"table created tableId=table_abc lobbyId=lobby_abc","rules":"rules error tableId=table_abc lobbyId=lobby_abc reason=Invalid intent","disconnect":"disconnect lobbyId=lobby_abc tableId=table_abc disconnectsPerMinute=1"}
+{"ok":true}
+{"ok":true}
+{"ok":true}
+{"ok":true,"skipped":true}
+$ node --import tsx --test src/*.test.ts
+✔ the registered command set is /cardhouse create, status, and close (3.381177ms)
+﹣ one /interactions create mints the code, stores the channel, and returns that join URL (1.076909ms) # set CARDROOM_LIVE=1 to call the published module
+✔ createLobby mints the code and the channel is stored on that lobby (2.02324ms)
+✔ rejects a channel id that is not a Discord snowflake (0.637582ms)
+✔ a short 429 is retried once (2.568476ms)
+✔ a long 429 fails without waiting it out (1.293603ms)
+✔ an exhausted bucket waits until reset (0.661396ms)
+✔ 401 from Discord does not invent a channel id (0.576045ms)
+✔ probe keeps the token out of the recorded body (0.674203ms)
+﹣ the live Discord token lookup returns 401 and no invented user (0.839385ms) # set DISCORD_NAME_LIVE=1 to call Discord
+✔ an empty token does not call Discord or invent a name (3.18818ms)
+✔ a 401 from Discord returns no user and no name (5.303646ms)
+✔ a Discord user becomes the default player name (1.337877ms)
+✔ a user payload for a different id is not used (0.768605ms)
+✔ the name route reports a 401 without a player name (61.148916ms)
+✔ a create interaction replies with the code and join URL (2.14975ms)
+✔ ping replies with pong (1.243996ms)
+✔ the interactions endpoint checks the Discord signature (162.23047ms)
+✔ status names a live lobby from the room code (2.000951ms)
+✔ status says the room was not found for a missing code (0.719519ms)
+✔ status asks for a room code when the option is empty (0.401719ms)
+✔ close refuses a room that still has a player (0.437511ms)
+✔ close reports an empty room as closed (0.27662ms)
+✔ create forwards startingchips while accepting commands registered before the rename (0.602438ms)
+✔ join URL is the public origin plus the lobby code (1.162459ms)
+✔ reply content contains the code and the URL (0.445676ms)
+✔ rank by profit, split tied ranks, count committed coins, suppress mentions and paginate (20.972326ms)
+✔ refresh one durable message, coalesce hands, recover restarts and retry rate limits (7.296065ms)
+✔ recover an accepted POST when the process stopped before recording its id (2.151472ms)
+✔ leaderboard commands use the linked channel and forward code/page (1.720691ms)
+✔ an empty room closes (4.75222ms)
+✔ a lobby player blocks close (0.465099ms)
+✔ a seated player in this room blocks close (0.563052ms)
+✔ players in another room do not block close (0.368839ms)
+✔ a missing code does not close a room (0.7379ms)
+✔ an already closed room is not closed again (3.49812ms)
+✔ an open lobby is live and counts only that room (2.137268ms)
+✔ a closed lobby is found and is not live (0.576098ms)
+✔ a missing code says the room was not found (0.362731ms)
+✔ a blank code does not match a lobby (0.443794ms)
+✔ a documented Discord user maps to the username when global name is unset (0.944256ms)
+✔ the global name is the default player name when Discord set one (0.194942ms)
+✔ a long Discord name is cut to the lobby name length (0.173767ms)
+✔ username punctuation becomes spaces and an unreadable global name is skipped (0.362126ms)
+✔ an id that is not a Discord user id does not invent a name (0.133937ms)
+✔ a join URL keeps a known Discord profile for the default name (0.549343ms)
+✔ a user id alone is not treated as a known profile (0.813073ms)
+﹣ speaking state follows each discord user and a hand still plays (0.740564ms) # set CARDROOM_LIVE=1 to call the published module
+✔ a speaking signal keeps only the user, the channel, and the boolean (3.121111ms)
+✔ rapid speaking toggles send the latest boolean once (80.973523ms)
+✔ voice control frames do not forward audio fields (1.065239ms)
+✔ discovery reads an address and drops other datagrams (0.587851ms)
+✔ a voice join is deafened and muted (3.245823ms)
+✔ an unauthorized gateway does not open a socket (0.408705ms)
+✔ a gateway probe redacts the token (2.993091ms)
+✔ watched channels include lobby and table voice (0.537068ms)
+﹣ one /interactions status names the lobby createLobby just minted, and a bogus code is not found (1.218309ms) # set CARDROOM_LIVE=1 to call the published module
+﹣ cardhouse create stores a lobby voice channel, and closing a table or lobby deletes it (1.202176ms) # set CARDROOM_LIVE=1 to call the published module
+Lobby voice channel skipped: Discord request failed (401)
+Lobby voice channel skipped: Discord rate limited
+Lobby voice channel skipped: write failed
+✔ voice channel names follow the lobby and table examples (1.845211ms)
+✔ a create interaction forwards the guild id (1.628414ms)
+✔ attach stores the lobby voice channel from the Discord API (1.785461ms)
+✔ a Discord 401 leaves the lobby without a voice channel (2.619334ms)
+✔ a rate limit leaves the lobby without a voice channel (0.737439ms)
+✔ a failed voice write deletes the channel it just created (1.104286ms)
+✔ a Discord table gets a voice channel and a web table does not (1.024003ms)
+✔ finishing a table deletes its voice channel and clears the id (0.548249ms)
+✔ removing a table deletes its voice channel (0.583406ms)
+✔ deleting a lobby deletes its voice channel (0.725262ms)
+✔ closing a lobby deletes the lobby channel and remaining table channels (0.600053ms)
+✔ a user joining the table voice channel is recorded with ids only (3.124323ms)
+✔ leaving voice sends an empty channel only for a user with a headset (0.374932ms)
+✔ a channel the module does not store is ignored (0.234586ms)
+✔ a guild snapshot records members and clears a user who is gone (0.502451ms)
+✔ the gateway identifies for voice states and passes ids through (1.754221ms)
+﹣ a web lobby still deals with the bot stopped (0.681664ms) # set CARDROOM_LIVE=1 to call the published module
+ℹ tests 75
+ℹ suites 0
+ℹ pass 69
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 6
+ℹ todo 0
+ℹ duration_ms 2173.269733

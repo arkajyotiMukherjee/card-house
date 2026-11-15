@@ -1,0 +1,807 @@
+{
+  "game": "bluff",
+  "independentPlayers": 2,
+  "privateCards": 27,
+  "desktop": "1440x900",
+  "touch": [
+    "844x390",
+    "667x375"
+  ],
+  "hoveredCardAlwaysInFront": true,
+  "selectedOrderKeepsLeftCorners": true,
+  "selectedRestSize": true,
+  "scrubDoesNotSelect": true,
+  "releaseClearsFocus": true,
+  "resizeAndPagingPreserveSelection": true,
+  "unchangedAuthoritativeState": true,
+  "samples": [
+    {
+      "selected": [
+        "AS"
+      ],
+      "page": 0,
+      "pages": 3,
+      "cards": [
+        {
+          "id": "AC",
+          "x": 262,
+          "y": 488,
+          "z": 12,
+          "restZ": 12,
+          "scale": 1.1,
+          "focused": false
+        },
+        {
+          "id": "AD",
+          "x": 314,
+          "y": 488,
+          "z": 13,
+          "restZ": 13,
+          "scale": 1.1,
+          "focused": false
+        },
+        {
+          "id": "AH",
+          "x": 366,
+          "y": 488,
+          "z": 30.010203244147487,
+          "restZ": 14,
+          "scale": 1.1352129765899512,
+          "focused": false
+        },
+        {
+          "id": "AS",
+          "x": 418,
+          "y": 488,
+          "z": 30.110251970963347,
+          "restZ": 15,
+          "scale": 1.535007883853387,
+          "focused": false
+        },
+        {
+          "id": "2C",
+          "x": 470,
+          "y": 488,
+          "z": 40.0016,
+          "restZ": 16,
+          "scale": 1.8643768379369203,
+          "focused": true
+        },
+        {
+          "id": "2H",
+          "x": 522,
+          "y": 488,
+          "z": 30.09284548266837,
+          "restZ": 17,
+          "scale": 1.4645819306734844,
+          "focused": false
+        },
+        {
+          "id": "3C",
+          "x": 574,
+          "y": 488,
+          "z": 18,
+          "restZ": 18,
+          "scale": 1.1,
+          "focused": false
+        },
+        {
+          "id": "4H",
+          "x": 626,
+          "y": 488,
+          "z": 19,
+          "restZ": 19,
+          "scale": 1.1,
+          "focused": false
+        },
+        {
+          "id": "5D",
+          "x": 678,
+          "y": 488,
+          "z": 20,
+          "restZ": 20,
+          "scale": 1.1,
+          "focused": false
+        }
+      ]
+    },
+    {
+      "selected": [
+        "AS",
+        "2C"
+      ],
+      "page": 0,
+      "pages": 3,
+      "cards": [
+        {
+          "id": "AC",
+          "x": 262,
+          "y": 488,
+          "z": 12,
+          "restZ": 12,
+          "scale": 1.1,
+          "focused": false
+        },
+        {
+          "id": "AD",
+          "x": 314,
+          "y": 488,
+          "z": 13,
+          "restZ": 13,
+          "scale": 1.1,
+          "focused": false
+        },
+        {
+          "id": "AH",
+          "x": 366,
+          "y": 488,
+          "z": 14,
+          "restZ": 14,
+          "scale": 1.1,
+          "focused": false
+        },
+        {
+          "id": "AS",
+          "x": 418,
+          "y": 488,
+          "z": 15,
+          "restZ": 15,
+          "scale": 1.1,
+          "focused": false
+        },
+        {
+          "id": "2C",
+          "x": 470,
+          "y": 488,
+          "z": 16,
+          "restZ": 16,
+          "scale": 1.1,
+          "focused": false
+        },
+        {
+          "id": "2H",
+          "x": 522,
+          "y": 488,
+          "z": 17,
+          "restZ": 17,
+          "scale": 1.1,
+          "focused": false
+        },
+        {
+          "id": "3C",
+          "x": 574,
+          "y": 488,
+          "z": 18,
+          "restZ": 18,
+          "scale": 1.1,
+          "focused": false
+        },
+        {
+          "id": "4H",
+          "x": 626,
+          "y": 488,
+          "z": 19,
+          "restZ": 19,
+          "scale": 1.1,
+          "focused": false
+        },
+        {
+          "id": "5D",
+          "x": 678,
+          "y": 488,
+          "z": 20,
+          "restZ": 20,
+          "scale": 1.1,
+          "focused": false
+        }
+      ]
+    },
+    {
+      "selected": [
+        "AS",
+        "2C"
+      ],
+      "page": 0,
+      "pages": 3,
+      "cards": [
+        {
+          "id": "AC",
+          "x": 262,
+          "y": 488,
+          "z": 12,
+          "restZ": 12,
+          "scale": 1.1,
+          "focused": false
+        },
+        {
+          "id": "AD",
+          "x": 314,
+          "y": 488,
+          "z": 13,
+          "restZ": 13,
+          "scale": 1.1,
+          "focused": false
+        },
+        {
+          "id": "AH",
+          "x": 366,
+          "y": 488,
+          "z": 30.071643458985243,
+          "restZ": 14,
+          "scale": 1.3809738359409738,
+          "focused": false
+        },
+        {
+          "id": "AS",
+          "x": 418,
+          "y": 488,
+          "z": 40.0015,
+          "restZ": 15,
+          "scale": 1.6619476718819477,
+          "focused": true
+        },
+        {
+          "id": "2C",
+          "x": 470,
+          "y": 488,
+          "z": 30.071843458985242,
+          "restZ": 16,
+          "scale": 1.3809738359409738,
+          "focused": false
+        },
+        {
+          "id": "2H",
+          "x": 522,
+          "y": 488,
+          "z": 17,
+          "restZ": 17,
+          "scale": 1.1,
+          "focused": false
+        },
+        {
+          "id": "3C",
+          "x": 574,
+          "y": 488,
+          "z": 18,
+          "restZ": 18,
+          "scale": 1.1,
+          "focused": false
+        },
+        {
+          "id": "4H",
+          "x": 626,
+          "y": 488,
+          "z": 19,
+          "restZ": 19,
+          "scale": 1.1,
+          "focused": false
+        },
+        {
+          "id": "5D",
+          "x": 678,
+          "y": 488,
+          "z": 20,
+          "restZ": 20,
+          "scale": 1.1,
+          "focused": false
+        }
+      ]
+    },
+    {
+      "selected": [
+        "AS"
+      ],
+      "page": 0,
+      "pages": 3,
+      "cards": [
+        {
+          "id": "AC",
+          "x": 180,
+          "y": 496,
+          "z": 12,
+          "restZ": 12,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "AD",
+          "x": 238,
+          "y": 496,
+          "z": 13,
+          "restZ": 13,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "AH",
+          "x": 296,
+          "y": 496,
+          "z": 14,
+          "restZ": 14,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "AS",
+          "x": 354,
+          "y": 496,
+          "z": 15,
+          "restZ": 15,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "2C",
+          "x": 412,
+          "y": 496,
+          "z": 40.0016,
+          "restZ": 16,
+          "scale": 1.8920950113425534,
+          "focused": true
+        },
+        {
+          "id": "2H",
+          "x": 470,
+          "y": 496,
+          "z": 17,
+          "restZ": 17,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "3C",
+          "x": 528,
+          "y": 496,
+          "z": 18,
+          "restZ": 18,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "4H",
+          "x": 586,
+          "y": 496,
+          "z": 19,
+          "restZ": 19,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "5D",
+          "x": 644,
+          "y": 496,
+          "z": 20,
+          "restZ": 20,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "6C",
+          "x": 702,
+          "y": 496,
+          "z": 21,
+          "restZ": 21,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "6D",
+          "x": 760,
+          "y": 496,
+          "z": 22,
+          "restZ": 22,
+          "scale": 1.35,
+          "focused": false
+        }
+      ]
+    },
+    {
+      "selected": [
+        "AS"
+      ],
+      "page": 0,
+      "pages": 3,
+      "cards": [
+        {
+          "id": "AC",
+          "x": 180,
+          "y": 496,
+          "z": 12,
+          "restZ": 12,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "AD",
+          "x": 238,
+          "y": 496,
+          "z": 13,
+          "restZ": 13,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "AH",
+          "x": 296,
+          "y": 496,
+          "z": 14,
+          "restZ": 14,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "AS",
+          "x": 354,
+          "y": 496,
+          "z": 40.0015,
+          "restZ": 15,
+          "scale": 1.7791238142948604,
+          "focused": true
+        },
+        {
+          "id": "2C",
+          "x": 412,
+          "y": 496,
+          "z": 30.04555497662005,
+          "restZ": 16,
+          "scale": 1.4708761857051396,
+          "focused": false
+        },
+        {
+          "id": "2H",
+          "x": 470,
+          "y": 496,
+          "z": 17,
+          "restZ": 17,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "3C",
+          "x": 528,
+          "y": 496,
+          "z": 18,
+          "restZ": 18,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "4H",
+          "x": 586,
+          "y": 496,
+          "z": 19,
+          "restZ": 19,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "5D",
+          "x": 644,
+          "y": 496,
+          "z": 20,
+          "restZ": 20,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "6C",
+          "x": 702,
+          "y": 496,
+          "z": 21,
+          "restZ": 21,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "6D",
+          "x": 760,
+          "y": 496,
+          "z": 22,
+          "restZ": 22,
+          "scale": 1.35,
+          "focused": false
+        }
+      ]
+    },
+    {
+      "selected": [
+        "AS"
+      ],
+      "page": 0,
+      "pages": 3,
+      "cards": [
+        {
+          "id": "AC",
+          "x": 180,
+          "y": 496,
+          "z": 12,
+          "restZ": 12,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "AD",
+          "x": 238,
+          "y": 496,
+          "z": 13,
+          "restZ": 13,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "AH",
+          "x": 296,
+          "y": 496,
+          "z": 14,
+          "restZ": 14,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "AS",
+          "x": 354,
+          "y": 496,
+          "z": 15,
+          "restZ": 15,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "2C",
+          "x": 412,
+          "y": 496,
+          "z": 16,
+          "restZ": 16,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "2H",
+          "x": 470,
+          "y": 496,
+          "z": 17,
+          "restZ": 17,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "3C",
+          "x": 528,
+          "y": 496,
+          "z": 18,
+          "restZ": 18,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "4H",
+          "x": 586,
+          "y": 496,
+          "z": 19,
+          "restZ": 19,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "5D",
+          "x": 644,
+          "y": 496,
+          "z": 20,
+          "restZ": 20,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "6C",
+          "x": 702,
+          "y": 496,
+          "z": 21,
+          "restZ": 21,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "6D",
+          "x": 760,
+          "y": 496,
+          "z": 22,
+          "restZ": 22,
+          "scale": 1.35,
+          "focused": false
+        }
+      ]
+    },
+    {
+      "selected": [
+        "AS",
+        "2C"
+      ],
+      "page": 0,
+      "pages": 3,
+      "cards": [
+        {
+          "id": "AC",
+          "x": 180,
+          "y": 496,
+          "z": 12,
+          "restZ": 12,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "AD",
+          "x": 238,
+          "y": 496,
+          "z": 13,
+          "restZ": 13,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "AH",
+          "x": 296,
+          "y": 496,
+          "z": 14,
+          "restZ": 14,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "AS",
+          "x": 354,
+          "y": 496,
+          "z": 15,
+          "restZ": 15,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "2C",
+          "x": 412,
+          "y": 496,
+          "z": 16,
+          "restZ": 16,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "2H",
+          "x": 470,
+          "y": 496,
+          "z": 17,
+          "restZ": 17,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "3C",
+          "x": 528,
+          "y": 496,
+          "z": 18,
+          "restZ": 18,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "4H",
+          "x": 586,
+          "y": 496,
+          "z": 19,
+          "restZ": 19,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "5D",
+          "x": 644,
+          "y": 496,
+          "z": 20,
+          "restZ": 20,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "6C",
+          "x": 702,
+          "y": 496,
+          "z": 21,
+          "restZ": 21,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "6D",
+          "x": 760,
+          "y": 496,
+          "z": 22,
+          "restZ": 22,
+          "scale": 1.35,
+          "focused": false
+        }
+      ]
+    },
+    {
+      "selected": [
+        "AS",
+        "2C"
+      ],
+      "page": 0,
+      "pages": 4,
+      "cards": [
+        {
+          "id": "AC",
+          "x": 267,
+          "y": 496,
+          "z": 12,
+          "restZ": 12,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "AD",
+          "x": 325,
+          "y": 496,
+          "z": 13,
+          "restZ": 13,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "AH",
+          "x": 383,
+          "y": 496,
+          "z": 14,
+          "restZ": 14,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "AS",
+          "x": 441,
+          "y": 496,
+          "z": 15,
+          "restZ": 15,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "2C",
+          "x": 499,
+          "y": 496,
+          "z": 16,
+          "restZ": 16,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "2H",
+          "x": 557,
+          "y": 496,
+          "z": 17,
+          "restZ": 17,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "3C",
+          "x": 615,
+          "y": 496,
+          "z": 18,
+          "restZ": 18,
+          "scale": 1.35,
+          "focused": false
+        },
+        {
+          "id": "4H",
+          "x": 673,
+          "y": 496,
+          "z": 19,
+          "restZ": 19,
+          "scale": 1.35,
+          "focused": false
+        }
+      ]
+    }
+  ],
+  "errors": []
+}

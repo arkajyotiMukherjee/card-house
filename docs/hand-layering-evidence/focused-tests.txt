@@ -1,0 +1,12 @@
+
+ RUN  v3.2.7 /workspace/card-house/client
+
+ ✓ src/hand-hover.test.ts (14 tests) 25ms
+ ✓ src/card-hit.test.ts (5 tests) 6ms
+ ✓ src/hand-inspection.test.ts (9 tests) 12ms
+ ✓ src/hand-layering.test.ts (16 tests) 33ms
+
+ Test Files  4 passed (4)
+      Tests  44 passed (44)
+   Start at  17:34:51
+   Duration  4.25s (transform 4.80s, setup 58ms, collect 9.59s, tests 77ms, environment 845ms, prepare 430ms)
