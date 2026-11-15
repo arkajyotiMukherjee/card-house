@@ -11,6 +11,14 @@ import deploy_hostinger as deploy
 
 
 class UploadTests(unittest.TestCase):
+    def test_identifies_application_instead_of_blocked_python_client(self):
+        response = unittest.mock.MagicMock()
+        response.__enter__.return_value.status = 200
+        response.__enter__.return_value.read.return_value = b"ok"
+        with patch("urllib.request.OpenerDirector.open", return_value=response) as open_request:
+            deploy.request("https://api.example.test")
+        self.assertEqual(open_request.call_args.args[0].get_header("User-agent"), "cardhouse-deploy/1.0")
+
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
