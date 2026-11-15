@@ -1,10 +1,12 @@
 import { BUTTON_HEIGHT } from './button-style';
 import { isMobileDevice } from './mobile-shell';
+import { handCardScale } from './card-sizing';
 
 const PHONE_LAYOUT = typeof window !== 'undefined' && isMobileDevice();
 const ACTION_HEIGHT = PHONE_LAYOUT ? 48 : BUTTON_HEIGHT;
 import {
   HOW_TO_PLAY_BUTTON,
+  TABLE_VARIATION_LABEL,
   LEAVE_TABLE_BUTTON,
   PHONE_RIGHT_PAIR_RAIL,
   TABLE_CHAT_BUTTON,
@@ -123,9 +125,9 @@ const LABEL_BLOCK_H = 56;
  */
 const LEFT_EDGE = 4;
 const RIGHT_EDGE = 956;
-const TOP_EDGE = 75;
+const TOP_EDGE = PHONE_LAYOUT ? 87 : 75;
 /** Name plate for a top fan. It stays under the arc, in the open middle. */
-const TOP_LABEL_Y = 144;
+const TOP_LABEL_Y = PHONE_LAYOUT ? 156 : 144;
 /** Lowest pixel a top-fan card may use. The name starts just under this. */
 const TOP_CARD_LIMIT = TOP_LABEL_Y - 4;
 /**
@@ -413,6 +415,7 @@ const FAN_CLEAR: readonly CardRect[] = [
   TABLE_CHAT_BUTTON,
   HOW_TO_PLAY_BUTTON,
   STATUS_HUD,
+  TABLE_VARIATION_LABEL,
   { x: 280, y: 16, w: 176, h: 20 },
   PERSONAL_HAND_CLEAR,
 ];
@@ -534,6 +537,84 @@ export function seatFan(
     slots = placeArc(frame, count, tilt, stepCap);
   }
   return slots;
+}
+
+/** Result faces use the local hand's size and a straight spread instead of a tight back fan. */
+export function revealedHandSlots(
+  seatX: number,
+  seatY: number,
+  count: number,
+): FanSlot[] {
+  if (count <= 0) return [];
+  const frame = fanFrame(seatX, seatY);
+  const scale = handCardScale(PHONE_LAYOUT);
+  const faceWidth = 41 * scale;
+  const horizontal = frame.horizontal;
+  let available =
+    frame.edge === 'top'
+      ? frame.edgeSeats > 1
+        ? TOP_SPAN / (frame.edgeSeats - 1)
+        : 720
+      : frame.edge === 'bottom'
+        ? 720
+        : frame.half * 2;
+  const left =
+    frame.edge === 'top'
+      ? Math.max(
+          frame.along - available / 2,
+          TABLE_VARIATION_LABEL.x + TABLE_VARIATION_LABEL.w + 8,
+        )
+      : 0;
+  const right =
+    frame.edge === 'top'
+      ? Math.min(frame.along + available / 2, LOGICAL_WIDTH - 8)
+      : 0;
+  if (frame.edge === 'top') available = right - left;
+  const baseSafe = frame.edge === 'right' ? RIGHT_SAFE : LEFT_SAFE;
+  const safe = {
+    start: Math.max(
+      baseSafe.start,
+      frame.edge === 'right'
+        ? STATUS_HUD.y + STATUS_HUD.h + 4
+        : TABLE_VARIATION_LABEL.y + TABLE_VARIATION_LABEL.h + 4,
+    ),
+    end: baseSafe.end,
+  };
+  if (!horizontal) available = Math.min(available, safe.end - safe.start);
+  const step =
+    count < 2
+      ? 0
+      : Math.max(
+          0,
+          Math.min(faceWidth + 3, (available - faceWidth) / (count - 1)),
+        );
+  const span = (count - 1) * step + faceWidth;
+  const along = horizontal
+    ? frame.edge === 'top'
+      ? (left + right) / 2
+      : frame.along
+    : clamp(frame.along, safe.start + span / 2, safe.end - span / 2);
+  return Array.from({ length: count }, (_, index) => {
+    const at = along + (index - (count - 1) / 2) * step;
+    return {
+      x: horizontal
+        ? at
+        : frame.edge === 'left'
+          ? LEFT_EDGE + 28 * scale
+          : RIGHT_EDGE - 28 * scale,
+      y: horizontal
+        ? frame.edge === 'top'
+          ? TOP_LABEL_Y - 4 - 28 * scale
+          : LOGICAL_HEIGHT - 6 - 28 * scale
+        : at,
+      rotation: horizontal
+        ? 0
+        : frame.edge === 'left'
+          ? Math.PI / 2
+          : -Math.PI / 2,
+      scale,
+    };
+  });
 }
 
 /** Top-left of the name plate, centered on the fan. */

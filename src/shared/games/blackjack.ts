@@ -116,7 +116,7 @@ export const blackjackGameDefinition = {
   minPlayers: 1,
   maxPlayers: 5,
   howToPlay:
-    '# Blackjack\n\nBuy in with room coins and choose a whole-coin wager within the table limits. The house has unlimited funds. Six decks are used, reshuffled between hands after 75% usage. The dealer checks for blackjack and stands on soft 17. Hit, stand, or double a two-card hand, including after eligible splits. Equal-value pairs can split into at most four hands. Split aces receive one card and cannot be doubled or resplit. An unsplit natural pays exactly 3:2; split-hand 21 pays even money. With a dealer ace, insurance pays 2:1 and a natural may take even money. Late surrender returns half your initial unsplit wager after the dealer check. Remaining chips return to your room wallet when you leave after settlement.',
+    '# Blackjack\n\nBuy in with room chips and choose a whole-chip wager within the table limits. The house has unlimited funds. Six decks are used, reshuffled between hands after 75% usage. The dealer checks for blackjack and stands on soft 17. Hit, stand, or double a two-card hand, including after eligible splits. Equal-value pairs can split into at most four hands. Split aces receive one card and cannot be doubled or resplit. An unsplit natural pays exactly 3:2; split-hand 21 pays even money. With a dealer ace, insurance pays 2:1 and a natural may take even money. Late surrender returns half your initial unsplit wager after the dealer check. Remaining chips return to your room wallet when you leave after settlement.',
 } satisfies GameDefinition;
 
 function asRecord(value: unknown, message: string): Record<string, unknown> {

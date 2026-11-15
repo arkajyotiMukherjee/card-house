@@ -1,0 +1,13 @@
+{
+  "zeroStackSeatRetained": true,
+  "returnDoesNotChargeOrReplaceStack": true,
+  "repeatedTopUpsChargeExactlyAndRespectMaximum": true,
+  "bothClientsShareTopUpState": true,
+  "bothBrowsersShareTopUpState": true,
+  "endedSessionRejectsBuyInsAndTopUps": true,
+  "remainingStackCashedOutExactlyOnce": true,
+  "cpuHostWinEndsSession": true,
+  "midHandReturnPreservesPaidSeat": true,
+  "chipsConserved": true,
+  "bothBrowsersShareEndedResultWithoutTopUp": true
+}

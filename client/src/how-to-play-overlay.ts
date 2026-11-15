@@ -1,10 +1,5 @@
-import {
-  anchorTableActor,
-  TABLE_VIEWPORT_MAX_WIDTH,
-  TABLE_BACKDROP_LEFT,
-} from './table-viewport';
-import { bindButtonPress } from './button-press';
 import * as ex from 'excalibur';
+import { bindButtonPress } from './button-press';
 import {
   BUTTON_HEIGHT,
   BUTTON_PRESS_SHIFT,
@@ -28,8 +23,14 @@ import {
   HOW_TO_PLAY_TEXT,
 } from './game-scene';
 import { clampScroll, definitionFor, layoutHowToPlay } from './how-to-play';
-import { LOGICAL_HEIGHT } from './sheets';
 import { isMobileDevice } from './mobile-shell';
+import { LOGICAL_HEIGHT } from './sheets';
+import {
+  anchorTableActor,
+  TABLE_BACKDROP_LEFT,
+  TABLE_VIEWPORT_MAX_WIDTH,
+} from './table-viewport';
+import { uiCaption, uiText } from './ui-text';
 
 const BACKDROP = new ex.Color(0, 0, 0, 0.65);
 const OFFSCREEN_Y = -200;
@@ -47,6 +48,7 @@ const SCROLL_STEP = 3;
  */
 export class HowToPlayOverlay {
   private opened = false;
+  private triggerVisible = true;
   private gameType = '';
   private lines: string[] = [];
   private scroll = 0;
@@ -66,6 +68,20 @@ export class HowToPlayOverlay {
     return this.opened;
   }
 
+  setTriggerVisible(visible: boolean): void {
+    this.triggerVisible = visible;
+    const show = visible && definitionFor(this.gameType) !== undefined;
+    this.button.graphics.isVisible = show;
+    for (const child of this.button.children)
+      if (child instanceof ex.Actor) {
+        child.graphics.isVisible = show;
+        child.pointer.useGraphicsBounds = show;
+        child.pointer.useColliderShape = show;
+      }
+    this.button.pointer.useColliderShape = show;
+    this.button.pointer.useGraphicsBounds = show;
+  }
+
   /** Shows the `?` control only for a game that has a definition. */
   setGameType(gameType: string): void {
     this.gameType = gameType;
@@ -75,6 +91,7 @@ export class HowToPlayOverlay {
       available ? HOW_TO_PLAY_BUTTON.y : OFFSCREEN_Y,
     );
     anchorTableActor(this.button, 'right', HOW_TO_PLAY_BUTTON.x);
+    this.setTriggerVisible(this.triggerVisible);
     if (!available && this.opened) {
       this.close();
     }
@@ -162,13 +179,13 @@ export class HowToPlayOverlay {
     });
     const face = panelRect(box.w, box.h, PLATE, STROKE);
     actor.graphics.use(face);
-    const size = buttonFontSize('?', box.w, box.h);
-    const rest = buttonCaptionPos('?', box.w, box.h, size);
+    const size = 28;
+    const rest = uiCaption('?', box.w, box.h, size);
     const caption = new ex.Actor({
       pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText('?', size, GOLD));
+    caption.graphics.use(uiText('?', size, GOLD));
     actor.addChild(caption);
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;

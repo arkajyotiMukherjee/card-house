@@ -1,0 +1,9 @@
+{
+  "renderedBrowsers": 1,
+  "serverPlayers": 6,
+  "opponentResizeAlignment": true,
+  "disabledPlayCannotSubmit": true,
+  "activePlayConfirmed": true,
+  "crossPageSelection": true,
+  "holdDoesNotSelect": true
+}

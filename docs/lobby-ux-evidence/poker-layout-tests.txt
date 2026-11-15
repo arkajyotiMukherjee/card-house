@@ -1,0 +1,15 @@
+
+ RUN  v3.2.7 /workspace/card-house/client
+
+ ✓ src/poker-layout.test.ts (13 tests) 490ms
+   ✓ poker layout > gives one stake control the click, including a shared edge  310ms
+ ✓ src/phone-layout.test.ts (2 tests) 2892ms
+   ✓ fits six phone actions with separate thumb targets below right-hand opponents  1491ms
+   ✓ separates mobile lobby chat and table targets and keeps two rows above paging  1400ms
+ ✓ src/table-notice.test.ts (2 tests) 12ms
+ ✓ src/poker-table-ui.test.ts (4 tests) 162ms
+
+ Test Files  4 passed (4)
+      Tests  21 passed (21)
+   Start at  17:10:54
+   Duration  6.08s (transform 5.33s, setup 1.15s, collect 7.84s, tests 3.56s, environment 875ms, prepare 1.29s)

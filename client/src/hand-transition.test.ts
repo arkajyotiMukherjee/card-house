@@ -7,6 +7,7 @@ import type { RenderContext } from './game-driver';
 for (const Driver of [HeartsDriver, SpadesDriver]) {
   it(`${Driver.name} clears a reused card's selection only on a new hand`, () => {
     const driver = new Driver();
+    if (Driver === SpadesDriver) Object.assign(driver, { buttonsReady: true });
     // Keep the render transition real, replacing only graphics construction.
     for (const method of [
       'ensureHoverClock',
@@ -20,6 +21,8 @@ for (const Driver of [HeartsDriver, SpadesDriver]) {
       'syncBacks',
     ])
       Object.assign(driver, { [method]: () => {} });
+    // Hearts now keeps persistent classic controls; bypass their canvas construction here.
+    if (Driver === HeartsDriver) Object.assign(driver, { buttonsReady: true });
     const internal = driver as unknown as {
       selected: Set<string> | string | null;
       hover: string | null;
@@ -34,10 +37,11 @@ for (const Driver of [HeartsDriver, SpadesDriver]) {
       handNumber: 1,
       hands: { '0': ['AS'] },
       passes: {},
+      tricksTaken: { '0': [] },
       scores: { ns: 0, ew: 0 },
     } as unknown as Parameters<HeartsDriver['render']>[0] &
       Parameters<SpadesDriver['render']>[0];
-    const ctx = { meSeatIndex: 0 } as RenderContext;
+    const ctx = { meSeatIndex: 0, seats: [] } as unknown as RenderContext;
     driver.render(before, ctx);
     internal.selected = Driver === HeartsDriver ? new Set(['AS']) : 'AS';
     internal.hover = 'AS';

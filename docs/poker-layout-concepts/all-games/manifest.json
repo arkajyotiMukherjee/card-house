@@ -1,0 +1,59 @@
+{
+  "status": "Design review only; implementation paused",
+  "reference": "../A-classic-table.png",
+  "views": [
+    "desktop",
+    "landscape phone"
+  ],
+  "maximums": "Current game definitions in src/shared/games",
+  "games": [
+    {
+      "game": "Bluff",
+      "maxPlayers": 6,
+      "houseDealer": false,
+      "mockup": "bluff-6-players.png"
+    },
+    {
+      "game": "President",
+      "maxPlayers": 6,
+      "houseDealer": false,
+      "mockup": "president-6-players.png"
+    },
+    {
+      "game": "Go Fish",
+      "maxPlayers": 6,
+      "houseDealer": false,
+      "mockup": "go-fish-6-players.png"
+    },
+    {
+      "game": "Crazy Eights",
+      "maxPlayers": 7,
+      "houseDealer": false,
+      "mockup": "crazy-eights-7-players.png"
+    },
+    {
+      "game": "Rummy",
+      "maxPlayers": 6,
+      "houseDealer": false,
+      "mockup": "rummy-6-players.png"
+    },
+    {
+      "game": "Blackjack",
+      "maxPlayers": 5,
+      "houseDealer": true,
+      "mockup": "blackjack-5-players.png"
+    },
+    {
+      "game": "Spades",
+      "maxPlayers": 4,
+      "houseDealer": false,
+      "mockup": "spades-4-players.png"
+    },
+    {
+      "game": "Hearts",
+      "maxPlayers": 4,
+      "houseDealer": false,
+      "mockup": "hearts-4-players.png"
+    }
+  ]
+}

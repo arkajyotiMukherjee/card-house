@@ -1,0 +1,22 @@
+{
+  "helpAndChatTouchControls": true,
+  "mobileHeaderAndSafeMargins": true,
+  "centeredLabelsAndHands": true,
+  "outerFrameRemoved": true,
+  "potLabelBesideChipStacks": true,
+  "quietUnboxedNames": true,
+  "turnOnlyActionsAndBottomBarStates": true,
+  "touchDiscard": true,
+  "longPressDoesNotDiscardOrSelect": true,
+  "touchBetSlider": true,
+  "acceptedBetAnimates": true,
+  "touchBetStepper": true,
+  "players": 8,
+  "uniqueIdentities": 8,
+  "foldedHandsPrivate": true,
+  "fourThreeTwoCardProgression": true,
+  "allViewsSameState": true,
+  "eightPlayerSpectator": true,
+  "spectatorLeaveViaHeader": true,
+  "errors": []
+}

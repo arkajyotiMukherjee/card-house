@@ -1,6 +1,7 @@
 import * as ex from 'excalibur';
 import { CARD_DRAW, HOVER_LIFT } from './bluff-layout';
 import { isMobileDevice } from './mobile-shell';
+import { handCardScale } from './card-sizing';
 
 /** How fast the drawn lift chases the curve. A short move is not a full pop. */
 export const HOVER_EASE_MS = 110;
@@ -107,7 +108,7 @@ export class CardTouchGesture {
 const LIFT_Z = 30;
 const WINDOW = 3;
 
-/** Extra space above the finger and a smooth magnification curve on phones. */
+/** Shared smooth inspection lift and magnification, with a larger resting hand on phones. */
 export function inspectionPose(
   lift: number,
   mobile: boolean,
@@ -118,13 +119,14 @@ export function inspectionPose(
   scale: number;
 } {
   const amount = Math.max(0, lift);
+  const progress = Math.min(1, amount / HOVER_LIFT);
+  const restScale = personal ? handCardScale(mobile) : 1;
   return {
-    lift: mobile
-      ? amount * 2.4 + (selected ? 12 : 0) + (personal ? 12 : 0)
-      : amount + (selected ? 12 : 0),
-    scale: mobile
-      ? (personal ? 1.25 : 1) + Math.min(1, amount / HOVER_LIFT) * 0.65
-      : 1,
+    lift:
+      amount * 2.4 +
+      (selected ? 12 : 0) +
+      (personal ? (mobile ? 12 : 4 + 8 * progress) : 0),
+    scale: restScale + progress * ((personal ? 1.9 : 1.65) - restScale),
   };
 }
 
@@ -340,7 +342,7 @@ export function placeCardLift(
   actor.pointer.useGraphicsBounds = false;
   actor.pos = ex.vec(restX, restY);
   const mobile = typeof window !== 'undefined' && isMobileDevice();
-  const enlarged = mobile && personal;
+  const enlarged = personal;
   if (enlargedColliders.get(actor) !== enlarged) {
     const resting = inspectionPose(0, mobile, false, personal);
     actor.collider.useBoxCollider(

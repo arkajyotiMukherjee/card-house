@@ -1,0 +1,15 @@
+{
+  "players": 2,
+  "uniqueIdentities": 2,
+  "independentBrowserActions": true,
+  "holdDoesNotSelect": true,
+  "canvasStockDiscard": true,
+  "crossedPages": true,
+  "meldsMade": 1,
+  "layoff": true,
+  "publicPage": true,
+  "stockExhausted": true,
+  "finished": true,
+  "remainingHandsPrivate": true,
+  "errors": []
+}

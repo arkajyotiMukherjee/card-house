@@ -1,4 +1,4 @@
-import { anchorTableActor } from './table-viewport';
+import { anchorTableActor, tableGutter } from './table-viewport';
 import { bindButtonPress } from './button-press';
 import { isMobileDevice } from './mobile-shell';
 import * as ex from 'excalibur';
@@ -8,26 +8,32 @@ import {
 } from '../../src/shared/games/president';
 import {
   CARD_DRAW,
-  PILE_X,
-  PILE_Y,
   cardLift,
   faceForCard,
-  handPositions,
-  pilePositions,
   selectedPlayCards,
 } from './bluff-layout';
+import { OPPONENT_FAN_CARD } from './table-presentation';
+import { BUTTON_PRESS_SHIFT } from './button-style';
+import { uiText, uiCaption } from './ui-text';
+import { CLASSIC, classicSeats } from './classic-table-design';
 import {
-  OPPONENT_FAN_CARD,
-  TURN_LINE,
-  opponentCountAnchor,
-  seatFan,
-} from './table-presentation';
+  HAND_PREV,
+  HAND_NEXT,
+  handPageSize,
+  handPositions,
+  classicBackSlots,
+  classicControlBoxes,
+} from './classic-card-layout';
 import {
-  BUTTON_PRESS_SHIFT,
-  buttonCaptionPos,
-  buttonFontSize,
-} from './button-style';
-import { pixelFont } from './boot-scene';
+  PRESIDENT_PILE,
+  PRESIDENT_PUBLIC_SCALE,
+  orderedPresidentHand,
+  presidentPublicCards,
+  presidentPublicPositions,
+} from './president-classic-layout';
+import { PresidentTableUi } from './president-table-ui';
+const PILE_X = PRESIDENT_PILE.x;
+const PILE_Y = PRESIDENT_PILE.y;
 import type { CardAtlas } from './card-atlas';
 import type { GameDriver, InputEvent, RenderContext } from './game-driver';
 import {
@@ -42,28 +48,14 @@ import {
   resetCardLift,
   startHandHoverClock,
 } from './hand-hover';
-import {
-  PASS_BUTTON,
-  PLAY_BUTTON,
-  RANK_STEP,
-  RANK_X,
-  RANK_Y,
-  STRENGTH_CAPTION_Y,
-  STRENGTH_Y,
-  finishedLine,
-  legalCard,
-  rankOrderLines,
-  requirementLine,
-  strengthSlots,
-} from './president-layout';
-import { LOGICAL_WIDTH } from './sheets';
+import { legalCard } from './president-layout';
 
-const GOLD = ex.Color.fromHex('#f4e4b3');
-const DIM = ex.Color.fromHex('#d7c08a');
+const [PLAY_BUTTON, PASS_BUTTON] = classicControlBoxes(2);
+const GOLD = ex.Color.fromHex(CLASSIC.cream);
 const BUTTON = ex.Color.fromHex('#1b5c38');
 const BUTTON_DOWN = ex.Color.fromHex('#0e3d24');
-const STROKE = ex.Color.fromHex('#e6c27a');
-const STROKE_HOT = ex.Color.fromHex('#fff6d0');
+const STROKE = ex.Color.fromHex(CLASSIC.softBorder);
+const STROKE_HOT = ex.Color.fromHex(CLASSIC.gold);
 const FLASH_FILL = ex.Color.fromRGB(232, 60, 48, 0.8);
 const FLASH_STROKE = ex.Color.fromHex('#ff3b2f');
 
@@ -114,6 +106,15 @@ class FlashActor extends ex.Actor {
   }
 }
 
+interface ControlFace {
+  actor: ex.Actor;
+  face: ex.Rectangle;
+  caption: ex.Actor;
+  text: ex.Text;
+  setLabel?: (label: string) => void;
+  place?: (box: { x: number; y: number; w: number; h: number }) => void;
+}
+
 interface CardRecord {
   actor: ex.Actor;
   restX: number;
@@ -124,22 +125,6 @@ interface CardRecord {
   moving: boolean;
   placed: boolean;
   restZ: number;
-}
-
-function canvasText(text: string, size: number, color: ex.Color): ex.Text {
-  const graphic = new ex.Text({
-    text,
-    color,
-    font: pixelFont.toFont({
-      family: '"Press Start 2P"',
-      size,
-      color,
-      quality: 1,
-      filtering: ex.ImageFiltering.Pixel,
-    }),
-  });
-  graphic.origin = ex.vec(0, 0);
-  return graphic;
 }
 
 function panelRect(
@@ -177,8 +162,8 @@ function cardSprite(
 
 /**
  * President table: your hand along the bottom, other hands as backs,
- * the play pile in the center with a low-to-high rank strip under it, and
- * the finish order down the left.
+ * the latest combination and strength guide in the center. Finish order
+ * replaces that public area at the end; remaining hands stay private.
  */
 export class PresidentDriver implements GameDriver<PresidentState> {
   readonly name = 'President';
@@ -187,7 +172,15 @@ export class PresidentDriver implements GameDriver<PresidentState> {
   private cards = new Map<string, CardRecord>();
   private backs = new Map<string, ex.Actor>();
   private backTargets = new Map<string, string>();
-  private labels: ex.Actor[] = [];
+  private readonly tableUi = new PresidentTableUi();
+  private playControl: ControlFace | null = null;
+  private passControl: ControlFace | null = null;
+  private prevHandControl: ControlFace | null = null;
+  private nextHandControl: ControlFace | null = null;
+  private handPage = 0;
+  private handPageCount = 1;
+  private handLayoutKey = '';
+  private visibleHand: string[] = [];
   private buttons: ex.Actor[] = [];
   private flashes: ex.Actor[] = [];
   private selected = new Set<string>();
@@ -202,26 +195,22 @@ export class PresidentDriver implements GameDriver<PresidentState> {
     this.state = state;
     this.ctx = ctx;
     this.ensureHoverClock(ctx);
-    const acting =
-      state.phase === 'play' &&
-      ctx.meSeatIndex !== null &&
-      state.turnSeatIndex === ctx.meSeatIndex;
-    if (!acting) {
-      for (const button of this.buttons) button.kill();
-      this.buttons = [];
-      this.buttonsReady = false;
-    } else if (!this.buttonsReady) {
-      this.addButton(ctx, PLAY_BUTTON, 'Play', 'play');
-      this.addButton(ctx, PASS_BUTTON, 'Pass', 'pass');
+    if (!this.buttonsReady) {
+      this.playControl = this.addButton(ctx, PLAY_BUTTON, 'Play', 'play');
+      this.passControl = this.addButton(ctx, PASS_BUTTON, 'Pass', 'pass');
+      this.prevHandControl = this.addButton(ctx, HAND_PREV, '<', 'hand-prev');
+      this.nextHandControl = this.addButton(ctx, HAND_NEXT, '>', 'hand-next');
+      anchorTableActor(this.prevHandControl.actor, 'left', HAND_PREV.x);
       this.buttonsReady = true;
     }
-    this.syncLabels(state, ctx);
     if (state.phase === 'lobby') {
       this.clearTableCards();
+      this.syncLabels(state, ctx);
       return;
     }
     this.syncCards(state, ctx);
     this.syncBacks(state, ctx);
+    this.syncLabels(state, ctx);
   }
 
   handleInput(
@@ -231,6 +220,19 @@ export class PresidentDriver implements GameDriver<PresidentState> {
   ): void {
     this.state = state;
     this.ctx = ctx;
+    if (
+      event.type === 'pointerup' &&
+      (event.target === 'hand-prev' || event.target === 'hand-next')
+    ) {
+      if (ctx.inputBlocked() || this.handPageCount < 2) return;
+      const direction = event.target === 'hand-prev' ? -1 : 1;
+      this.handPage =
+        (this.handPage + direction + this.handPageCount) % this.handPageCount;
+      this.handHover.clear();
+      this.syncCards(state, ctx, true);
+      this.syncLabels(state, ctx);
+      return;
+    }
     if (state.phase !== 'play') {
       return;
     }
@@ -270,6 +272,7 @@ export class PresidentDriver implements GameDriver<PresidentState> {
         this.selected.add(event.target);
       }
       this.applyLift(event.target, state, ctx);
+      this.syncLabels(state, ctx);
     }
   }
 
@@ -285,10 +288,10 @@ export class PresidentDriver implements GameDriver<PresidentState> {
     if (type === 'pass') {
       this.flashBox(
         ctx,
-        PASS_BUTTON.x,
-        PASS_BUTTON.y,
-        PASS_BUTTON.w,
-        PASS_BUTTON.h,
+        this.passControl?.actor.pos.x ?? PASS_BUTTON.x,
+        this.passControl?.actor.pos.y ?? PASS_BUTTON.y,
+        this.passControl?.actor.width ?? PASS_BUTTON.w,
+        this.passControl?.actor.height ?? PASS_BUTTON.h,
       );
       return;
     }
@@ -297,10 +300,10 @@ export class PresidentDriver implements GameDriver<PresidentState> {
     }
     this.flashBox(
       ctx,
-      PLAY_BUTTON.x,
-      PLAY_BUTTON.y,
-      PLAY_BUTTON.w,
-      PLAY_BUTTON.h,
+      this.playControl?.actor.pos.x ?? PLAY_BUTTON.x,
+      this.playControl?.actor.pos.y ?? PLAY_BUTTON.y,
+      this.playControl?.actor.width ?? PLAY_BUTTON.w,
+      this.playControl?.actor.height ?? PLAY_BUTTON.h,
     );
     for (const cardId of this.selected) {
       const record = this.cards.get(cardId);
@@ -339,15 +342,21 @@ export class PresidentDriver implements GameDriver<PresidentState> {
     }
     this.flashes = [];
     this.clearTableCards();
-    for (const actor of this.labels) {
-      actor.kill();
-    }
-    this.labels = [];
+    this.tableUi.clear();
     for (const actor of this.buttons) {
       actor.kill();
     }
     this.buttons = [];
     this.buttonsReady = false;
+    this.playControl =
+      this.passControl =
+      this.prevHandControl =
+      this.nextHandControl =
+        null;
+    this.handPage = 0;
+    this.handPageCount = 1;
+    this.handLayoutKey = '';
+    this.visibleHand = [];
     this.selected.clear();
     this.hover = null;
     this.stopHoverClock();
@@ -364,112 +373,46 @@ export class PresidentDriver implements GameDriver<PresidentState> {
     ctx.sendIntent({ type: 'play', cards });
   }
 
+  private setShown(control: ControlFace | null, shown: boolean): void {
+    if (!control) {
+      return;
+    }
+    control.actor.graphics.isVisible = shown;
+    control.caption.graphics.isVisible = shown;
+    control.actor.pointer.useColliderShape = shown;
+    control.actor.pointer.useGraphicsBounds = shown;
+  }
+
   private syncLabels(state: PresidentState, ctx: RenderContext): void {
-    for (const actor of this.labels) {
-      actor.kill();
-    }
-    this.labels = [];
-    if (state.phase === 'lobby') {
-      return;
-    }
-    this.addRankOrder(state, ctx);
-    if (state.phase === 'play') this.addStrengthStrip(state, ctx);
-    if (state.phase === 'finished') {
-      const line =
-        ctx.finishedMessage ?? finishedLine(state, ctx.seats) ?? 'Finished';
-      this.labels.push(this.banner(ctx, line));
-      return;
-    }
-    const mine =
-      ctx.meSeatIndex !== null && state.turnSeatIndex === ctx.meSeatIndex;
-    const turn = mine ? 'Your turn' : 'Wait';
-    this.labels.push(this.textActor(ctx, TURN_LINE.x, TURN_LINE.y, turn, GOLD));
-    const requirement =
-      !mine && requirementLine(state) === 'Your lead'
-        ? 'New lead'
-        : requirementLine(state);
-    if (requirement.length > 0) {
-      this.labels.push(this.textActor(ctx, 390, 196, requirement, GOLD));
-    }
-    if (state.lastPlay) {
-      const last = state.lastPlay;
-      this.labels.push(
-        this.textActor(
-          ctx,
-          390,
-          214,
-          `Last ${last.cards.length} ${last.rank}`,
-          DIM,
-        ),
-      );
-    }
-    for (const seat of ctx.seats) {
-      if (seat.self) {
-        continue;
-      }
-      const count = state.hands[String(seat.seatIndex)]?.length ?? 0;
-      const countAt = opponentCountAnchor(seat.x, seat.y, count, seat.name);
-      const countLabel = this.textActor(
-        ctx,
-        countAt.x,
-        countAt.y,
-        `x${count}`,
-        DIM,
-      );
-      countLabel.z = 80;
-      this.labels.push(countLabel);
-    }
-  }
-
-  private addRankOrder(state: PresidentState, ctx: RenderContext): void {
-    const lines = rankOrderLines(state, ctx.seats);
-    const mobile = isMobileDevice();
-    const finished = state.phase === 'finished';
-    for (let index = 0; index < lines.length; index += 1) {
-      const text = lines[index];
-      if (!text) {
-        continue;
-      }
-      this.labels.push(
-        this.textActor(
-          ctx,
-          mobile ? (finished ? 300 : 16) : RANK_X,
-          (mobile ? (finished ? 168 : 88) : RANK_Y) +
-            index * (mobile ? 24 : RANK_STEP),
-          text,
-          GOLD,
-          mobile ? 12 : 8,
-        ),
-      );
-    }
-  }
-
-  private addStrengthStrip(state: PresidentState, ctx: RenderContext): void {
-    const current = state.phase === 'play' ? state.currentRank : null;
-    for (const slot of strengthSlots(PILE_X, current)) {
-      this.labels.push(
-        this.textActor(
-          ctx,
-          slot.x,
-          STRENGTH_Y,
-          slot.rank,
-          slot.current ? STROKE_HOT : DIM,
-        ),
-      );
-    }
-    const caption = 'Low to high';
-    this.labels.push(
-      this.textActor(
-        ctx,
-        PILE_X - (caption.length * 8) / 2,
-        STRENGTH_CAPTION_Y,
-        caption,
-        DIM,
-      ),
+    if (!this.buttonsReady) return;
+    const acting =
+      state.phase === 'play' &&
+      ctx.meSeatIndex !== null &&
+      state.turnSeatIndex === ctx.meSeatIndex;
+    const pass = acting && state.currentRank !== null;
+    this.setShown(this.playControl, acting);
+    this.setShown(this.passControl, pass);
+    const boxes = classicControlBoxes(pass ? 2 : 1);
+    this.playControl?.place?.(boxes[0]);
+    if (pass) this.passControl?.place?.(boxes[1]);
+    this.playControl?.setLabel?.(
+      this.selected.size ? `Play ${this.selected.size}` : 'Play',
     );
+    if (this.playControl) {
+      const enabled = acting && this.selected.size > 0;
+      this.playControl.actor.graphics.opacity = enabled ? 1 : 0.45;
+      this.playControl.caption.graphics.opacity = enabled ? 1 : 0.45;
+      this.playControl.actor.pointer.useColliderShape = enabled;
+      this.playControl.actor.pointer.useGraphicsBounds = enabled;
+    }
+    this.tableUi.render(state, ctx, this.handPage, this.handPageCount);
   }
 
-  private syncCards(state: PresidentState, ctx: RenderContext): void {
+  private syncCards(
+    state: PresidentState,
+    ctx: RenderContext,
+    pageChanged = false,
+  ): void {
     const desired = new Map<
       string,
       {
@@ -484,10 +427,22 @@ export class PresidentDriver implements GameDriver<PresidentState> {
     const hand =
       ctx.meSeatIndex === null
         ? []
-        : (state.hands[String(ctx.meSeatIndex)] ?? []);
-    const handSlots = handPositions(hand.length);
-    for (let index = 0; index < hand.length; index += 1) {
-      const cardId = hand[index];
+        : orderedPresidentHand(state.hands[String(ctx.meSeatIndex)] ?? []);
+    this.handLayoutKey = `${isMobileDevice()}:${tableGutter()}`;
+    const pageSize = handPageSize(hand.length, isMobileDevice(), tableGutter());
+    this.handPageCount = this.nextHandControl
+      ? Math.max(1, Math.ceil(hand.length / pageSize))
+      : 1;
+    this.handPage = Math.min(this.handPage, this.handPageCount - 1);
+    const paged = this.handPageCount > 1;
+    this.visibleHand = paged
+      ? hand.slice(this.handPage * pageSize, (this.handPage + 1) * pageSize)
+      : hand;
+    this.setShown(this.prevHandControl, paged);
+    this.setShown(this.nextHandControl, paged);
+    const handSlots = handPositions(this.visibleHand.length, isMobileDevice());
+    for (let index = 0; index < this.visibleHand.length; index += 1) {
+      const cardId = this.visibleHand[index];
       const slot = handSlots[index];
       if (!cardId || !slot) {
         continue;
@@ -501,22 +456,16 @@ export class PresidentDriver implements GameDriver<PresidentState> {
         personal: true,
       });
     }
-    const pileSlots =
-      state.phase === 'finished' ? [] : pilePositions(state.playPile.length);
-    const pileStart = state.playPile.length - pileSlots.length;
-    for (let index = 0; index < pileSlots.length; index += 1) {
-      const cardId = state.playPile[pileStart + index];
+    const publicCards = presidentPublicCards(state);
+    const pileSlots = presidentPublicPositions(publicCards.length);
+    for (const [index, cardId] of publicCards.entries()) {
       const slot = pileSlots[index];
-      if (!cardId || !slot) {
-        continue;
-      }
       desired.set(cardId, {
-        x: slot.x,
-        y: slot.y,
+        ...slot,
         faceUp: true,
         delay: 0,
         personal: false,
-        z: 5 + index,
+        z: 8 + index,
       });
     }
     for (const cardId of [...this.selected]) {
@@ -528,11 +477,10 @@ export class PresidentDriver implements GameDriver<PresidentState> {
       if (!desired.has(cardId)) {
         record.actor.kill();
         this.cards.delete(cardId);
-        this.selected.delete(cardId);
       }
     }
     for (const [cardId, place] of desired) {
-      this.placeCard(cardId, place, ctx);
+      this.placeCard(cardId, place, ctx, pageChanged && place.personal);
     }
   }
 
@@ -547,11 +495,13 @@ export class PresidentDriver implements GameDriver<PresidentState> {
       personal: boolean;
     },
     ctx: RenderContext,
+    instant: boolean,
   ): void {
     const atlas = place.personal ? ctx.myCards : ctx.cards;
     let record = this.cards.get(cardId);
     if (!record) {
       const actor = new ex.Actor({
+        name: `president-card-${cardId}`,
         pos: ex.vec(PILE_X, PILE_Y),
         anchor: ex.vec(0.5, 0.5),
         width: CARD_DRAW,
@@ -617,10 +567,18 @@ export class PresidentDriver implements GameDriver<PresidentState> {
       record.personal = place.personal;
       record.actor.graphics.use(cardSprite(atlas, cardId, place.faceUp));
     }
+    record.actor.pointer.useColliderShape = place.personal;
     const moved = record.restX !== place.x || record.restY !== place.y;
     record.restX = place.x;
     record.restY = place.y;
     record.restZ = place.z;
+    if (instant) {
+      record.actor.actions.clearActions();
+      record.moving = false;
+      record.placed = true;
+      this.applyLift(cardId, this.state, ctx);
+      return;
+    }
     if (!record.placed || moved) {
       const fromDeal = !record.placed;
       record.placed = true;
@@ -639,6 +597,11 @@ export class PresidentDriver implements GameDriver<PresidentState> {
   ): void {
     record.moving = true;
     resetCardLift(record.actor);
+    if (!record.personal)
+      record.actor.scale = ex.vec(
+        PRESIDENT_PUBLIC_SCALE,
+        PRESIDENT_PUBLIC_SCALE,
+      );
     record.actor.z = record.restZ;
     record.actor.actions.clearActions();
     const motion = record.actor.actions;
@@ -664,6 +627,15 @@ export class PresidentDriver implements GameDriver<PresidentState> {
   ): void {
     const record = this.cards.get(cardId);
     if (!record || record.moving || !state || !ctx) {
+      return;
+    }
+    if (!record.personal) {
+      record.actor.pos = ex.vec(record.restX, record.restY);
+      record.actor.z = record.restZ;
+      record.actor.scale = ex.vec(
+        PRESIDENT_PUBLIC_SCALE,
+        PRESIDENT_PUBLIC_SCALE,
+      );
       return;
     }
     const legal = legalCard(state, ctx.meSeatIndex, cardId);
@@ -730,11 +702,13 @@ export class PresidentDriver implements GameDriver<PresidentState> {
     if (!state || !ctx) {
       return;
     }
-    const hand =
-      ctx.meSeatIndex === null
-        ? []
-        : (state.hands[String(ctx.meSeatIndex)] ?? []);
-    const slots = handPositions(hand.length);
+    if (this.handLayoutKey !== `${isMobileDevice()}:${tableGutter()}`) {
+      this.handHover.clear();
+      this.syncCards(state, ctx, true);
+      this.syncLabels(state, ctx);
+    }
+    const hand = this.visibleHand;
+    const slots = this.visibleHandSlots();
     const centers: number[] = [];
     for (let index = 0; index < slots.length; index += 1) {
       centers.push(slots[index]?.x ?? 0);
@@ -755,8 +729,11 @@ export class PresidentDriver implements GameDriver<PresidentState> {
     if (!state || !ctx || ctx.meSeatIndex === null) {
       return [];
     }
-    const hand = state.hands[String(ctx.meSeatIndex)] ?? [];
-    return localHandHitBoxes(hand, this.cards, CARD_DRAW);
+    return localHandHitBoxes(this.visibleHand, this.cards, CARD_DRAW);
+  }
+
+  private visibleHandSlots(): { x: number; y: number }[] {
+    return handPositions(this.visibleHand.length, isMobileDevice());
   }
 
   private onCard(
@@ -776,25 +753,18 @@ export class PresidentDriver implements GameDriver<PresidentState> {
       string,
       { x: number; y: number; z: number; rotation: number; scale: number }
     >();
-    for (const seat of ctx.seats) {
-      if (seat.self) {
-        continue;
-      }
-      const count = state.hands[String(seat.seatIndex)]?.length ?? 0;
-      const slots = seatFan(seat.x, seat.y, count, seat.name);
-      for (let index = 0; index < slots.length; index += 1) {
-        const slot = slots[index];
-        if (!slot) {
-          continue;
-        }
-        desired.set(`${seat.seatIndex}:${index}`, {
-          x: slot.x,
-          y: slot.y,
-          z: 4 + index,
-          rotation: slot.rotation,
-          scale: slot.scale,
-        });
-      }
+    for (const slot of classicBackSlots(ctx.seats, state.hands)) {
+      const { key, ...place } = slot;
+      const box = classicSeats(ctx.seats).find((row) =>
+        key.startsWith(`${row.seat.seatIndex}:`),
+      );
+      place.x +=
+        box?.edge === 'left'
+          ? -tableGutter()
+          : box?.edge === 'right'
+            ? tableGutter()
+            : 0;
+      desired.set(key, place);
     }
     for (const [key, actor] of this.backs) {
       if (!desired.has(key)) {
@@ -806,8 +776,22 @@ export class PresidentDriver implements GameDriver<PresidentState> {
     for (const [key, place] of desired) {
       const target = `${place.x}:${place.y}:${place.rotation}:${place.scale}`;
       let actor = this.backs.get(key);
+      const edge = classicSeats(ctx.seats).find((box) =>
+        key.startsWith(`${box.seat.seatIndex}:`),
+      )?.edge;
+      const baseX =
+        place.x +
+        (edge === 'left'
+          ? tableGutter()
+          : edge === 'right'
+            ? -tableGutter()
+            : 0);
+      const dock = (): void => {
+        if (actor && edge) anchorTableActor(actor, edge, baseX);
+      };
       if (!actor) {
         actor = new ex.Actor({
+          name: `president-back-${key}`,
           pos: ex.vec(PILE_X, PILE_Y),
           anchor: ex.vec(0.5, 0.5),
           width: OPPONENT_FAN_CARD,
@@ -818,14 +802,18 @@ export class PresidentDriver implements GameDriver<PresidentState> {
         actor.scale = ex.vec(place.scale, place.scale);
         const back = ctx.cards.back();
         actor.graphics.use(back);
+        actor.pointer.useGraphicsBounds = false;
+        actor.pointer.useColliderShape = false;
         ctx.scene.add(actor);
         this.backs.set(key, actor);
         this.backTargets.set(key, target);
-        actor.actions.moveTo({
-          pos: ex.vec(place.x, place.y),
-          duration: TRAVEL_MS,
-          easing: ex.EasingFunctions.EaseOutCubic,
-        });
+        actor.actions
+          .moveTo({
+            pos: ex.vec(place.x, place.y),
+            duration: TRAVEL_MS,
+            easing: ex.EasingFunctions.EaseOutCubic,
+          })
+          .callMethod(dock);
         continue;
       }
       actor.z = place.z;
@@ -836,11 +824,13 @@ export class PresidentDriver implements GameDriver<PresidentState> {
       }
       this.backTargets.set(key, target);
       actor.actions.clearActions();
-      actor.actions.moveTo({
-        pos: ex.vec(place.x, place.y),
-        duration: TRAVEL_MS,
-        easing: ex.EasingFunctions.EaseOutCubic,
-      });
+      actor.actions
+        .moveTo({
+          pos: ex.vec(place.x, place.y),
+          duration: TRAVEL_MS,
+          easing: ex.EasingFunctions.EaseOutCubic,
+        })
+        .callMethod(dock);
     }
   }
 
@@ -859,56 +849,15 @@ export class PresidentDriver implements GameDriver<PresidentState> {
     this.handHover.clear();
   }
 
-  private banner(ctx: RenderContext, text: string): ex.Actor {
-    const size = isMobileDevice()
-      ? Math.max(8, Math.min(16, Math.floor(700 / Math.max(1, text.length))))
-      : 8;
-    const width = text.length * size + 16;
-    const actor = new ex.Actor({
-      pos: ex.vec(Math.floor((LOGICAL_WIDTH - width) / 2), 112),
-      anchor: ex.vec(0, 0),
-      width,
-      height: size + 16,
-      z: 16,
-    });
-    actor.graphics.use(panelRect(width, size + 16, BUTTON, STROKE));
-    const caption = new ex.Actor({
-      pos: ex.vec(8, 8),
-      anchor: ex.vec(0, 0),
-    });
-    caption.graphics.use(canvasText(text, size, GOLD));
-    actor.addChild(caption);
-    ctx.scene.add(actor);
-    return actor;
-  }
-
-  private textActor(
-    ctx: RenderContext,
-    x: number,
-    y: number,
-    text: string,
-    color: ex.Color,
-    size = 8,
-  ): ex.Actor {
-    const actor = new ex.Actor({
-      pos: ex.vec(x, y),
-      anchor: ex.vec(0, 0),
-      z: 14,
-    });
-    actor.graphics.use(canvasText(text, size, color));
-    if (x === TURN_LINE.x && y === TURN_LINE.y)
-      anchorTableActor(actor, 'right');
-    ctx.scene.add(actor);
-    return actor;
-  }
-
   private addButton(
     ctx: RenderContext,
     box: { x: number; y: number; w: number; h: number },
     label: string,
-    target: 'play' | 'pass',
-  ): void {
+    target: 'play' | 'pass' | 'hand-prev' | 'hand-next',
+  ): ControlFace {
+    let currentBox = { ...box };
     const actor = new ex.Actor({
+      name: `president-control-${target}`,
       pos: ex.vec(box.x, box.y),
       anchor: ex.vec(0, 0),
       width: box.w,
@@ -917,13 +866,16 @@ export class PresidentDriver implements GameDriver<PresidentState> {
     });
     const face = panelRect(box.w, box.h, BUTTON, STROKE);
     actor.graphics.use(face);
-    const size = buttonFontSize(label, box.w, box.h);
-    const rest = buttonCaptionPos(label, box.w, box.h, size);
+    const size = 18;
+    const rest = uiCaption(label, currentBox.w, currentBox.h, size);
+    const text = uiText(label, size, GOLD);
     const caption = new ex.Actor({
       pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText(label, size, GOLD));
+    caption.graphics.use(text);
+    caption.pointer.useGraphicsBounds = false;
+    caption.pointer.useColliderShape = false;
     actor.addChild(caption);
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;
@@ -935,21 +887,48 @@ export class PresidentDriver implements GameDriver<PresidentState> {
         caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
       },
       () => {
+        caption.pos = ex.vec(rest.x, rest.y);
         face.strokeColor = STROKE;
         face.color = BUTTON;
-        caption.pos = ex.vec(rest.x, rest.y);
       },
       () => {
-        const currentState = this.state;
+        const state = this.state;
         const current = this.ctx;
-        if (!currentState || !current) {
+        if (!state || !current) {
           return;
         }
-        this.handleInput({ type: 'pointerup', target }, currentState, current);
+        this.handleInput({ type: 'pointerup', target }, state, current);
       },
     );
-    if (box.x >= 750 && box.y >= 300) anchorTableActor(actor, 'right', box.x);
+    if (box.x >= 600 && box.y >= 400) anchorTableActor(actor, 'right', box.x);
     ctx.scene.add(actor);
     this.buttons.push(actor);
+    return {
+      actor,
+      face,
+      caption,
+      text,
+      place: (nextBox) => {
+        currentBox = { ...nextBox };
+        face.width = nextBox.w;
+        face.height = nextBox.h;
+        actor.collider.useBoxCollider(nextBox.w, nextBox.h, ex.vec(0, 0));
+        actor.pos.y = nextBox.y;
+        anchorTableActor(actor, 'right', nextBox.x);
+        const next = uiCaption(text.text, nextBox.w, nextBox.h, size);
+        rest.x = next.x;
+        rest.y = next.y;
+        caption.pos = ex.vec(rest.x, rest.y);
+      },
+      setLabel: (nextLabel) => {
+        text.text = nextLabel;
+        const nextSize = 18;
+        text.font = uiText(nextLabel, nextSize, GOLD).font;
+        const next = uiCaption(nextLabel, currentBox.w, currentBox.h, nextSize);
+        rest.x = next.x;
+        rest.y = next.y;
+        caption.pos = ex.vec(rest.x, rest.y);
+      },
+    };
   }
 }

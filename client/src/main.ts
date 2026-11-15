@@ -23,6 +23,7 @@ import {
 } from './last-room';
 import { lobbyByCode, type LobbyRow } from './lobby';
 import { GameScene } from './game-scene-view';
+import { LEAVE_TABLE_BUTTON } from './game-scene';
 import {
   cardroomBotUrl,
   fetchDefaultPlayerName,
@@ -83,10 +84,11 @@ const engine = new ex.Engine({
   suppressPlayButton: true,
   snapToPixel: true,
   backgroundColor: ex.Color.fromHex(theme.background),
-  pixelRatio: 1,
+  pixelRatio: 2,
 });
 
 let settledSize = visibleSize();
+let fittedClassicControls = false;
 
 /**
  * Fits the whole 960×540 frame inside the visible area and the safe-area
@@ -104,9 +106,13 @@ function applyContainScale(): void {
     settledSize = size;
   }
   const insets = readSafeInsets();
+  const classicControls =
+    engine.currentScene instanceof GameScene &&
+    engine.currentScene.usesClassicLayout;
+  fittedClassicControls = classicControls;
   // Reserve a rail for the phone shell so Fullscreen never covers game input.
   const shell = shellView(readShellInputs());
-  if (shell.button && !shell.gate) {
+  if (shell.button && !shell.gate && !classicControls) {
     insets.left += 60;
   }
   const tableActive =
@@ -132,10 +138,19 @@ function applyContainScale(): void {
   );
   engine.screen.viewport = { width: fitted.width, height: fitted.height };
   engine.screen.applyResolutionAndViewport();
-  canvas.style.imageRendering = 'pixelated';
+  canvas.style.imageRendering = 'auto';
   canvas.style.position = 'absolute';
   canvas.style.left = `${fitted.left}px`;
   canvas.style.top = `${fitted.top}px`;
+  const controlScale = fitted.height / LOGICAL_HEIGHT;
+  document.documentElement.style.setProperty(
+    '--cardhouse-control-height',
+    `${(classicControls ? 40 : LEAVE_TABLE_BUTTON.h) * controlScale}px`,
+  );
+  document.documentElement.style.setProperty(
+    '--cardhouse-control-top',
+    `${fitted.top + LEAVE_TABLE_BUTTON.y * controlScale}px`,
+  );
   refreshCanvasTextFields();
 }
 
@@ -171,14 +186,29 @@ engine.on('postframe', () => {
     isLobbyViewport(engine.currentScene);
   const insets = readSafeInsets();
   const shell = shellView(readShellInputs());
-  if (shell.button && !shell.gate) insets.left += 60;
+  if (
+    shell.button &&
+    !shell.gate &&
+    !(
+      engine.currentScene instanceof GameScene &&
+      engine.currentScene.usesClassicLayout
+    )
+  )
+    insets.left += 60;
   const width = tableActive
     ? tableViewportWidth(
         settledSize.width - insets.left - insets.right,
         settledSize.height - insets.top - insets.bottom,
       )
     : LOGICAL_WIDTH;
-  if (engine.screen.resolution.width !== width) applyContainScale();
+  const classicControls =
+    engine.currentScene instanceof GameScene &&
+    engine.currentScene.usesClassicLayout;
+  if (
+    engine.screen.resolution.width !== width ||
+    classicControls !== fittedClassicControls
+  )
+    applyContainScale();
   placeTableAnchors(engine.currentScene, width);
   if (isLobbyViewport(engine.currentScene))
     placeLobbyWidths(engine.currentScene);

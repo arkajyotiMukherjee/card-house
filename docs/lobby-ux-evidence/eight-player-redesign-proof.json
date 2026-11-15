@@ -1,0 +1,18 @@
+{
+  "players": 8,
+  "uniqueIdentities": 8,
+  "game": "Omaha",
+  "desktop": "1440x900",
+  "mobile": "844x390",
+  "flopAndShowdown": true,
+  "foldedHandsExcluded": true,
+  "showdownContenders": 6,
+  "reviewNavigation": true,
+  "readableFullNames": true,
+  "fullscreenIconCentered": true,
+  "uncalledHandPrivate": true,
+  "personalBottomBand": true,
+  "roomWalletHidden": true,
+  "errorBandClearOfCardsAndNames": true,
+  "errors": []
+}

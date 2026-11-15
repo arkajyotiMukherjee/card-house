@@ -1,0 +1,78 @@
+{
+  "players": 5,
+  "dealer": 1,
+  "proofs": [
+    {
+      "kind": "insurance",
+      "person": 3,
+      "classic": true,
+      "names": 5,
+      "prize": false,
+      "hiddenDealer": 1,
+      "privateOther": 0,
+      "controls": [
+        "insurance:yes",
+        "insurance:no",
+        "even_money"
+      ]
+    },
+    {
+      "kind": "insurance",
+      "independentReplica": "02-insurance-even-money",
+      "stateMatchesAuthoritative": true
+    },
+    {
+      "kind": "insurance",
+      "independentReplica": "03-even-money-result",
+      "stateMatchesAuthoritative": true
+    },
+    {
+      "kind": "insurance",
+      "person": 3,
+      "classic": true,
+      "names": 5,
+      "prize": false,
+      "hiddenDealer": 0,
+      "privateOther": 0,
+      "controls": []
+    },
+    {
+      "insuranceAndEvenMoney": true,
+      "insuranceTaken": true,
+      "headerNavigation": true,
+      "settledSeats": {
+        "0": {
+          "chips": 1000,
+          "results": [
+            "lose"
+          ]
+        },
+        "1": {
+          "chips": 975,
+          "results": [
+            "lose"
+          ]
+        },
+        "2": {
+          "chips": 975,
+          "results": [
+            "lose"
+          ]
+        },
+        "3": {
+          "chips": 1025,
+          "results": [
+            "win"
+          ]
+        },
+        "4": {
+          "chips": 975,
+          "results": [
+            "lose"
+          ]
+        }
+      }
+    }
+  ],
+  "errors": []
+}

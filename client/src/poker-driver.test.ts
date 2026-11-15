@@ -74,6 +74,48 @@ function context(
 }
 
 describe('PokerDriver input', () => {
+  it('supports exact slider endpoints and keyboard fine adjustment', () => {
+    const driver = new PokerDriver(),
+      sent: unknown[] = [],
+      table = state(),
+      ctx = context(sent, 0);
+    driver.handleInput({ type: 'pointerup', target: 'bet' }, table, ctx);
+    driver['sliderKey']({ key: 'End', preventDefault() {} } as KeyboardEvent);
+    driver.handleInput(
+      { type: 'pointerup', target: 'stake-confirm' },
+      table,
+      ctx,
+    );
+    expect(sent).toEqual([{ type: 'bet', amount: 980 }]);
+    driver.handleInput({ type: 'pointerup', target: 'bet' }, table, ctx);
+    driver['sliderKey']({ key: 'Home', preventDefault() {} } as KeyboardEvent);
+    driver['sliderKey']({
+      key: 'ArrowRight',
+      preventDefault() {},
+    } as KeyboardEvent);
+    driver.handleInput(
+      { type: 'pointerup', target: 'stake-confirm' },
+      table,
+      ctx,
+    );
+    expect(sent[1]).toEqual({ type: 'bet', amount: 40 });
+  });
+  it('submits a full all-in street total while the UI shows only the remaining stack', () => {
+    const driver = new PokerDriver(),
+      sent: unknown[] = [],
+      table = state({ currentBet: 10, minRaise: 10, pot: 15 });
+    Object.assign(table.seats['0'], { chips: 395, streetBet: 5 });
+    Object.assign(table.seats['1'], { chips: 390, streetBet: 10 });
+    const ctx = context(sent, 0);
+    driver.handleInput({ type: 'pointerup', target: 'raise' }, table, ctx);
+    driver['sliderKey']({ key: 'End', preventDefault() {} } as KeyboardEvent);
+    driver.handleInput(
+      { type: 'pointerup', target: 'stake-confirm' },
+      table,
+      ctx,
+    );
+    expect(sent).toEqual([{ type: 'raise', amount: 400 }]);
+  });
   it('sends fold and check immediately, and a bet only after confirm', () => {
     const driver = new PokerDriver();
     const sent: unknown[] = [];
@@ -234,6 +276,24 @@ describe('PokerDriver input', () => {
 
     const holdEm = state({ pot: 0 });
     driver.render(holdEm, ctx);
+    driver.render({ ...holdEm, turnSeatIndex: 1 }, ctx);
+    expect(
+      driver['buttons'].every(
+        (button) =>
+          !button.actor.graphics.isVisible &&
+          !button.caption.graphics.isVisible &&
+          !button.actor.pointer.useGraphicsBounds &&
+          !button.actor.pointer.useColliderShape,
+      ),
+    ).toBe(true);
+    driver.render(holdEm, ctx);
+    expect(
+      driver['buttons'].every(
+        (button) =>
+          button.actor.graphics.isVisible &&
+          button.actor.pointer.useColliderShape,
+      ),
+    ).toBe(true);
     driver['followHole']('KD', 480, true);
     driver['easeHand'](16);
     expect(driver['dropMarks']).toHaveLength(0);

@@ -1,0 +1,3 @@
+
+> client@ typecheck /workspace/card-house/client
+> tsc -p tsconfig.json --noEmit

@@ -1,0 +1,10 @@
+{
+  "players": 2,
+  "allInRunsOutWithoutChecks": true,
+  "discardActions": 4,
+  "zeroStackTopUp": true,
+  "uncalledHandPrivate": true,
+  "remainingBoardRevealed": true,
+  "leaveViaHeader": true,
+  "errors": []
+}

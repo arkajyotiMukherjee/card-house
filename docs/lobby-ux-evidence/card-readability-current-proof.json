@@ -1,0 +1,212 @@
+{
+  "844-fullscreen-alignment": {
+    "fullscreenHeight": 31.765625,
+    "leaveHeight": 31.77777777777778,
+    "fullscreenTop": 11.546875,
+    "leaveTop": 11.555555555555555
+  },
+  "667-fullscreen-alignment": {
+    "fullscreenHeight": 27.78125,
+    "leaveHeight": 27.785185185185185,
+    "fullscreenTop": 27.09375,
+    "leaveTop": 27.103703703703705
+  },
+  "desktop-showdown-scales": {
+    "own": [
+      {
+        "self": true,
+        "scale": 1.1,
+        "rotation": 0
+      },
+      {
+        "self": true,
+        "scale": 1.1,
+        "rotation": 0
+      },
+      {
+        "self": true,
+        "scale": 1.1,
+        "rotation": 0
+      },
+      {
+        "self": true,
+        "scale": 1.1,
+        "rotation": 0
+      }
+    ],
+    "review": [
+      {
+        "scale": 1.1,
+        "rotation": 0
+      },
+      {
+        "scale": 1.1,
+        "rotation": 0
+      },
+      {
+        "scale": 1.1,
+        "rotation": 0
+      },
+      {
+        "scale": 1.1,
+        "rotation": 0
+      }
+    ]
+  },
+  "mobile-showdown-scales": {
+    "own": [
+      {
+        "self": true,
+        "scale": 1.35,
+        "rotation": 0
+      },
+      {
+        "self": true,
+        "scale": 1.35,
+        "rotation": 0
+      },
+      {
+        "self": true,
+        "scale": 1.35,
+        "rotation": 0
+      },
+      {
+        "self": true,
+        "scale": 1.35,
+        "rotation": 0
+      }
+    ],
+    "review": [
+      {
+        "scale": 1.35,
+        "rotation": 0
+      },
+      {
+        "scale": 1.35,
+        "rotation": 0
+      },
+      {
+        "scale": 1.35,
+        "rotation": 0
+      },
+      {
+        "scale": 1.35,
+        "rotation": 0
+      }
+    ]
+  },
+  "blackjack-desktop-result-cards": [
+    {
+      "scale": 1.1,
+      "image": "/assets/cards-diamonds.png"
+    },
+    {
+      "scale": 1.1,
+      "image": "/assets/cards-hearts.png"
+    },
+    {
+      "scale": 1.1,
+      "image": "/assets/cards-hearts.png"
+    },
+    {
+      "scale": 1.1,
+      "image": "/assets/cards-diamonds.png"
+    },
+    {
+      "scale": 1.1,
+      "image": "/assets/cards-clubs.png"
+    },
+    {
+      "scale": 1.1,
+      "image": "/assets/cards-spades.png"
+    },
+    {
+      "scale": 1.1,
+      "image": "/assets/cards-clubs.png"
+    },
+    {
+      "scale": 1.1,
+      "image": "/assets/cards-diamonds.png"
+    }
+  ],
+  "blackjack-mobile-result-cards": [
+    {
+      "scale": 1.35,
+      "image": "/assets/cards-diamonds.png"
+    },
+    {
+      "scale": 1.35,
+      "image": "/assets/cards-hearts.png"
+    },
+    {
+      "scale": 1.35,
+      "image": "/assets/cards-hearts.png"
+    },
+    {
+      "scale": 1.35,
+      "image": "/assets/cards-diamonds.png"
+    },
+    {
+      "scale": 1.35,
+      "image": "/assets/cards-clubs.png"
+    },
+    {
+      "scale": 1.35,
+      "image": "/assets/cards-spades.png"
+    },
+    {
+      "scale": 1.35,
+      "image": "/assets/cards-clubs.png"
+    },
+    {
+      "scale": 1.35,
+      "image": "/assets/cards-diamonds.png"
+    }
+  ],
+  "blackjack-result-replicated": true,
+  "rummy-desktop-result-cards": [
+    {
+      "scale": 1,
+      "image": "/assets/card-back-01.png"
+    },
+    {
+      "scale": 1,
+      "image": "/assets/card-back-01.png"
+    }
+  ],
+  "rummy-mobile-result-cards": [],
+  "rummy-result-replicated": true,
+  "bluff-desktop-result-cards": [
+    {
+      "scale": 1,
+      "image": "/assets/card-back-01.png"
+    },
+    {
+      "scale": 1,
+      "image": "/assets/card-back-01.png"
+    },
+    {
+      "scale": 1,
+      "image": "/assets/card-back-01.png"
+    },
+    {
+      "scale": 1,
+      "image": "/assets/card-back-01.png"
+    },
+    {
+      "scale": 1,
+      "image": "/assets/card-back-01.png"
+    },
+    {
+      "scale": 1,
+      "image": "/assets/card-back-01.png"
+    },
+    {
+      "scale": 1,
+      "image": "/assets/card-back-01.png"
+    }
+  ],
+  "bluff-mobile-result-cards": [],
+  "bluff-result-replicated": true,
+  "errors": []
+}

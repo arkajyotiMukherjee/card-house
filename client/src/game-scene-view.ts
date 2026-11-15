@@ -1,71 +1,46 @@
-import { settledSeats, finishedPrizeMessage } from './settled-seats';
+import * as ex from 'excalibur';
 import {
   casinoGame,
   coinUnits,
   formatCoins,
   type TableEconomy,
 } from '../../src/shared/economy';
-import { coinDialog, coinDialogOpen } from './coin-dialog';
-import { anchorTableActor } from './table-viewport';
-import { bindButtonPress } from './button-press';
-import * as ex from 'excalibur';
-import { isMobileDevice } from './mobile-shell';
-import { refreshCanvasTextFields } from './html-field';
+import {
+  readBlackjackState,
+  type BlackjackState,
+} from '../../src/shared/games/blackjack';
 import { readBluffState, type BluffState } from '../../src/shared/games/bluff';
 import {
   readCrazyEightsState,
   type CrazyEightsState,
 } from '../../src/shared/games/crazy-eights';
 import {
+  DUMMY_INCREMENT,
+  type DummyIntent,
+} from '../../src/shared/games/dummy-counter';
+import {
   readGoFishState,
   type GoFishState,
 } from '../../src/shared/games/go-fish';
-import {
-  readPresidentState,
-  type PresidentState,
-} from '../../src/shared/games/president';
-import { readRummyState, type RummyState } from '../../src/shared/games/rummy';
-import {
-  readBlackjackState,
-  type BlackjackState,
-} from '../../src/shared/games/blackjack';
-import {
-  readSpadesState,
-  type SpadesState,
-} from '../../src/shared/games/spades';
 import {
   readHeartsState,
   type HeartsState,
 } from '../../src/shared/games/hearts';
 import { readPokerState, type PokerState } from '../../src/shared/games/poker';
 import {
-  DUMMY_INCREMENT,
-  type DummyIntent,
-} from '../../src/shared/games/dummy-counter';
-import { opponentNameAnchor, seatPlateWidth } from './table-presentation';
-import { BluffDriver } from './bluff-driver';
-import { CrazyEightsDriver } from './crazy-eights-driver';
-import { GoFishDriver } from './go-fish-driver';
-import { PresidentDriver } from './president-driver';
-import { RummyDriver } from './rummy-driver';
+  readPresidentState,
+  type PresidentState,
+} from '../../src/shared/games/president';
+import { readRummyState, type RummyState } from '../../src/shared/games/rummy';
+import {
+  readSpadesState,
+  type SpadesState,
+} from '../../src/shared/games/spades';
 import { BlackjackDriver } from './blackjack-driver';
-import { SpadesDriver } from './spades-driver';
-import { HeartsDriver } from './hearts-driver';
-import {
-  headsetActor,
-  tableVoiceMemberIds,
-  type PresenceRef,
-} from './voice-presence';
-import { PokerDriver } from './poker-driver';
+import { BluffDriver } from './bluff-driver';
 import { personalCardAtlas, tableSprites } from './boot-scene';
-import { tableScenePaint } from './client-look';
-import { statsCaption } from './client-stats';
-import { type TableStyle } from './table-atlas';
-import {
-  BUTTON_PRESS_SHIFT,
-  buttonCaptionPos,
-  buttonFontSize,
-} from './button-style';
+import { bindButtonPress } from './button-press';
+import { BUTTON_PRESS_SHIFT } from './button-style';
 import {
   BUTTON,
   BUTTON_DOWN,
@@ -79,7 +54,12 @@ import {
   STROKE,
   STROKE_HOT,
 } from './canvas-ui';
+import { tableScenePaint } from './client-look';
+import { statsCaption } from './client-stats';
+import { coinDialog, coinDialogOpen } from './coin-dialog';
+import { CrazyEightsDriver } from './crazy-eights-driver';
 import { eventMessage, readStoredEvent } from './event-messages';
+import type { GameDriver, RenderContext } from './game-driver';
 import {
   COUNTER_BUTTON,
   dummyIntentPayload,
@@ -94,27 +74,18 @@ import {
   type PlacedSeat,
   type SeatRef,
 } from './game-scene';
-import type { GameDriver, RenderContext } from './game-driver';
+import { GoFishDriver } from './go-fish-driver';
+import { HeartsDriver } from './hearts-driver';
 import { HowToPlayOverlay } from './how-to-play-overlay';
-import { TableChatOverlay } from './table-chat-overlay';
+import { refreshCanvasTextFields } from './html-field';
+import { isMobileDevice } from './mobile-shell';
 import type { DbConnection, SubscriptionHandle } from './module_bindings';
-import { SpeakingFader, tableSpeakers, type SpeakingRow } from './speaking';
-import { seatGlow, speechBubble } from './speaking-view';
-import {
-  bluffStatusHud,
-  crazyEightsStatusHud,
-  goFishStatusHud,
-  presidentStatusHud,
-  rummyStatusHud,
-  blackjackStatusHud,
-  spadesStatusHud,
-  heartsStatusHud,
-  pokerStatusHud,
-  STATUS_HUD,
-  STATUS_FONT_SIZE,
-  STATUS_LINE_HEIGHT,
-  type StatusHudLines,
-} from './status-hud';
+import { PokerDriver } from './poker-driver';
+import { PresidentDriver } from './president-driver';
+import { PrizePoolBadge } from './prize-pool-badge';
+import { entryFeePrizePool } from './prize-pool';
+import { RummyDriver } from './rummy-driver';
+import { finishedPrizeMessage, settledSeats } from './settled-seats';
 import {
   LOGICAL_HEIGHT,
   LOGICAL_WIDTH,
@@ -122,9 +93,25 @@ import {
   TABLE_SCALE,
   TABLE_WIDTH,
 } from './sheets';
+import { SpadesDriver } from './spades-driver';
+import { SpeakingFader, tableSpeakers, type SpeakingRow } from './speaking';
+import { seatGlow, speechBubble } from './speaking-view';
+import { STATUS_FONT_SIZE, STATUS_HUD, STATUS_LINE_HEIGHT } from './status-hud';
+import { type TableStyle } from './table-atlas';
+import { TableChatOverlay } from './table-chat-overlay';
+import { tableNoticeLayout } from './table-notice';
+import { opponentNameAnchor, seatPlateWidth } from './table-presentation';
+import { anchorTableActor } from './table-viewport';
+import { uiCaption, uiText } from './ui-text';
+import { CLASSIC, isClassicGame } from './classic-table-design';
+import { tableGutter } from './table-viewport';
+import {
+  headsetActor,
+  tableVoiceMemberIds,
+  type PresenceRef,
+} from './voice-presence';
 
 const WARN_PLATE = ex.Color.fromHex('#4a1713');
-const STRIP_Y = 204;
 const STRIP_HOLD_MS = 3200;
 const STRIP_FADE_MS = 500;
 
@@ -137,7 +124,6 @@ export class GameScene extends ex.Scene {
   private ready = false;
   private leaving = false;
   private seatActors: ex.Actor[] = [];
-  private errorText!: ex.Text;
   private linkLine = '';
   private linkText = canvasText('', 8, GOLD);
   private linkActor: ex.Actor | undefined;
@@ -188,6 +174,17 @@ export class GameScene extends ex.Scene {
   private statsText!: ex.Text;
   private statsLine = statsCaption({ handsPlayed: 0, gamesWon: 0 });
   private tableActor: ex.Actor | undefined;
+  private leaveControl?: ex.Actor;
+  private statsActor?: ex.Actor;
+  private readonly prizeBadge = new PrizePoolBadge();
+
+  get usesClassicLayout(): boolean {
+    return (
+      !!this.lastRow &&
+      isClassicGame(this.lastRow.gameType) &&
+      !this.lastRow.waiting
+    );
+  }
 
   constructor(
     private readonly connection: DbConnection,
@@ -245,7 +242,6 @@ export class GameScene extends ex.Scene {
     this.clearStrip();
     this.shownEvents.clear();
     if (this.ready) {
-      this.errorText.text = '';
       this.howToPlay.close();
       this.howToPlay.setGameType('');
       this.tableChat.setTable(tableId, lobbyMemberId);
@@ -325,15 +321,6 @@ export class GameScene extends ex.Scene {
     spectating.graphics.use(this.spectatingText);
     this.add(spectating);
 
-    this.errorText = canvasText('', 8, DANGER);
-    const error = new ex.Actor({
-      pos: ex.vec(200, 24),
-      anchor: ex.vec(0, 0),
-      z: 22,
-    });
-    error.graphics.use(this.errorText);
-    this.add(error);
-
     this.linkText.text = this.linkLine;
     this.linkActor = new ex.Actor({
       pos: ex.vec(16, 4),
@@ -344,17 +331,14 @@ export class GameScene extends ex.Scene {
     anchorTableActor(this.linkActor, 'left');
     this.add(this.linkActor);
 
-    this.statsText = canvasText(
-      this.statsLine,
-      isMobileDevice() ? 10 : 8,
-      GOLD,
-    );
+    this.statsText = uiText(this.statsLine, 17, GOLD);
     const stats = new ex.Actor({
       pos: ex.vec(isMobileDevice() ? 256 : 280, 22),
       anchor: ex.vec(0, 0),
       z: 21,
     });
     stats.graphics.use(this.statsText);
+    this.statsActor = stats;
     anchorTableActor(stats, 'left');
     this.add(stats);
 
@@ -370,6 +354,7 @@ export class GameScene extends ex.Scene {
     );
     this.tableChat.setTable(this.tableId, this.lobbyMemberId);
     this.addStatusHud();
+    this.add(this.prizeBadge);
     this.watchRows();
     this.ready = true;
   }
@@ -395,11 +380,11 @@ export class GameScene extends ex.Scene {
   }
 
   onPreUpdate(): void {
+    this.placeTablePresentation();
     const second = Math.floor(Date.now() / 1000);
     if (second === this.economySecond || !this.active) return;
     this.economySecond = second;
-    if (this.lastRow?.waiting && this.lastRow.startsAt !== undefined)
-      this.paintGame();
+    if (this.lastRow?.waiting) this.readSubscribedState();
     const table = [...this.connection.db.gameTable.iter()].find(
       (row) => row.id === this.tableId,
     );
@@ -407,9 +392,11 @@ export class GameScene extends ex.Scene {
       (row) =>
         row.tableId === this.tableId && row.walletId === this.lobbyMemberId,
     );
-    const wallet = [...this.connection.db.roomWallet.iter()].find(
-      (row) => row.id === this.lobbyMemberId,
-    );
+    if (table && isClassicGame(table.gameType)) {
+      if (this.economyText) this.economyText.text = '';
+      if (this.topUpActor) this.topUpActor.pos.y = -2000;
+      return;
+    }
     const countdown =
       table?.startsAt === undefined
         ? ''
@@ -421,13 +408,65 @@ export class GameScene extends ex.Scene {
         : undefined;
     if (this.economyText)
       this.economyText.text =
-        table?.economyJson && wallet
-          ? `Room coins\n\n${formatCoins(wallet.available)}${chips === undefined ? '' : `\n\nStack\n\n${formatCoins(coinUnits(chips))}`}\n\n${countdown}`
-          : '';
-    const paused = table && JSON.parse(table.stateJson).phase !== 'play';
+        chips === undefined
+          ? countdown
+          : `Stack\n\n${formatCoins(coinUnits(chips))}\n\n${countdown}`;
+    const phase = table && JSON.parse(table.stateJson).phase;
+    const closed =
+      table?.gameType === 'poker' && table.status.tag === 'Finished';
+    const paused = !closed && (phase === 'finished' || phase === 'lobby');
     if (this.topUpActor)
       this.topUpActor.pos.y =
         table && funding && casinoGame(table.gameType) && paused ? 234 : -2000;
+  }
+
+  private placeTablePresentation(): void {
+    if (!this.tableActor) return;
+    const classic = this.usesClassicLayout;
+    this.tableActor.pos = ex.vec(
+      480,
+      classic ? CLASSIC.feltBox.y + CLASSIC.feltBox.h / 2 : 278,
+    );
+    const sprite = this.tableActor.graphics.current;
+    if (sprite)
+      sprite.scale = classic
+        ? ex.vec(
+            (CLASSIC.feltBox.w + 2 * tableGutter()) / TABLE_WIDTH,
+            CLASSIC.feltBox.h / TABLE_HEIGHT,
+          )
+        : ex.vec(TABLE_SCALE, TABLE_SCALE);
+    if (this.leaveControl) {
+      this.leaveControl.graphics.isVisible = !classic;
+      for (const child of this.leaveControl.children)
+        if (child instanceof ex.Actor) {
+          child.graphics.isVisible = !classic;
+          child.pointer.useGraphicsBounds = !classic;
+          child.pointer.useColliderShape = !classic;
+        }
+      this.leaveControl.pointer.useColliderShape = !classic;
+      this.leaveControl.pointer.useGraphicsBounds = !classic;
+    }
+    const table = [...this.connection.db.gameTable.iter()].find(
+      (row) => row.id === this.tableId,
+    );
+    const prizePool = table
+      ? entryFeePrizePool(
+          table,
+          this.connection.db.tableFunding.iter(),
+          this.connection.db.gameSettlement.iter(),
+        )
+      : undefined;
+    this.prizeBadge.setAmount(prizePool);
+    if (this.statsActor)
+      this.statsActor.graphics.isVisible = !classic && prizePool === undefined;
+    // Keep fallback HUD geometry separate from the scene-owned prize badge.
+    anchorTableActor(
+      this.hudPlate,
+      'right',
+      prizePool === undefined ? STATUS_HUD.x : 384,
+    );
+    this.tableChat?.setTriggerVisible(!classic);
+    this.howToPlay?.setTriggerVisible(!classic);
   }
 
   private async topUp(): Promise<void> {
@@ -440,23 +479,27 @@ export class GameScene extends ex.Scene {
         row.tableId === this.tableId && row.walletId === this.lobbyMemberId,
     );
     if (!table?.economyJson || !funding) return;
+    if (table.gameType === 'poker' && table.status.tag === 'Finished') return;
     this.howToPlay.close();
     this.tableChat.close();
     const settings = JSON.parse(table.economyJson) as TableEconomy;
     const current = Number(funding.units) / 2;
+    const wallet = [...this.connection.db.roomWallet.iter()].find(
+      (row) => row.id === this.lobbyMemberId,
+    );
     const selected = await coinDialog(
       this.engine,
       this,
       'Top up',
-      `Current stack ${current}. Maximum stack ${settings.maxBuyIn}.`,
+      `Stack ${current}. Limit ${settings.maxBuyIn}. Available ${wallet ? formatCoins(wallet.available) : '—'} chips.`,
       [
         {
           key: 'amount',
-          label: 'Additional coins',
+          label: 'Additional chips',
           value: Math.max(1, Math.ceil(settings.minBuyIn - current)),
         },
       ],
-      'Add coins',
+      'Add chips',
     );
     if (!selected) return;
     try {
@@ -465,8 +508,9 @@ export class GameScene extends ex.Scene {
         amount: selected.amount,
       });
     } catch (error) {
-      this.errorText.text =
-        error instanceof Error ? error.message : 'Could not top up';
+      this.showError(
+        error instanceof Error ? error.message : 'Could not top up',
+      );
     }
   }
 
@@ -623,15 +667,18 @@ export class GameScene extends ex.Scene {
     const placed = placeSeats(labels);
     this.placed = placed;
     this.waitingText.text = placed.length === 0 ? 'Waiting for seats' : '';
-    this.spectatingText.text = spectatingLine(
-      placed.some((seat) => seat.self),
-      memberIsWatching(
-        readSpectators(this.connection),
-        this.tableId,
-        this.lobbyMemberId,
-      ),
-    );
+    this.spectatingText.text = this.usesClassicLayout
+      ? ''
+      : spectatingLine(
+          placed.some((seat) => seat.self),
+          memberIsWatching(
+            readSpectators(this.connection),
+            this.tableId,
+            this.lobbyMemberId,
+          ),
+        );
     for (const seat of placed) {
+      if (table && isClassicGame(table.gameType)) continue;
       this.addSeat(
         seat.name,
         seat.x,
@@ -652,7 +699,9 @@ export class GameScene extends ex.Scene {
     lobbyMemberId: string,
     inVoice: boolean,
   ): void {
-    const width = seatPlateWidth(name);
+    const text = uiText(name, 18, self ? SELF : GOLD);
+    const width = Math.max(seatPlateWidth(name), Math.ceil(text.width) + 16);
+    const caption = uiCaption(name, width, 20, 18);
     const opponent = !self;
     const origin = opponent
       ? opponentNameAnchor(x, y, name)
@@ -665,9 +714,8 @@ export class GameScene extends ex.Scene {
       z: opponent ? 80 : 6,
     });
     plate.graphics.use(panelRect(width, 20, PLATE, self ? STROKE_HOT : STROKE));
-    const text = canvasText(name, 8, self ? SELF : GOLD);
     const label = new ex.Actor({
-      pos: ex.vec(8, 6),
+      pos: ex.vec(caption.x, caption.y),
       anchor: ex.vec(0, 0),
     });
     label.graphics.use(text);
@@ -714,13 +762,13 @@ export class GameScene extends ex.Scene {
     });
     const face = panelRect(box.w, box.h, BUTTON, STROKE);
     actor.graphics.use(face);
-    const size = buttonFontSize('Leave Table', box.w, box.h);
-    const rest = buttonCaptionPos('Leave Table', box.w, box.h, size);
+    const size = 20;
+    const rest = uiCaption('Leave Table', box.w, box.h, size);
     const caption = new ex.Actor({
       pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText('Leave Table', size, GOLD));
+    caption.graphics.use(uiText('Leave Table', size, GOLD));
     actor.addChild(caption);
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;
@@ -740,6 +788,7 @@ export class GameScene extends ex.Scene {
     );
     anchorTableActor(actor, 'left');
     this.add(actor);
+    this.leaveControl = actor;
   }
 
   /**
@@ -831,34 +880,63 @@ export class GameScene extends ex.Scene {
   /** Keep the latest accepted action visible; only warnings fade away. */
   private showStrip(message: string, warning: boolean): void {
     this.clearStrip();
-    const poker = this.gameTypeOfTable() === 'poker';
-    const size = poker && isMobileDevice() ? 12 : 8;
-    const width = message.length * size + 24;
+    const gameType = this.gameTypeOfTable();
+    const classic = isClassicGame(gameType);
+    if (classic && !warning) {
+      this.driverFor(gameType)?.setAnnouncement?.(message);
+      return;
+    }
+    const layout = tableNoticeLayout(
+      message,
+      isMobileDevice(),
+      warning,
+      classic,
+      classic ? (text, size) => uiText(text, size, GOLD).width : undefined,
+      gameType === 'poker' ? 388 : gameType === 'blackjack' ? 260 : 184,
+    );
     const strip = new ex.Actor({
-      pos: ex.vec(
-        Math.floor((LOGICAL_WIDTH - width) / 2),
-        poker ? STRIP_Y : 44,
-      ),
+      name: 'table-notice',
+      pos: ex.vec(layout.x, layout.y),
       anchor: ex.vec(0, 0),
-      width,
-      height: 28,
-      z: 26,
+      width: layout.w,
+      height: layout.h,
+      z: warning ? 90 : 26,
     });
     strip.graphics.use(
       panelRect(
-        width,
-        28,
+        layout.w,
+        layout.h,
         warning ? WARN_PLATE : PLATE,
         warning ? DANGER : STROKE_HOT,
       ),
     );
-    const caption = new ex.Actor({
-      pos: ex.vec(12, 7),
-      anchor: ex.vec(0, 0),
-    });
-    caption.graphics.use(canvasText(message, size, warning ? DANGER : GOLD));
-    strip.addChild(caption);
-    if (warning || !poker)
+    for (const [index, line] of layout.lines.entries()) {
+      const caption = new ex.Actor({
+        pos: ex.vec(
+          12,
+          (classic
+            ? Math.floor(
+                (layout.h - layout.lines.length * layout.lineHeight) / 2,
+              )
+            : 6) +
+            index * layout.lineHeight,
+        ),
+        anchor: ex.vec(0, 0),
+      });
+      caption.graphics.use(
+        classic
+          ? uiText(line, layout.size, warning ? DANGER : GOLD)
+          : canvasText(line, layout.size, warning ? DANGER : GOLD),
+      );
+      strip.addChild(caption);
+    }
+    if (classic && warning) {
+      anchorTableActor(strip, 'right', layout.x);
+      strip.collider.useBoxCollider(layout.w, layout.h, ex.vec(0, 0));
+      strip.on('pointerdown', (event) => event.cancel());
+      strip.on('pointerup', (event) => event.cancel());
+    }
+    if (warning || !classic)
       strip.actions
         .delay(STRIP_HOLD_MS)
         .fade(0, STRIP_FADE_MS)
@@ -1022,14 +1100,26 @@ export class GameScene extends ex.Scene {
               ? -1
               : 1;
         });
+      const seatedHere = seats.some(
+        (seat) => seat.lobbyMemberId === this.lobbyMemberId,
+      );
       this.tableChat.setWaiting({
+        participation: seatedHere
+          ? 'seated'
+          : memberIsWatching(
+                readSpectators(this.connection),
+                this.tableId,
+                this.lobbyMemberId,
+              )
+            ? 'watching'
+            : 'released',
         name: row.name,
         startsAt: row.startsAt,
         seated: seats.length,
         capacity: row.maxPlayers,
         minimum: row.minPlayers,
         start:
-          row.hostMemberId === this.lobbyMemberId
+          seatedHere && row.hostMemberId === this.lobbyMemberId
             ? () => this.startWaitingGame()
             : undefined,
         leave: () => this.leave(true),
@@ -1214,11 +1304,10 @@ export class GameScene extends ex.Scene {
       );
       return;
     }
-    this.errorText.text = '';
     this.waitingText.text =
       state.phase === 'lobby' ? 'Waiting for host to start' : '';
     this.bluffDriver.render(state, this.driverContext());
-    this.paintHud(bluffStatusHud(state, this.placed));
+    this.placeHud(false);
   }
 
   private paintPresident(stateJson: string): void {
@@ -1233,11 +1322,10 @@ export class GameScene extends ex.Scene {
       );
       return;
     }
-    this.errorText.text = '';
     this.waitingText.text =
       state.phase === 'lobby' ? 'Waiting for host to start' : '';
     this.presidentDriver.render(state, this.driverContext());
-    this.paintHud(presidentStatusHud(state, this.placed));
+    this.placeHud(false);
   }
 
   private paintGoFish(stateJson: string): void {
@@ -1252,11 +1340,10 @@ export class GameScene extends ex.Scene {
       );
       return;
     }
-    this.errorText.text = '';
     this.waitingText.text =
       state.phase === 'lobby' ? 'Waiting for host to start' : '';
     this.goFishDriver.render(state, this.driverContext());
-    this.paintHud(goFishStatusHud(state, this.placed));
+    this.placeHud(false);
   }
 
   private paintCrazyEights(stateJson: string): void {
@@ -1271,11 +1358,10 @@ export class GameScene extends ex.Scene {
       );
       return;
     }
-    this.errorText.text = '';
     this.waitingText.text =
       state.phase === 'lobby' ? 'Waiting for host to start' : '';
     this.crazyEightsDriver.render(state, this.driverContext());
-    this.paintHud(crazyEightsStatusHud(state, this.placed));
+    this.placeHud(false);
   }
 
   private paintRummy(stateJson: string): void {
@@ -1290,11 +1376,10 @@ export class GameScene extends ex.Scene {
       );
       return;
     }
-    this.errorText.text = '';
     this.waitingText.text =
       state.phase === 'lobby' ? 'Waiting for host to start' : '';
     this.rummyDriver.render(state, this.driverContext());
-    this.paintHud(rummyStatusHud(state, this.placed));
+    this.placeHud(false);
   }
 
   private paintBlackjack(stateJson: string): void {
@@ -1309,11 +1394,10 @@ export class GameScene extends ex.Scene {
       );
       return;
     }
-    this.errorText.text = '';
     this.waitingText.text =
       state.phase === 'lobby' ? 'Waiting for host to start' : '';
     this.blackjackDriver.render(state, this.driverContext());
-    this.paintHud(blackjackStatusHud(state, this.placed));
+    this.placeHud(false);
   }
 
   private paintSpades(stateJson: string): void {
@@ -1328,11 +1412,10 @@ export class GameScene extends ex.Scene {
       );
       return;
     }
-    this.errorText.text = '';
     this.waitingText.text =
       state.phase === 'lobby' ? 'Waiting for host to start' : '';
     this.spadesDriver.render(state, this.driverContext());
-    this.paintHud(spadesStatusHud(state, this.placed));
+    this.placeHud(false);
   }
 
   private paintHearts(stateJson: string): void {
@@ -1347,11 +1430,10 @@ export class GameScene extends ex.Scene {
       );
       return;
     }
-    this.errorText.text = '';
     this.waitingText.text =
       state.phase === 'lobby' ? 'Waiting for host to start' : '';
     this.heartsDriver.render(state, this.driverContext());
-    this.paintHud(heartsStatusHud(state, this.placed));
+    this.placeHud(false);
   }
 
   private paintPoker(stateJson: string): void {
@@ -1366,18 +1448,10 @@ export class GameScene extends ex.Scene {
       );
       return;
     }
-    this.errorText.text = '';
     this.waitingText.text =
       state.phase === 'lobby' ? 'Waiting for host to start' : '';
     this.pokerDriver.render(state, this.driverContext());
-    this.paintHud(pokerStatusHud(state, this.placed));
-  }
-
-  private paintHud(lines: StatusHudLines): void {
-    this.hudTurn.text = lines.turn;
-    this.hudPhase.text = lines.phase;
-    this.hudRound.text = lines.round;
-    this.placeHud(true);
+    this.placeHud(false);
   }
 
   private placeHud(visible: boolean): void {
@@ -1431,11 +1505,59 @@ export class GameScene extends ex.Scene {
           table.handNumber,
         )
       : undefined;
+    const funding = [...this.connection.db.tableFunding.iter()].find(
+      (row) =>
+        row.tableId === this.tableId && row.walletId === this.lobbyMemberId,
+    );
+    const phase = table ? JSON.parse(table.stateJson).phase : '';
     return {
       scene: this,
       seats: this.placed,
       meSeatIndex,
       finishedMessage,
+      tableName: table?.name,
+      prizePool: table
+        ? entryFeePrizePool(
+            table,
+            this.connection.db.tableFunding.iter(),
+            this.connection.db.gameSettlement.iter(),
+          )
+        : undefined,
+      navigation: {
+        leave: () => this.leave(),
+        chat: () => this.tableChat.toggle(),
+        help: () => this.howToPlay.toggle(),
+        chatAvailable: this.tableChat?.available ?? false,
+      },
+      houseGame:
+        table?.gameType === 'blackjack'
+          ? {
+              nextHandAt:
+                table.startsAt === undefined
+                  ? undefined
+                  : Number(table.startsAt / 1000n),
+              topUp:
+                funding && (phase === 'finished' || phase === 'lobby')
+                  ? () => void this.topUp()
+                  : undefined,
+            }
+          : undefined,
+      cashGame:
+        table?.gameType === 'poker'
+          ? {
+              topUp:
+                funding &&
+                table.status.tag !== 'Finished' &&
+                (phase === 'finished' || phase === 'lobby')
+                  ? () => void this.topUp()
+                  : undefined,
+              closed: table.status.tag === 'Finished',
+              nextHandAt:
+                table.startsAt === undefined
+                  ? undefined
+                  : Number(table.startsAt / 1000n),
+            }
+          : undefined,
       cards: mine,
       myCards: mine,
       sendIntent: (intent) => {
@@ -1469,7 +1591,6 @@ export class GameScene extends ex.Scene {
     this.countText.text = label;
     const width = label.length * 24;
     this.countValue.pos = ex.vec((COUNTER_BUTTON.w - width) / 2, 34);
-    this.errorText.text = '';
   }
 
   private placeCounter(visible: boolean): void {
@@ -1545,7 +1666,6 @@ export class GameScene extends ex.Scene {
       return;
     }
     this.leaving = true;
-    this.errorText.text = '';
     const tableId = this.tableId;
     const lobbyMemberId = this.lobbyMemberId;
     void this.connection.reducers
@@ -1557,6 +1677,10 @@ export class GameScene extends ex.Scene {
         this.leaving = false;
         const message =
           error instanceof Error ? error.message : 'Could not leave';
+        if (/^(Not seated|Table not found)$/.test(message)) {
+          this.onLeft();
+          return;
+        }
         if (fromWaiting) this.tableChat.showError(message);
         else this.showError(message);
       });
@@ -1566,7 +1690,7 @@ export class GameScene extends ex.Scene {
     if (!this.ready) {
       return;
     }
-    this.errorText.text = message;
+    this.showStrip(message, true);
   }
 }
 

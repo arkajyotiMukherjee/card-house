@@ -1,4 +1,4 @@
-import { anchorTableActor } from './table-viewport';
+import { anchorTableActor, tableGutter } from './table-viewport';
 import { bindButtonPress } from './button-press';
 import { isMobileDevice } from './mobile-shell';
 import * as ex from 'excalibur';
@@ -7,24 +7,27 @@ import {
   rankOfCard,
   type GoFishState,
 } from '../../src/shared/games/go-fish';
+import { CARD_DRAW, faceForCard } from './bluff-layout';
+import { OPPONENT_FAN_CARD } from './table-presentation';
+import { BUTTON_PRESS_SHIFT } from './button-style';
+import { uiText, uiCaption } from './ui-text';
+import { CLASSIC, classicSeats } from './classic-table-design';
 import {
-  CARD_DRAW,
-  cardLift,
-  faceForCard,
+  HAND_PREV,
+  HAND_NEXT,
+  handPageSize,
   handPositions,
-} from './bluff-layout';
+  classicBackSlots,
+  classicControlBoxes,
+} from './classic-card-layout';
 import {
-  OPPONENT_FAN_CARD,
-  TURN_LINE,
-  fanGapLine,
-  seatFan,
-} from './table-presentation';
-import {
-  BUTTON_PRESS_SHIFT,
-  buttonCaptionPos,
-  buttonFontSize,
-} from './button-style';
-import { canvasText, panelRect } from './canvas-ui';
+  orderedGoFishHand,
+  goFishTargetBoxes,
+  goFishStockPosition,
+} from './go-fish-classic-layout';
+import { GoFishTableUi } from './go-fish-table-ui';
+const PILE_X = 480;
+const PILE_Y = 350;
 import type { CardAtlas } from './card-atlas';
 import type { GameDriver, InputEvent, RenderContext } from './game-driver';
 import {
@@ -39,25 +42,14 @@ import {
   resetCardLift,
   startHandHoverClock,
 } from './hand-hover';
-import {
-  STOCK_LABEL_DY,
-  askButtonBox,
-  askSeat,
-  bookSlots,
-  finishedLine,
-  legalCard,
-  opponentBookOrigin,
-  selfBookOrigin,
-  stockPosition,
-} from './go-fish-layout';
-import { LOGICAL_WIDTH } from './sheets';
+import { legalCard, askSeat } from './go-fish-layout';
 
-const GOLD = ex.Color.fromHex('#f4e4b3');
-const DIM = ex.Color.fromHex('#d7c08a');
+const [ASK_BUTTON, BOOKS_BUTTON] = classicControlBoxes(2);
+const GOLD = ex.Color.fromHex(CLASSIC.cream);
 const BUTTON = ex.Color.fromHex('#1b5c38');
 const BUTTON_DOWN = ex.Color.fromHex('#0e3d24');
-const STROKE = ex.Color.fromHex('#e6c27a');
-const STROKE_HOT = ex.Color.fromHex('#fff6d0');
+const STROKE = ex.Color.fromHex(CLASSIC.softBorder);
+const STROKE_HOT = ex.Color.fromHex(CLASSIC.gold);
 const FLASH_FILL = ex.Color.fromRGB(232, 60, 48, 0.8);
 const FLASH_STROKE = ex.Color.fromHex('#ff3b2f');
 
@@ -65,13 +57,6 @@ const TRAVEL_MS = 420;
 const FLASH_ON_MS = 130;
 const FLASH_OFF_MS = 80;
 const FLASH_BLINKS = 3;
-const BOOK_SCALE = 0.5;
-const BOOK_ART_HALF = 12;
-const BOOK_LABEL_DY = 34;
-const BOOK_CAPTION_DY = 16;
-const LAST_ASK_Y =
-  typeof window !== 'undefined' && isMobileDevice() ? 370 : 264;
-const STOCK_SHOWN = 3;
 
 /** A red box that blinks a few times over a control, then removes itself. */
 class FlashActor extends ex.Actor {
@@ -115,21 +100,43 @@ class FlashActor extends ex.Actor {
   }
 }
 
+interface ControlFace {
+  actor: ex.Actor;
+  face: ex.Rectangle;
+  caption: ex.Actor;
+  text: ex.Text;
+  setLabel?: (label: string) => void;
+  place?: (box: { x: number; y: number; w: number; h: number }) => void;
+}
+
 interface CardRecord {
   actor: ex.Actor;
   restX: number;
   restY: number;
   faceUp: boolean;
+  /** True for a card still in the local player's own hand. */
+  personal: boolean;
   moving: boolean;
   placed: boolean;
   restZ: number;
 }
 
-interface BookRecord {
-  actor: ex.Actor;
-  caption: ex.Actor;
-  cardId: string;
-  rank: string;
+function panelRect(
+  width: number,
+  height: number,
+  fill: ex.Color,
+  stroke: ex.Color,
+): ex.Rectangle {
+  const rect = new ex.Rectangle({
+    width,
+    height,
+    color: fill,
+    strokeColor: stroke,
+    lineWidth: 2,
+    smoothing: false,
+  });
+  rect.origin = ex.vec(0, 0);
+  return rect;
 }
 
 function cardSprite(
@@ -147,10 +154,7 @@ function cardSprite(
   return atlas.sprite(face);
 }
 
-/**
- * Go Fish table: your hand along the bottom, other hands as backs,
- * the stock left of center, and books beside each seat.
- */
+/** Go Fish keeps private ranks in the personal band and public books in a bounded collection view. */
 export class GoFishDriver implements GameDriver<GoFishState> {
   readonly name = 'Go Fish';
   readonly gameType = GO_FISH_GAME_TYPE;
@@ -158,21 +162,27 @@ export class GoFishDriver implements GameDriver<GoFishState> {
   private cards = new Map<string, CardRecord>();
   private backs = new Map<string, ex.Actor>();
   private backTargets = new Map<string, string>();
-  private books = new Map<string, BookRecord>();
+  private readonly tableUi = new GoFishTableUi();
+  private askControl: ControlFace | null = null;
+  private booksControl: ControlFace | null = null;
+  private targetControls = new Map<number, ControlFace>();
+  private selectedRank: string | null = null;
+  private selectedTarget: number | null = null;
+  private booksOpen = false;
   private stockActors: ex.Actor[] = [];
   private stockKey = '';
-  private labels: ex.Actor[] = [];
+  private prevHandControl: ControlFace | null = null;
+  private nextHandControl: ControlFace | null = null;
+  private handPage = 0;
+  private handPageCount = 1;
+  private handLayoutKey = '';
+  private visibleHand: string[] = [];
   private buttons: ex.Actor[] = [];
-  private askKey = '';
-  private askBoxes = new Map<
-    number,
-    { x: number; y: number; w: number; h: number }
-  >();
   private flashes: ex.Actor[] = [];
-  private selectedRank: string | null = null;
   private hover: string | null = null;
   private readonly handHover = new HandHover();
   private hoverClock: ex.Actor | null = null;
+  private buttonsReady = false;
   private state: GoFishState | null = null;
   private ctx: RenderContext | null = null;
 
@@ -180,44 +190,87 @@ export class GoFishDriver implements GameDriver<GoFishState> {
     this.state = state;
     this.ctx = ctx;
     this.ensureHoverClock(ctx);
+    if (!this.buttonsReady) {
+      this.askControl = this.addButton(ctx, ASK_BUTTON, 'Ask', 'ask');
+      this.booksControl = this.addButton(ctx, BOOKS_BUTTON, 'Books', 'books');
+      this.prevHandControl = this.addButton(ctx, HAND_PREV, '<', 'hand-prev');
+      this.nextHandControl = this.addButton(ctx, HAND_NEXT, '>', 'hand-next');
+      anchorTableActor(this.prevHandControl.actor, 'left', HAND_PREV.x);
+      this.buttonsReady = true;
+    }
     if (state.phase === 'lobby') {
       this.clearTableCards();
-      this.syncAskButtons(state, ctx);
       this.syncLabels(state, ctx);
       return;
     }
     this.syncCards(state, ctx);
-    this.syncAskButtons(state, ctx);
-    this.syncLabels(state, ctx);
     this.syncBacks(state, ctx);
     this.syncStock(state, ctx);
-    this.syncBooks(state, ctx);
+    this.syncLabels(state, ctx);
   }
+
+  /** lastAsk/books already own the public message; event strips must not repeat them. */
+  setAnnouncement(_text: string): void {}
 
   handleInput(event: InputEvent, state: GoFishState, ctx: RenderContext): void {
     this.state = state;
     this.ctx = ctx;
+    if (
+      event.type === 'pointerup' &&
+      (event.target === 'hand-prev' || event.target === 'hand-next')
+    ) {
+      if (ctx.inputBlocked() || this.handPageCount < 2) return;
+      const direction = event.target === 'hand-prev' ? -1 : 1;
+      this.handPage =
+        (this.handPage + direction + this.handPageCount) % this.handPageCount;
+      this.handHover.clear();
+      this.syncCards(state, ctx, true);
+      this.syncLabels(state, ctx);
+      return;
+    }
+    if (ctx.inputBlocked() && event.type !== 'pointerleave') return;
+    if (
+      event.type === 'pointerup' &&
+      (event.target === 'books' || event.target === 'books-close')
+    ) {
+      this.booksOpen = event.target === 'books';
+      this.handHover.clear();
+      this.syncStock(state, ctx);
+      this.syncLabels(state, ctx);
+      return;
+    }
+    if (this.booksOpen) return;
     if (state.phase !== 'play') {
       return;
     }
     if (ctx.inputBlocked() && event.type !== 'pointerleave') {
       return;
     }
-    const targetSeat = askSeat(event.target);
-    if (targetSeat !== null && event.type === 'pointerup') {
-      const rank = this.selectedRank;
+    if (ctx.meSeatIndex === null || state.turnSeatIndex !== ctx.meSeatIndex) {
+      return;
+    }
+    if (event.target.startsWith('target:') && event.type === 'pointerup') {
+      const target = Number(event.target.slice(7));
       if (
-        rank === null ||
-        ctx.meSeatIndex === null ||
-        state.turnSeatIndex !== ctx.meSeatIndex ||
-        !ctx.seats.some((seat) => seat.seatIndex === targetSeat && !seat.self)
-      ) {
+        ctx.seats.some((seat) => !seat.self && seat.seatIndex === target) &&
+        state.hands[String(target)]?.length
+      )
+        this.selectedTarget = target;
+      this.syncLabels(state, ctx);
+      return;
+    }
+    const askedSeat =
+      event.target === 'ask' ? this.selectedTarget : askSeat(event.target);
+    if (askedSeat !== null && event.type === 'pointerup') {
+      if (
+        this.selectedRank === null ||
+        !ctx.seats.some((seat) => !seat.self && seat.seatIndex === askedSeat)
+      )
         return;
-      }
       ctx.sendIntent({
         type: 'ask',
-        targetSeat,
-        rank,
+        targetSeat: askedSeat,
+        rank: this.selectedRank,
       });
       return;
     }
@@ -238,50 +291,51 @@ export class GoFishDriver implements GameDriver<GoFishState> {
     }
     if (event.type === 'pointerup') {
       const rank = rankOfCard(event.target);
-      if (!rank) {
-        return;
-      }
+      if (!rank) return;
       this.selectedRank = this.selectedRank === rank ? null : rank;
-      this.refreshLifts(state, ctx);
-      this.syncAskButtons(state, ctx);
+      this.syncStock(state, ctx);
+      this.applyLift(event.target, state, ctx);
       this.syncLabels(state, ctx);
     }
   }
 
   /**
-   * The module said no. Flash the Ask button and the lifted rank
-   * so the click does not look ignored.
+   * The module said no. Flash Ask and the selected rank so the click does
+   * not look ignored.
    */
   intentRejected(intent: unknown, ctx: RenderContext): void {
-    if (typeof intent !== 'object' || intent === null || !('type' in intent)) {
-      return;
-    }
-    if (intent.type !== 'ask') {
-      return;
-    }
-    const targetSeat =
-      'targetSeat' in intent && typeof intent.targetSeat === 'number'
-        ? intent.targetSeat
+    const type =
+      typeof intent === 'object' && intent !== null && 'type' in intent
+        ? intent.type
         : null;
-    if (targetSeat !== null) {
-      const box = this.askBoxes.get(targetSeat);
-      if (box) {
-        this.flashBox(ctx, box.x, box.y, box.w, box.h);
-      }
-    }
+    if (type !== 'ask') return;
+    const actor = this.askControl?.actor;
+    if (actor)
+      this.flashBox(ctx, actor.pos.x, actor.pos.y, actor.width, actor.height);
     for (const [cardId, record] of this.cards) {
-      if (!this.rankSelected(cardId)) {
-        continue;
-      }
-      const half = CARD_DRAW / 2;
+      if (rankOfCard(cardId) !== this.selectedRank) continue;
       this.flashBox(
         ctx,
-        record.actor.pos.x - half,
-        record.actor.pos.y - half,
+        record.actor.pos.x - CARD_DRAW / 2,
+        record.actor.pos.y - CARD_DRAW / 2,
         CARD_DRAW,
         CARD_DRAW,
       );
     }
+  }
+
+  private flashBox(
+    ctx: RenderContext,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+  ): void {
+    const actor = new FlashActor(x, y, width, height, () => {
+      this.flashes = this.flashes.filter((item) => item !== actor);
+    });
+    ctx.scene.add(actor);
+    this.flashes.push(actor);
   }
 
   destroy(ctx: RenderContext): void {
@@ -291,118 +345,140 @@ export class GoFishDriver implements GameDriver<GoFishState> {
     }
     this.flashes = [];
     this.clearTableCards();
-    for (const actor of this.labels) {
-      actor.kill();
-    }
-    this.labels = [];
+    this.tableUi.clear();
     for (const actor of this.buttons) {
       actor.kill();
     }
     this.buttons = [];
-    this.askKey = '';
-    this.askBoxes.clear();
+    this.buttonsReady = false;
+    this.askControl =
+      this.booksControl =
+      this.prevHandControl =
+      this.nextHandControl =
+        null;
+    this.handPage = 0;
+    this.handPageCount = 1;
+    this.handLayoutKey = '';
+    this.visibleHand = [];
     this.selectedRank = null;
+    this.selectedTarget = null;
+    this.booksOpen = false;
+    this.targetControls.clear();
     this.hover = null;
     this.stopHoverClock();
     this.state = null;
     this.ctx = null;
   }
 
-  private syncLabels(state: GoFishState, ctx: RenderContext): void {
-    for (const actor of this.labels) {
-      actor.kill();
-    }
-    this.labels = [];
-    if (state.phase === 'lobby') {
+  private setShown(control: ControlFace | null, shown: boolean): void {
+    if (!control) {
       return;
     }
-    if (state.phase === 'finished') {
-      const line =
-        ctx.finishedMessage ?? finishedLine(state, ctx.seats) ?? 'Finished';
-      this.labels.push(this.banner(ctx, line));
-    } else {
-      const mine =
-        ctx.meSeatIndex !== null && state.turnSeatIndex === ctx.meSeatIndex;
-      this.labels.push(
-        this.textActor(
-          ctx,
-          TURN_LINE.x,
-          TURN_LINE.y,
-          mine
-            ? this.selectedRank === null
-              ? 'Pick a rank'
-              : 'Your turn'
-            : 'Wait',
-          GOLD,
-        ),
-      );
-      const stock = stockPosition();
-      const stockLine = `Stock ${state.stock.length}`;
-      this.labels.push(
-        this.textActor(
-          ctx,
-          stock.x - stockLine.length * 4,
-          stock.y + STOCK_LABEL_DY,
-          stockLine,
-          GOLD,
-        ),
-      );
-      if (state.lastAsk) {
-        const ask = state.lastAsk;
-        const line =
-          ask.given > 0
-            ? `Got ${ask.given} ${ask.rank}`
-            : ask.drawn
-              ? 'Go fish'
-              : `No ${ask.rank}`;
-        this.labels.push(
-          this.textActor(ctx, 480 - line.length * 4, LAST_ASK_Y, line, DIM),
-        );
-      }
-    }
-    for (const seat of ctx.seats) {
-      const booked = state.books[String(seat.seatIndex)]?.length ?? 0;
-      if (seat.self) {
-        if (booked > 0) {
-          const origin = selfBookOrigin();
-          this.labels.push(
-            this.textActor(
-              ctx,
-              origin.x - BOOK_ART_HALF,
-              origin.y - BOOK_LABEL_DY,
-              `Books ${booked}`,
-              GOLD,
-            ),
-          );
-        }
-        continue;
-      }
-      const count = state.hands[String(seat.seatIndex)]?.length ?? 0;
-      const line =
-        state.phase === 'finished'
-          ? `Books ${booked}`
-          : booked > 0
-            ? `x${count} Books ${booked}`
-            : `x${count}`;
-      const countAt = fanGapLine(seat.x, seat.y, seat.name, line, 0);
-      const countLabel = this.textActor(ctx, countAt.x, countAt.y, line, DIM);
-      countLabel.z = 80;
-      this.labels.push(countLabel);
-    }
+    control.actor.graphics.isVisible = shown;
+    control.caption.graphics.isVisible = shown;
+    control.actor.pointer.useColliderShape = shown;
+    control.actor.pointer.useGraphicsBounds = shown;
   }
 
-  private syncCards(state: GoFishState, ctx: RenderContext): void {
+  private syncLabels(state: GoFishState, ctx: RenderContext): void {
+    if (!this.buttonsReady) return;
+    const acting =
+      state.phase === 'play' &&
+      ctx.meSeatIndex !== null &&
+      state.turnSeatIndex === ctx.meSeatIndex;
+    const choosing = acting && this.selectedRank !== null && !this.booksOpen;
+    const showAsk = acting && !this.booksOpen;
+    const showBooks = state.phase === 'play' && !this.booksOpen;
+    this.setShown(this.askControl, showAsk);
+    this.setShown(this.booksControl, showBooks);
+    this.askControl?.place?.(
+      (showBooks ? classicControlBoxes(2) : classicControlBoxes(1))[0],
+    );
+    this.booksControl?.place?.(
+      showAsk ? classicControlBoxes(2)[1] : classicControlBoxes(1)[0],
+    );
+    if (this.askControl) {
+      const enabled =
+        showAsk && this.selectedRank !== null && this.selectedTarget !== null;
+      this.askControl.actor.graphics.opacity = enabled ? 1 : 0.45;
+      this.askControl.caption.graphics.opacity = enabled ? 1 : 0.45;
+      this.askControl.actor.pointer.useColliderShape = enabled;
+      this.askControl.actor.pointer.useGraphicsBounds = enabled;
+    }
+    for (const box of goFishTargetBoxes(ctx.seats)) {
+      let control = this.targetControls.get(box.seat.seatIndex);
+      if (!control) {
+        control = this.addButton(
+          ctx,
+          box,
+          box.seat.name,
+          `target:${box.seat.seatIndex}`,
+        );
+        this.targetControls.set(box.seat.seatIndex, control);
+      }
+      const enabled =
+        choosing && (state.hands[String(box.seat.seatIndex)]?.length ?? 0) > 0;
+      this.setShown(control, enabled);
+      control.face.color = ex.Color.fromHex(
+        this.selectedTarget === box.seat.seatIndex ? CLASSIC.active : '#1b5c38',
+      );
+      control.face.strokeColor =
+        this.selectedTarget === box.seat.seatIndex ? STROKE_HOT : STROKE;
+      control.text.color =
+        this.selectedTarget === box.seat.seatIndex ? STROKE_HOT : GOLD;
+    }
+    this.tableUi.render(state, ctx, {
+      rank: this.selectedRank,
+      target: this.selectedTarget,
+      page: this.handPage,
+      pages: this.handPageCount,
+      booksOpen: this.booksOpen,
+      books: () =>
+        this.handleInput({ type: 'pointerup', target: 'books' }, state, ctx),
+      closeBooks: () =>
+        this.handleInput(
+          { type: 'pointerup', target: 'books-close' },
+          state,
+          ctx,
+        ),
+    });
+  }
+
+  private syncCards(
+    state: GoFishState,
+    ctx: RenderContext,
+    pageChanged = false,
+  ): void {
     const desired = new Map<
       string,
-      { x: number; y: number; faceUp: boolean; delay: number; z: number }
+      {
+        x: number;
+        y: number;
+        faceUp: boolean;
+        delay: number;
+        z: number;
+        personal: boolean;
+      }
     >();
     const hand =
       ctx.meSeatIndex === null
         ? []
-        : (state.hands[String(ctx.meSeatIndex)] ?? []);
-    const handSlots = handPositions(hand.length);
-    for (let index = 0; index < hand.length; index += 1) {
-      const cardId = hand[index];
+        : orderedGoFishHand(state.hands[String(ctx.meSeatIndex)] ?? []);
+    this.handLayoutKey = `${isMobileDevice()}:${tableGutter()}`;
+    const pageSize = handPageSize(hand.length, isMobileDevice(), tableGutter());
+    this.handPageCount = this.nextHandControl
+      ? Math.max(1, Math.ceil(hand.length / pageSize))
+      : 1;
+    this.handPage = Math.min(this.handPage, this.handPageCount - 1);
+    const paged = this.handPageCount > 1;
+    this.visibleHand = paged
+      ? hand.slice(this.handPage * pageSize, (this.handPage + 1) * pageSize)
+      : hand;
+    this.setShown(this.prevHandControl, paged);
+    this.setShown(this.nextHandControl, paged);
+    const handSlots = handPositions(this.visibleHand.length, isMobileDevice());
+    for (let index = 0; index < this.visibleHand.length; index += 1) {
+      const cardId = this.visibleHand[index];
       const slot = handSlots[index];
       if (!cardId || !slot) {
         continue;
@@ -413,14 +489,19 @@ export class GoFishDriver implements GameDriver<GoFishState> {
         faceUp: true,
         delay: index * 16,
         z: 12 + index,
+        personal: true,
       });
     }
-    if (this.selectedRank !== null) {
-      const still = hand.some((card) => rankOfCard(card) === this.selectedRank);
-      if (!still) {
-        this.selectedRank = null;
-      }
-    }
+    if (
+      this.selectedRank !== null &&
+      !hand.some((card) => rankOfCard(card) === this.selectedRank)
+    )
+      this.selectedRank = null;
+    if (
+      this.selectedTarget !== null &&
+      !state.hands[String(this.selectedTarget)]?.length
+    )
+      this.selectedTarget = null;
     for (const [cardId, record] of this.cards) {
       if (!desired.has(cardId)) {
         record.actor.kill();
@@ -428,28 +509,36 @@ export class GoFishDriver implements GameDriver<GoFishState> {
       }
     }
     for (const [cardId, place] of desired) {
-      this.placeCard(cardId, place, ctx);
+      this.placeCard(cardId, place, ctx, pageChanged && place.personal);
     }
   }
 
-  /** `syncCards` only ever places the local player's own hand here. */
   private placeCard(
     cardId: string,
-    place: { x: number; y: number; faceUp: boolean; delay: number; z: number },
+    place: {
+      x: number;
+      y: number;
+      faceUp: boolean;
+      delay: number;
+      z: number;
+      personal: boolean;
+    },
     ctx: RenderContext,
+    instant: boolean,
   ): void {
-    const spawn = stockPosition();
+    const atlas = place.personal ? ctx.myCards : ctx.cards;
     let record = this.cards.get(cardId);
     if (!record) {
       const actor = new ex.Actor({
-        pos: ex.vec(spawn.x, spawn.y),
+        name: `go-fish-card-${cardId}`,
+        pos: ex.vec(PILE_X, PILE_Y),
         anchor: ex.vec(0.5, 0.5),
         width: CARD_DRAW,
         height: CARD_DRAW,
         z: place.z,
       });
       actor.pointer.useGraphicsBounds = false;
-      actor.graphics.use(cardSprite(ctx.myCards, cardId, place.faceUp));
+      actor.graphics.use(cardSprite(atlas, cardId, place.faceUp));
       actor.on('pointerenter', (event) => {
         if (!canInspectPointer(event, ctx.scene.engine.input.pointers)) return;
         this.followHand(cardId, event.worldPos.x, true);
@@ -495,20 +584,30 @@ export class GoFishDriver implements GameDriver<GoFishState> {
         restX: place.x,
         restY: place.y,
         faceUp: place.faceUp,
+        personal: place.personal,
         moving: false,
         placed: false,
         restZ: place.z,
       };
       this.cards.set(cardId, record);
     }
-    if (record.faceUp !== place.faceUp) {
+    if (record.faceUp !== place.faceUp || record.personal !== place.personal) {
       record.faceUp = place.faceUp;
-      record.actor.graphics.use(cardSprite(ctx.myCards, cardId, place.faceUp));
+      record.personal = place.personal;
+      record.actor.graphics.use(cardSprite(atlas, cardId, place.faceUp));
     }
+    record.actor.pointer.useColliderShape = place.personal;
     const moved = record.restX !== place.x || record.restY !== place.y;
     record.restX = place.x;
     record.restY = place.y;
     record.restZ = place.z;
+    if (instant) {
+      record.actor.actions.clearActions();
+      record.moving = false;
+      record.placed = true;
+      this.applyLift(cardId, this.state, ctx);
+      return;
+    }
     if (!record.placed || moved) {
       const fromDeal = !record.placed;
       record.placed = true;
@@ -555,35 +654,28 @@ export class GoFishDriver implements GameDriver<GoFishState> {
       return;
     }
     const legal = legalCard(state, ctx.meSeatIndex, cardId);
-    const held = cardLift({
-      legal,
-      hovered: false,
-      selected: this.rankSelected(cardId),
-    });
     const hover =
-      !ctx.inputBlocked() && held === 0 ? this.handHover.current(cardId) : 0;
+      record.personal && !this.booksOpen && !ctx.inputBlocked()
+        ? this.handHover.current(cardId)
+        : 0;
     placeCardLift(
       record.actor,
       record.restX,
       record.restY,
       record.restZ,
-      held > 0 ? held : hover,
-      legal && this.rankSelected(cardId),
-      ctx.meSeatIndex !== null &&
-        state.hands[String(ctx.meSeatIndex)]?.includes(cardId) === true,
+      hover,
+      !this.booksOpen && legal && rankOfCard(cardId) === this.selectedRank,
+      record.personal,
     );
-  }
-
-  private refreshLifts(state: GoFishState, ctx: RenderContext): void {
-    for (const cardId of this.cards.keys()) {
-      this.applyLift(cardId, state, ctx);
-    }
   }
 
   private followHand(cardId: string, pointerX: number, entered: boolean): void {
     const state = this.state;
     const ctx = this.ctx;
+    const record = this.cards.get(cardId);
     if (
+      !record?.personal ||
+      this.booksOpen ||
       !state ||
       !ctx ||
       ctx.inputBlocked() ||
@@ -621,11 +713,13 @@ export class GoFishDriver implements GameDriver<GoFishState> {
     if (!state || !ctx) {
       return;
     }
-    const hand =
-      ctx.meSeatIndex === null
-        ? []
-        : (state.hands[String(ctx.meSeatIndex)] ?? []);
-    const slots = handPositions(hand.length);
+    if (this.handLayoutKey !== `${isMobileDevice()}:${tableGutter()}`) {
+      this.handHover.clear();
+      this.syncCards(state, ctx, true);
+      this.syncLabels(state, ctx);
+    }
+    const hand = this.visibleHand;
+    const slots = this.visibleHandSlots();
     const centers: number[] = [];
     for (let index = 0; index < slots.length; index += 1) {
       centers.push(slots[index]?.x ?? 0);
@@ -640,20 +734,17 @@ export class GoFishDriver implements GameDriver<GoFishState> {
     }
   }
 
-  private rankSelected(cardId: string): boolean {
-    return (
-      this.selectedRank !== null && rankOfCard(cardId) === this.selectedRank
-    );
-  }
-
   private handBoxes(): CardHitBox[] {
     const state = this.state;
     const ctx = this.ctx;
     if (!state || !ctx || ctx.meSeatIndex === null) {
       return [];
     }
-    const hand = state.hands[String(ctx.meSeatIndex)] ?? [];
-    return localHandHitBoxes(hand, this.cards, CARD_DRAW);
+    return localHandHitBoxes(this.visibleHand, this.cards, CARD_DRAW);
+  }
+
+  private visibleHandSlots(): { x: number; y: number }[] {
+    return handPositions(this.visibleHand.length, isMobileDevice());
   }
 
   private onCard(
@@ -673,25 +764,18 @@ export class GoFishDriver implements GameDriver<GoFishState> {
       string,
       { x: number; y: number; z: number; rotation: number; scale: number }
     >();
-    for (const seat of ctx.seats) {
-      if (seat.self) {
-        continue;
-      }
-      const count = state.hands[String(seat.seatIndex)]?.length ?? 0;
-      const slots = seatFan(seat.x, seat.y, count, seat.name);
-      for (let index = 0; index < slots.length; index += 1) {
-        const slot = slots[index];
-        if (!slot) {
-          continue;
-        }
-        desired.set(`${seat.seatIndex}:${index}`, {
-          x: slot.x,
-          y: slot.y,
-          z: 4 + index,
-          rotation: slot.rotation,
-          scale: slot.scale,
-        });
-      }
+    for (const slot of classicBackSlots(ctx.seats, state.hands)) {
+      const { key, ...place } = slot;
+      const box = classicSeats(ctx.seats).find((row) =>
+        key.startsWith(`${row.seat.seatIndex}:`),
+      );
+      place.x +=
+        box?.edge === 'left'
+          ? -tableGutter()
+          : box?.edge === 'right'
+            ? tableGutter()
+            : 0;
+      desired.set(key, place);
     }
     for (const [key, actor] of this.backs) {
       if (!desired.has(key)) {
@@ -700,13 +784,26 @@ export class GoFishDriver implements GameDriver<GoFishState> {
         this.backTargets.delete(key);
       }
     }
-    const spawn = stockPosition();
     for (const [key, place] of desired) {
       const target = `${place.x}:${place.y}:${place.rotation}:${place.scale}`;
       let actor = this.backs.get(key);
+      const edge = classicSeats(ctx.seats).find((box) =>
+        key.startsWith(`${box.seat.seatIndex}:`),
+      )?.edge;
+      const baseX =
+        place.x +
+        (edge === 'left'
+          ? tableGutter()
+          : edge === 'right'
+            ? -tableGutter()
+            : 0);
+      const dock = (): void => {
+        if (actor && edge) anchorTableActor(actor, edge, baseX);
+      };
       if (!actor) {
         actor = new ex.Actor({
-          pos: ex.vec(spawn.x, spawn.y),
+          name: `go-fish-back-${key}`,
+          pos: ex.vec(PILE_X, PILE_Y),
           anchor: ex.vec(0.5, 0.5),
           width: OPPONENT_FAN_CARD,
           height: OPPONENT_FAN_CARD,
@@ -716,14 +813,18 @@ export class GoFishDriver implements GameDriver<GoFishState> {
         actor.scale = ex.vec(place.scale, place.scale);
         const back = ctx.cards.back();
         actor.graphics.use(back);
+        actor.pointer.useGraphicsBounds = false;
+        actor.pointer.useColliderShape = false;
         ctx.scene.add(actor);
         this.backs.set(key, actor);
         this.backTargets.set(key, target);
-        actor.actions.moveTo({
-          pos: ex.vec(place.x, place.y),
-          duration: TRAVEL_MS,
-          easing: ex.EasingFunctions.EaseOutCubic,
-        });
+        actor.actions
+          .moveTo({
+            pos: ex.vec(place.x, place.y),
+            duration: TRAVEL_MS,
+            easing: ex.EasingFunctions.EaseOutCubic,
+          })
+          .callMethod(dock);
         continue;
       }
       actor.z = place.z;
@@ -734,135 +835,48 @@ export class GoFishDriver implements GameDriver<GoFishState> {
       }
       this.backTargets.set(key, target);
       actor.actions.clearActions();
-      actor.actions.moveTo({
-        pos: ex.vec(place.x, place.y),
-        duration: TRAVEL_MS,
-        easing: ex.EasingFunctions.EaseOutCubic,
-      });
+      actor.actions
+        .moveTo({
+          pos: ex.vec(place.x, place.y),
+          duration: TRAVEL_MS,
+          easing: ex.EasingFunctions.EaseOutCubic,
+        })
+        .callMethod(dock);
     }
   }
 
   private syncStock(state: GoFishState, ctx: RenderContext): void {
-    const shown = Math.min(state.stock.length, STOCK_SHOWN);
-    const key = `${shown}`;
-    if (key === this.stockKey) {
-      return;
-    }
-    for (const actor of this.stockActors) {
-      actor.kill();
-    }
-    this.stockActors = [];
-    this.stockKey = key;
-    const spot = stockPosition();
-    for (let index = 0; index < shown; index += 1) {
-      const actor = new ex.Actor({
-        pos: ex.vec(spot.x + index * 3, spot.y - index * 2),
-        anchor: ex.vec(0.5, 0.5),
-        width: CARD_DRAW,
-        height: CARD_DRAW,
-        z: 3 + index,
-      });
-      actor.graphics.use(ctx.cards.back());
-      ctx.scene.add(actor);
-      this.stockActors.push(actor);
-    }
-  }
-
-  private syncBooks(state: GoFishState, ctx: RenderContext): void {
-    const desired = new Map<
-      string,
-      { x: number; y: number; cardId: string; rank: string }
-    >();
-    for (const seat of ctx.seats) {
-      const list = state.books[String(seat.seatIndex)] ?? [];
-      const origin = seat.self
-        ? selfBookOrigin()
-        : opponentBookOrigin(seat.x, seat.y, list.length, seat.name);
-      const slots = bookSlots(origin.x, origin.y, list.length);
-      for (let index = 0; index < list.length; index += 1) {
-        const book = list[index];
-        const slot = slots[index];
-        const cardId = book?.cards[0];
-        if (!book || !slot || !cardId) {
-          continue;
-        }
-        desired.set(`${seat.seatIndex}:${index}`, {
-          x: slot.x,
-          y: slot.y,
-          cardId,
-          rank: book.rank,
-        });
-      }
-    }
-    for (const [key, record] of this.books) {
-      if (!desired.has(key)) {
-        record.actor.kill();
-        record.caption.kill();
-        this.books.delete(key);
-      }
-    }
-    for (const [key, place] of desired) {
-      let record = this.books.get(key);
-      if (!record) {
-        const actor = new ex.Actor({
-          pos: ex.vec(place.x, place.y),
-          anchor: ex.vec(0.5, 0.5),
-          width: CARD_DRAW * BOOK_SCALE,
-          height: CARD_DRAW * BOOK_SCALE,
-          z: 6,
-        });
-        const caption = new ex.Actor({
-          pos: ex.vec(place.x, place.y),
-          anchor: ex.vec(0, 0),
-          z: 7,
-        });
-        ctx.scene.add(actor);
-        ctx.scene.add(caption);
-        record = { actor, caption, cardId: '', rank: '' };
-        this.books.set(key, record);
-      }
-      record.actor.pos = ex.vec(place.x, place.y);
-      record.caption.pos = ex.vec(
-        place.x - place.rank.length * 4,
-        place.y + BOOK_CAPTION_DY,
-      );
-      if (record.cardId !== place.cardId) {
-        record.cardId = place.cardId;
-        const sprite = cardSprite(ctx.cards, place.cardId, true);
-        sprite.scale = ex.vec(BOOK_SCALE, BOOK_SCALE);
-        record.actor.graphics.use(sprite);
-      }
-      if (record.rank !== place.rank) {
-        record.rank = place.rank;
-        record.caption.graphics.use(canvasText(place.rank, 8, GOLD));
-      }
-    }
-  }
-
-  private syncAskButtons(state: GoFishState, ctx: RenderContext): void {
-    const others =
+    if (!this.buttonsReady) return;
+    const choosing =
       state.phase === 'play' &&
       ctx.meSeatIndex !== null &&
       state.turnSeatIndex === ctx.meSeatIndex &&
-      this.selectedRank !== null
-        ? ctx.seats.filter((seat) => !seat.self)
-        : [];
-    const key = others
-      .map((seat) => `${seat.seatIndex}:${seat.x}:${seat.y}`)
-      .join('|');
-    if (key === this.askKey) {
-      return;
-    }
-    for (const actor of this.buttons) {
-      actor.kill();
-    }
-    this.buttons = [];
-    this.askBoxes.clear();
-    this.askKey = key;
-    for (const seat of others) {
-      const box = askButtonBox(seat.x, seat.y, seat.name);
-      this.askBoxes.set(seat.seatIndex, box);
-      this.addButton(ctx, box, 'Ask', `ask:${seat.seatIndex}`);
+      this.selectedRank !== null &&
+      !this.booksOpen;
+    const spot = goFishStockPosition(choosing),
+      shown =
+        state.phase === 'play' && !this.booksOpen
+          ? Math.min(3, state.stock.length)
+          : 0;
+    const key = `${shown}:${spot.x}:${spot.y}`;
+    if (key === this.stockKey) return;
+    for (const actor of this.stockActors) actor.kill();
+    this.stockActors = [];
+    this.stockKey = key;
+    for (let index = 0; index < shown; index++) {
+      const actor = new ex.Actor({
+        name: 'go-fish-stock',
+        pos: ex.vec(spot.x + index * 3, spot.y - index * 2),
+        anchor: ex.vec(0.5, 0.5),
+        z: 6 + index,
+      });
+      const sprite = ctx.cards.back();
+      sprite.scale = ex.vec(1.1, 1.1);
+      actor.graphics.use(sprite);
+      actor.pointer.useColliderShape = false;
+      actor.pointer.useGraphicsBounds = false;
+      ctx.scene.add(actor);
+      this.stockActors.push(actor);
     }
   }
 
@@ -876,61 +890,13 @@ export class GoFishDriver implements GameDriver<GoFishState> {
     }
     this.backs.clear();
     this.backTargets.clear();
-    for (const record of this.books.values()) {
-      record.actor.kill();
-      record.caption.kill();
-    }
-    this.books.clear();
-    for (const actor of this.stockActors) {
-      actor.kill();
-    }
+    this.selectedRank = null;
+    this.selectedTarget = null;
+    this.hover = null;
+    for (const actor of this.stockActors) actor.kill();
     this.stockActors = [];
     this.stockKey = '';
-    this.selectedRank = null;
-    this.hover = null;
     this.handHover.clear();
-  }
-
-  private banner(ctx: RenderContext, text: string): ex.Actor {
-    const size = isMobileDevice()
-      ? Math.max(8, Math.min(16, Math.floor(700 / Math.max(1, text.length))))
-      : 8;
-    const width = text.length * size + 16;
-    const actor = new ex.Actor({
-      pos: ex.vec(Math.floor((LOGICAL_WIDTH - width) / 2), 112),
-      anchor: ex.vec(0, 0),
-      width,
-      height: size + 16,
-      z: 16,
-    });
-    actor.graphics.use(panelRect(width, size + 16, BUTTON, STROKE));
-    const caption = new ex.Actor({
-      pos: ex.vec(8, 8),
-      anchor: ex.vec(0, 0),
-    });
-    caption.graphics.use(canvasText(text, size, GOLD));
-    actor.addChild(caption);
-    ctx.scene.add(actor);
-    return actor;
-  }
-
-  private textActor(
-    ctx: RenderContext,
-    x: number,
-    y: number,
-    text: string,
-    color: ex.Color,
-  ): ex.Actor {
-    const actor = new ex.Actor({
-      pos: ex.vec(x, y),
-      anchor: ex.vec(0, 0),
-      z: 14,
-    });
-    actor.graphics.use(canvasText(text, 8, color));
-    if (x === TURN_LINE.x && y === TURN_LINE.y)
-      anchorTableActor(actor, 'right');
-    ctx.scene.add(actor);
-    return actor;
   }
 
   private addButton(
@@ -938,8 +904,10 @@ export class GoFishDriver implements GameDriver<GoFishState> {
     box: { x: number; y: number; w: number; h: number },
     label: string,
     target: string,
-  ): void {
+  ): ControlFace {
+    let currentBox = { ...box };
     const actor = new ex.Actor({
+      name: `go-fish-control-${target}`,
       pos: ex.vec(box.x, box.y),
       anchor: ex.vec(0, 0),
       width: box.w,
@@ -948,13 +916,26 @@ export class GoFishDriver implements GameDriver<GoFishState> {
     });
     const face = panelRect(box.w, box.h, BUTTON, STROKE);
     actor.graphics.use(face);
-    const size = buttonFontSize(label, box.w, box.h);
-    const rest = buttonCaptionPos(label, box.w, box.h, size);
+    let size = target.startsWith('target:') ? 17 : 18;
+    while (uiText(label, size, GOLD).width > box.w - 12 && size > 16) size--;
+    if (uiText(label, size, GOLD).width > box.w - 12) {
+      let short = label;
+      while (
+        uiText(short + '…', size, GOLD).width > box.w - 12 &&
+        short.length > 1
+      )
+        short = short.slice(0, -1);
+      label = short + '…';
+    }
+    const rest = uiCaption(label, currentBox.w, currentBox.h, size);
+    const text = uiText(label, size, GOLD);
     const caption = new ex.Actor({
       pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText(label, size, GOLD));
+    caption.graphics.use(text);
+    caption.pointer.useGraphicsBounds = false;
+    caption.pointer.useColliderShape = false;
     actor.addChild(caption);
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;
@@ -966,35 +947,48 @@ export class GoFishDriver implements GameDriver<GoFishState> {
         caption.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
       },
       () => {
+        caption.pos = ex.vec(rest.x, rest.y);
         face.strokeColor = STROKE;
         face.color = BUTTON;
-        caption.pos = ex.vec(rest.x, rest.y);
       },
       () => {
-        const currentState = this.state;
+        const state = this.state;
         const current = this.ctx;
-        if (!currentState || !current) {
+        if (!state || !current) {
           return;
         }
-        this.handleInput({ type: 'pointerup', target }, currentState, current);
+        this.handleInput({ type: 'pointerup', target }, state, current);
       },
     );
-    if (box.x >= 750 && box.y >= 300) anchorTableActor(actor, 'right', box.x);
+    if (box.x >= 600 && box.y >= 400) anchorTableActor(actor, 'right', box.x);
     ctx.scene.add(actor);
     this.buttons.push(actor);
-  }
-
-  private flashBox(
-    ctx: RenderContext,
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-  ): void {
-    const actor = new FlashActor(x, y, width, height, () => {
-      this.flashes = this.flashes.filter((item) => item !== actor);
-    });
-    ctx.scene.add(actor);
-    this.flashes.push(actor);
+    return {
+      actor,
+      face,
+      caption,
+      text,
+      place: (nextBox) => {
+        currentBox = { ...nextBox };
+        face.width = nextBox.w;
+        face.height = nextBox.h;
+        actor.collider.useBoxCollider(nextBox.w, nextBox.h, ex.vec(0, 0));
+        actor.pos.y = nextBox.y;
+        anchorTableActor(actor, 'right', nextBox.x);
+        const next = uiCaption(text.text, nextBox.w, nextBox.h, size);
+        rest.x = next.x;
+        rest.y = next.y;
+        caption.pos = ex.vec(rest.x, rest.y);
+      },
+      setLabel: (nextLabel) => {
+        text.text = nextLabel;
+        const nextSize = 18;
+        text.font = uiText(nextLabel, nextSize, GOLD).font;
+        const next = uiCaption(nextLabel, currentBox.w, currentBox.h, nextSize);
+        rest.x = next.x;
+        rest.y = next.y;
+        caption.pos = ex.vec(rest.x, rest.y);
+      },
+    };
   }
 }

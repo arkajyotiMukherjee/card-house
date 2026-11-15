@@ -1,0 +1,12 @@
+
+ RUN  v3.2.7 /workspace/card-house/client
+
+ ✓ src/bluff-classic-layout.test.ts (3 tests) 13ms
+ ✓ src/bluff-driver.test.ts (9 tests) 26ms
+ ✓ src/event-messages.test.ts (19 tests) 23ms
+ ✓ src/bluff-challenge.test.ts (2 tests) 3ms
+
+ Test Files  4 passed (4)
+      Tests  33 passed (33)
+   Start at  12:05:05
+   Duration  3.21s (transform 3.53s, setup 106ms, collect 6.86s, tests 64ms, environment 1ms, prepare 635ms)

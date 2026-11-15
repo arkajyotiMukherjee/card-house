@@ -273,3 +273,32 @@ test('close reports an empty room as closed', async () => {
   );
   assert.equal(reply.data?.content, 'Lobby H7KP is closed');
 });
+
+test('create forwards startingchips while accepting commands registered before the rename', async () => {
+  for (const option of ['startingchips', 'startingcoins']) {
+    let grant: number | undefined;
+    await handleInteraction(
+      {
+        type: InteractionType.APPLICATION_COMMAND,
+        channel_id: CHANNEL,
+        data: {
+          name: 'cardhouse',
+          options: [
+            {
+              name: 'create',
+              type: 1,
+              options: [{ name: option, type: 4, value: 5000 }],
+            },
+          ],
+        },
+      },
+      deps({
+        createLobby: async (_channel, _guild, amount) => {
+          grant = amount;
+          return createdLobby();
+        },
+      }),
+    );
+    assert.equal(grant, 5000);
+  }
+});

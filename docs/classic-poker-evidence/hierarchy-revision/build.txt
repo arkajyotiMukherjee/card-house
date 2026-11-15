@@ -1,0 +1,19 @@
+
+> discord-card-games@ build /workspace/card-house
+> pnpm --filter client build
+
+$ tsc -p tsconfig.json --noEmit && vite build
+vite v8.3.2 building client environment for production...
+transforming...
+✓ 150 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                  1.24 kB │ gzip:   0.61 kB
+dist/assets/index-DbLGUjTH.js  971.67 kB │ gzip: 252.26 kB
+
+[plugin builtin:vite-reporter]
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 981ms

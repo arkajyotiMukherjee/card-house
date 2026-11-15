@@ -1,9 +1,19 @@
 import {
+  stakeFieldUpdates,
+  validateStakeForm,
+  validateBuyIn,
+} from './stake-form';
+import {
   casinoGame,
   formatCoins,
   tableEconomy,
   type TableEconomy,
 } from '../../src/shared/economy';
+import {
+  leaderboardRows,
+  clampLeaderboardOffset,
+  leaderboardScrollThumb,
+} from './leaderboard';
 import { coinDialog, type CoinField } from './coin-dialog';
 import {
   anchorLobbyActor,
@@ -24,7 +34,7 @@ import {
 import { pixelFont } from './boot-scene';
 import { statsCaption } from './client-stats';
 import { subscribeLobbyTables } from './connect';
-import { joinFailureMessage, wrapTableError } from './join-errors';
+import { joinFailureMessage } from './join-errors';
 import { showLobbyUrl, tableCodeForId } from './join-path';
 import { tableToReopen } from './last-room';
 import { roomComposer } from './room-composer';
@@ -53,6 +63,8 @@ import {
   applyChatText,
   CHAT_BODY_MAX,
   CHAT_PANEL,
+  CHAT_TOGGLE,
+  REFILL_CHIPS_BUTTON,
   LEAVE_CONFIRM,
   LEAVE_ROOM,
   leaveConfirmHit,
@@ -102,8 +114,6 @@ const STROKE = ex.Color.fromHex('#e6c27a');
 const STROKE_HOT = ex.Color.fromHex('#fff6d0');
 const DANGER = ex.Color.fromHex('#e85d4c');
 const PANEL = ex.Color.fromHex('#0a2e1c');
-const WAITING = ex.Color.fromHex('#3dd68c');
-const PLAYING = ex.Color.fromHex('#e6c27a');
 const FIELD_SEATED = ex.Color.fromHex('#1a4a2c');
 const INK = ex.Color.fromHex('#0a2e1c');
 const BANNER_FILL = ex.Color.fromHex('#0a2e1c');
@@ -185,6 +195,7 @@ export class LobbyScene {
   private tableNameText?: ex.Text;
   private gameIndex = 0;
   private variationIndex = 0;
+  private pokerLimit: 'no-limit' | 'pot-limit' | undefined;
   private maxPlayers = gameOption(0).maxPlayers;
   private readonly rowActors: ex.Actor[] = [];
   private emptyText: ex.Text | undefined;
@@ -214,10 +225,20 @@ export class LobbyScene {
   );
   private chatOpen = false;
   private chatUnread = 0;
-  private chatToggleText?: ex.Text;
+  private chatToggle?: ex.Actor;
+  private readonly buttonCaptions = new WeakMap<
+    ex.Actor,
+    (caption: string) => void
+  >();
   private readonly chatActors: { actor: ex.Actor; y: number }[] = [];
   private readonly leaderboardActors: ex.Actor[] = [];
-  private leaderboardPage = 0;
+  private leaderboardOffset = 0;
+  private leaderboardCount = 0;
+  private leaderboardDrag?: {
+    pointerId: number;
+    y: number;
+    thumbGrab?: number;
+  };
   private fundingDialog = false;
   private chatBody = '';
   private chatFocused = false;
@@ -384,6 +405,7 @@ export class LobbyScene {
     this.connection.db.roomWallet.onUpdate(() => this.renderLeaderboard());
     this.connection.db.tableFunding.onUpdate(() => this.renderLeaderboard());
     this.bindChatKeyboard();
+    this.bindLeaderboardScroll();
     roomComposer.watch(() => {
       this.chatFocused = roomComposer.active() === 'chat';
       this.paintChatField();
@@ -393,6 +415,7 @@ export class LobbyScene {
   openLobby(lobbyId: string, code = ''): Promise<boolean> {
     this.returnedToMenu = false;
     if (this.lobbyId !== lobbyId) showLobbyUrl(code);
+    if (this.lobbyId !== lobbyId) this.leaderboardOffset = 0;
     this.lobbyId = lobbyId;
     this.lobbyCode = code;
     this.closeLeaveConfirm();
@@ -528,24 +551,18 @@ export class LobbyScene {
     for (const actor of this.scene.actors)
       if (!beforeChat.has(actor))
         this.chatActors.push({ actor, y: actor.pos.y });
-    const chatToggle = this.button(
-      { x: 656, y: 16, w: 144, h: PHONE_LAYOUT ? 40 : 28 },
-      'Chat',
-      () => {
-        this.chatOpen = !this.chatOpen;
-        this.chatUnread = 0;
-        roomComposer.blur('chat');
-        this.setChatVisible();
-        this.renderChat();
-        this.renderLeaderboard();
-      },
-    );
-    anchorTableActor(chatToggle, 'right', 656);
-    // The caption is updated with the unread count.
-    this.chatToggleText = (chatToggle.children[0] as ex.Actor | undefined)
-      ?.graphics.current as ex.Text | undefined;
+    const chatToggle = this.button(CHAT_TOGGLE, 'Chat', () => {
+      this.chatOpen = !this.chatOpen;
+      this.chatUnread = 0;
+      roomComposer.blur('chat');
+      this.setChatVisible();
+      this.renderChat();
+      this.renderLeaderboard();
+    });
+    anchorTableActor(chatToggle, 'right', CHAT_TOGGLE.x);
+    this.chatToggle = chatToggle;
     this.setChatVisible();
-    this.button({ x: 20, y: 366, w: 160, h: 30 }, 'Refill coins', () => {
+    this.button(REFILL_CHIPS_BUTTON, 'Refill chips', () => {
       void this.connection.reducers
         .refillRoomCoins({ lobbyId: this.lobbyId, clientId: this.clientId })
         .catch((error) => this.setError(errorMessage(error)));
@@ -575,12 +592,14 @@ export class LobbyScene {
     if (!this.panelReady) return;
     for (const actor of this.leaderboardActors) actor.kill();
     this.leaderboardActors.length = 0;
-    if (this.chatToggleText)
-      this.chatToggleText.text = this.chatOpen
-        ? 'Rankings'
-        : this.chatUnread
-          ? `Chat (${this.chatUnread})`
-          : 'Chat';
+    if (this.chatToggle)
+      this.buttonCaptions.get(this.chatToggle)?.(
+        this.chatOpen
+          ? 'Rankings'
+          : this.chatUnread
+            ? `Chat (${this.chatUnread > 99 ? '99+' : this.chatUnread})`
+            : 'Chat',
+      );
     if (this.chatOpen) return;
     const box = CHAT_PANEL.panel;
     const panel = new ex.Actor({
@@ -605,62 +624,216 @@ export class LobbyScene {
     };
     label(98, 'Leaderboard', PHONE_LAYOUT ? 16 : 12);
     label(122, 'Ranked by net winnings', PHONE_LAYOUT ? 11 : 8, DIM);
-    const wallets = [...this.connection.db.roomWallet.iter()]
-      .filter((row) => row.lobbyId === this.lobbyId)
-      .sort((a, b) =>
-        a.profit === b.profit
-          ? a.id.localeCompare(b.id)
-          : a.profit > b.profit
-            ? -1
-            : 1,
-      );
+    const wallets = leaderboardRows(
+      [...this.connection.db.roomWallet.iter()].filter(
+        (row) => row.lobbyId === this.lobbyId,
+      ),
+    );
     const capacity = PHONE_LAYOUT ? 4 : 5;
-    const pages = Math.max(1, Math.ceil(wallets.length / capacity));
-    this.leaderboardPage %= pages;
-    const start = this.leaderboardPage * capacity;
+    this.leaderboardCount = wallets.length;
+    this.leaderboardOffset = clampLeaderboardOffset(
+      this.leaderboardOffset,
+      wallets.length,
+      capacity,
+    );
+    const start = this.leaderboardOffset;
+    const textX = CHAT_PANEL.list.x + 24;
+    const rowLabel = (
+      y: number,
+      value: string,
+      size: number,
+      color = GOLD,
+    ): void => {
+      const actor = this.addChatLabel(textX, y, value, size, color);
+      this.leaderboardActors.push(actor);
+    };
     wallets.slice(start, start + capacity).forEach((wallet, index) => {
-      const rank = wallets.findIndex((row) => row.profit === wallet.profit) + 1;
       const y = 158 + index * (PHONE_LAYOUT ? 70 : 54);
       const mine = wallet.clientId === this.clientId;
-      label(
-        y,
-        `${rank}. ${wallet.name.slice(0, PHONE_LAYOUT ? 15 : 20)}`,
-        PHONE_LAYOUT ? 14 : 10,
-        mine ? SELF : GOLD,
-      );
+      const size = PHONE_LAYOUT ? 14 : 10;
+      const prefix = `${wallet.rank}. `;
+      const nameLimit = Math.floor((932 - textX - 12) / size) - prefix.length;
+      const name =
+        wallet.name.length > nameLimit
+          ? wallet.name.slice(0, nameLimit - 3) + '...'
+          : wallet.name;
+      rowLabel(y, prefix + name, size, mine ? SELF : GOLD);
+      if (wallet.crowned) this.addLeaderCrown(CHAT_PANEL.list.x, y - 1);
       const committed = [...this.connection.db.tableFunding.iter()]
         .filter((row) => row.walletId === wallet.id)
         .reduce((sum, row) => sum + row.units, 0n);
       if (PHONE_LAYOUT) {
-        label(
+        rowLabel(
           y + 22,
           `Net ${wallet.profit > 0n ? '+' : ''}${formatCoins(wallet.profit)}`,
           12,
           DIM,
         );
-        label(
+        rowLabel(
           y + 40,
-          `Coins ${formatCoins(wallet.available + committed)}`,
+          `Chips ${formatCoins(wallet.available + committed)}`,
           12,
           DIM,
         );
       } else
-        label(
+        rowLabel(
           y + 20,
-          `${wallet.profit > 0n ? '+' : ''}${formatCoins(wallet.profit)} net | ${formatCoins(wallet.available + committed)} total`,
+          `${wallet.profit > 0n ? '+' : ''}${formatCoins(wallet.profit)} net | ${formatCoins(wallet.available + committed)} chips`,
           8,
           DIM,
         );
     });
-    const next = this.button(
-      { x: 668, y: 454, w: 272, h: 30 },
-      `Players ${this.leaderboardPage + 1}/${pages}`,
-      () => {
-        this.leaderboardPage += 1;
-        this.renderLeaderboard();
-      },
+    label(
+      474,
+      wallets.length
+        ? `${start + 1}-${Math.min(start + capacity, wallets.length)} of ${wallets.length} players`
+        : 'No players yet',
+      PHONE_LAYOUT ? 11 : 8,
+      DIM,
     );
-    this.leaderboardActors.push(next);
+    if (wallets.length > capacity) {
+      label(
+        452,
+        PHONE_LAYOUT ? 'Swipe to scroll' : 'Scroll for more',
+        PHONE_LAYOUT ? 10 : 8,
+        DIM,
+      );
+      const thumb = leaderboardScrollThumb(
+        start,
+        wallets.length,
+        capacity,
+        280,
+      );
+      for (const [y, h, color] of [
+        [154, 280, FIELD],
+        [154 + thumb.y, thumb.h, STROKE],
+      ] as const) {
+        const actor = new ex.Actor({
+          pos: ex.vec(932, y),
+          anchor: ex.vec(0, 0),
+          width: 6,
+          height: h,
+          z: 21,
+        });
+        actor.graphics.use(panelRect(6, h, color, color));
+        this.silencePointer(actor);
+        anchorLobbyActor(actor);
+        this.scene.add(actor);
+        this.leaderboardActors.push(actor);
+      }
+    }
+  }
+
+  private addLeaderCrown(x: number, y: number): void {
+    const actor = new ex.Actor({
+      pos: ex.vec(x, y),
+      anchor: ex.vec(0, 0),
+      z: 21,
+    });
+    const graphic = new ex.Canvas({
+      width: 18,
+      height: 14,
+      cache: true,
+      smoothing: false,
+      filtering: ex.ImageFiltering.Pixel,
+      draw: (ctx) => {
+        ctx.fillStyle = '#e6c27a';
+        ctx.fillRect(0, 2, 2, 6);
+        ctx.fillRect(8, 0, 2, 8);
+        ctx.fillRect(16, 2, 2, 6);
+        ctx.fillRect(2, 6, 14, 4);
+        ctx.fillRect(2, 12, 14, 2);
+        ctx.fillStyle = '#fff6d0';
+        ctx.fillRect(4, 8, 10, 2);
+      },
+    });
+    graphic.origin = ex.vec(0, 0);
+    actor.graphics.use(graphic);
+    this.silencePointer(actor);
+    anchorLobbyActor(actor);
+    this.scene.add(actor);
+    this.leaderboardActors.push(actor);
+  }
+
+  private bindLeaderboardScroll(): void {
+    const active = (): boolean =>
+      this.panelReady &&
+      this.engine.currentScene === this.scene &&
+      !this.chatOpen &&
+      !this.dialogOpen;
+    const contains = (x: number, y: number): boolean =>
+      active() &&
+      x >= CHAT_PANEL.panel.x + tableGutter() &&
+      x < CHAT_PANEL.panel.x + CHAT_PANEL.panel.w + tableGutter() &&
+      y >= 146 &&
+      y < 440;
+    const scroll = (offset: number): void => {
+      const next = clampLeaderboardOffset(
+        offset,
+        this.leaderboardCount,
+        PHONE_LAYOUT ? 4 : 5,
+      );
+      if (next === this.leaderboardOffset) return;
+      this.leaderboardOffset = next;
+      this.renderLeaderboard();
+    };
+    this.engine.input.pointers.on('wheel', (event) => {
+      if (!contains(event.x, event.y) || !event.deltaY) return;
+      event.cancel();
+      scroll(this.leaderboardOffset + Math.sign(event.deltaY));
+    });
+    this.engine.input.pointers.on('down', (event) => {
+      if (!contains(event.worldPos.x, event.worldPos.y)) return;
+      const thumb = leaderboardScrollThumb(
+        this.leaderboardOffset,
+        this.leaderboardCount,
+        PHONE_LAYOUT ? 4 : 5,
+        280,
+      );
+      const track = event.worldPos.x >= 922 + tableGutter();
+      this.leaderboardDrag = {
+        pointerId: event.pointerId,
+        y: event.worldPos.y,
+        thumbGrab: track
+          ? Math.max(0, Math.min(thumb.h, event.worldPos.y - 154 - thumb.y))
+          : undefined,
+      };
+      event.cancel();
+    });
+    this.engine.input.pointers.on('move', (event) => {
+      const drag = this.leaderboardDrag;
+      if (!drag || drag.pointerId !== event.pointerId || !active()) return;
+      if (drag.thumbGrab !== undefined) {
+        const capacity = PHONE_LAYOUT ? 4 : 5;
+        const thumb = leaderboardScrollThumb(
+          this.leaderboardOffset,
+          this.leaderboardCount,
+          capacity,
+          280,
+        );
+        scroll(
+          ((event.worldPos.y - 154 - drag.thumbGrab) /
+            Math.max(1, 280 - thumb.h)) *
+            Math.max(0, this.leaderboardCount - capacity),
+        );
+      } else {
+        const steps = Math.trunc(
+          (drag.y - event.worldPos.y) / (PHONE_LAYOUT ? 40 : 32),
+        );
+        if (steps) {
+          scroll(this.leaderboardOffset + steps);
+          drag.y = event.worldPos.y;
+        }
+      }
+      event.cancel();
+    });
+    this.engine.input.pointers.on('up', (event) => {
+      if (this.leaderboardDrag?.pointerId === event.pointerId)
+        this.leaderboardDrag = undefined;
+    });
+    this.engine.canvas.addEventListener('pointercancel', () => {
+      this.leaderboardDrag = undefined;
+    });
   }
 
   private buildChatPanel(): void {
@@ -703,6 +876,7 @@ export class LobbyScene {
       GOLD,
     );
     this.chatCaret = makeFieldCaret(chatMetrics.size, 22);
+    this.chatCaret.name = 'lobby-chat-caret';
     this.scene.add(this.chatCaret);
     this.chatInputBox.on('pointerup', () => {
       roomComposer.focus('chat');
@@ -738,8 +912,8 @@ export class LobbyScene {
       enterKeyHint: 'send',
       autoCapitalize: 'off',
       metrics: lobbyFieldGeometry(chatFieldLabel(CHAT_PANEL.field), 'right'),
-      onCaret: () => {
-        this.paintChatField();
+      onCaret: (index) => {
+        this.paintChatField(index);
       },
     });
 
@@ -919,7 +1093,7 @@ export class LobbyScene {
     });
   }
 
-  private paintChatField(): void {
+  private paintChatField(caretIndex?: number): void {
     if (!this.chatInputBox || !this.chatInputText || !this.chatCaret) {
       return;
     }
@@ -934,7 +1108,7 @@ export class LobbyScene {
       ),
     );
     const index = this.chatFocused
-      ? (this.chatField?.selectionIndex() ?? this.chatBody.length)
+      ? (caretIndex ?? this.chatField?.selectionIndex() ?? this.chatBody.length)
       : this.chatBody.length;
     const layout = layoutFieldCaret({
       value: this.chatBody,
@@ -1188,40 +1362,40 @@ export class LobbyScene {
     });
     popup.graphics.use(panelRect(box.w, box.h, PANEL, STROKE));
     this.addLabel(
-      PHONE_LAYOUT ? 184 : 204,
-      PHONE_LAYOUT ? 54 : 156,
+      PHONE_LAYOUT ? 184 : 276,
+      PHONE_LAYOUT ? 54 : 150,
       'Create Table',
       PHONE_LAYOUT ? 18 : 8,
       GOLD,
       popup,
     );
     this.addLabel(
-      PHONE_LAYOUT ? 288 : 204,
-      PHONE_LAYOUT ? 100 : 180,
+      PHONE_LAYOUT ? 288 : 276,
+      PHONE_LAYOUT ? 100 : 174,
       'Game',
       PHONE_LAYOUT ? 12 : 8,
       DIM,
       popup,
     );
     this.gameText = this.addLabel(
-      PHONE_LAYOUT ? 288 : 204,
-      PHONE_LAYOUT ? 132 : 196,
+      PHONE_LAYOUT ? 288 : 276,
+      PHONE_LAYOUT ? 132 : 190,
       gameOption(0).name,
       PHONE_LAYOUT ? 16 : 8,
       GOLD,
       popup,
     );
     this.addLabel(
-      PHONE_LAYOUT ? 288 : 420,
-      PHONE_LAYOUT ? 200 : 180,
+      PHONE_LAYOUT ? 288 : 492,
+      PHONE_LAYOUT ? 200 : 174,
       PHONE_LAYOUT ? 'Max players' : 'Max',
       PHONE_LAYOUT ? 12 : 8,
       DIM,
       popup,
     );
     this.maxText = this.addLabel(
-      PHONE_LAYOUT ? 288 : 420,
-      PHONE_LAYOUT ? 232 : 196,
+      PHONE_LAYOUT ? 288 : 492,
+      PHONE_LAYOUT ? 232 : 190,
       String(this.maxPlayers),
       PHONE_LAYOUT ? 16 : 8,
       GOLD,
@@ -1260,16 +1434,16 @@ export class LobbyScene {
       popup,
     );
     this.dealLabel = this.addLabel(
-      PHONE_LAYOUT ? 288 : 420,
-      PHONE_LAYOUT ? 300 : 252,
+      PHONE_LAYOUT ? 288 : 492,
+      PHONE_LAYOUT ? 300 : 246,
       '',
       PHONE_LAYOUT ? 12 : 8,
       DIM,
       popup,
     );
     this.variationText = this.addLabel(
-      PHONE_LAYOUT ? 288 : 420,
-      PHONE_LAYOUT ? 332 : 276,
+      PHONE_LAYOUT ? 288 : 492,
+      PHONE_LAYOUT ? 332 : 270,
       '',
       PHONE_LAYOUT ? 16 : 8,
       GOLD,
@@ -1320,6 +1494,28 @@ export class LobbyScene {
       GOLD,
       popup,
     );
+    const caret = makeFieldCaret(metrics.size, 3);
+    caret.name = 'table-name-caret';
+    this.silencePointer(caret);
+    popup.addChild(caret);
+    let nameFocused = false;
+    const paintName = (index = this.tableNameDraft.length): void => {
+      const layout = layoutFieldCaret({
+        value: this.tableNameDraft,
+        index,
+        size: metrics.size,
+        originX: metrics.x,
+        originY: metrics.y,
+        columns: metrics.columns,
+      });
+      if (this.tableNameText) this.tableNameText.text = layout.text;
+      showFieldCaret(
+        caret,
+        nameFocused && this.creating && !this.fundingDialog,
+        layout.x - box.x,
+        layout.y - box.y,
+      );
+    };
     const nameField = bindCanvasTextField({
       id: 'table-name',
       label: 'Table name (optional)',
@@ -1333,11 +1529,20 @@ export class LobbyScene {
       sanitize: (value) => applyChatText(value).slice(0, 32),
       write: (value) => {
         this.tableNameDraft = value;
-        if (this.tableNameText) this.tableNameText.text = value;
+        paintName(nameField.selectionIndex());
       },
       submit: () => void this.createTable(),
       cancel: () => this.closeCreate(),
       metrics,
+      onFocus: () => {
+        nameFocused = true;
+        paintName(nameField.selectionIndex());
+      },
+      onBlur: () => {
+        nameFocused = false;
+        caret.graphics.opacity = 0;
+      },
+      onCaret: paintName,
     });
     nameFace.on('pointerup', () => nameField.focus());
     this.button(
@@ -1371,6 +1576,7 @@ export class LobbyScene {
     this.tableNameDraft = '';
     if (this.tableNameText) this.tableNameText.text = '';
     this.variationIndex = 0;
+    this.pokerLimit = undefined;
     this.paintChoice();
     this.setPopupOpen(true);
     roomComposer.clear();
@@ -1455,6 +1661,11 @@ export class LobbyScene {
     if (this.fundingDialog) return;
     if (!stakes) {
       this.fundingDialog = true;
+      if (game.gameType === 'poker')
+        this.pokerLimit ??=
+          POKER_VARIATIONS[this.variationIndex] === 'holdem'
+            ? 'no-limit'
+            : 'pot-limit';
       const defaults = tableEconomy(game.gameType);
       const fields: CoinField[] = casinoGame(game.gameType)
         ? [
@@ -1500,9 +1711,23 @@ export class LobbyScene {
         this.engine,
         this.scene,
         'Table stakes',
-        'Create and join as host. Coins are reserved immediately.',
+        'Create and join as host. Chips are reserved immediately.',
         fields,
         'Create and join',
+        {
+          onChange: stakeFieldUpdates,
+          choice:
+            game.gameType === 'poker'
+              ? {
+                  values: ['No limit', 'Pot limit'],
+                  index: this.pokerLimit === 'no-limit' ? 0 : 1,
+                  onChange: (index) => {
+                    this.pokerLimit = index === 0 ? 'no-limit' : 'pot-limit';
+                  },
+                }
+              : undefined,
+          validate: (values) => validateStakeForm(game.gameType, values),
+        },
       );
       this.fundingDialog = false;
       if (selected) await this.createTable(selected);
@@ -1532,6 +1757,7 @@ export class LobbyScene {
             ),
           ),
           ...stakes,
+          ...(game.gameType === 'poker' ? { limit: this.pokerLimit } : {}),
         }),
       });
     } catch (error: unknown) {
@@ -1595,6 +1821,8 @@ export class LobbyScene {
     const table = [...this.connection.db.gameTable.iter()].find(
       (row) => row.id === tableId,
     );
+    if (table?.gameType === 'poker' && table.status.tag === 'Finished')
+      return this.spectateTable(tableId);
     let buyIn: number | undefined;
     if (table?.economyJson && !this.memberSeatedHere(tableId, member.id)) {
       this.fundingDialog = true;
@@ -1605,12 +1833,18 @@ export class LobbyScene {
         this.scene,
         casino ? 'Buy in' : 'Join paid game',
         casino
-          ? `Buy-in range: ${settings.minBuyIn} to ${settings.maxBuyIn} coins`
-          : `Entry: ${settings.entryFee} coins. Winner takes the pool.`,
+          ? `Buy-in range: ${settings.minBuyIn} to ${settings.maxBuyIn} chips`
+          : `Entry: ${settings.entryFee} chips. Winner takes the pool.`,
         casino
           ? [{ key: 'buyIn', label: 'Your buy-in', value: settings.minBuyIn }]
           : [],
         'Join table',
+        {
+          validate: (values) => {
+            if (casino)
+              validateBuyIn(values.buyIn, settings.minBuyIn, settings.maxBuyIn);
+          },
+        },
       );
       this.fundingDialog = false;
       if (!selected) return false;
@@ -1820,7 +2054,7 @@ export class LobbyScene {
           ? `${settings.smallBlind}/${settings.bigBlind} | Buy-in ${settings.minBuyIn}+`
           : dbTable.gameType === 'blackjack'
             ? `Bet ${settings.minBet}-${settings.maxBet}`
-            : `Entry ${settings.entryFee} coins`;
+            : `Entry ${settings.entryFee} chips`;
       const countdown =
         dbTable.startsAt === undefined
           ? `Host ${host.slice(0, 12)}`
@@ -1836,23 +2070,6 @@ export class LobbyScene {
       this.childLabel(actor, 8, 78, countdown, DIM, PHONE_LAYOUT ? 12 : 8);
     }
     const full = line.currentSeats >= line.maxPlayers;
-    const dot = new ex.Rectangle({
-      width: 6,
-      height: 6,
-      color:
-        full || line.statusLabel === 'Finished'
-          ? DANGER
-          : line.statusLabel === 'In Progress'
-            ? PLAYING
-            : WAITING,
-      smoothing: false,
-    });
-    const dotActor = new ex.Actor({
-      pos: ex.vec(6, 6),
-      anchor: ex.vec(0, 0),
-    });
-    dotActor.graphics.use(dot);
-    actor.addChild(dotActor);
     const titleSize = PHONE_LAYOUT ? 12 : 10;
     const titleLimit = Math.floor(
       (row.w + tableGutter() * 2 - 208) / titleSize,
@@ -1888,13 +2105,15 @@ export class LobbyScene {
     // The card is informational. Only the two visible buttons accept a tap.
     this.silencePointer(actor);
     const mobile = isMobileDevice();
+    const ended =
+      line.statusLabel === 'Finished' && line.gameType !== 'blackjack';
     this.tableAction(
       actor,
       mobile ? MOBILE_JOIN_BUTTON : JOIN_BUTTON,
-      line.seated ? 'Return' : full ? 'Full' : 'Join',
+      line.seated ? 'Return' : ended ? 'Ended' : full ? 'Full' : 'Join',
       () => void this.joinTable(line.id),
       true,
-      !full || line.seated,
+      line.seated || (!full && !ended),
     );
     this.tableAction(
       actor,
@@ -2031,9 +2250,10 @@ export class LobbyScene {
 
   private setError(message: string): void {
     if (this.errorText) {
-      this.errorText.text = PHONE_LAYOUT
-        ? wrapText(message, 60).slice(0, 2).join('\n')
-        : wrapTableError(message);
+      const columns = Math.floor(
+        (TABLE_LIST.row.w + tableGutter() * 2) / (PHONE_LAYOUT ? 10 : 8),
+      );
+      this.errorText.text = wrapText(message, columns).join('\n');
       if (PHONE_LAYOUT && this.statsActor) {
         this.statsActor.graphics.isVisible = message.length === 0;
       }
@@ -2104,9 +2324,11 @@ export class LobbyScene {
     });
     const face = panelRect(box.w, box.h, BUTTON, STROKE);
     actor.graphics.use(face);
-    const size = PHONE_LAYOUT ? 12 : buttonFontSize(caption, box.w, box.h);
-    const captionText = canvasText(caption, size, GOLD);
-    const rest = buttonCaptionPos(caption, box.w, box.h, size);
+    const sizeFor = (value: string): number =>
+      buttonFontSize(value, box.w, box.h, PHONE_LAYOUT ? 12 : undefined);
+    const size = sizeFor(caption);
+    let captionText = canvasText(caption, size, GOLD);
+    let rest = buttonCaptionPos(caption, box.w, box.h, size);
     const captionActor = new ex.Actor({
       pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
@@ -2114,6 +2336,14 @@ export class LobbyScene {
     captionActor.graphics.use(captionText);
     this.silencePointer(captionActor);
     actor.addChild(captionActor);
+    this.buttonCaptions.set(actor, (value) => {
+      if (captionText.text === value) return;
+      const size = sizeFor(value);
+      captionText = canvasText(value, size, GOLD);
+      captionActor.graphics.use(captionText);
+      rest = buttonCaptionPos(value, box.w, box.h, size);
+      captionActor.pos = ex.vec(rest.x, rest.y);
+    });
     const claimEvent = (event: { cancel: () => void }): void => {
       if (claim) {
         event.cancel();

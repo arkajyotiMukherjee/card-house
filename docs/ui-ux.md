@@ -415,6 +415,44 @@ A phone or tablet is any device matching `(pointer: coarse) and (hover: none)`. 
 
 ## Room economy lobby
 
-The default lobby has a personal wallet summary, table browser, and player leaderboard. Use the full safe viewport width. Rank by settled net winnings and display available and committed coins separately. Chat is initially closed and replaces its column only after a button press; new messages have an unread indicator. Table cards show the host, fee or stakes, and an independent start countdown. Keep these labels readable rather than shrinking them beneath the action buttons.
+The default lobby has a personal wallet summary, table browser, and player leaderboard. Use the full safe viewport width. Rank by settled net winnings and display available and committed chips separately. Chat is initially closed and replaces its column only after a button press; new messages have an unread indicator. Table cards show the host, fee or stakes, and an independent start countdown. Keep these labels readable rather than shrinking them beneath the action buttons.
 
-Numeric coin dialogs stay on the canvas, use native text inputs with numeric keyboards, and grow with the number of settings. Creation confirms stakes and seats the creator as host. Joining confirms a fee or chosen casino buy-in before reserving coins. Show room balance and the between-hand top-up action in the table margin. Completed paid games retain a participant snapshot so releasing seats never removes winner names.
+Numeric chip dialogs stay on the canvas, use native text inputs with numeric keyboards, and grow with the number of settings. Creation confirms stakes and seats the creator as host. Joining confirms a fee or chosen casino buy-in before reserving chips. Keep room balances in the lobby and the top-up dialog. During a hand, show the playing stack; between hands, offer Top up in the personal area. Completed paid games retain a participant snapshot so releasing seats never removes winner names.
+
+The lobby ranking list scrolls with wheel, touch swipe, and a draggable scrollbar. Place a pixel crown before the name of a unique positive-profit leader, leaving initial or leading ties uncrowned. Fit and recenter dynamic button captions whenever their text changes. Keep at least 16 logical pixels between Refill chips and Name.
+
+The approved [classic-table design system](design-system.md) supersedes the earlier Poker roster and central review-tray experiment. Poker (Oklahoma) is the first implemented checkpoint. Opponents sit around the wooden rail with compact card fans, smaller unboxed names, prominent stacks and quiet bet/blind/fold status. Their whole cluster stays clear of neighboring seats and the public center. A flat pot surface and short horizontal chip piles sit above the lower community board. Pot chips use the betting preview’s face artwork, with repeated denominations split into piles of at most four rather than tall towers. The bottom bar holds an unboxed local name/stack, personal cards, and a dynamic status/action area: waiting and the latest move, controls on the player's turn, discard instructions, or winner/countdown/top-up after the hand. There is no duplicated global message banner on the felt.
+
+Oklahoma uses four private cards before the flop, three after the flop discard, and two after the turn discard. Discard steps explicitly ask for one card and hide irrelevant betting controls. Holding inspects; only a short tap discards. At showdown, each non-folded contender's two remaining cards reveal at that player's rail seat, at the personal hand's resting scale. An uncalled hand keeps hole cards private. Community cards remain readable at 1.65 scale.
+
+Classic tables pair Bree Serif amounts and headings with smaller Chakra Petch supporting text. Cards and chip totals have priority; outlines identify controls instead of framing every label. Caption bounds are measured and centered. The existing pixel-art card/table themes remain. Menu/input typography and the layouts of other games stay as they are until their own approval checkpoint. See the design-system document for exact tokens, safe-area behavior, maximum seat counts, special game zones, and the required test/evidence checklist.
+
+The phone Fullscreen control stays aligned with Leave and uses a centered four-corner icon. The classic header reserves its space inside the frame, so it does not also consume the legacy 60px outer margin. Refit when entering/leaving classic mode even when logical width is unchanged.
+
+Create Table is centered on the viewport on desktop and phones. Table-name and chat fields draw the same caret at the native input's published insertion index, including keyboard and pointer movement. Increasing Minimum buy-in raises Your buy-in only if needed; manually entering a lower buy-in keeps the stakes dialog open with a wrapped inline error. Keep visible waiting-room actions adjacent, identify watchers separately from seated players, and let a viewer leave after their seat has already been released.
+
+Poker's variation and phase share a readable status panel beside Help; the current actor is on the second line. The action/review zone also identifies the variation. Table errors use a bounded message band below the board, clear of Hands/Wins. A paid poker result shows Top up to continue or Waiting for top-up while a session is paused, a shared server countdown when funded players can continue, and Session ended when closed. Hide Top up and disable fresh admission on an ended poker table; Watch remains available.
+
+### Bluff classic checkpoint
+
+The user has authorized Bluff after the Poker review. The [design system](design-system.md#bluff-adoption-checkpoint) now defines its six-player classic composition: quiet rail names, exact card counts, compact backs, a public rank/claim/pile, and a wider hand zone with responsive paging only for larger hands. Play/Pass and the rank picker follow the turn; Challenge remains accessible outside the turn when allowed. The table name heads the view; the center owns claim/challenge feedback and compact bottom-right controls own actions/results, and remaining cards stay private at the end. Other games retain their current layout pending the next review. Evidence is under `docs/classic-bluff-evidence/`.
+
+
+### President classic checkpoint
+
+President is the next user-authorized game after Bluff. Its classic composition uses the same readable six-player rail and wide private-hand band. The public center shows the latest combination to beat, a low-to-high strength guide, and then the final order/titles/points. Play/Pass use a compact right-hand column; large three-player hands page at the shared readable card size. Remaining cards stay private. See [the President design contract](design-system.md#president-adoption-checkpoint) and `docs/classic-president-evidence/` for the running-app review. Pause before migrating another game.
+
+
+### Shared prize-pool header
+
+All seven entry-fee games use the approved rectangular gold trophy badge: PRIZE POOL above a larger exact chip amount, replacing header player-count text. The badge is shared by `GameScene`, including games awaiting full classic migration. Legacy phase status remains in the header center and its hand/win counter yields that space. Live retained funding and settled participants determine the pool; current seat count does not. See [the shared badge contract](design-system.md#shared-prize-pool-badge) and [screenshots/proof](prize-pool-evidence/README.md).
+
+
+### Go Fish classic checkpoint
+
+Go Fish is the next user-authorized full UI migration after President. The classic table keeps the latest ask/result and stock in the center, prioritizes book scores and readable cards over names, and uses held-rank selection followed by a target chooser and compact Ask confirmation. Books opens a bounded public collection, and finish uses that area for ranked scores and all tied leaders. The shared trophy prize badge remains in the header. Private draws and remaining hands stay private. See [the composition contract](design-system.md#go-fish-adoption-checkpoint); screenshots and independent multiplayer proof belong in `docs/classic-go-fish-evidence/`. Pause before migrating Crazy Eights.
+
+
+### Poker main and side pots
+
+Unequal all-ins display a readable Main pot and numbered Side pot tiles in the public center. The main pot stays visible while extra layers page, with wider columns for large exact values. Tap a pot for eligible-player details and its independent result. Awaiting calls/Uncalled contributions remain separate from contested pots; returns do not count as wins. Layered mode moves the board down 12 logical pixels. Details block actions/slider interaction. The shared rules handle each pot's eligibility, winners, odd chips and exact awards. See `docs/poker-side-pot-evidence/` and [the all-in matrix](poker-all-in-rules.md).

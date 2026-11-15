@@ -38,7 +38,7 @@ export const POKER_SUITS = ['S', 'H', 'D', 'C'] as const;
 const POKER_PHASES = ['lobby', 'play', 'finished'] as const;
 const POKER_STREETS = ['preflop', 'flop', 'turn', 'river'] as const;
 const POKER_STEPS = ['discard', 'bet', 'runout'] as const;
-const POKER_LIMITS = ['no-limit', 'pot-limit'] as const;
+export const POKER_LIMITS = ['no-limit', 'pot-limit'] as const;
 const POKER_ENDS = ['fold', 'showdown'] as const;
 
 const RANK_SET: ReadonlySet<string> = new Set(POKER_RANKS);
@@ -94,6 +94,7 @@ export interface PokerSeatState {
   allIn: boolean;
   /** True after a check or a call that already matched the current bet. */
   acted: boolean;
+  actedAtBet?: number;
   /** Oklahoma still owes a hole-card discard this street. */
   mustDiscard: boolean;
 }
@@ -149,9 +150,9 @@ export type PokerIntent =
 export type PokerEventNote =
   | { kind: 'fold'; seat: number }
   | { kind: 'check'; seat: number }
-  | { kind: 'call'; seat: number; amount: number }
-  | { kind: 'bet'; seat: number; amount: number }
-  | { kind: 'raise'; seat: number; amount: number }
+  | { kind: 'call'; seat: number; amount: number; allIn?: boolean }
+  | { kind: 'bet'; seat: number; amount: number; allIn?: boolean }
+  | { kind: 'raise'; seat: number; amount: number; allIn?: boolean }
   | { kind: 'discard'; seat: number }
   | { kind: 'finished'; end: PokerEnd; winners: number[] };
 
@@ -161,7 +162,7 @@ export const pokerGameDefinition = {
   minPlayers: 2,
   maxPlayers: 8,
   howToPlay:
-    "# Poker\n\nTexas Hold'em, Omaha, and Oklahoma share one table. Choose the variation when you create the table. The host sets blinds and buy-in limits. Your buy-in comes from your room wallet; remaining chips return after a safe cash-out.\n\n## Texas Hold'em\n\nTwo hole cards. The board is a flop of three, then the turn, then the river. At showdown you may use any mix of hole cards and community cards. Betting is no-limit.\n\n## Omaha\n\nFour hole cards. The board and the betting rounds match Hold'em. At showdown you must use exactly two hole cards and three community cards. Betting is pot-limit.\n\n## Oklahoma\n\nThe deal starts like Omaha, with four hole cards. Before betting on the flop, each player still in discards one hole card. Before betting on the turn, each player still in discards one more. Showdown uses the two remaining hole cards and exactly three community cards. Betting is pot-limit.\n\n## Betting\n\nThe button posts the small blind and the next seat posts the big blind. Those seats are marked SB and BB for the whole hand, including after a fold. On your turn you may fold, check, call, bet, or raise. Bet and Raise ask for an amount from the minimum through all-in. Call matches the current bet. The maximum button reads Pot max when the pot-limit ceiling is below your full stack, and All-in when your full stack is legal. Once all remaining opponents are all-in and calls are settled, live hands turn face up and the board runs out without extra checks. Oklahoma still requires its flop and turn discards. The hand ends when everyone else folds, or at showdown. The best hand wins. Side pots pay players who were all-in for less. After a fold win, any undealt community cards are revealed without changing the winner. The finished hand stays up so the winner and any showdown cards can be read, then the next hand deals while two or more players are still seated. A player with no chips leaves the paid seat and may buy in again between hands.",
+    "# Poker\n\nTexas Hold'em, Omaha, and Oklahoma share one table. Choose the variation when you create the table. The host sets blinds, buy-in limits, and No limit or Pot limit independently of the variation. Your buy-in comes from your room wallet; remaining chips return after a safe cash-out.\n\n## Texas Hold'em\n\nTwo hole cards. The board is a flop of three, then the turn, then the river. At showdown you may use any mix of hole cards and community cards. The default betting limit is no-limit; the host can choose pot-limit instead.\n\n## Omaha\n\nFour hole cards. The board and the betting rounds match Hold'em. At showdown you must use exactly two hole cards and three community cards. The default betting limit is pot-limit; the host can choose no-limit instead.\n\n## Oklahoma\n\nThe deal starts like Omaha, with four hole cards. Before betting on the flop, each player still in discards one hole card. Before betting on the turn, each player still in discards one more. Showdown uses the two remaining hole cards and exactly three community cards. The default betting limit is pot-limit; the host can choose no-limit instead.\n\n## Betting\n\nThe button posts the small blind and the next seat posts the big blind. Those seats are marked SB and BB for the whole hand, including after a fold. On your turn you may fold, check, call, bet, or raise. Bet and Raise ask for an amount from the minimum through all-in. Call matches the current bet. The slider above the chip preview runs from the minimum to Pot max or All-in. No-limit allows your full stack on a legal betting turn. A short all-in is allowed below the minimum, but does not reopen raising for someone who already acted unless the cumulative increase reaches a full raise. Other funded players can keep betting into side pots; an all-in player can win only the matched pots they contributed to. Unmatched excess is returned. You cannot bet into an uncontested side pot. Once all remaining opponents are all-in and calls are settled, live hands turn face up and the board runs out without extra checks. Oklahoma still requires its flop and turn discards. The hand ends when everyone else folds, or at showdown. The best hand wins. Side pots pay players who were all-in for less. After a fold win, any undealt community cards are revealed without changing the winner. The finished hand stays up so the winner and any showdown cards can be read, then the next hand deals while two or more players are still seated. A player with no chips can top up between hands, within table limits and their room balance. Their saved seat is retained; returning does not create a second buy-in. Play pauses until at least two seats have chips.",
 } satisfies GameDefinition;
 
 function asRecord(value: unknown, message: string): Record<string, unknown> {
@@ -292,7 +293,8 @@ function readSeat(value: unknown): PokerSeatState {
     typeof record.folded !== 'boolean' ||
     typeof record.allIn !== 'boolean' ||
     typeof record.acted !== 'boolean' ||
-    typeof record.mustDiscard !== 'boolean'
+    typeof record.mustDiscard !== 'boolean' ||
+    (record.actedAtBet !== undefined && !isCount(record.actedAtBet))
   ) {
     throw new Error('Invalid table state');
   }
@@ -304,6 +306,7 @@ function readSeat(value: unknown): PokerSeatState {
     folded: record.folded,
     allIn: record.allIn,
     acted: record.acted,
+    actedAtBet: isCount(record.actedAtBet) ? record.actedAtBet : undefined,
     mustDiscard: record.mustDiscard,
   };
 }
@@ -358,9 +361,6 @@ export function readPokerState(value: unknown): PokerState {
     !isCount(record.bigBlind) ||
     !isLimit(record.limit)
   ) {
-    throw new Error('Invalid table state');
-  }
-  if (record.limit !== limitFor(record.variation)) {
     throw new Error('Invalid table state');
   }
   const dealer = record.dealerSeatIndex;
@@ -471,10 +471,19 @@ export function readPokerEventNote(value: unknown): PokerEventNote | null {
     record.kind === 'bet' ||
     record.kind === 'raise'
   ) {
-    if (!isSeatIndex(record.seat) || !isCount(record.amount)) {
+    if (
+      !isSeatIndex(record.seat) ||
+      !isCount(record.amount) ||
+      (record.allIn !== undefined && typeof record.allIn !== 'boolean')
+    ) {
       return null;
     }
-    return { kind: record.kind, seat: record.seat, amount: record.amount };
+    return {
+      kind: record.kind,
+      seat: record.seat,
+      amount: record.amount,
+      ...(record.allIn ? { allIn: true } : {}),
+    };
   }
   if (record.kind === 'finished') {
     if (!isEnd(record.end) || !Array.isArray(record.winners)) {
@@ -570,7 +579,17 @@ function emptySeat(): PokerSeatState {
   };
 }
 
-function lobbyState(variation: PokerVariation): PokerState {
+function configuredLimit(json: string, variation: PokerVariation): PokerLimit {
+  const value = JSON.parse(json || '{}').limit;
+  if (value !== undefined && !isLimit(value))
+    throw new Error('Invalid betting limit');
+  return value ?? limitFor(variation);
+}
+
+function lobbyState(
+  variation: PokerVariation,
+  limit = limitFor(variation),
+): PokerState {
   return {
     phase: 'lobby',
     variation,
@@ -592,7 +611,7 @@ function lobbyState(variation: PokerVariation): PokerState {
     end: null,
     smallBlind: POKER_SMALL_BLIND,
     bigBlind: POKER_BIG_BLIND,
-    limit: limitFor(variation),
+    limit,
   };
 }
 
@@ -686,6 +705,25 @@ function canContestBet(state: PokerState, seatIndex: number): boolean {
   });
 }
 
+/** A short big blind still sets the full price while two funded players can contest it. */
+function reconcileShortBlind(state: PokerState): void {
+  if (state.street !== 'preflop') return;
+  const funded = state.order.filter((index) => {
+    const seat = state.seats[seatKey(index)];
+    return seat && !seat.folded && !seat.allIn && seat.chips > 0;
+  });
+  if (funded.length < 2) {
+    state.currentBet = Math.min(
+      state.currentBet,
+      Math.max(
+        ...state.order.map(
+          (index) => state.seats[seatKey(index)]?.streetBet ?? 0,
+        ),
+      ),
+    );
+  }
+}
+
 function needsAction(state: PokerState, seatIndex: number): boolean {
   const seat = state.seats[seatKey(seatIndex)];
   if (!seat || seat.folded || seat.allIn) {
@@ -752,7 +790,7 @@ function openingDeal(players: GameSeat[], table: GameTable): PokerState {
   const ordered = seatsInOrder(players);
   const variation = variationFromStateJson(table.stateJson);
   if (ordered.length < pokerGameDefinition.minPlayers) {
-    return lobbyState(variation);
+    return lobbyState(variation, configuredLimit(table.stateJson, variation));
   }
   const holes = holeCount(variation);
   if (ordered.length * holes + 5 > 52) {
@@ -760,7 +798,10 @@ function openingDeal(players: GameSeat[], table: GameTable): PokerState {
   }
   const order = ordered.map((seat) => seat.seatIndex);
   const dealer = order[0] ?? 0;
-  const state = lobbyState(variation);
+  const state = lobbyState(
+    variation,
+    configuredLimit(table.stateJson, variation),
+  );
   state.smallBlind = table.economy?.smallBlind ?? state.smallBlind;
   state.bigBlind = table.economy?.bigBlind ?? state.bigBlind;
   state.phase = 'play';
@@ -783,7 +824,8 @@ function openingDeal(players: GameSeat[], table: GameTable): PokerState {
   }
   postChips(small, state.smallBlind, state);
   postChips(big, state.bigBlind, state);
-  state.currentBet = big.streetBet;
+  state.currentBet = state.bigBlind;
+  reconcileShortBlind(state);
   state.minRaise = state.bigBlind;
   const turn = firstToAct(state, (index) => needsAction(state, index));
   state.turnSeatIndex = turn;
@@ -991,7 +1033,21 @@ export function potLimitCeiling(state: PokerState, seatIndex: number): number {
   const seat = state.seats[seatKey(seatIndex)];
   const streetBet = seat?.streetBet ?? 0;
   const toCall = Math.max(0, state.currentBet - streetBet);
-  return state.currentBet + state.pot + toCall;
+  // Preflop pot/re-pot calculations assume full blinds even when a blind is short all-in.
+  let missingBlinds = 0;
+  if (state.street === 'preflop' && state.order.length >= 2) {
+    const blinds = blindSeats(state.order, state.dealerSeatIndex ?? 0);
+    missingBlinds =
+      Math.max(
+        0,
+        state.smallBlind - (state.seats[seatKey(blinds.small)]?.committed ?? 0),
+      ) +
+      Math.max(
+        0,
+        state.bigBlind - (state.seats[seatKey(blinds.big)]?.committed ?? 0),
+      );
+  }
+  return state.currentBet + state.pot + missingBlinds + toCall;
 }
 
 export function pokerCallAmount(state: PokerState, seatIndex: number): number {
@@ -1070,6 +1126,12 @@ export function pokerBetTo(
   return amount;
 }
 
+/** A prior action reopens only when the cumulative increase reaches a full wager. */
+function raiseReopened(state: PokerState, seat: PokerSeatState): boolean {
+  const previous = seat.actedAtBet ?? seat.streetBet;
+  return !seat.acted || state.currentBet - previous >= state.minRaise;
+}
+
 /** Minimum legal raise, as the new street total. `null` when a raise is not legal. */
 export function pokerRaiseTo(
   state: PokerState,
@@ -1083,6 +1145,7 @@ export function pokerRaiseTo(
     seat.folded ||
     seat.allIn ||
     state.currentBet <= 0 ||
+    !raiseReopened(state, seat) ||
     !canContestBet(state, seatIndex)
   ) {
     return null;
@@ -1199,6 +1262,8 @@ function awardFold(state: PokerState): PokerState {
   if (!seat) {
     throw new Error('Invalid table state');
   }
+  returnUncalled(state);
+  state.pots = pokerPotBreakdown(state).pots;
   takeBoard(state, Math.max(0, 5 - state.board.length));
   seat.chips += state.pot;
   state.phase = 'finished';
@@ -1209,41 +1274,114 @@ function awardFold(state: PokerState): PokerState {
   return state;
 }
 
-function buildPots(state: PokerState): PokerPot[] {
+export interface PokerPotBreakdown {
+  pots: PokerPot[];
+  /** The leading contribution is still awaiting matching action, not a one-player pot. */
+  unmatched: { seat: number; amount: number } | null;
+}
+
+/**
+ * Split only at live all-in caps, never at temporary unequal bets or folded amounts.
+ * Folded chips fund the pots but cannot win them. An unmatched leading contribution
+ * stays separate until called or returned; a player with chips may still match a cap.
+ */
+export function pokerPotBreakdown(state: PokerState): PokerPotBreakdown {
   const levels = state.order.map((index) => {
     const seat = state.seats[seatKey(index)];
     return {
       index,
       committed: seat?.committed ?? 0,
       folded: seat?.folded ?? true,
+      allIn: seat?.allIn ?? false,
+      chips: seat?.chips ?? 0,
     };
   });
+  const ranked = [...levels].sort((a, b) => b.committed - a.committed);
+  const high = ranked[0];
+  const excess =
+    high && !high.folded
+      ? Math.max(0, high.committed - (ranked[1]?.committed ?? 0))
+      : 0;
+  const unmatched =
+    high && excess > 0 ? { seat: high.index, amount: excess } : null;
+  if (high && excess > 0) high.committed -= excess;
+  const maximum = Math.max(0, ...levels.map((row) => row.committed));
+  const caps = [
+    ...new Set([
+      ...levels
+        .filter(
+          (row) =>
+            !row.folded &&
+            row.allIn &&
+            row.committed > 0 &&
+            row.committed < maximum,
+        )
+        .map((row) => row.committed),
+      maximum,
+    ]),
+  ]
+    .filter((cap) => cap > 0)
+    .sort((a, b) => a - b);
   const pots: PokerPot[] = [];
-  let orphan = 0;
-  while (levels.some((level) => level.committed > 0)) {
-    const live = levels.filter((level) => level.committed > 0);
-    const slice = Math.min(...live.map((level) => level.committed));
-    const eligible = live
-      .filter((level) => !level.folded)
-      .map((level) => level.index);
-    const amount = slice * live.length;
-    if (eligible.length === 0) {
-      orphan += amount;
-    } else {
-      pots.push({ amount: amount + orphan, eligible });
-      orphan = 0;
+  let lower = 0;
+  for (const cap of caps) {
+    const amount = levels.reduce(
+      (sum, row) => sum + Math.max(0, Math.min(row.committed, cap) - lower),
+      0,
+    );
+    const lockedCap = levels.some(
+      (row) => !row.folded && row.allIn && row.committed === cap,
+    );
+    const eligible = levels
+      .filter(
+        (row) =>
+          !row.folded &&
+          (row.allIn
+            ? row.committed >= cap
+            : lockedCap
+              ? row.committed + row.chips >= cap
+              : row.committed > lower || row.committed + row.chips >= cap),
+      )
+      .map((row) => row.index);
+    const previous = pots[pots.length - 1];
+    if (amount > 0) {
+      if (!eligible.length && previous) previous.amount += amount;
+      else if (
+        previous &&
+        previous.eligible.length === eligible.length &&
+        previous.eligible.every((seat, i) => seat === eligible[i])
+      )
+        previous.amount += amount;
+      else if (eligible.length) pots.push({ amount, eligible });
     }
-    for (const level of live) {
-      level.committed -= slice;
-    }
+    lower = cap;
   }
-  if (orphan > 0 && pots.length > 0) {
-    const last = pots[pots.length - 1];
-    if (last) {
-      last.amount += orphan;
-    }
+  return { pots, unmatched };
+}
+
+/** Each main/side pot is independently ranked, including ties and old saved results. */
+export function pokerPotWinners(state: PokerState, pot: PokerPot): number[] {
+  if (state.end === 'fold')
+    return pot.eligible.filter((seat) =>
+      state.winnerSeatIndexes.includes(seat),
+    );
+  let best: number[] | null = null;
+  for (const seat of pot.eligible) {
+    const score = state.hands[seatKey(seat)]?.score;
+    if (score && (best === null || comparePokerScores(score, best) > 0))
+      best = score;
   }
-  return pots;
+  return best === null
+    ? []
+    : pot.eligible.filter((seat) => {
+        const score = state.hands[seatKey(seat)]?.score;
+        return score !== undefined && comparePokerScores(score, best!) === 0;
+      });
+}
+
+function updatePots(state: PokerState): PokerState {
+  if (state.phase !== 'finished') state.pots = pokerPotBreakdown(state).pots;
+  return state;
 }
 
 function oddChips(
@@ -1270,7 +1408,39 @@ function oddChips(
   }
 }
 
+/** Exact contested awards, also used by cosmetic payout motion; returns are excluded. */
+export function pokerPotAwards(state: PokerState): Map<number, number> {
+  const awards = new Map<number, number>();
+  for (const pot of state.pots) {
+    const winners = pokerPotWinners(state, pot);
+    if (winners.length === 0) {
+      continue;
+    }
+    const share = Math.floor(pot.amount / winners.length);
+    for (const index of winners) {
+      awards.set(index, (awards.get(index) ?? 0) + share);
+    }
+    oddChips(state, winners, pot.amount % winners.length, awards);
+  }
+  return awards;
+}
+
+/** Excess matched by nobody is a return, never a winning side pot. */
+function returnUncalled(state: PokerState): void {
+  const contributions = Object.values(state.seats).sort(
+    (a, b) => b.committed - a.committed,
+  );
+  const highest = contributions[0];
+  const excess = (highest?.committed ?? 0) - (contributions[1]?.committed ?? 0);
+  if (!highest || highest.folded || excess <= 0) return;
+  highest.chips += excess;
+  highest.committed -= excess;
+  highest.streetBet = Math.max(0, highest.streetBet - excess);
+  state.pot -= excess;
+}
+
 function showdown(state: PokerState): PokerState {
+  returnUncalled(state);
   for (const index of state.order) {
     const seat = state.seats[seatKey(index)];
     if (!seat || seat.folded) {
@@ -1282,36 +1452,9 @@ function showdown(state: PokerState): PokerState {
       state.board,
     );
   }
-  const pots = buildPots(state);
+  const pots = pokerPotBreakdown(state).pots;
   state.pots = pots;
-  const awards = new Map<number, number>();
-  for (const pot of pots) {
-    let best: number[] | null = null;
-    for (const index of pot.eligible) {
-      const score = state.hands[seatKey(index)]?.score;
-      if (!score) {
-        continue;
-      }
-      if (best === null || comparePokerScores(score, best) > 0) {
-        best = score;
-      }
-    }
-    if (best === null) {
-      continue;
-    }
-    const winners = pot.eligible.filter((index) => {
-      const score = state.hands[seatKey(index)]?.score;
-      return score !== undefined && comparePokerScores(score, best) === 0;
-    });
-    if (winners.length === 0) {
-      continue;
-    }
-    const share = Math.floor(pot.amount / winners.length);
-    for (const index of winners) {
-      awards.set(index, (awards.get(index) ?? 0) + share);
-    }
-    oddChips(state, winners, pot.amount % winners.length, awards);
-  }
+  const awards = pokerPotAwards(state);
   for (const [index, amount] of awards) {
     const seat = state.seats[seatKey(index)];
     if (seat) {
@@ -1347,6 +1490,7 @@ function resetStreet(state: PokerState): void {
     }
     seat.streetBet = 0;
     seat.acted = false;
+    seat.actedAtBet = undefined;
     seat.mustDiscard = false;
   }
   state.currentBet = 0;
@@ -1411,6 +1555,7 @@ function dealNext(state: PokerState): PokerState {
 }
 
 function continueAction(state: PokerState, actor: number): PokerState {
+  reconcileShortBlind(state);
   if (aliveCount(state) <= 1) {
     return awardFold(state);
   }
@@ -1442,6 +1587,7 @@ function applyFold(state: PokerState, seatIndex: number): PokerState {
   }
   seat.folded = true;
   seat.acted = true;
+  seat.actedAtBet = state.currentBet;
   seat.mustDiscard = false;
   return continueAction(state, seatIndex);
 }
@@ -1455,6 +1601,7 @@ function applyCheck(state: PokerState, seatIndex: number): PokerState {
     throw new Error('Invalid intent');
   }
   seat.acted = true;
+  seat.actedAtBet = state.currentBet;
   return continueAction(state, seatIndex);
 }
 
@@ -1469,6 +1616,7 @@ function applyCall(state: PokerState, seatIndex: number): PokerState {
   }
   postChips(seat, toCall, state);
   seat.acted = true;
+  seat.actedAtBet = state.currentBet;
   return continueAction(state, seatIndex);
 }
 
@@ -1506,6 +1654,7 @@ function applyBet(
   state.currentBet = seat.streetBet;
   state.minRaise = Math.max(state.bigBlind, amount);
   seat.acted = true;
+  seat.actedAtBet = state.currentBet;
   return continueAction(state, seatIndex);
 }
 
@@ -1521,7 +1670,8 @@ function applyRaise(
   if (
     seat.allIn ||
     !canContestBet(state, seatIndex) ||
-    amount <= state.currentBet
+    amount <= state.currentBet ||
+    !raiseReopened(state, seat)
   ) {
     throw new Error('Invalid intent');
   }
@@ -1547,6 +1697,7 @@ function applyRaise(
   }
   state.currentBet = Math.max(state.currentBet, seat.streetBet);
   seat.acted = true;
+  seat.actedAtBet = state.currentBet;
   return continueAction(state, seatIndex);
 }
 
@@ -1669,7 +1820,7 @@ function dealNextHand(
   }
   const handNumber = (prev.handNumber || 1) + 1;
   const dealer = nextButton(prev.order, prev.dealerSeatIndex, live);
-  const state = lobbyState(prev.variation);
+  const state = lobbyState(prev.variation, prev.limit);
   state.smallBlind = prev.smallBlind;
   state.bigBlind = prev.bigBlind;
   state.phase = 'play';
@@ -1696,7 +1847,8 @@ function dealNextHand(
   }
   postChips(small, state.smallBlind, state);
   postChips(big, state.bigBlind, state);
-  state.currentBet = big.streetBet;
+  state.currentBet = state.bigBlind;
+  reconcileShortBlind(state);
   state.minRaise = state.bigBlind;
   const turn = firstToAct(state, (index) => needsAction(state, index));
   state.turnSeatIndex = turn;
@@ -1721,10 +1873,10 @@ export function advancePoker(
   const state = readPokerState(prev);
   const kind = pokerAdvanceKind(state, seated);
   if (kind === 'street') {
-    return dealNext(state);
+    return updatePots(dealNext(state));
   }
   if (kind === 'hand') {
-    return dealNextHand(state, table, seated);
+    return updatePots(dealNextHand(state, table, seated));
   }
   return state;
 }
@@ -1738,14 +1890,15 @@ export function pokerSeatLeft(prev: PokerState, seatIndex: number): PokerState {
   }
   seat.folded = true;
   seat.acted = true;
+  seat.actedAtBet = state.currentBet;
   seat.mustDiscard = false;
   if (state.turnSeatIndex === seatIndex) {
-    return continueAction(state, seatIndex);
+    return updatePots(continueAction(state, seatIndex));
   }
   if (aliveCount(state) <= 1) {
     return awardFold(state);
   }
-  return state;
+  return updatePots(state);
 }
 
 /**
@@ -1756,9 +1909,10 @@ export function pokerSeatLeft(prev: PokerState, seatIndex: number): PokerState {
 export const pokerRules = {
   initialState(players: GameSeat[], table: GameTable): PokerState {
     if (players.length === 0) {
-      return lobbyState(variationFromStateJson(table.stateJson));
+      const variation = variationFromStateJson(table.stateJson);
+      return lobbyState(variation, configuredLimit(table.stateJson, variation));
     }
-    return openingDeal(players, table);
+    return updatePots(openingDeal(players, table));
   },
   applyIntent(
     prev: PokerState,
@@ -1775,21 +1929,21 @@ export const pokerRules = {
     }
     const seatIndex = ctx.seat.seatIndex;
     if (action.type === 'fold') {
-      return applyFold(state, seatIndex);
+      return updatePots(applyFold(state, seatIndex));
     }
     if (action.type === 'check') {
-      return applyCheck(state, seatIndex);
+      return updatePots(applyCheck(state, seatIndex));
     }
     if (action.type === 'call') {
-      return applyCall(state, seatIndex);
+      return updatePots(applyCall(state, seatIndex));
     }
     if (action.type === 'bet') {
-      return applyBet(state, seatIndex, action.amount);
+      return updatePots(applyBet(state, seatIndex, action.amount));
     }
     if (action.type === 'raise') {
-      return applyRaise(state, seatIndex, action.amount);
+      return updatePots(applyRaise(state, seatIndex, action.amount));
     }
-    return applyDiscard(state, seatIndex, action.card);
+    return updatePots(applyDiscard(state, seatIndex, action.card));
   },
   eventNote(
     prev: PokerState,
@@ -1825,13 +1979,24 @@ export const pokerRules = {
         kind: 'call',
         seat,
         amount: (to?.committed ?? 0) - (from?.committed ?? 0),
+        ...(to?.allIn ? { allIn: true } : {}),
       };
     }
     if (action.type === 'bet') {
-      return { kind: 'bet', seat, amount: action.amount };
+      return {
+        kind: 'bet',
+        seat,
+        amount: action.amount,
+        ...(after.seats[seatKey(seat)]?.allIn ? { allIn: true } : {}),
+      };
     }
     if (action.type === 'raise') {
-      return { kind: 'raise', seat, amount: action.amount };
+      return {
+        kind: 'raise',
+        seat,
+        amount: action.amount,
+        ...(after.seats[seatKey(seat)]?.allIn ? { allIn: true } : {}),
+      };
     }
     if (action.type === 'discard') {
       return { kind: 'discard', seat };

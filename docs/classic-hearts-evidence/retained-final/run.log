@@ -1,0 +1,30 @@
+ℹ️ INFO Connecting to SpacetimeDB WS...
+ℹ️ INFO Connecting to SpacetimeDB WS...
+ℹ️ INFO Connecting to SpacetimeDB WS...
+ℹ️ INFO Connecting to SpacetimeDB WS...
+OPEN mobile
+CAPTURED 01-four-player-pass
+SELECT 7C {"selected":["7C"],"page":0,"visible":["7C","8C","JC","6D","8D","3S","5S","6S","8S","10S","3H"]}
+SELECT 6H {"selected":["7C","6H"],"page":1,"visible":["5H","6H"]}
+SELECT 8C {"selected":["7C","6H","8C"],"page":0,"visible":["7C","8C","JC","6D","8D","3S","5S","6S","8S","10S","3H"]}
+CAPTURED 02-three-selected-across-pages
+CAPTURED 03-pass-submitted
+CAPTURED 04-opening-play
+SELECT 3C {"selected":["3C"],"page":0,"visible":["3C","4C","JC","QC","6D","8D","3S","5S","6S","8S","10S"]}
+CAPTURED 05-owner-labelled-trick
+CAPTURED 06-hearts-broken
+CAPTURED 08-pass-right
+CAPTURED 07-scores-and-queen
+CAPTURED 09-pass-across
+CAPTURED 11-shot-the-moon
+CAPTURED 10-hold-hand
+CAPTURED 12-final-scores-and-prize
+OPEN desktop
+CAPTURED 12-final-scores-and-prize
+ℹ️ INFO Connecting to SpacetimeDB WS...
+OPEN spectator
+CAPTURED 13-spectator-results
+OPEN spectator-mobile
+CAPTURED 13-spectator-results
+OPEN mobile
+HEARTS PROOF PASSED 572

@@ -145,3 +145,14 @@ export function tableChatLine(
   const sender = tableChatSender(row, members, selfLobbyMemberId);
   return sender ? `${sender}: ${row.body}` : row.body;
 }
+
+/** Right-align only the visible waiting-room actions with one consistent gap. */
+export function waitingHeaderLayout(canStart: boolean): {
+  copyX: number;
+  startX: number;
+  leaveX: number;
+} {
+  const leaveX = 706;
+  const startX = leaveX - 10 - 130;
+  return { leaveX, startX, copyX: (canStart ? startX : leaveX) - 10 - 116 };
+}

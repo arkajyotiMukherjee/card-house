@@ -467,3 +467,14 @@ describe('pokerStatusHud', () => {
     ).toBe('Phase: Hand');
   });
 });
+
+it('keeps bottom padding under the mobile round text and matches the help height', async () => {
+  const { STATUS_HUD, STATUS_LINE_HEIGHT, STATUS_FONT_SIZE } =
+    await import('./status-hud');
+  const { HOW_TO_PLAY_BUTTON } = await import('./game-scene');
+  expect(
+    STATUS_HUD.h - (8 + 2 * STATUS_LINE_HEIGHT + STATUS_FONT_SIZE + 4),
+  ).toBeGreaterThanOrEqual(8);
+  expect(HOW_TO_PLAY_BUTTON.h).toBe(STATUS_HUD.h);
+  expect(HOW_TO_PLAY_BUTTON.y).toBe(STATUS_HUD.y);
+});

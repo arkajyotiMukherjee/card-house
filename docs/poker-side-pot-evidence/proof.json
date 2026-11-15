@@ -1,0 +1,380 @@
+{
+  "proofs": [
+    {
+      "pending": true,
+      "pot": 610,
+      "entries": [
+        {
+          "key": "pot-0",
+          "title": "Main pot",
+          "amount": 310,
+          "eligible": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "winners": [],
+          "pending": false
+        },
+        {
+          "key": "pot-1",
+          "title": "Side pot 1",
+          "amount": 200,
+          "eligible": [
+            1,
+            2,
+            3
+          ],
+          "winners": [],
+          "pending": false
+        },
+        {
+          "key": "unmatched",
+          "title": "Awaiting calls",
+          "amount": 100,
+          "eligible": [
+            3
+          ],
+          "winners": [],
+          "pending": true
+        }
+      ]
+    },
+    {
+      "textBounds": {
+        "captions": [
+          {
+            "amount": 9999,
+            "columns": 3,
+            "available": 144,
+            "width": 134.45623779296875
+          },
+          {
+            "amount": 10000,
+            "columns": 2,
+            "available": 224,
+            "width": 142.480224609375
+          },
+          {
+            "amount": 99999,
+            "columns": 2,
+            "available": 224,
+            "width": 144.36026000976562
+          },
+          {
+            "amount": 100000,
+            "columns": 2,
+            "available": 224,
+            "width": 152.78424072265625
+          },
+          {
+            "amount": 9999999,
+            "columns": 2,
+            "available": 224,
+            "width": 167.4803009033203
+          },
+          {
+            "amount": 8000000000,
+            "columns": 2,
+            "available": 224,
+            "width": 204.4803009033203
+          }
+        ],
+        "name": {
+          "width": 183.62432861328125,
+          "height": 20.40625,
+          "text": "Alexandria Montgomer…",
+          "size": 16
+        }
+      }
+    },
+    {
+      "players": 4,
+      "entries": [
+        {
+          "key": "pot-0",
+          "title": "Main pot",
+          "amount": 400,
+          "eligible": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "winners": [],
+          "pending": false
+        },
+        {
+          "key": "pot-1",
+          "title": "Side pot 1",
+          "amount": 300,
+          "eligible": [
+            1,
+            2,
+            3
+          ],
+          "winners": [],
+          "pending": false
+        },
+        {
+          "key": "pot-2",
+          "title": "Side pot 2",
+          "amount": 200,
+          "eligible": [
+            2,
+            3
+          ],
+          "winners": [],
+          "pending": false
+        }
+      ],
+      "finalPot": 900,
+      "settledPots": [
+        {
+          "amount": 400,
+          "eligible": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "winners": [
+            0
+          ]
+        },
+        {
+          "amount": 300,
+          "eligible": [
+            1,
+            2,
+            3
+          ],
+          "winners": [
+            3
+          ]
+        },
+        {
+          "amount": 200,
+          "eligible": [
+            2,
+            3
+          ],
+          "winners": [
+            3
+          ]
+        }
+      ],
+      "conserved": true
+    },
+    {
+      "players": 8,
+      "entries": [
+        {
+          "key": "pot-0",
+          "title": "Main pot",
+          "amount": 800,
+          "eligible": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
+          "winners": [],
+          "pending": false
+        },
+        {
+          "key": "pot-1",
+          "title": "Side pot 1",
+          "amount": 700,
+          "eligible": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
+          "winners": [],
+          "pending": false
+        },
+        {
+          "key": "pot-2",
+          "title": "Side pot 2",
+          "amount": 600,
+          "eligible": [
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
+          "winners": [],
+          "pending": false
+        },
+        {
+          "key": "pot-3",
+          "title": "Side pot 3",
+          "amount": 500,
+          "eligible": [
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
+          "winners": [],
+          "pending": false
+        },
+        {
+          "key": "pot-4",
+          "title": "Side pot 4",
+          "amount": 400,
+          "eligible": [
+            4,
+            5,
+            6,
+            7
+          ],
+          "winners": [],
+          "pending": false
+        },
+        {
+          "key": "pot-5",
+          "title": "Side pot 5",
+          "amount": 300,
+          "eligible": [
+            5,
+            6,
+            7
+          ],
+          "winners": [],
+          "pending": false
+        },
+        {
+          "key": "pot-6",
+          "title": "Side pot 6",
+          "amount": 200,
+          "eligible": [
+            6,
+            7
+          ],
+          "winners": [],
+          "pending": false
+        },
+        {
+          "key": "unmatched",
+          "title": "Uncalled",
+          "amount": 100,
+          "eligible": [
+            7
+          ],
+          "winners": [],
+          "pending": true
+        }
+      ],
+      "finalPot": 3500,
+      "settledPots": [
+        {
+          "amount": 800,
+          "eligible": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
+          "winners": [
+            0
+          ]
+        },
+        {
+          "amount": 700,
+          "eligible": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
+          "winners": [
+            7
+          ]
+        },
+        {
+          "amount": 600,
+          "eligible": [
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
+          "winners": [
+            7
+          ]
+        },
+        {
+          "amount": 500,
+          "eligible": [
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
+          "winners": [
+            7
+          ]
+        },
+        {
+          "amount": 400,
+          "eligible": [
+            4,
+            5,
+            6,
+            7
+          ],
+          "winners": [
+            7
+          ]
+        },
+        {
+          "amount": 300,
+          "eligible": [
+            5,
+            6,
+            7
+          ],
+          "winners": [
+            7
+          ]
+        },
+        {
+          "amount": 200,
+          "eligible": [
+            6,
+            7
+          ],
+          "winners": [
+            7
+          ]
+        }
+      ],
+      "conserved": true
+    }
+  ],
+  "errors": []
+}

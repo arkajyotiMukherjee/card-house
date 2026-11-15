@@ -4,7 +4,15 @@ import {
   type BlackjackState,
 } from '../../src/shared/games/blackjack';
 import { handPositions } from './bluff-layout';
-import { actionBox, fanEdge, fanGapLine, seatFan } from './table-presentation';
+import {
+  actionBox,
+  fanEdge,
+  fanGapLine,
+  seatFan,
+  revealedHandSlots,
+} from './table-presentation';
+import { handCardScale } from './card-sizing';
+import { isMobileDevice } from './mobile-shell';
 
 export const DEALER_X = 480;
 export const DEALER_Y = 200;
@@ -44,14 +52,31 @@ function row(
 }
 
 /** Dealer cards in a row at the top of the felt. The second card is the hole card. */
-export function dealerPositions(count: number): { x: number; y: number }[] {
-  return row(DEALER_X, DEALER_Y, Math.max(count, 0), DEALER_STEP);
+export function dealerPositions(
+  count: number,
+  revealed = false,
+): { x: number; y: number }[] {
+  return row(
+    DEALER_X,
+    DEALER_Y,
+    Math.max(count, 0),
+    revealed ? 41 * handCardScale(isMobileDevice()) + 3 : DEALER_STEP,
+  );
 }
 
 /** Where the dealer total is written: right of the last dealer card. */
-export function dealerLabelPosition(count: number): { x: number; y: number } {
-  const last = dealerPositions(Math.max(count, 1)).at(-1);
-  return { x: (last?.x ?? DEALER_X) + CARD_DRAW / 2 + 12, y: DEALER_Y - 4 };
+export function dealerLabelPosition(
+  count: number,
+  revealed = false,
+): { x: number; y: number } {
+  const last = dealerPositions(Math.max(count, 1), revealed).at(-1);
+  return {
+    x:
+      (last?.x ?? DEALER_X) +
+      (CARD_DRAW / 2) * (revealed ? handCardScale(isMobileDevice()) : 1) +
+      12,
+    y: DEALER_Y - 4,
+  };
 }
 
 /** Width of the seat name plate `GameScene` draws for this name. */
@@ -71,6 +96,7 @@ export function playerCardSlots(
   handIndex: number,
   cardCount: number,
   name = 'Seat',
+  revealed = false,
 ): { x: number; y: number; rotation: number; scale: number }[] {
   const split = handCount > 1;
   const sign =
@@ -102,7 +128,9 @@ export function playerCardSlots(
   const edge = fanEdge(seatX, seatY);
   const along =
     split && (edge === 'top' || edge === 'bottom') ? sign * SPLIT_ALONG : 0;
-  const slots = seatFan(seatX + along, seatY, cardCount, name);
+  const slots = revealed
+    ? revealedHandSlots(seatX + along, seatY, cardCount)
+    : seatFan(seatX + along, seatY, cardCount, name);
   if (!split || edge === 'top' || edge === 'bottom') {
     return slots;
   }

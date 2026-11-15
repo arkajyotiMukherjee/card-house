@@ -10,6 +10,12 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const ActiveConnection = __t.object("ActiveConnection", {
+  id: __t.string(),
+  identity: __t.string(),
+});
+export type ActiveConnection = __Infer<typeof ActiveConnection>;
+
 export const BotTurnSchedule = __t.object("BotTurnSchedule", {
   scheduledId: __t.u64(),
   scheduledAt: __t.scheduleAt(),

@@ -44,7 +44,21 @@ describe('BluffDriver input', () => {
   it('keeps selected cards from other hand pages in the same play', () => {
     const driver = new BluffDriver();
     const table = state();
-    table.hands['0'] = ['AS', '2S', '3S', '4S', '5S', '6S', '7S', '8S', '9S'];
+    table.hands['0'] = [
+      'AS',
+      '2S',
+      '3S',
+      '4S',
+      '5S',
+      '6S',
+      '7S',
+      '8S',
+      '9S',
+      '10S',
+      'JS',
+      'QS',
+      'KS',
+    ];
     const sent: unknown[] = [];
     const ctx = context(sent, 0);
     const view = driver as unknown as {
@@ -61,16 +75,16 @@ describe('BluffDriver input', () => {
     });
     vi.spyOn(view, 'setShown').mockImplementation(() => {});
     view.syncCards(table, ctx);
-    expect(view.visibleHand).toEqual(table.hands['0'].slice(0, 8));
+    expect(view.visibleHand).toEqual(table.hands['0'].slice(0, 9));
 
     driver.handleInput({ type: 'pointerup', target: 'AS' }, table, ctx);
     driver.handleInput({ type: 'pointerup', target: 'hand-next' }, table, ctx);
-    expect(view.visibleHand).toEqual(['9S']);
-    driver.handleInput({ type: 'pointerup', target: '9S' }, table, ctx);
+    expect(view.visibleHand).toEqual(['10S', 'JS', 'QS', 'KS']);
+    driver.handleInput({ type: 'pointerup', target: 'KS' }, table, ctx);
     driver.handleInput({ type: 'pointerup', target: 'hand-prev' }, table, ctx);
     driver.handleInput({ type: 'pointerup', target: 'play' }, table, ctx);
 
-    expect(sent).toEqual([{ type: 'play', cards: ['AS', '9S'] }]);
+    expect(sent).toEqual([{ type: 'play', cards: ['AS', 'KS'] }]);
     table.hands['0'] = ['2S', '3S', '4S'];
     view.syncCards(table, ctx);
     expect(view.visibleHand).toEqual(table.hands['0']);

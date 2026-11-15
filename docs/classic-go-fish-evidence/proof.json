@@ -1,0 +1,27 @@
+{
+  "players": 6,
+  "uniqueIdentities": 6,
+  "desktopAndBothTouchSizes": true,
+  "holdDoesNotSelect": true,
+  "disabledAskCannotSubmit": true,
+  "rankAndTargetCanvasAsk": true,
+  "secondPlayerCanvasAsk": true,
+  "longTargetNamesFit": true,
+  "denseHand": true,
+  "selectedTriple": true,
+  "bookCollection": true,
+  "finished": true,
+  "remainingHandsPrivate": true,
+  "spectator": true,
+  "headerNavigation": true,
+  "errors": [],
+  "denseHandObservation": {
+    "cards": 13,
+    "widePhonePages": 2,
+    "smallPhonePages": 2,
+    "source": [
+      "04-large-hand-mobile.png",
+      "04-large-hand-small-mobile.png"
+    ]
+  }
+}

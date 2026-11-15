@@ -1,4 +1,4 @@
-/** Coins are stored as integer half-coins; public controls accept whole coins. */
+/** Chips are stored as integer half-chips; public controls accept whole chips. */
 export const DEFAULT_ROOM_GRANT = 10_000;
 export const MAX_COINS = 1_000_000_000;
 export interface TableEconomy {
@@ -19,7 +19,7 @@ export function coinSetting(value: unknown, fallback: number): number {
     value > MAX_COINS
   )
     throw new Error(
-      'Coins must be a positive whole number up to 1,000,000,000',
+      'Chips must be a positive whole number up to 1,000,000,000',
     );
   return value;
 }
@@ -62,7 +62,7 @@ export function tableEconomy(
 }
 export function coinUnits(coins: number): bigint {
   if (!Number.isFinite(coins) || !Number.isSafeInteger(coins * 2) || coins < 0)
-    throw new Error('Invalid coin amount');
+    throw new Error('Invalid chip amount');
   return BigInt(coins * 2);
 }
 export function formatCoins(units: bigint): string {

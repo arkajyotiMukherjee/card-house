@@ -8,7 +8,7 @@ SpacetimeDB owns rooms, seats, game rules, wallets, and settlement. This package
 
 Read [room economy behavior](../docs/room-economy.md). `RoomWallet` stores available half-coins, grants, and settled profit. `WalletOwner` privately binds each wallet to the authenticated sender. `WalletLedger` is private and idempotent. Public `TableFunding` reserves a seat's entry fee or casino stack for its original wallet, including CPU-controlled seats. `GameSettlement` preserves monetary results and participant names after paid seats are released. Keep grants and transfers out of profit.
 
-Creation, seating, funding, and host assignment are atomic. Table creators auto-join. Hosting is durable and independent of seat order. Server schedules enforce the full-table countdown, CPU takeover, and absent-host transfer. A returning player cannot take another wallet or reclaim a transferred host role.
+Creation, seating, funding, and host assignment are atomic. Table creators auto-join. Hosting is durable and independent of seat order. Private `ActiveConnection` rows track individual sockets so an old disconnect cannot mark a still-connected identity offline. Server schedules enforce the full-table countdown, CPU takeover, and absent-host transfer. A returning player cannot take another wallet or reclaim a transferred host role.
 
 Entry-fee games settle once per complete game. `src/game-prizes.ts` normalizes winners, including tied scored games and Spades teams. Poker and Blackjack settle actual per-seat chip deltas per hand, not winner flags. Never return a casino stack before all wagers and claims are resolved. Never let legacy or solo chips enter a room wallet. House-funded Blackjack is intentionally not zero-sum among players.
 

@@ -1,0 +1,16 @@
+
+> discord-card-games@ typecheck /workspace/card-house
+> pnpm -r typecheck && tsc -p src/shared/tsconfig.json --noEmit
+
+Scope: 3 of 4 workspace projects
+client typecheck$ tsc -p tsconfig.json --noEmit
+discord-bot typecheck$ tsc -p tsconfig.json --noEmit
+server typecheck$ tsc -p tsconfig.json --noEmit
+server typecheck: Done
+discord-bot typecheck: Done
+client typecheck: Done
+
+Final shared-header return type:
+
+> client@ typecheck /workspace/card-house/client
+> tsc -p tsconfig.json --noEmit

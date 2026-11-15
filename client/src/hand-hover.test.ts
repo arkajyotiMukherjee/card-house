@@ -162,7 +162,7 @@ describe('hand hover lift', () => {
     expect(actor.pos.x).toBe(200);
     expect(actor.pos.y).toBe(500);
     expect(actor.children).toHaveLength(0);
-    expect(actor.graphics.offset.y).toBe(-32);
+    expect(actor.graphics.offset.y).toBeCloseTo(-60 / 1.65);
     resetCardLift(actor);
     expect(actor.graphics.offset.y).toBe(0);
     expect(actor.graphics.current?.scale.y).toBe(1);
@@ -175,18 +175,21 @@ describe('hand hover lift', () => {
       inspectionPose(20, true).lift,
     );
   });
-  it('magnifies phone inspection while preserving desktop and resting cards', () => {
+  it('shares phone magnification and lift with desktop while preserving resting cards', () => {
     expect(inspectionPose(0, true)).toEqual({ lift: 0, scale: 1 });
-    expect(inspectionPose(20, false)).toEqual({ lift: 20, scale: 1 });
+    expect(inspectionPose(20, false)).toEqual(inspectionPose(20, true));
     expect(inspectionPose(20, true)).toEqual({ lift: 48, scale: 1.65 });
     expect(inspectionPose(10, true)).toEqual({ lift: 24, scale: 1.325 });
+    expect(inspectionPose(20, false, false, true)).toEqual(
+      inspectionPose(20, true, false, true),
+    );
     const resting = inspectionPose(0, true, false, true);
-    expect(resting.scale).toBe(1.25);
+    expect(resting.scale).toBe(1.35);
     expect(508 - resting.lift + 32 * resting.scale).toBeLessThanOrEqual(540);
     expect(inspectionPose(20, true, false, true).scale).toBe(1.9);
     expect(inspectionPose(0, false, false, true)).toEqual({
-      lift: 0,
-      scale: 1,
+      lift: 4,
+      scale: 1.1,
     });
   });
   it('eases inspection back to rest after a finger is released', () => {

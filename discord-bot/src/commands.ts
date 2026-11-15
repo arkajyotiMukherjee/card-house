@@ -17,8 +17,8 @@ export const CARDHOUSE_COMMAND = {
       options: [
         {
           type: 4,
-          name: 'startingcoins',
-          description: 'Starting room coins per player (default 10000)',
+          name: 'startingchips',
+          description: 'Starting room chips per player (default 10000)',
           required: false,
           min_value: 1,
           max_value: 1000000000,

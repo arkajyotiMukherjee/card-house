@@ -1,0 +1,18 @@
+{
+  "players": 6,
+  "uniqueIdentities": 6,
+  "desktopAndTwoTouchSizes": false,
+  "openingUiPlay": true,
+  "emptyPlayDisabled": true,
+  "holdDoesNotSelect": true,
+  "opponentResizeAlignment": true,
+  "allPassesClearTrick": true,
+  "pairCaptured": true,
+  "tripleCaptured": false,
+  "finishOrder": false,
+  "remainingHandsPrivate": false,
+  "largeHandsPaged": false,
+  "selectionRetainedAcrossPagesAndResize": false,
+  "headerChatHelpLeave": false,
+  "errors": []
+}

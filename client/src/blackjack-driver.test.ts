@@ -47,7 +47,25 @@ function context(
 }
 
 describe('BlackjackDriver input', () => {
-  it('sends hit, stand, double, and split on your turn', () => {
+  it('routes top-up through the scene-owned house flow and respects modal blocking', () => {
+    const driver = new BlackjackDriver();
+    const sent: unknown[] = [];
+    let opened = 0;
+    const ctx = context(sent, 0);
+    ctx.houseGame = {
+      topUp: () => {
+        opened += 1;
+      },
+    };
+    const table = state();
+    table.phase = 'finished';
+    driver.handleInput({ type: 'pointerup', target: 'top-up' }, table, ctx);
+    ctx.inputBlocked = () => true;
+    driver.handleInput({ type: 'pointerup', target: 'top-up' }, table, ctx);
+    expect(opened).toBe(1);
+    expect(sent).toEqual([]);
+  });
+  it('sends hit, stand, double, split, and surrender on your turn', () => {
     const driver = new BlackjackDriver();
     const sent: unknown[] = [];
     const ctx = context(sent, 0);
@@ -56,11 +74,13 @@ describe('BlackjackDriver input', () => {
     driver.handleInput({ type: 'pointerup', target: 'stand' }, table, ctx);
     driver.handleInput({ type: 'pointerup', target: 'double' }, table, ctx);
     driver.handleInput({ type: 'pointerup', target: 'split' }, table, ctx);
+    driver.handleInput({ type: 'pointerup', target: 'surrender' }, table, ctx);
     expect(sent).toEqual([
       { type: 'hit' },
       { type: 'stand' },
       { type: 'double' },
       { type: 'split' },
+      { type: 'surrender' },
     ]);
   });
 

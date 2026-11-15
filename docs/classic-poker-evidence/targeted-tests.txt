@@ -1,0 +1,18 @@
+
+ RUN  v3.2.7 /workspace/card-house/client
+
+ ✓ src/poker-layout.test.ts (13 tests) 357ms
+ ✓ src/poker-driver.test.ts (6 tests) 793ms
+   ✓ PokerDriver input > shows the Drop marker only while the hovered card can be discarded  731ms
+ ✓ src/poker-table-ui.test.ts (4 tests) 59ms
+ ✓ src/button-style.test.ts (6 tests) 21ms
+ ✓ src/table-viewport.test.ts (3 tests) 33ms
+ ✓ src/game-scene.test.ts (13 tests) 34ms
+ ✓ src/card-hit.test.ts (5 tests) 12ms
+ ✓ src/table-notice.test.ts (2 tests) 7ms
+ ✓ src/hand-hover.test.ts (14 tests) 82ms
+
+ Test Files  9 passed (9)
+      Tests  66 passed (66)
+   Start at  07:27:06
+   Duration  16.71s (transform 7.26s, setup 157ms, collect 17.21s, tests 1.40s, environment 828ms, prepare 3.37s)

@@ -1,0 +1,89 @@
+
+> client@ test /workspace/card-house/client
+> vitest run
+
+
+ RUN  v3.2.7 /workspace/card-house/client
+
+ ✓ src/mobile-shell.test.ts (21 tests) 107ms
+ ✓ src/html-field.test.ts (24 tests) 185ms
+ ✓ src/phone-layout.test.ts (2 tests) 1697ms
+   ✓ fits six phone actions with separate thumb targets below right-hand opponents  1666ms
+ ✓ src/table-atlas.test.ts (1 test) 24ms
+ ✓ src/hand-hover.test.ts (14 tests) 18ms
+ ✓ src/page-background.test.ts (2 tests) 16ms
+ ✓ src/room-url.test.ts (3 tests) 6ms
+ ✓ src/card-atlas.test.ts (1 test) 966ms
+   ✓ CardAtlas > returns the Ace of hearts from the Ace cell, not the blank cell  964ms
+ ✓ src/table-presentation.test.ts (6 tests) 154ms
+ ✓ src/poker-driver.test.ts (8 tests) 90ms
+ ✓ src/hearts-layout.test.ts (10 tests) 31ms
+ ✓ src/poker-layout.test.ts (14 tests) 185ms
+ ✓ src/speaking.test.ts (11 tests) 69ms
+ ✓ src/bluff-layout.test.ts (13 tests) 37ms
+ ✓ src/lobby.test.ts (27 tests) 26ms
+ ✓ src/go-fish-driver.test.ts (7 tests) 40ms
+ ✓ src/menu-layout.test.ts (17 tests) 18ms
+ ✓ src/seat-layout.test.ts (4 tests) 34ms
+ ✓ src/status-hud.test.ts (23 tests) 23ms
+ ✓ src/rummy-layout.test.ts (7 tests) 12ms
+ ✓ src/bluff-driver.test.ts (9 tests) 66ms
+ ✓ src/button-press.test.ts (1 test) 9ms
+ ✓ src/leaderboard.test.ts (2 tests) 21ms
+ ✓ src/event-messages.test.ts (19 tests) 11ms
+ ✓ src/poker-table-ui.test.ts (7 tests) 14ms
+ ✓ src/stake-form.test.ts (2 tests) 26ms
+ ✓ src/how-to-play.test.ts (21 tests) 10ms
+ ✓ src/blackjack-layout.test.ts (7 tests) 9ms
+ ✓ src/go-fish-layout.test.ts (6 tests) 11ms
+ ✓ src/live-connection.test.ts (4 tests) 18ms
+ ✓ src/poker-chip-motion.test.ts (5 tests) 6ms
+ ✓ src/bluff-classic-layout.test.ts (4 tests) 35ms
+ ✓ src/lobby-ambience.test.ts (2 tests) 15ms
+ ✓ src/touch-targets.test.ts (10 tests) 9ms
+ ✓ src/game-scene.test.ts (13 tests) 10ms
+ ✓ src/card-appearance.test.ts (8 tests) 9ms
+ ✓ src/connection-session.test.ts (11 tests) 11ms
+ ✓ src/hand-inspection.test.ts (9 tests) 11ms
+ ✓ src/sheets.test.ts (9 tests) 12ms
+ ✓ src/card-hit.test.ts (5 tests) 6ms
+ ✓ src/hearts-driver.test.ts (6 tests) 7ms
+ ✓ src/button-style.test.ts (6 tests) 12ms
+ ✓ src/join-path.test.ts (7 tests) 6ms
+ ✓ src/crazy-eights-layout.test.ts (6 tests) 8ms
+ ✓ src/chip-atlas.test.ts (2 tests) 6ms
+ ✓ src/spades-driver.test.ts (5 tests) 5ms
+ ✓ src/settled-seats.test.ts (3 tests) 6ms
+ ✓ src/spades-layout.test.ts (6 tests) 17ms
+ ✓ src/table-viewport.test.ts (3 tests) 6ms
+ ✓ src/rummy-driver.test.ts (7 tests) 11ms
+ ✓ src/president-layout.test.ts (7 tests) 11ms
+ ✓ src/voice-presence.test.ts (4 tests) 4ms
+ ✓ src/discord-join.test.ts (5 tests) 5ms
+ ✓ src/join-errors.test.ts (5 tests) 5ms
+ ✓ src/result-notice.test.ts (1 test) 5ms
+ ✓ src/room-composer.test.ts (3 tests) 3ms
+ ✓ src/client-look.test.ts (3 tests) 7ms
+ ✓ src/table-chat.test.ts (14 tests) 9ms
+ ✓ src/crazy-eights-driver.test.ts (8 tests) 8ms
+ ✓ src/connect.test.ts (3 tests) 4ms
+ ✓ src/last-room.test.ts (11 tests) 11ms
+ ✓ src/theme.test.ts (12 tests) 10ms
+ ✓ src/table-notice.test.ts (2 tests) 9ms
+ ✓ src/reload-landing.test.ts (2 tests) 4ms
+ ✓ src/blackjack-driver.test.ts (5 tests) 4ms
+ ✓ src/client-id.test.ts (3 tests) 5ms
+ ✓ src/client-stats.test.ts (5 tests) 10ms
+ ✓ src/preferred-name.test.ts (6 tests) 8ms
+ ✓ src/milestone-10-combination.test.ts (1 test) 4ms
+ ✓ src/president-driver.test.ts (5 tests) 8ms
+ ✓ src/lobby-viewport.test.ts (1 test) 11ms
+ ✓ src/bluff-challenge.test.ts (2 tests) 6ms
+ ✓ src/solo-room.test.ts (3 tests) 4ms
+ ✓ src/hand-transition.test.ts (2 tests) 3ms
+ ↓ src/seat-return.live.test.ts (1 test | 1 skipped)
+
+ Test Files  74 passed | 1 skipped (75)
+      Tests  533 passed | 1 skipped (534)
+   Start at  12:17:06
+   Duration  15.50s (transform 4.70s, setup 748ms, collect 13.88s, tests 4.30s, environment 2.93s, prepare 6.87s)

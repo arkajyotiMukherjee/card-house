@@ -1,13 +1,8 @@
-import { anchorTableActor, tableGutter } from './table-viewport';
-import { bindButtonPress } from './button-press';
+import { hasPokerPotLayers } from './poker-pots';
 import * as ex from 'excalibur';
 import {
   POKER_GAME_TYPE,
-  POKER_VARIATION_LABELS,
-  pokerAdvanceKind,
   pokerBetRange,
-  pokerBlindMark,
-  pokerCallAmount,
   pokerCanCall,
   pokerCanCheck,
   pokerCanDiscard,
@@ -17,47 +12,39 @@ import {
   type PokerStakeRange,
   type PokerState,
 } from '../../src/shared/games/poker';
+import { bindButtonPress } from './button-press';
+import { BUTTON_FONT_SIZE, BUTTON_PRESS_SHIFT } from './button-style';
 import {
-  BUTTON_FONT_SIZE,
-  BUTTON_PRESS_SHIFT,
-  buttonCaptionPos,
-  buttonFontSize,
-} from './button-style';
-import { chipsImage } from './boot-scene';
-import {
+  DIM,
   BUTTON as GIVE_UP,
   BUTTON_DOWN as GIVE_UP_DOWN,
-  DIM,
   GOLD,
   STROKE,
   STROKE_HOT,
   canvasText,
   panelRect,
 } from './canvas-ui';
+import type { CardAtlas } from './card-atlas';
 import {
   isFrontHandCard,
   localHandHitBoxes,
   type CardHitBox,
 } from './card-hit';
+import type { GameDriver, InputEvent, RenderContext } from './game-driver';
 import {
   HandHover,
   canInspectPointer,
   placeCardLift,
   startHandHoverClock,
 } from './hand-hover';
-import type { CardAtlas } from './card-atlas';
-import { ChipAtlas, type ChipDenomination } from './chip-atlas';
-import type { GameDriver, InputEvent, RenderContext } from './game-driver';
 import {
   BET_BUTTON,
+  BOARD_SCALE,
+  BOARD_SLOTS,
   CALL_BUTTON,
   CARD_DRAW,
   CHECK_BUTTON,
-  DROPPED_LABEL,
-  DROPPED_SCALE,
   FOLD_BUTTON,
-  POT_X,
-  POT_Y,
   RAISE_BUTTON,
   STAKE_AMOUNT,
   STAKE_CANCEL,
@@ -65,34 +52,33 @@ import {
   STAKE_DOWN,
   STAKE_MAX,
   STAKE_UP,
-  BANNER_Y,
-  BOARD_SLOTS,
-  BOARD_SCALE,
-  COUNTDOWN_Y,
-  POT_CHIP_SCALE,
-  bannerX,
-  nextHandCountdown,
-  blindChipLine,
+  STAKE_SLIDER,
+  sliderStake,
+  stakeContribution,
+  betChipStacks,
+  POKER_CHIP_FACE_SCALE,
+  POKER_CHIP_LAYER_GAP,
   boardFlip,
   boardPositions,
-  droppedPositions,
   faceForPokerCard,
-  finishedLine,
-  holePositions,
   frontStakeControl,
+  holePositions,
   moveStake,
-  seatNote,
+  pokerPersonalMode,
   stakeStep,
   type StakeHitBox,
 } from './poker-layout';
+import { PokerTableUi } from './poker-table-ui';
+import { PokerChipMotion } from './poker-chip-motion';
+import { uiText as bodyText } from './ui-text';
+import { chipAtlas } from './boot-scene';
+import { isMobileDevice } from './mobile-shell';
+import { OPPONENT_FAN_CARD, isGiveUpControl } from './table-presentation';
+import { anchorTableActor, tableGutter } from './table-viewport';
 import {
-  OPPONENT_FAN_CARD,
-  TURN_LINE,
-  fanGapLine,
-  isGiveUpControl,
-} from './table-presentation';
-
-const LABEL_SIZE = FOLD_BUTTON.h >= 44 ? 12 : 8;
+  classicCaption as uiCaption,
+  classicText as uiText,
+} from './classic-table-design';
 
 const BUTTON = ex.Color.fromHex('#1b5c38');
 const BUTTON_DOWN = ex.Color.fromHex('#0e3d24');
@@ -102,14 +88,8 @@ const FLASH_STROKE = ex.Color.fromHex('#ff3b2f');
 const FLASH_ON_MS = 130;
 const FLASH_OFF_MS = 80;
 const FLASH_BLINKS = 3;
-const CHIP_STACK_STEP = 4;
-const CHIP_STACK_MAX = 4;
 const DIMMED = 0.45;
 const FOLDED_CARD = 0.4;
-const DROPPED_CARD = 0.55;
-const CHIP_DENOMINATIONS = [100, 25, 10, 5, 1] as const;
-
-const chips = new ChipAtlas(chipsImage);
 
 const ACTION_BUTTONS = [
   { target: 'fold', label: 'Fold', box: FOLD_BUTTON },
@@ -223,18 +203,6 @@ function faceSprite(
   return atlas.sprite(face);
 }
 
-function chipStack(amount: number): ChipDenomination[] {
-  const stack: ChipDenomination[] = [];
-  let left = amount;
-  for (const value of CHIP_DENOMINATIONS) {
-    while (left >= value && stack.length < CHIP_STACK_MAX) {
-      stack.push(value);
-      left -= value;
-    }
-  }
-  return stack;
-}
-
 function actionEnabled(
   state: PokerState,
   seatIndex: number | null,
@@ -287,7 +255,8 @@ export class PokerDriver implements GameDriver<PokerState> {
   private cards = new Map<string, CardRecord>();
   private board: BoardSlot[] = [];
   private chipActors: ex.Actor[] = [];
-  private labels: ex.Actor[] = [];
+  private tableUi = new PokerTableUi();
+  private announcement = '';
   private buttons: ButtonRecord[] = [];
   private stakeButtons: ButtonRecord[] = [];
   private amount: AmountRecord | null = null;
@@ -300,18 +269,57 @@ export class PokerDriver implements GameDriver<PokerState> {
   private hovered: string | null = null;
   private readonly handHover = new HandHover();
   private hoverClock: ex.Actor | null = null;
-  private countdown: ex.Actor | null = null;
-  private countdownText = '';
-  /** Hand number the pause clock belongs to. `-1` while no hand is waiting. */
-  private pauseHand = -1;
-  private pauseElapsed = 0;
+
   private dropMarkKey = '';
   private dropMarks: ex.Actor[] = [];
   private buttonsReady = false;
   private state: PokerState | null = null;
   private ctx: RenderContext | null = null;
+  private chipMotion = new PokerChipMotion();
+  private slider: ex.Actor | null = null;
+  private previewChips: ex.Actor[] = [];
+  private draggingSlider = false;
+  private readonly releaseSlider = (): void => {
+    this.draggingSlider = false;
+  };
+  private readonly sliderKey = (event: KeyboardEvent): void => {
+    if (
+      !this.stake ||
+      !this.state ||
+      !this.ctx ||
+      this.ctx.inputBlocked() ||
+      this.tableUi.isPotDetailsOpen
+    )
+      return;
+    const range = stakeRange(
+      this.state,
+      this.ctx.meSeatIndex!,
+      this.stake.kind,
+    );
+    if (
+      !range ||
+      !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)
+    )
+      return;
+    event.preventDefault();
+    this.stake.amount =
+      event.key === 'Home'
+        ? range.min
+        : event.key === 'End'
+          ? range.max
+          : moveStake(
+              this.stake.amount,
+              stakeStep(this.state, this.stake.kind) *
+                (event.key === 'ArrowLeft' ? -1 : 1),
+              range.min,
+              range.max,
+            );
+    this.placeButtons(this.state, this.ctx);
+  };
 
   render(state: PokerState, ctx: RenderContext): void {
+    this.chipMotion.update(state, ctx);
+    if (this.state?.handNumber !== state.handNumber) this.announcement = '';
     this.state = state;
     this.ctx = ctx;
     this.ensureHoverClock(ctx);
@@ -321,7 +329,6 @@ export class PokerDriver implements GameDriver<PokerState> {
       this.buttonsReady = true;
     }
     this.placeButtons(state, ctx);
-    this.syncLabels(state, ctx);
     if (state.phase === 'lobby') {
       this.clearCards();
       this.clearDropped();
@@ -330,7 +337,7 @@ export class PokerDriver implements GameDriver<PokerState> {
     }
     this.syncCards(state, ctx);
     this.syncDropped(ctx);
-    this.syncPot(state, ctx);
+    this.clearChips();
   }
 
   handleInput(event: InputEvent, state: PokerState, ctx: RenderContext): void {
@@ -339,7 +346,10 @@ export class PokerDriver implements GameDriver<PokerState> {
     if (state.phase !== 'play') {
       return;
     }
-    if (ctx.inputBlocked() && event.type !== 'pointerleave') {
+    if (
+      (ctx.inputBlocked() || this.tableUi.isPotDetailsOpen) &&
+      event.type !== 'pointerleave'
+    ) {
       return;
     }
     if (event.type !== 'pointerup') {
@@ -399,6 +409,15 @@ export class PokerDriver implements GameDriver<PokerState> {
   }
 
   destroy(ctx: RenderContext): void {
+    this.chipMotion.clear();
+    this.slider?.kill();
+    this.slider = null;
+    for (const actor of this.previewChips) actor.kill();
+    this.previewChips = [];
+    window.removeEventListener?.('pointerup', this.releaseSlider);
+    window.removeEventListener?.('pointercancel', this.releaseSlider);
+    window.removeEventListener?.('blur', this.releaseSlider);
+    window.removeEventListener?.('keydown', this.sliderKey);
     void ctx;
     for (const actor of this.flashes) {
       actor.kill();
@@ -407,10 +426,7 @@ export class PokerDriver implements GameDriver<PokerState> {
     this.clearCards();
     this.clearDropped();
     this.clearChips();
-    for (const actor of this.labels) {
-      actor.kill();
-    }
-    this.labels = [];
+    this.tableUi.clear(true);
     for (const button of this.buttons) {
       button.actor.kill();
     }
@@ -421,11 +437,6 @@ export class PokerDriver implements GameDriver<PokerState> {
     this.stakeButtons = [];
     this.amount?.actor.kill();
     this.amount = null;
-    this.countdown?.kill();
-    this.countdown = null;
-    this.countdownText = '';
-    this.pauseHand = -1;
-    this.pauseElapsed = 0;
     this.stake = null;
     this.buttonsReady = false;
     this.stopHoverClock();
@@ -467,13 +478,13 @@ export class PokerDriver implements GameDriver<PokerState> {
       z: 20,
     });
     actor.graphics.use(face);
-    const size = buttonFontSize(spec.label, spec.box.w, spec.box.h);
-    const rest = buttonCaptionPos(spec.label, spec.box.w, spec.box.h, size);
+    const size = 18;
+    const rest = uiCaption(spec.label, spec.box.w, spec.box.h, size);
     const caption = new ex.Actor({
       pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
-    caption.graphics.use(canvasText(spec.label, size, GOLD));
+    caption.graphics.use(uiText(spec.label, size, GOLD));
     actor.addChild(caption);
     const record: ButtonRecord = {
       actor,
@@ -526,9 +537,9 @@ export class PokerDriver implements GameDriver<PokerState> {
       return;
     }
     record.label = label;
-    const size = buttonFontSize(label, record.box.w, record.box.h);
-    record.rest = buttonCaptionPos(label, record.box.w, record.box.h, size);
-    record.caption.graphics.use(canvasText(label, size, GOLD));
+    const size = 18;
+    record.rest = uiCaption(label, record.box.w, record.box.h, size);
+    record.caption.graphics.use(uiText(label, size, GOLD));
     record.caption.pos = ex.vec(record.rest.x, record.rest.y);
   }
 
@@ -539,6 +550,10 @@ export class PokerDriver implements GameDriver<PokerState> {
   ): void {
     record.actor.graphics.isVisible = show;
     record.caption.graphics.isVisible = show;
+    record.actor.pointer.useGraphicsBounds = false;
+    record.actor.pointer.useColliderShape = show;
+    record.caption.pointer.useGraphicsBounds = false;
+    record.caption.pointer.useColliderShape = false;
     record.actor.graphics.opacity = enabled ? 1 : DIMMED;
     if (show) {
       // The actor anchor is the top-left. Excalibur's default collider
@@ -562,6 +577,56 @@ export class PokerDriver implements GameDriver<PokerState> {
   }
 
   private addStakeControls(ctx: RenderContext): void {
+    this.slider = new ex.Actor({
+      name: 'poker-bet-slider',
+      pos: ex.vec(STAKE_SLIDER.x, STAKE_SLIDER.y),
+      anchor: ex.vec(0, 0),
+      width: STAKE_SLIDER.w,
+      height: STAKE_SLIDER.h,
+      z: 24,
+    });
+    this.slider.pointer.useGraphicsBounds = false;
+    const change = (event: ex.PointerEvent): void => {
+      if (
+        !this.stake ||
+        !this.state ||
+        !this.ctx ||
+        this.ctx.inputBlocked() ||
+        this.tableUi.isPotDetailsOpen
+      )
+        return;
+      const range = stakeRange(
+        this.state,
+        this.ctx.meSeatIndex!,
+        this.stake.kind,
+      );
+      if (!range) return;
+      this.stake.amount = sliderStake(
+        (event.worldPos.x - STAKE_SLIDER.x - tableGutter() - 10) /
+          (STAKE_SLIDER.w - 20),
+        range.min,
+        range.max,
+        stakeStep(this.state, this.stake.kind),
+      );
+      this.placeButtons(this.state, this.ctx);
+    };
+    this.slider.on('pointerdown', (event) => {
+      this.draggingSlider = true;
+      change(event);
+    });
+    this.slider.on('pointermove', (event) => {
+      if (this.draggingSlider) change(event);
+    });
+    this.slider.on('pointerleave', (event) => {
+      if (this.draggingSlider) change(event);
+    });
+    this.slider.on('pointerup', this.releaseSlider);
+    window.addEventListener?.('pointerup', this.releaseSlider);
+    window.addEventListener?.('pointercancel', this.releaseSlider);
+    window.addEventListener?.('blur', this.releaseSlider);
+    window.addEventListener?.('keydown', this.sliderKey);
+    anchorTableActor(this.slider, 'right', STAKE_SLIDER.x);
+    ctx.scene.add(this.slider);
     const specs = [
       { target: 'stake-down', label: '-', box: STAKE_DOWN },
       { target: 'stake-up', label: '+', box: STAKE_UP },
@@ -659,7 +724,8 @@ export class PokerDriver implements GameDriver<PokerState> {
   private placeButtons(state: PokerState, ctx: RenderContext): void {
     this.syncStake(state, ctx);
     const staking = this.stake !== null && state.phase === 'play';
-    const showActions = state.phase === 'play' && !staking;
+    const showActions =
+      pokerPersonalMode(state, ctx.meSeatIndex, staking) === 'acting';
     for (const button of this.buttons) {
       this.showControl(
         button,
@@ -676,9 +742,15 @@ export class PokerDriver implements GameDriver<PokerState> {
       const label = this.stakeCaption(button.target, state, range);
       this.setCaption(button, label);
       const enabled = this.stakeEnabled(button.target, range);
-      this.showControl(button, staking, enabled);
+      this.showControl(
+        button,
+        staking && ['stake-confirm', 'stake-cancel'].includes(button.target),
+        enabled,
+      );
     }
     this.placeAmount(staking, range);
+    this.placeSlider(staking, range);
+    if (this.buttonsReady) this.syncLabels(state, ctx);
   }
 
   private syncStake(state: PokerState, ctx: RenderContext): void {
@@ -782,141 +854,120 @@ export class PokerDriver implements GameDriver<PokerState> {
     if (!show || !this.stake || !range) {
       return;
     }
-    const valueText = String(this.stake.amount);
-    const touch = STAKE_AMOUNT.h >= 44;
-    const rangeText = touch
-      ? `${range.min}–${range.max}`
-      : `${range.min} to ${range.max}`;
+    const valueText = stakeContribution(
+      this.state!,
+      this.ctx!.meSeatIndex!,
+      this.stake.amount,
+    ).toLocaleString();
+    const rangeText = this.stake.kind === 'raise' ? 'Add chips' : 'Bet chips';
     if (box.valueText !== valueText) {
       box.valueText = valueText;
-      const size = buttonFontSize(valueText, STAKE_AMOUNT.w, STAKE_AMOUNT.h);
-      box.value.graphics.use(canvasText(valueText, size, GOLD));
-      const pos = buttonCaptionPos(
-        valueText,
-        STAKE_AMOUNT.w,
-        STAKE_AMOUNT.h,
-        size,
-      );
-      box.value.pos = ex.vec(pos.x, touch ? 8 : 1);
+      const size = 24;
+      box.value.graphics.use(uiText(valueText, size, GOLD));
+      box.value.pos = ex.vec(8, 20);
     }
     if (box.rangeText !== rangeText) {
       box.rangeText = rangeText;
-      const size = buttonFontSize(rangeText, STAKE_AMOUNT.w, STAKE_AMOUNT.h);
-      box.range.graphics.use(canvasText(rangeText, size, DIM));
-      const pos = buttonCaptionPos(
-        rangeText,
-        STAKE_AMOUNT.w,
-        STAKE_AMOUNT.h,
-        size,
-      );
-      box.range.pos = ex.vec(pos.x, touch ? 28 : 14);
+      const size = 17;
+      box.range.graphics.use(bodyText(rangeText, size, GOLD));
+      box.range.pos = ex.vec(8, 0);
     }
   }
 
-  private syncLabels(state: PokerState, ctx: RenderContext): void {
-    for (const actor of this.labels) {
-      actor.kill();
-    }
-    this.labels = [];
-    if (state.phase === 'lobby') {
-      this.clearCountdown();
-      return;
-    }
-    const variation = POKER_VARIATION_LABELS[state.variation];
-    this.labels.push(this.textActor(ctx, 16, 56, variation, GOLD));
-    if (state.phase === 'finished') {
-      const line = finishedLine(state, ctx.seats) ?? 'Hand over';
-      this.labels.push(
-        this.textActor(ctx, bannerX(line, LABEL_SIZE), BANNER_Y, line, GOLD),
+  private placeSlider(show: boolean, range: PokerStakeRange | null): void {
+    if (!this.slider) return;
+    this.slider.graphics.isVisible = show;
+    this.slider.pointer.useColliderShape = show;
+    if (show)
+      this.slider.collider.useBoxCollider(
+        STAKE_SLIDER.w,
+        STAKE_SLIDER.h,
+        ex.vec(0, 0),
       );
-      this.syncCountdown(state, ctx);
-    } else {
-      this.clearCountdown();
-      const mine =
-        ctx.meSeatIndex !== null && state.turnSeatIndex === ctx.meSeatIndex;
-      let hint = mine ? 'Your turn' : 'Wait';
-      if (mine && state.step === 'discard') {
-        hint = 'Drop one';
-      } else if (
-        mine &&
-        ctx.meSeatIndex !== null &&
-        pokerCanCall(state, ctx.meSeatIndex)
-      ) {
-        hint = `Call ${pokerCallAmount(state, ctx.meSeatIndex)}`;
-      }
-      this.labels.push(
-        this.textActor(ctx, TURN_LINE.x, TURN_LINE.y, hint, GOLD),
-      );
+    else {
+      this.slider.collider.clear();
+      this.draggingSlider = false;
     }
-    const potLabel = `Pot ${state.pot}`;
-    this.labels.push(
-      this.textActor(
-        ctx,
-        POT_X - 72 - potLabel.length * LABEL_SIZE,
-        POT_Y - LABEL_SIZE / 2,
-        potLabel,
-        GOLD,
-      ),
+    for (const actor of this.previewChips) actor.kill();
+    this.previewChips = [];
+    if (!show || !range || !this.stake || !this.ctx) return;
+    const value = this.stake.amount;
+    const t =
+      range.max === range.min
+        ? 1
+        : (value - range.min) / (range.max - range.min);
+    this.slider.graphics.use(
+      new ex.Canvas({
+        width: STAKE_SLIDER.w,
+        height: STAKE_SLIDER.h,
+        draw: (g) => {
+          g.fillStyle = '#103c27';
+          g.fillRect(0, 0, STAKE_SLIDER.w, STAKE_SLIDER.h);
+          g.fillStyle = '#66866e';
+          g.fillRect(10, 10, 348, 12);
+          g.fillStyle = '#f3d98b';
+          g.fillRect(10, 10, 348 * t, 12);
+          g.fillRect(3 + 348 * t, 2, 14, 20);
+          g.font = '12px "Chakra Petch"';
+          g.fillStyle = '#c4d3c2';
+          g.textBaseline = 'top';
+          g.fillText(
+            String(
+              stakeContribution(this.state!, this.ctx!.meSeatIndex!, range.min),
+            ),
+            10,
+            24,
+          );
+          g.textAlign = 'right';
+          g.fillText(
+            `${stakeContribution(this.state!, this.ctx!.meSeatIndex!, range.max)} · ${this.stakeCaption('stake-max', this.state!, range)}`,
+            358,
+            24,
+          );
+        },
+      }),
     );
-    for (const seat of ctx.seats) {
-      const row = state.seats[String(seat.seatIndex)];
-      if (!row) {
-        continue;
+    const contribution = stakeContribution(
+      this.state!,
+      this.ctx.meSeatIndex!,
+      value,
+    );
+    const stacks = betChipStacks(contribution);
+    stacks.forEach((stack, index) => {
+      for (let layer = 0; layer < Math.min(6, stack.count); layer += 1) {
+        const chip = new ex.Actor({
+          name: 'bet-chip-preview',
+          pos: ex.vec(
+            (stacks.length === 1 ? 737 : 704) +
+              tableGutter() +
+              index * (66 / Math.max(1, stacks.length - 1)),
+            508 - layer * POKER_CHIP_LAYER_GAP,
+          ),
+          z: 26,
+        });
+        chip.graphics.use(chipAtlas.sprite(stack.value));
+        chip.scale = ex.vec(POKER_CHIP_FACE_SCALE, POKER_CHIP_FACE_SCALE);
+        chip.pointer.useGraphicsBounds = false;
+        chip.pointer.useColliderShape = false;
+        this.ctx!.scene.add(chip);
+        this.previewChips.push(chip);
       }
-      const blind = pokerBlindMark(state, seat.seatIndex);
-      const dealer =
-        state.dealerSeatIndex === seat.seatIndex && blind === null ? ' D' : '';
-      const chips = `${seat.self ? 'Stack ' : ''}${row.chips}${dealer}`;
-      const note = seatNote(state, seat.seatIndex);
-      const line = blindChipLine(
-        seat.self,
-        seat.x,
-        seat.y,
-        seat.name,
-        chips,
-        blind,
-        LABEL_SIZE,
-      );
-      if (blind && line.mark) {
-        const blindLabel = this.textActor(
-          ctx,
-          line.mark.x,
-          line.mark.y,
-          blind,
-          GOLD,
-        );
-        if (!seat.self) {
-          blindLabel.z = 80;
-        }
-        this.labels.push(blindLabel);
-      }
-      const chipLabel = this.textActor(
-        ctx,
-        line.chips.x,
-        line.chips.y,
-        chips,
-        seat.self ? GOLD : DIM,
-      );
-      if (!seat.self) {
-        chipLabel.z = 80;
-      }
-      this.labels.push(chipLabel);
-      if (note && !seat.self) {
-        const noteAt = fanGapLine(
-          seat.x,
-          seat.y,
-          seat.name,
-          note,
-          1,
-          LABEL_SIZE,
-        );
-        const noteLabel = this.textActor(ctx, noteAt.x, noteAt.y, note, GOLD);
-        if (!seat.self) {
-          noteLabel.z = 80;
-        }
-        this.labels.push(noteLabel);
-      }
-    }
+    });
+  }
+
+  setAnnouncement(text: string): void {
+    this.announcement = text;
+    if (this.state && this.ctx) this.syncLabels(this.state, this.ctx);
+  }
+
+  private syncLabels(state: PokerState, ctx: RenderContext): void {
+    this.tableUi.render(
+      state,
+      ctx,
+      this.announcement,
+      () => this.syncLabels(state, ctx),
+      this.stake !== null,
+    );
   }
 
   private syncCards(state: PokerState, ctx: RenderContext): void {
@@ -937,6 +988,8 @@ export class PokerDriver implements GameDriver<PokerState> {
     this.syncBoard(state, ctx);
     this.trackDrops(state, ctx);
     for (const seat of ctx.seats) {
+      if (!seat.self) continue;
+      if (state.phase === 'finished') continue;
       const row = state.seats[String(seat.seatIndex)];
       if (!row) {
         continue;
@@ -947,6 +1000,8 @@ export class PokerDriver implements GameDriver<PokerState> {
         seat.y,
         row.hole.length,
         seat.name,
+        false,
+        isMobileDevice(),
       );
       for (let index = 0; index < row.hole.length; index += 1) {
         const cardId = row.hole[index];
@@ -1012,39 +1067,11 @@ export class PokerDriver implements GameDriver<PokerState> {
   }
 
   private syncDropped(ctx: RenderContext): void {
-    for (const [cardId, actor] of this.droppedActors) {
-      if (!this.dropped.includes(cardId)) {
-        actor.kill();
-        this.droppedActors.delete(cardId);
-      }
-    }
-    const slots = droppedPositions(this.dropped.length);
-    for (let index = 0; index < this.dropped.length; index += 1) {
-      const cardId = this.dropped[index];
-      const slot = slots[index];
-      const actor = cardId ? this.droppedActors.get(cardId) : undefined;
-      if (!cardId || !slot || !actor) {
-        continue;
-      }
-      actor.pos = ex.vec(slot.x, slot.y);
-      actor.scale = ex.vec(DROPPED_SCALE, DROPPED_SCALE);
-      actor.graphics.opacity = DROPPED_CARD;
-      actor.z = 14 + index;
-    }
-    const show = this.droppedActors.size > 0;
-    if (show && !this.droppedLabel) {
-      const label = new ex.Actor({
-        pos: ex.vec(DROPPED_LABEL.x, DROPPED_LABEL.y),
-        anchor: ex.vec(0, 0),
-        z: 16,
-      });
-      label.graphics.use(canvasText('Dropped', 8, DIM));
-      ctx.scene.add(label);
-      this.droppedLabel = label;
-    } else if (!show && this.droppedLabel) {
-      this.droppedLabel.kill();
-      this.droppedLabel = null;
-    }
+    void ctx;
+    for (const actor of this.droppedActors.values()) actor.kill();
+    this.droppedActors.clear();
+    this.droppedLabel?.kill();
+    this.droppedLabel = null;
   }
 
   private placeCard(
@@ -1208,69 +1235,6 @@ export class PokerDriver implements GameDriver<PokerState> {
     this.handHover.move(pointerX);
   }
 
-  /**
-   * The finished hand stays up for the pause. The winner line is drawn
-   * with the other labels, and this clock counts the seconds until the deal.
-   */
-  private syncCountdown(state: PokerState, ctx: RenderContext): void {
-    const seats = ctx.seats.map((seat) => seat.seatIndex);
-    if (pokerAdvanceKind(state, seats) !== 'hand') {
-      this.clearCountdown();
-      return;
-    }
-    if (this.pauseHand !== state.handNumber) {
-      this.pauseHand = state.handNumber;
-      this.pauseElapsed = 0;
-    }
-    const line = nextHandCountdown(this.pauseElapsed) ?? 'Next hand in 1';
-    this.paintCountdown(ctx, line);
-  }
-
-  private tickPause(elapsedMs: number): void {
-    const state = this.state;
-    const ctx = this.ctx;
-    if (this.pauseHand < 0 || !state || !ctx || state.phase !== 'finished') {
-      return;
-    }
-    this.pauseElapsed += elapsedMs;
-    const line = nextHandCountdown(this.pauseElapsed);
-    this.paintCountdown(ctx, line ?? 'Next hand in 1');
-  }
-
-  private paintCountdown(ctx: RenderContext, text: string): void {
-    if (text.length === 0) {
-      this.clearCountdown();
-      return;
-    }
-    if (text === this.countdownText && this.countdown) {
-      return;
-    }
-    this.countdownText = text;
-    if (!this.countdown) {
-      this.countdown = this.textActor(
-        ctx,
-        bannerX(text, 8),
-        COUNTDOWN_Y,
-        text,
-        GOLD,
-        8,
-      );
-      return;
-    }
-    this.countdown.graphics.isVisible = true;
-    this.countdown.pos = ex.vec(bannerX(text, 8), COUNTDOWN_Y);
-    this.countdown.graphics.use(canvasText(text, 8, GOLD));
-  }
-
-  private clearCountdown(): void {
-    this.pauseHand = -1;
-    this.pauseElapsed = 0;
-    this.countdownText = '';
-    if (this.countdown) {
-      this.countdown.graphics.isVisible = false;
-    }
-  }
-
   private ensureHoverClock(ctx: RenderContext): void {
     if (this.hoverClock) {
       return;
@@ -1278,7 +1242,6 @@ export class PokerDriver implements GameDriver<PokerState> {
     this.hoverClock = startHandHoverClock(ctx.scene, (elapsedMs) => {
       this.easeHand(elapsedMs);
       this.easeBoard(elapsedMs);
-      this.tickPause(elapsedMs);
     });
   }
 
@@ -1296,7 +1259,15 @@ export class PokerDriver implements GameDriver<PokerState> {
       return;
     }
     const hole = state.seats[String(ctx.meSeatIndex)]?.hole ?? [];
-    const slots = holePositions(true, 0, 0, hole.length);
+    const slots = holePositions(
+      true,
+      0,
+      0,
+      hole.length,
+      'Seat',
+      false,
+      isMobileDevice(),
+    );
     const ids: string[] = [];
     const centers: number[] = [];
     for (let index = 0; index < hole.length; index += 1) {
@@ -1368,51 +1339,9 @@ export class PokerDriver implements GameDriver<PokerState> {
     this.dropMarks.push(tag);
   }
 
-  private syncPot(state: PokerState, ctx: RenderContext): void {
-    this.clearChips();
-    const stack = chipStack(state.pot);
-    for (let index = 0; index < stack.length; index += 1) {
-      const value = stack[index];
-      if (value === undefined) {
-        continue;
-      }
-      const sprite = chips.sprite(value);
-      sprite.scale = ex.vec(POT_CHIP_SCALE, POT_CHIP_SCALE);
-      const actor = new ex.Actor({
-        pos: ex.vec(POT_X - 20 + index * 18, POT_Y - index * CHIP_STACK_STEP),
-        anchor: ex.vec(0.5, 0.5),
-        z: 4 + index,
-      });
-      actor.graphics.use(sprite);
-      ctx.scene.add(actor);
-      this.chipActors.push(actor);
-    }
-  }
-
-  private textActor(
-    ctx: RenderContext,
-    x: number,
-    y: number,
-    text: string,
-    color: ex.Color,
-    size = LABEL_SIZE,
-  ): ex.Actor {
-    const actor = new ex.Actor({
-      pos: ex.vec(x, y),
-      anchor: ex.vec(0, 0),
-      z: 16,
-    });
-    actor.graphics.use(canvasText(text, size, color));
-    if (x === TURN_LINE.x && y === TURN_LINE.y)
-      anchorTableActor(actor, 'right');
-    if (y === 518 && x < 200) anchorTableActor(actor, 'left');
-    ctx.scene.add(actor);
-    return actor;
-  }
-
   /** Five backs stay in the flop, turn, and river slots, then flip in place. */
   private syncBoard(state: PokerState, ctx: RenderContext): void {
-    const slots = boardPositions(BOARD_SLOTS);
+    const slots = boardPositions(BOARD_SLOTS, hasPokerPotLayers(state));
     for (let index = 0; index < slots.length; index += 1) {
       const place = slots[index];
       const cardId = state.board[index] ?? null;

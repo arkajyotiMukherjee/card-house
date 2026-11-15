@@ -9,6 +9,7 @@ test('the registered command set is /cardhouse create, status, and close', () =>
     CARDHOUSE_COMMAND.options.map((option) => option.name),
     ['create', 'status', 'close', 'leaderboard'],
   );
+  assert.equal(CARDHOUSE_COMMAND.options[0].options[0].name, 'startingchips');
   const status = CARDHOUSE_COMMAND.options[1];
   assert.equal(status.name, 'status');
   assert.equal(status.options[0].name, 'roomcode');

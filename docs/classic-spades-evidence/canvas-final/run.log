@@ -1,0 +1,26 @@
+ℹ️ INFO Connecting to SpacetimeDB WS...
+ℹ️ INFO Connecting to SpacetimeDB WS...
+ℹ️ INFO Connecting to SpacetimeDB WS...
+ℹ️ INFO Connecting to SpacetimeDB WS...
+OPEN mobile
+CAPTURED 01-four-player-bidding
+CAPTURED 02-selected-card
+CAPTURED 03-complete-trick
+CAPTURED 04-partnership-scores
+CAPTURED 05-spades-broken
+CAPTURED 06-next-hand-score
+PROFILE webgl-first-hand-complete {"heap":{"usedSize":108447304,"totalSize":152072192,"embedderHeapUsedSize":188333944,"backingStorageSize":17939507},"engine":{"renderer":"ExcaliburGraphicsContextWebGL","actors":113,"cards":11,"fps":17.574692443342503}}
+PROFILE canvas2d-start {"heap":{"usedSize":112954600,"totalSize":152334336,"embedderHeapUsedSize":188667048,"backingStorageSize":17942066},"engine":{"renderer":"ExcaliburGraphicsContext2DCanvas","actors":113,"cards":11,"fps":14.295925661338831}}
+HAND REPLICATED 3 { ns: 70, ew: 37 }
+HAND REPLICATED 4 { ns: 120, ew: 117 }
+HAND REPLICATED 5 { ns: 160, ew: 207 }
+HAND REPLICATED 6 { ns: 220, ew: 277 }
+HAND REPLICATED 7 { ns: 270, ew: 357 }
+HAND REPLICATED 8 { ns: 320, ew: 437 }
+HAND REPLICATED 8 { ns: 380, ew: 507 }
+PROFILE retained-finished {"heap":{"usedSize":274975112,"totalSize":339042304,"embedderHeapUsedSize":861595192,"backingStorageSize":19035309},"engine":{"renderer":"ExcaliburGraphicsContext2DCanvas","actors":97,"cards":0,"fps":9.47867298578199}}
+CAPTURED 07-winning-partnership
+ℹ️ INFO Connecting to SpacetimeDB WS...
+OPEN spectator
+CAPTURED 08-spectator
+CLASSIC SPADES PROOF PASSED
