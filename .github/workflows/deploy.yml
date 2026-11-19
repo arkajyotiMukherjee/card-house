@@ -82,3 +82,13 @@ jobs:
         env:
           HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
         run: python3 scripts/deploy_hostinger.py
+      - name: Package Discord bot
+        run: |
+          package="$RUNNER_TEMP/cardhouse-discord-bot"
+          pnpm --filter discord-bot exec tsx src/package-bot.ts "$package"
+          npm --prefix "$package" install --package-lock-only --ignore-scripts
+          npm --prefix "$package" run build
+      - name: Deploy and verify Hostinger Discord bot
+        env:
+          HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
+        run: python3 scripts/deploy_hostinger_bot.py "$RUNNER_TEMP/cardhouse-discord-bot"

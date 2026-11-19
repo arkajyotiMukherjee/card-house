@@ -12,6 +12,7 @@ const SNOWFLAKE = /^\d{17,20}$/;
 
 interface LinkOptions {
   applicationId: string;
+  release?: string;
   secret: string;
   redirectUri: string;
   isReady?(): boolean;
@@ -36,7 +37,7 @@ export function attachCasinoLink(app: Express, options: LinkOptions): void {
   app.get('/casino/discord/status', (_request, response) => {
     response.set('Access-Control-Allow-Origin', '*');
     response.set('Cache-Control', 'no-store');
-    response.json({ available: available() });
+    response.json({ available: available(), release: options.release });
   });
 
   app.get('/casino/discord/link', (request, response) => {

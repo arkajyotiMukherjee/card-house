@@ -1,4 +1,4 @@
-# Deploy the client to Hostinger
+# Deploy Card House to Hostinger
 
 This repository is a pnpm workspace. The browser client is a Vite app in `client/`; the SpacetimeDB module and Discord bot are separate services. The existing Hostinger website for the client is `cardhouse.arkaive.studio` and serves static files.
 
@@ -43,18 +43,22 @@ The Pixel Poker Pack source art under `card-assest -pack/` is licensed for use i
 
 ## Automatic deployment from main
 
-`.github/workflows/deploy.yml` runs on every push to `main`, including pull request merges. It can also be run manually from the Actions tab, on `main` only. It installs the locked dependencies, runs type checks and tests, builds the client with the public production settings above, publishes `server/` to Maincloud, and uploads only `client/dist/` to Hostinger. The Discord bot is a separate deployment and is not restarted by this workflow.
+`.github/workflows/deploy.yml` runs on every push to `main`, including pull request merges. It can also run manually from the Actions tab on `main`. It installs the locked dependencies, runs type checks and tests, publishes `server/` to Maincloud, and deploys and verifies `client/dist/`. The last steps build a standalone Node.js package for the Discord bot, deploy it to `bot.arkaive.studio`, and verify that Discord linking reports ready on the new commit.
 
 The production job uses these encrypted repository Actions secrets:
 
 | Secret | Purpose |
 | --- | --- |
-| `HOSTINGER_API_TOKEN` | Generate temporary TUS upload credentials and deploy the static archive for account `u101590536`, website `cardhouse.arkaive.studio`. |
+| `HOSTINGER_API_TOKEN` | Deploy the client archive for `cardhouse.arkaive.studio` and the Node.js archive for `bot.arkaive.studio`. |
 | `SPACETIMEDB_TOKEN` | Publish the existing `cardhouse` database using its owner's SpacetimeDB login token. |
 
 The Hostinger token `cardhouse-github-actions` was created on 2026-11-15 with a one-year expiry. Replace the encrypted secret before it expires or if the token is revoked. Create replacement tokens in Hostinger's API settings; never paste them into repository files, workflow YAML, issue comments, or logs. Use GitHub Settings → Secrets and variables → Actions, or pipe the token to `gh secret set HOSTINGER_API_TOKEN` through standard input. The SpacetimeDB token must belong to an identity permitted to publish `cardhouse`.
 
-Only the publish/upload steps receive their required secrets. The client build receives no credentials. Upload credentials stay in process memory; API errors are sanitized. The temporary SpacetimeDB config is created with owner-only permissions and deleted when publishing exits. The workflow uploads no build artifacts or source archives. Third-party Actions are pinned to commit SHAs, and the SpacetimeDB CLI is pinned to 2.12.0 with its release SHA-256 checksum.
+Only the publish and deploy steps receive their required secrets. Upload credentials stay in process memory and API errors are sanitized. The temporary SpacetimeDB config is created with owner-only permissions and deleted when publishing exits. Third-party Actions are pinned to commit SHAs, and the SpacetimeDB CLI is pinned to 2.12.0 with its release SHA-256 checksum.
+
+### Discord bot settings in hPanel
+
+Use the existing Node.js application at `bot.arkaive.studio`. The workflow reads environment variable names from hPanel before requesting a build and preserves the existing values. The application needs `DISCORD_PUBLIC_KEY`, `DISCORD_BOT_TOKEN`, `DISCORD_APPLICATION_ID`, `DISCORD_OAUTH_CLIENT_SECRET`, `DISCORD_OAUTH_REDIRECT_URI`, `CARDROOM_PUBLIC_URL`, `SPACETIMEDB_HOST`, `SPACETIMEDB_DB`, and `CARDHOUSE_BOT_SESSION_FILE`. Point the session file at the bot's existing credential on persistent storage outside the application deployment directory. See [walkable casino](walkable-casino.md) for the redirect URI and database operator role. A bot error after client verification leaves the published client and database live.
 
 Maincloud is published with `--delete-data=never`. An incompatible schema change fails the release and requires a separately planned migration; CI must never reset production to work around it. A successful database publish followed by a failed client upload can leave the previous client live against the newer module, so keep reducer/schema changes compatible with the previous client where possible. Failed runs stop with an error; they do not automatically roll back a database module.
 

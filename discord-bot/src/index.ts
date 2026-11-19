@@ -24,6 +24,13 @@ import {
   type VoiceChannelClient,
 } from './voice-channels.ts';
 
+declare const __CARDHOUSE_BOT_RELEASE__: string | undefined;
+
+const release =
+  typeof __CARDHOUSE_BOT_RELEASE__ === 'string'
+    ? __CARDHOUSE_BOT_RELEASE__
+    : undefined;
+
 function redact(message: string, token: string): string {
   return token.length > 0 ? message.split(token).join('[redacted]') : message;
 }
@@ -81,6 +88,7 @@ export async function main(attached?: Server): Promise<void> {
   });
   attachCasinoLink(app, {
     applicationId,
+    release,
     secret: process.env.DISCORD_OAUTH_CLIENT_SECRET?.trim() ?? '',
     redirectUri: process.env.DISCORD_OAUTH_REDIRECT_URI?.trim() ?? '',
     isReady: () => connection?.isActive === true,
@@ -258,7 +266,7 @@ export async function main(attached?: Server): Promise<void> {
 }
 
 const invoked = process.argv[1];
-if (invoked && pathToFileURL(invoked).href === import.meta.url) {
+if (release || (invoked && pathToFileURL(invoked).href === import.meta.url)) {
   void main().catch((error: unknown) => {
     const message = error instanceof Error ? error.message : 'Bot failed';
     console.error(message);
