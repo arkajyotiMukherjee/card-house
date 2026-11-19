@@ -19,6 +19,7 @@ export const LOUNGE_CHAIRS: readonly FloorPoint[] = [
 ];
 export const FLOOR_STEP_MS = 145;
 export const FLOOR_STEER_STEPS = 4;
+const NO_TABLES: ReadonlySet<number> = new Set();
 
 export interface FloorWalk extends FloorPoint {
   path: FloorPoint[];
@@ -49,6 +50,7 @@ export function floorDirectionPath(
   from: FloorPoint,
   direction: FloorPoint,
   rows: number,
+  tableSlots: ReadonlySet<number>,
   limit = FLOOR_STEER_STEPS,
 ): FloorPoint[] {
   const path: FloorPoint[] = [];
@@ -58,7 +60,7 @@ export function floorDirectionPath(
       x: from.x + step * direction.x,
       y: from.y + step * direction.y,
     };
-    if (!walkable(next, rows)) break;
+    if (!floorStepAllowed(path.at(-1) ?? from, next, rows, tableSlots)) break;
     path.push(next);
   }
   return path;
@@ -97,18 +99,30 @@ export function tableEntrance(slot: number): FloorPoint {
   return { x, y: y + 2 };
 }
 
-export function tableFootprint(point: FloorPoint): boolean {
+function tableDepth(
+  point: FloorPoint,
+  tableSlots: ReadonlySet<number>,
+): number {
   const wing = Math.floor((point.y - LOBBY_ROWS) / WING_ROWS);
-  if (wing < 0) return false;
+  if (wing < 0) return 0;
   for (let spot = 0; spot < TABLES_PER_WING; spot += 1) {
-    const center = floorTable(wing * TABLES_PER_WING + spot);
-    if (Math.abs(point.x - center.x) <= 2 && Math.abs(point.y - center.y) <= 1)
-      return true;
+    const slot = wing * TABLES_PER_WING + spot;
+    if (!tableSlots.has(slot)) continue;
+    const center = floorTable(slot);
+    const depth = Math.min(
+      3 - Math.abs(point.x - center.x),
+      2 - Math.abs(point.y - center.y),
+    );
+    if (depth > 0) return depth;
   }
-  return false;
+  return 0;
 }
 
-export function walkable(point: FloorPoint, rows: number): boolean {
+export function walkable(
+  point: FloorPoint,
+  rows: number,
+  tableSlots: ReadonlySet<number> = NO_TABLES,
+): boolean {
   if (
     !Number.isInteger(point.x) ||
     !Number.isInteger(point.y) ||
@@ -118,11 +132,23 @@ export function walkable(point: FloorPoint, rows: number): boolean {
     point.y >= rows - 1
   )
     return false;
-  if (point.y >= LOBBY_ROWS) return !tableFootprint(point);
+  if (point.y >= LOBBY_ROWS) return tableDepth(point, tableSlots) === 0;
   const desk = point.x >= 3 && point.x <= 9 && point.y >= 3 && point.y <= 5;
   const loungeTable =
     point.x >= 22 && point.x <= 28 && point.y >= 7 && point.y <= 9;
   return !desk && !loungeTable;
+}
+
+export function floorStepAllowed(
+  from: FloorPoint,
+  to: FloorPoint,
+  rows: number,
+  tableSlots: ReadonlySet<number>,
+): boolean {
+  if (walkable(to, rows, tableSlots)) return true;
+  // A table can be placed under an avatar. Let them take the shortest way out.
+  const depth = tableDepth(to, tableSlots);
+  return depth > 0 && depth < tableDepth(from, tableSlots);
 }
 
 /** Bounded shortest path through the tile grid. Players do not block each other. */
@@ -130,8 +156,13 @@ export function floorPath(
   from: FloorPoint,
   to: FloorPoint,
   rows: number,
+  tableSlots: ReadonlySet<number> = NO_TABLES,
 ): FloorPoint[] {
-  if (!walkable(from, rows) || !walkable(to, rows)) return [];
+  if (
+    (!walkable(from, rows, tableSlots) && !tableDepth(from, tableSlots)) ||
+    !walkable(to, rows, tableSlots)
+  )
+    return [];
   const key = (point: FloorPoint) => point.y * FLOOR_COLUMNS + point.x;
   const first = key(from),
     last = key(to);
@@ -153,7 +184,11 @@ export function floorPath(
       { x, y: y + 1 },
     ]) {
       const id = key(next);
-      if (!walkable(next, rows) || parents[id] >= 0) continue;
+      if (
+        !floorStepAllowed({ x, y }, next, rows, tableSlots) ||
+        parents[id] >= 0
+      )
+        continue;
       parents[id] = at;
       queue.push(id);
     }

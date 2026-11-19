@@ -78,7 +78,7 @@ import {
   type PromptKind,
   type ThemeChoiceId,
 } from './menu-layout';
-import { statsCaption } from './client-stats';
+import { lifetimeWinningsCaption } from './lifetime-winnings';
 import {
   preferredNameForPrompt,
   rememberPreferredName,
@@ -215,12 +215,8 @@ export class MenuScene extends ex.Scene {
   private soloGameText: ex.Text | undefined;
   private soloSeatText: ex.Text | undefined;
   private soloVariationText: ex.Text | undefined;
-  private statsText = canvasText(
-    statsCaption({ handsPlayed: 0, gamesWon: 0 }),
-    8,
-    DIM,
-  );
-  private statsActor: ex.Actor | undefined;
+  private winningsText = canvasText(lifetimeWinningsCaption(), 8, DIM);
+  private winningsActor: ex.Actor | undefined;
   private readonly overlay: ex.Actor[] = [];
   private busy = false;
   private readonly loading = new LoadingScreen(this);
@@ -290,11 +286,11 @@ export class MenuScene extends ex.Scene {
     this.linkActor.pos = ex.vec(16, 4);
   }
 
-  setStats(line: string): void {
-    this.statsText.text = line;
-    if (this.statsActor) {
+  setLifetimeWinnings(line: string): void {
+    this.winningsText.text = line;
+    if (this.winningsActor) {
       const width = line.length * 8;
-      this.statsActor.pos = ex.vec(
+      this.winningsActor.pos = ex.vec(
         Math.floor((LOGICAL_WIDTH - width) / 2),
         STATS_Y,
       );
@@ -446,15 +442,15 @@ export class MenuScene extends ex.Scene {
   }
 
   private buildFooter(): void {
-    const statsLine = this.statsText.text;
-    const statsWidth = statsLine.length * 8;
-    this.statsActor = new ex.Actor({
-      pos: ex.vec(Math.floor((LOGICAL_WIDTH - statsWidth) / 2), STATS_Y),
+    const winningsLine = this.winningsText.text;
+    const winningsWidth = winningsLine.length * 8;
+    this.winningsActor = new ex.Actor({
+      pos: ex.vec(Math.floor((LOGICAL_WIDTH - winningsWidth) / 2), STATS_Y),
       anchor: ex.vec(0, 0),
       z: 10,
     });
-    this.statsActor.graphics.use(this.statsText);
-    this.add(this.statsActor);
+    this.winningsActor.graphics.use(this.winningsText);
+    this.add(this.winningsActor);
     this.linkText.text = this.linkLine;
     this.linkActor = new ex.Actor({
       pos: ex.vec(16, 4),

@@ -5,12 +5,21 @@ import {
   readCasinoAvatar,
   type CasinoAvatar,
 } from '../../src/shared/casino-avatar';
+import {
+  DISCORD_LINK_MESSAGES,
+  readDiscordLinkResult,
+  type DiscordLinkResult,
+} from '../../src/shared/casino-discord-link';
 import { avatarSprite, CASINO_PALETTE } from './casino-art';
 import { classicText } from './classic-table-design';
 import { uiText, uiCaption } from './ui-text';
 import { panelRect } from './canvas-ui';
 import { bindButtonPress } from './button-press';
-import { cardroomBotUrl, discordLinkAvailable } from './discord-join';
+import {
+  cardroomBotUrl,
+  discordLinkAvailable,
+  discordLinkChannel,
+} from './discord-join';
 import type { DbConnection } from './module_bindings';
 
 const AVATAR_STORAGE = 'casinoAvatar';
@@ -53,6 +62,7 @@ export function openCasinoAvatarEditor(
   scene: ex.Scene,
   connection?: DbConnection,
   lobbyId = '',
+  linkResult?: DiscordLinkResult,
 ): void {
   if (editors.has(scene)) return;
   editors.add(scene);
@@ -68,6 +78,12 @@ export function openCasinoAvatarEditor(
   let busy = false;
   let closed = false;
   let linkPopup: Window | null = null;
+  let linkFlow: string | undefined;
+  const linkChannel = discordLinkChannel();
+  const linkMessage = (result: DiscordLinkResult): string =>
+    result === 'linked' && !profile()
+      ? 'Checking Discord link…'
+      : DISCORD_LINK_MESSAGES[result];
   const add = (
     x: number,
     y: number,
@@ -94,6 +110,7 @@ export function openCasinoAvatarEditor(
   const close = () => {
     closed = true;
     linkPopup?.close();
+    linkChannel?.close();
     detach();
     document.removeEventListener('keydown', key);
     scene.off('deactivate', close);
@@ -126,11 +143,27 @@ export function openCasinoAvatarEditor(
   preview.origin = ex.vec(0, 0);
   add(186, 165, 182, preview);
   const status = uiText(
-    profile() ? 'Discord linked' : 'Saved on this browser',
+    linkResult
+      ? linkMessage(linkResult)
+      : profile()
+        ? 'Discord linked'
+        : 'Saved on this browser',
     16,
     ink,
   );
   add(181, 387, 182, status);
+  linkChannel?.addEventListener(
+    'message',
+    (event: MessageEvent<{ result?: unknown; flow?: unknown }>) => {
+      const result = readDiscordLinkResult(event.data?.result);
+      if (!result || !linkPopup || !linkFlow || event.data.flow !== linkFlow)
+        return;
+      linkPopup.close();
+      linkPopup = null;
+      linkFlow = undefined;
+      status.text = linkMessage(result);
+    },
+  );
   const button = (
     x: number,
     y: number,
@@ -185,12 +218,13 @@ export function openCasinoAvatarEditor(
       ready = await discordLinkAvailable(botUrl);
       checking = false;
       if (closed || profile() || busy) return;
-      if (!ready) status.text = 'Discord linking is unavailable';
+      if (!ready && (!linkResult || retry))
+        status.text = 'Discord linking is unavailable';
       else if (retry) status.text = 'Select Link Discord to continue';
     };
     void check(false);
     button(181, 434, 212, 'Link Discord', () => {
-      if (busy || profile() || linkPopup) return;
+      if (busy || profile() || (linkPopup && !linkPopup.closed)) return;
       if (!ready) {
         void check(true);
         return;
@@ -205,6 +239,8 @@ export function openCasinoAvatarEditor(
       const id = [...crypto.getRandomValues(new Uint8Array(32))]
         .map((byte) => byte.toString(16).padStart(2, '0'))
         .join('');
+      const flow = crypto.randomUUID().replaceAll('-', '');
+      linkFlow = flow;
       void (async () => {
         ready = await discordLinkAvailable(botUrl);
         if (!ready) {
@@ -217,17 +253,13 @@ export function openCasinoAvatarEditor(
         if (closed || popup.closed) return;
         const url = new URL('/casino/discord/link', botUrl);
         url.searchParams.set('challenge', id);
+        url.searchParams.set('flow', flow);
         popup.location.href = url.toString();
-        linkPopup = null;
         status.text = 'Finish linking in Discord';
-      })()
-        .catch(() => {
-          popup.close();
-          if (!closed) status.text = 'Could not start Discord linking';
-        })
-        .finally(() => {
-          linkPopup = null;
-        });
+      })().catch(() => {
+        popup.close();
+        if (!closed) status.text = 'Could not start Discord linking';
+      });
     });
   }
   const refreshProfile = () => {

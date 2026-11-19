@@ -12,6 +12,8 @@ Creation, seating, funding, and host assignment are atomic. Table creators auto-
 
 Entry-fee games settle once per complete game. `src/game-prizes.ts` normalizes winners, including tied scored games and Spades teams. Poker and Blackjack settle actual per-seat chip deltas per hand, not winner flags. Never return a casino stack before all wagers and claims are resolved. Never let legacy or solo chips enter a room wallet. House-funded Blackjack is intentionally not zero-sum among players.
 
+`my_lifetime_winnings` sums positive multiplayer settlement gains for the caller. Room cleanup rolls those gains into private `ArchivedWinnings` before removing the room ledger. Use the [counter retirement migration](../docs/room-economy.md#retiring-the-hands-and-wins-counters) for the first release that removes the old counter table.
+
 The module stores game JSON on `GameTable`. Shared rules decide legal moves; the client sends intents and renders subscribed state. All wallet-affecting operations require authenticated ownership. Private `OperatorSession` records bind a sender to the room/client session; a public client id or unverified Discord identity is insufficient authority.
 
 ## Lifecycle and generated API

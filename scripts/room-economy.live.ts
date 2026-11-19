@@ -31,6 +31,9 @@ async function connect(name: string) {
           .onApplied(() => resolve(db))
           .onError(reject)
           .subscribeToAllTables();
+        db.subscriptionBuilder()
+          .onError(reject)
+          .subscribe('SELECT * FROM my_lifetime_winnings');
       })
       .onConnectError((_ctx, error) => reject(error))
       .build();
@@ -396,19 +399,82 @@ try {
     shoePreserved: true,
     immediateRefundWithoutCpuBet: true,
   });
-  writeFileSync(
-    '/tmp/room-economy-fixtures.json',
-    JSON.stringify({
-      room: room.code,
-      lobbyId: room.id,
-      actors: people.map(({ name, clientId, token }) => ({
-        name,
-        clientId,
-        token,
-      })),
-    }),
-    { mode: 0o600 },
+  const expectedWinnings = new Map<string, bigint>();
+  for (const row of db.gameSettlement.iter()) {
+    if (row.lobbyId !== room.id) continue;
+    const players: { walletId: string; profit: string }[] = JSON.parse(
+      row.summaryJson,
+    );
+    for (const player of players) {
+      const profit = BigInt(player.profit);
+      if (profit > 0n)
+        expectedWinnings.set(
+          player.walletId,
+          (expectedWinnings.get(player.walletId) ?? 0n) + profit,
+        );
+    }
+  }
+  const winnings = (actor: typeof alice) =>
+    [...actor.connection.db.myLifetimeWinnings.iter()][0]?.units;
+  await until(
+    () =>
+      people.every(
+        (actor) =>
+          winnings(actor) === (expectedWinnings.get(memberId(actor)) ?? 0n),
+      ),
+    'Each viewer sees their own winnings from paid settlements',
   );
+  assert.ok(people.some((actor) => winnings(actor)! > wallet(actor).profit));
+  const beforeSolo = winnings(alice);
+  const known = new Set([...db.gameTable.iter()].map((row) => row.id));
+  await alice.connection.reducers.startSoloGame({
+    clientId: alice.clientId,
+    name: alice.name,
+    gameType: 'poker',
+    seatCount: 2,
+    settings: undefined,
+  });
+  const solo = [...db.gameTable.iter()].find(
+    (row) =>
+      !known.has(row.id) && row.gameType === 'poker' && row.lobbyId !== room.id,
+  )!;
+  assert.ok(solo);
+  await intent(alice, solo.id, { type: 'fold' });
+  assert.equal(
+    JSON.parse(db.gameTable.id.find(solo.id)!.stateJson).phase,
+    'finished',
+  );
+  assert.equal(db.gameSettlement.id.find(`${solo.id}:1`), null);
+  assert.equal(winnings(alice), beforeSolo);
+  record('lifetime-winnings', {
+    paidSettlementsOnly: true,
+    privatePerIdentity: true,
+  });
+  if (process.argv.includes('--verify-cleanup')) {
+    await alice.connection.reducers.closeLobby({ lobbyCode: room.code });
+    await until(() => !db.lobby.id.find(room.id), 'The closed room is purged');
+    assert.ok(
+      people.every(
+        (actor) =>
+          winnings(actor) === (expectedWinnings.get(memberId(actor)) ?? 0n),
+      ),
+    );
+    record('lifetime-winnings-after-cleanup', { archived: true });
+  } else {
+    writeFileSync(
+      '/tmp/room-economy-fixtures.json',
+      JSON.stringify({
+        room: room.code,
+        lobbyId: room.id,
+        actors: people.map(({ name, clientId, token }) => ({
+          name,
+          clientId,
+          token,
+        })),
+      }),
+      { mode: 0o600 },
+    );
+  }
   writeFileSync(
     '/tmp/room-economy-proof.json',
     JSON.stringify(proofs, null, 2),

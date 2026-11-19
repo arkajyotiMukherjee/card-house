@@ -5,6 +5,8 @@ import { DbConnection } from '../client/src/module_bindings/index.ts';
 import {
   RECEPTION,
   floorRows,
+  floorTable,
+  floorDirectionPath,
   tableEntrance,
   walkable,
   floorPath,
@@ -84,12 +86,39 @@ function operator(actor: Actor, role: 'admin' | 'discord') {
 
 assert.equal(nextFloorSlot([4, 0, 2, 1]), 3);
 assert.equal(floorPath(SPAWN, { x: 6, y: 4 }, floorRows(1)).length, 0);
+const rows = floorRows(6);
+for (const slot of [1, 3]) {
+  const center = floorTable(slot);
+  const north = { x: center.x, y: center.y - 2 };
+  const south = tableEntrance(slot);
+  const expected = Array.from({ length: 4 }, (_, step) => ({
+    x: center.x,
+    y: north.y + step + 1,
+  }));
+  const otherTables = new Set([0, 2, 4]);
+  assert.deepEqual(floorPath(north, south, rows, otherTables), expected);
+  assert.deepEqual(
+    floorDirectionPath(north, { x: 0, y: 1 }, rows, otherTables),
+    expected,
+  );
+  const withTable = new Set([...otherTables, slot]);
+  assert.ok(floorPath(north, south, rows, withTable).length > expected.length);
+  assert.deepEqual(
+    floorDirectionPath(north, { x: 0, y: 1 }, rows, withTable),
+    [],
+  );
+  assert.deepEqual(
+    floorPath(center, south, rows, withTable),
+    expected.slice(2),
+  );
+}
+const occupied = new Set(Array.from({ length: 25 }, (_, i) => i));
 for (let i = 0; i < 25; i += 1) {
   const target = tableEntrance(i),
     rows = floorRows(25);
-  const path = floorPath(SPAWN, target, rows);
+  const path = floorPath(SPAWN, target, rows, occupied);
   assert.deepEqual(path.at(-1), target);
-  assert.ok(path.every((point) => walkable(point, rows)));
+  assert.ok(path.every((point) => walkable(point, rows, occupied)));
 }
 
 try {
@@ -122,6 +151,23 @@ try {
     });
   await join(hostPlayer, 0);
   await hostPlayer.db.reducers.enterCasinoFloor({ lobbyId: room.id });
+  const vacant = floorTable(1);
+  await hostPlayer.db.reducers.moveCasinoAvatar({
+    lobbyId: room.id,
+    ...vacant,
+    chair: -1,
+  });
+  const hostPath = () =>
+    JSON.parse(
+      [...hostPlayer.db.db.casinoPresence.iter()].find((row) =>
+        row.id.endsWith(hostPlayer.clientId),
+      )?.pathJson ?? '[]',
+    );
+  await until(
+    () => hostPath().at(-1)?.y === vacant.y,
+    'Server accepts walks through a vacant table slot',
+  );
+  assert.ok(hostPath().every((point: { x: number }) => point.x === vacant.x));
   const peers = await group(15, async (index) => {
     const actor = await connect(['SELECT * FROM my_casino_room_chat']);
     await join(actor, index + 1);
@@ -162,6 +208,7 @@ try {
     owner.reducers.moveCasinoAvatar({ lobbyId: room.id, ...point, chair });
   await new Promise((resolve) => setTimeout(resolve, 160));
   await assert.rejects(floorMove({ x: 6, y: 4 }), /cannot be reached/);
+  await assert.rejects(floorMove(floorTable(2)), /cannot be reached/);
   await floorMove(RECEPTION);
   const presence = () =>
     [...owner.db.casinoPresence.iter()].find((row) =>

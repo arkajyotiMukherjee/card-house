@@ -11,7 +11,5 @@ import {
 } from "spacetimedb";
 
 export default __t.row({
-  clientId: __t.string().primaryKey(),
-  handsPlayed: __t.u32(),
-  gamesWon: __t.u32(),
+  units: __t.u128(),
 });

@@ -62,7 +62,7 @@ import {
   STROKE_HOT,
 } from './canvas-ui';
 import { tableScenePaint } from './client-look';
-import { statsCaption } from './client-stats';
+import { lifetimeWinningsCaption } from './lifetime-winnings';
 import { coinDialog, coinDialogOpen } from './coin-dialog';
 import { CrazyEightsDriver } from './crazy-eights-driver';
 import { eventMessage, readStoredEvent } from './event-messages';
@@ -179,11 +179,11 @@ export class GameScene extends ex.Scene {
   private hudTurn!: ex.Text;
   private hudPhase!: ex.Text;
   private hudRound!: ex.Text;
-  private statsText!: ex.Text;
-  private statsLine = statsCaption({ handsPlayed: 0, gamesWon: 0 });
+  private winningsText!: ex.Text;
+  private winningsLine = lifetimeWinningsCaption();
   private tableActor: ex.Actor | undefined;
   private leaveControl?: ex.Actor;
-  private statsActor?: ex.Actor;
+  private winningsActor?: ex.Actor;
   private readonly prizeBadge = new PrizePoolBadge();
 
   get usesClassicLayout(): boolean {
@@ -213,10 +213,10 @@ export class GameScene extends ex.Scene {
     }
   }
 
-  setStats(line: string): void {
-    this.statsLine = line;
-    if (this.statsText) {
-      this.statsText.text = line;
+  setLifetimeWinnings(line: string): void {
+    this.winningsLine = line;
+    if (this.winningsText) {
+      this.winningsText.text = line;
     }
   }
 
@@ -343,16 +343,16 @@ export class GameScene extends ex.Scene {
     anchorTableActor(this.linkActor, 'left');
     this.add(this.linkActor);
 
-    this.statsText = uiText(this.statsLine, 17, GOLD);
-    const stats = new ex.Actor({
+    this.winningsText = uiText(this.winningsLine, 15, GOLD);
+    const winnings = new ex.Actor({
       pos: ex.vec(isMobileDevice() ? 256 : 280, 22),
       anchor: ex.vec(0, 0),
       z: 21,
     });
-    stats.graphics.use(this.statsText);
-    this.statsActor = stats;
-    anchorTableActor(stats, 'left');
-    this.add(stats);
+    winnings.graphics.use(this.winningsText);
+    this.winningsActor = winnings;
+    anchorTableActor(winnings, 'left');
+    this.add(winnings);
 
     this.addLeaveButton();
     this.addCounterButton();
@@ -469,8 +469,14 @@ export class GameScene extends ex.Scene {
         )
       : undefined;
     this.prizeBadge.setAmount(prizePool);
-    if (this.statsActor)
-      this.statsActor.graphics.isVisible = !classic && prizePool === undefined;
+    if (this.winningsActor) {
+      this.winningsActor.pos.y = classic ? 61 : 22;
+      anchorTableActor(
+        this.winningsActor,
+        'left',
+        classic ? 16 : isMobileDevice() ? 256 : 280,
+      );
+    }
     // Keep fallback HUD geometry separate from the scene-owned prize badge.
     anchorTableActor(
       this.hudPlate,

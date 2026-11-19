@@ -6,6 +6,8 @@ The lobby defaults to a leaderboard beside the table browser. Rankings use settl
 
 A player who cannot afford the cheapest payable table and has no committed funds can refill to the room's original grant. With no payable tables, the threshold is 20 chips. Every refill is tracked and excluded from profit.
 
+**Lifetime winnings** in the menu, lobby, and table sum the positive chips earned after stakes on settled multiplayer results. Solo practice, payouts that only return the stake, and transfers do not count. Losses affect the room's net ranking and leave the lifetime winnings total unchanged. The total uses the signed-in SpacetimeDB identity and survives room cleanup. Past results count when their ledger entries still exist. Previously purged rooms have no settlement history to recover.
+
 ## Entry-fee games
 
 Bluff, President, Go Fish, Crazy Eights, Rummy, Hearts, and Spades charge the host's chosen entry fee (default 20). Joining reserves chips; leaving before the start refunds them. Starting commits all reservations atomically. One fee covers a complete game, including all internal Hearts or Spades rounds.
@@ -45,3 +47,16 @@ Keep `CARDHOUSE_BOT_SESSION_FILE` on persistent storage with restrictive permiss
 ## Rollout
 
 This change removes the retired competition mode. Existing games remain free legacy tables: their old chips never become wallet chips. Newly created tables use the economy. See [the staged migration runbook](room-economy-migration.md) before publishing to an existing database. Deployment remains a separate, explicitly requested action.
+
+### Retiring the hands and wins counters
+
+The production workflow runs this migration with database-owner credentials if Maincloud refuses to remove a populated `ClientStats` table. The temporary module stops writes to the old table. The script deletes only its counter rows and publishes the final schema with the usual database reset protection. Existing clients disconnect when the counter table is removed, so the workflow rolls out the matching client in the same release.
+
+For a manual release, run the same command with the SpacetimeDB CLI and database-owner credentials.
+
+```sh
+python3 scripts/retire-client-stats.py --spacetime spacetimedb-cli \
+  --server https://maincloud.spacetimedb.com --database cardhouse --allow-remote
+```
+
+For an isolated rehearsal, use a local `room-economy-*` database and omit `--allow-remote`. When the owner credentials are in a separate CLI configuration file, pass its path as `--config-path`.

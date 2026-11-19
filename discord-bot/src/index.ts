@@ -91,6 +91,7 @@ export async function main(attached?: Server): Promise<void> {
     release,
     secret: process.env.DISCORD_OAUTH_CLIENT_SECRET?.trim() ?? '',
     redirectUri: process.env.DISCORD_OAUTH_REDIRECT_URI?.trim() ?? '',
+    publicUrl,
     isReady: () => connection?.isActive === true,
     complete: async (id, discordUserId) => {
       if (!connection) throw new Error('Still connecting to SpacetimeDB');
@@ -161,6 +162,9 @@ export async function main(attached?: Server): Promise<void> {
     return;
   }
   const lobby = connection;
+  console.log(
+    `Discord bot SpacetimeDB identity: ${lobby.identity?.toHexString()}`,
+  );
   if (token.length > 0)
     attachLeaderboardWatch(lobby, discordRestApi({ token }), (error) =>
       console.error(

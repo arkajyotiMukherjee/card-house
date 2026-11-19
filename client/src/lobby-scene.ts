@@ -43,7 +43,7 @@ import {
   buttonFontSize,
 } from './button-style';
 import { pixelFont } from './boot-scene';
-import { statsCaption } from './client-stats';
+import { lifetimeWinningsCaption } from './lifetime-winnings';
 import { subscribeLobbyTables } from './connect';
 import { joinFailureMessage } from './join-errors';
 import { showLobbyUrl, tableCodeForId } from './join-path';
@@ -218,7 +218,7 @@ export class LobbyScene {
   private codeText: ex.Text | undefined;
   private codeActor: ex.Actor | undefined;
   private errorText: ex.Text | undefined;
-  private statsActor: ex.Actor | undefined;
+  private winningsActor: ex.Actor | undefined;
   private linkLine = '';
   private linkText = canvasText('', 8, GOLD);
   private linkActor: ex.Actor | undefined;
@@ -230,11 +230,7 @@ export class LobbyScene {
   private popup: ex.Actor | undefined;
   private discordBadge: ex.Actor | undefined;
   private tablesReady: Promise<boolean> = Promise.resolve(false);
-  private statsText = canvasText(
-    statsCaption({ handsPlayed: 0, gamesWon: 0 }),
-    8,
-    DIM,
-  );
+  private winningsText = canvasText(lifetimeWinningsCaption(), 8, DIM);
   private chatOpen = false;
   private chatUnread = 0;
   private chatToggle?: ex.Actor;
@@ -295,8 +291,9 @@ export class LobbyScene {
     );
   }
 
-  setStats(line: string): void {
-    this.statsText.text = line;
+  setLifetimeWinnings(line: string): void {
+    this.winningsText.text = line;
+    this.floor?.invalidate();
   }
 
   /** A short line while the socket is being replaced. Empty once it is up. */
@@ -616,15 +613,15 @@ export class LobbyScene {
         .catch((error) => this.setError(errorMessage(error)));
     });
     this.buildLeaveRoom();
-    const stats = new ex.Actor({
+    const winnings = new ex.Actor({
       pos: ex.vec(20, 518),
       anchor: ex.vec(0, 0),
       z: 20,
     });
-    stats.graphics.use(this.statsText);
-    anchorLobbyActor(stats);
-    this.statsActor = stats;
-    this.scene.add(stats);
+    winnings.graphics.use(this.winningsText);
+    anchorLobbyActor(winnings);
+    this.winningsActor = winnings;
+    this.scene.add(winnings);
     this.floor = new CasinoFloor(this.scene, {
       snapshot: () => this.casinoSnapshot(),
       active: () =>
@@ -2443,6 +2440,7 @@ export class LobbyScene {
         wallets.find((wallet) => wallet.clientId === this.clientId)
           ?.available ?? 0n,
       ),
+      lifetimeWinnings: this.winningsText.text,
       roomVoice:
         lobby?.discordLobbyVoiceChannelId && lobby.discordGuildId
           ? `https://discord.com/channels/${lobby.discordGuildId}/${lobby.discordLobbyVoiceChannelId}`
@@ -2558,8 +2556,8 @@ export class LobbyScene {
         (TABLE_LIST.row.w + tableGutter() * 2) / (PHONE_LAYOUT ? 10 : 8),
       );
       this.errorText.text = wrapText(message, columns).join('\n');
-      if (PHONE_LAYOUT && this.statsActor) {
-        this.statsActor.graphics.isVisible = message.length === 0;
+      if (PHONE_LAYOUT && this.winningsActor) {
+        this.winningsActor.graphics.isVisible = message.length === 0;
       }
     }
   }

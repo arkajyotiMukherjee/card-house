@@ -313,6 +313,6 @@ These aren’t needed for v1, but the architecture supports them cleanly:
   - saved preferred name (done: `preferredNames` in localStorage, keyed by `clientId`; Create Room and Join Room start with the name this client used last),
   - color theme (done: `theme` in localStorage, keyed by `clientId`, stores the table felt and the background color; the menu Theme panel sets both, and the menu, lobby, and every table paint them. Background choices are green, purple, red, and black. The default stays green),
   - card customizations (done: `cardAppearance` in localStorage stores a front style and a back style from the Pixel Poker Pack. The Theme panel saves them, and this browser draws that front and back on the menu, the lobby, and the table. Not sent to SpacetimeDB),
-  - simple stats (hands played, games won). `ClientStats` stores both for a `clientId`. A finished hand adds one hand for each seated player, and a game win adds one win for each winner.
+  - lifetime winnings from settled multiplayer games and hands. The caller-scoped `my_lifetime_winnings` view keeps that total available across rooms and after room cleanup.
 
 You can schedule other optional milestones after the core loop (lobby → tables → play → back to lobby) is rock solid.

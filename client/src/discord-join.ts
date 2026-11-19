@@ -2,6 +2,39 @@ import {
   defaultPlayerName,
   readDiscordJoinIdentity,
 } from '../../src/shared/discord-player-name';
+import {
+  DISCORD_LINK_RESULT_PARAM,
+  DISCORD_LINK_FLOW_PARAM,
+  readDiscordLinkFlow,
+  readDiscordLinkResult,
+  type DiscordLinkResult,
+} from '../../src/shared/casino-discord-link';
+
+export function discordLinkChannel(): BroadcastChannel | undefined {
+  return typeof BroadcastChannel === 'function'
+    ? new BroadcastChannel('cardhouse-discord-link')
+    : undefined;
+}
+
+export function takeDiscordLinkResult(): DiscordLinkResult | undefined {
+  const url = new URL(window.location.href);
+  const result = readDiscordLinkResult(
+    url.searchParams.get(DISCORD_LINK_RESULT_PARAM),
+  );
+  if (!result) return undefined;
+  const flow = readDiscordLinkFlow(
+    url.searchParams.get(DISCORD_LINK_FLOW_PARAM),
+  );
+  url.searchParams.delete(DISCORD_LINK_RESULT_PARAM);
+  url.searchParams.delete(DISCORD_LINK_FLOW_PARAM);
+  window.history.replaceState(window.history.state, '', url);
+  if (flow) {
+    const channel = discordLinkChannel();
+    channel?.postMessage({ result, flow });
+    channel?.close();
+  }
+  return result;
+}
 
 export type JoinName =
   { state: 'ready'; name: string } | { state: 'lookup'; discordUserId: string };

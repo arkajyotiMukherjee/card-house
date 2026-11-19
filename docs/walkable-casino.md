@@ -11,7 +11,7 @@ The approved [casino concept](lobby-casino-concepts/B-walkable-casino.png) estab
 - Desktop `/` opens free-text quick chat, Enter sends, and Esc closes. The Chat button opens history on both desktop and touch devices. A recent room message can appear over the sender on the floor, then expires. Table chat has its own history.
 - Free rooms support 16 concurrent humans including reserved seats, and 3 live tables. Pro test rooms support 100 humans and 25 live tables. Room-tier changes require an operator. The planned Pro price is $5 per month. Billing is outside this release.
 
-The lobby subscribes to room-scoped table summaries, wallet, occupancy, movement, and chat. Full table state is fetched when opening a table. Walking starts on the local client, and the server validates routes against the shared terrain grid. Players can cross paths. Lounge seats are exclusive. Leaving a running hand removes the player from the visible seated count while the game holds their seat for its existing return period. Reduced-motion users see movement without camera easing or animated walking frames.
+The lobby subscribes to room-scoped table summaries, wallet, occupancy, movement, and chat. Full table state is fetched when opening a table. Walking starts on the local client, and the server validates routes against the shared terrain grid. Only placed tables block their slots. Players can cross paths. Lounge seats are exclusive. Leaving a running hand removes the player from the visible seated count while the game holds their seat for its existing return period. Reduced-motion users see movement without camera easing or animated walking frames.
 
 ## Discord setup
 
@@ -35,6 +35,8 @@ Set these variables on the Discord bot service.
 Allow the bot to view and read the linked voice channels and their built-in text chat. Channel creation uses Manage Channels. Moving members uses Move Members, and monitoring speaking metadata requires Connect. Register the callback with the exact scheme, host, and path. The browser build uses the existing `CARDROOM_BOT_URL` for the OAuth entry point.
 
 The [production workflow](hostinger-deployment.md) publishes the game client and database, then deploys the Discord bot to `bot.arkaive.studio`. Check `GET /casino/discord/status` after rollout. The response reports the running commit and whether the OAuth settings and database connection are ready. An `available: true` response enables the button. Complete an OAuth sign-in to verify the registered redirect, client secret, and database operator role.
+
+The callback returns the browser to `CARDROOM_PUBLIC_URL`, including when authorization is cancelled or fails. Card House displays the result in the avatar editor. If it reports that the bot needs permission, use the public identity logged at startup to check the `CasinoOperator` grant. The runtime log also identifies token exchange or profile lookup failures without logging credentials.
 
 OAuth uses the identify scope, a short-lived browser-bound challenge, and PKCE. Guests keep their appearance in browser storage. Once verified, the same Discord account can restore the appearance on another browser. Only mapped voice-channel text is mirrored. Ordinary guild text, DMs, bot messages, webhooks, and attachment-only posts stay outside the bridge. The bridge handles edits and deletions and deduplicates by Discord message ID. The module checks the subscriber's active room or table before delivering mirrored messages.
 

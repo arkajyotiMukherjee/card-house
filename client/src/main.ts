@@ -4,14 +4,9 @@ import * as ex from 'excalibur';
 import { demoImages } from './boot-scene';
 import { CardHouseLoader, LoadingScreen } from './loading-screen';
 import { getOrCreateClientId } from './client-id';
+import { openCasinoAvatarEditor } from './casino-profile';
 import { reloadLanding, reloadLoadingLine } from './reload-landing';
-import {
-  clearTableSession,
-  countsForTableSession,
-  emptyClientStats,
-  statsCaptionFor,
-  statsForClient,
-} from './client-stats';
+import { lifetimeWinningsCaption } from './lifetime-winnings';
 import { connectCardroom, linkStatusLine } from './connect';
 import {
   clearLastRoom,
@@ -29,6 +24,7 @@ import {
   cardroomBotUrl,
   fetchDefaultPlayerName,
   joinNameFromSearch,
+  takeDiscordLinkResult,
 } from './discord-join';
 import {
   discordIdentityFromSearch,
@@ -60,6 +56,8 @@ import { applyPageBackground } from './page-background';
 import { backgroundHex } from './theme';
 
 const clientId = getOrCreateClientId();
+localStorage.removeItem('tableSessionStats');
+const discordLinkResult = takeDiscordLinkResult();
 const theme = tableScenePaint(clientId);
 applyPageBackground(theme.background);
 const initialTableLink = tableLinkFromPath(window.location.pathname);
@@ -159,7 +157,7 @@ const reloadScene = new ex.Scene();
 const loading = new LoadingScreen(reloadScene);
 const menu = new MenuScene(clientId);
 const savedRoomAtStart =
-  readLastRoom()?.lobbyCode === joinCode || !joinCode
+  !discordLinkResult && (readLastRoom()?.lobbyCode === joinCode || !joinCode)
     ? readLastRoom()
     : undefined;
 const loadingLine = reloadLoadingLine(savedRoomAtStart);
@@ -221,297 +219,267 @@ void engine.start(loader).then(() => {
     engine.goToScene('menu');
   }
   applyContainScale();
-  let clientStatsReady = false;
-  let publishStats = (): void => {};
   let lobbyScene: LobbyScene | undefined;
   let game: GameScene | undefined;
   let rejoinAfterReconnect = (): void => {};
-  connectCardroom(
-    {
-      onPhase: (phase) => {
-        menu.setConnectionPhase(phase);
-        const line = linkStatusLine(phase);
-        lobbyScene?.setLinkStatus(line);
-        game?.setLinkStatus(line);
-      },
-      onReconnected: () => {
-        rejoinAfterReconnect();
-      },
-      onClientStats: () => {
-        clientStatsReady = true;
-        publishStats();
-      },
-      onSubscribed: (connection) => {
-        menu.casinoConnection = connection;
-        const joined: { panel?: LobbyPanel } = {};
-        let openTableId = '';
-        let endTableSession = (): void => {};
-        let openSeatedTable = (
-          _tableId: string,
-          _lobbyMemberId: string,
-        ): void => {};
-        const tableScene = new GameScene(
-          connection,
-          clientId,
-          () => {
-            if (!hasOwnMembership(readOwnMembers(connection), clientId)) {
-              clearLastRoom();
-              endTableSession();
-              joined.panel?.resetAfterLeave();
-              engine.goToScene('menu');
-              return;
-            }
-            forgetTable();
-            const room = readLastRoom();
-            if (room) showLobbyUrl(room.lobbyCode);
-            endTableSession();
-            engine.goToScene('boot');
-          },
-          theme.table,
-        );
-        game = tableScene;
-        engine.add('game', tableScene);
-        const roomScene = new LobbyScene(
-          engine,
-          scene,
-          connection,
-          clientId,
-          (tableId, lobbyMemberId) => {
-            openSeatedTable(tableId, lobbyMemberId);
-          },
-          () => {
+  connectCardroom({
+    onPhase: (phase) => {
+      menu.setConnectionPhase(phase);
+      const line = linkStatusLine(phase);
+      lobbyScene?.setLinkStatus(line);
+      game?.setLinkStatus(line);
+    },
+    onReconnected: () => {
+      rejoinAfterReconnect();
+    },
+    onSubscribed: (connection) => {
+      menu.casinoConnection = connection;
+      const joined: { panel?: LobbyPanel } = {};
+      let openTableId = '';
+      let endTableSession = (): void => {};
+      let openSeatedTable = (
+        _tableId: string,
+        _lobbyMemberId: string,
+      ): void => {};
+      const tableScene = new GameScene(
+        connection,
+        clientId,
+        () => {
+          if (!hasOwnMembership(readOwnMembers(connection), clientId)) {
             clearLastRoom();
             endTableSession();
             joined.panel?.resetAfterLeave();
             engine.goToScene('menu');
-          },
-        );
-        lobbyScene = roomScene;
-        publishStats = (): void => {
-          const lifetime = statsForClient(
-            connection.db.clientStats.iter(),
-            clientId,
-          );
-          const session =
-            openTableId.length > 0 && clientStatsReady
-              ? countsForTableSession(
-                  clientId,
-                  openTableId,
-                  lifetime,
-                  localStorage,
-                )
-              : emptyClientStats();
-          menu.setStats(statsCaptionFor('menu', lifetime, session));
-          roomScene.setStats(statsCaptionFor('lobby', lifetime, session));
-          tableScene.setStats(statsCaptionFor('table', lifetime, session));
-        };
-        endTableSession = (): void => {
-          openTableId = '';
-          clearTableSession(localStorage);
-          publishStats();
-        };
-        openSeatedTable = (tableId, lobbyMemberId): void => {
-          rememberTable(tableId);
-          const saved = readLastRoom();
-          if (saved) showTableUrl(saved.lobbyCode, tableId);
-          openTableId = tableId;
-          publishStats();
-          tableScene.open(tableId, lobbyMemberId);
-          engine.goToScene('game');
-        };
-        roomScene.mount();
-        const savedRoom =
-          readLastRoom()?.lobbyCode === joinCode || !joinCode
-            ? readLastRoom()
-            : undefined;
-        let pendingReload: LastRoom | undefined = savedRoom;
-        let reloadBusy = false;
-        let pendingTableCode = initialTableLink?.tableCode;
-        const followTableLink = async (lobbyCode: string): Promise<boolean> => {
-          const code = pendingTableCode;
-          if (!code || lobbyCode !== initialTableLink?.lobbyCode) return false;
-          pendingTableCode = undefined;
-          return roomScene.followTableLink(code);
-        };
-        const panel = mountLobbyPanel(
-          engine,
-          scene,
-          connection,
-          clientId,
-          discordIdentity,
-          {
-            returning: savedRoomAtStart !== undefined,
-            inputBlocked: () => roomScene.dialogOpen,
-            onJoined: (lobby) => {
-              if (pendingReload) {
-                void finishReload(lobby);
-                return;
-              }
-              if (openTableId) return;
-              void roomScene.openLobby(lobby.id, lobby.code).then((ready) => {
-                if (ready) void followTableLink(lobby.code);
-              });
-            },
-          },
-        );
-        joined.panel = panel;
-        rejoinAfterReconnect = () => {
-          const saved = readLastRoom();
-          if (!saved) {
             return;
           }
-          void connection.reducers
-            .joinLobby({
-              lobbyCode: saved.lobbyCode,
-              clientId,
-              name: saved.name,
-            })
-            .catch((error: unknown) => {
-              const message = error instanceof Error ? error.message : '';
-              if (!roomGoneMessage(message)) {
-                return;
-              }
-              clearLastRoom();
-              endTableSession();
-              panel.resetAfterLeave();
-              engine.goToScene('menu');
-            });
-        };
-        menu.connect(
-          (entry) => panel.enter(entry.kind, entry.name, entry.code),
-          () => {
-            engine.goToScene('boot');
-          },
-        );
-        menu.connectSolo(async (start) => {
-          try {
-            await connection.reducers.startSoloGame({
-              clientId,
-              name: start.name,
-              gameType: start.gameType,
-              seatCount: start.seatCount,
-              settings: start.settings,
-            });
-          } catch (error: unknown) {
-            return error instanceof Error ? error.message : 'Could not start';
-          }
-          const seat = findSoloSeat(
-            clientId,
-            readSoloLobbies(connection),
-            readSoloMembers(connection),
-            readSoloTables(connection),
-          );
-          if (!seat) {
-            return 'Could not open the table';
-          }
-          rememberLobby(seat.code, start.name);
-          const ready = await roomScene.openLobby(seat.lobbyId, seat.code);
-          if (!ready) {
-            return 'Could not open the table';
-          }
-          openSeatedTable(seat.tableId, seat.lobbyMemberId);
-          return undefined;
-        });
-        menu.connectLook((look) => {
-          const hex = backgroundHex(look.background);
-          applyPageBackground(hex);
-          const color = ex.Color.fromHex(hex);
-          engine.backgroundColor = color;
-          scene.backgroundColor = color;
-          tableScene.setTableStyle(look.table);
-          tableScene.setBackground(hex);
-        });
-        if (joinCode && !savedRoom) {
-          const joinName = joinNameFromSearch(window.location.search);
-          if (joinName.state === 'ready') {
-            menu.openJoin(joinCode, joinName.name);
-          } else {
-            void fetchDefaultPlayerName(
-              cardroomBotUrl(),
-              joinName.discordUserId,
-            ).then((name) => {
-              menu.openJoin(joinCode, name);
-            });
-          }
-        } else if (savedRoom) {
-          void rejoinSavedRoom(connection, savedRoom);
-        }
-
-        async function finishReload(lobby: LobbyRow): Promise<void> {
-          const saved = pendingReload;
-          if (!saved || reloadBusy || lobby.code !== saved.lobbyCode) {
-            return;
-          }
-          reloadBusy = true;
-          try {
-            const ready = await roomScene.openLobby(lobby.id, lobby.code);
-            const atTable =
-              ready &&
-              (pendingTableCode
-                ? await followTableLink(lobby.code)
-                : saved.tableId.length > 0 &&
-                  roomScene.reopenIfSeated(saved.tableId));
-            const landing = reloadLanding({ atTable, inRoom: true });
-            pendingReload = undefined;
-            if (landing === 'table') {
+          forgetTable();
+          const room = readLastRoom();
+          if (room) showLobbyUrl(room.lobbyCode);
+          endTableSession();
+          engine.goToScene('boot');
+        },
+        theme.table,
+      );
+      game = tableScene;
+      engine.add('game', tableScene);
+      const roomScene = new LobbyScene(
+        engine,
+        scene,
+        connection,
+        clientId,
+        (tableId, lobbyMemberId) => {
+          openSeatedTable(tableId, lobbyMemberId);
+        },
+        () => {
+          clearLastRoom();
+          endTableSession();
+          joined.panel?.resetAfterLeave();
+          engine.goToScene('menu');
+        },
+      );
+      lobbyScene = roomScene;
+      const publishWinnings = (): void => {
+        const [row] = connection.db.myLifetimeWinnings.iter();
+        const caption = lifetimeWinningsCaption(row?.units ?? 0n);
+        menu.setLifetimeWinnings(caption);
+        roomScene.setLifetimeWinnings(caption);
+        tableScene.setLifetimeWinnings(caption);
+      };
+      endTableSession = (): void => {
+        openTableId = '';
+      };
+      openSeatedTable = (tableId, lobbyMemberId): void => {
+        rememberTable(tableId);
+        const saved = readLastRoom();
+        if (saved) showTableUrl(saved.lobbyCode, tableId);
+        openTableId = tableId;
+        tableScene.open(tableId, lobbyMemberId);
+        engine.goToScene('game');
+      };
+      roomScene.mount();
+      const savedRoom = savedRoomAtStart;
+      let pendingReload: LastRoom | undefined = savedRoom;
+      let reloadBusy = false;
+      let pendingTableCode = initialTableLink?.tableCode;
+      const followTableLink = async (lobbyCode: string): Promise<boolean> => {
+        const code = pendingTableCode;
+        if (!code || lobbyCode !== initialTableLink?.lobbyCode) return false;
+        pendingTableCode = undefined;
+        return roomScene.followTableLink(code);
+      };
+      const panel = mountLobbyPanel(
+        engine,
+        scene,
+        connection,
+        clientId,
+        discordIdentity,
+        {
+          returning: savedRoomAtStart !== undefined,
+          inputBlocked: () => roomScene.dialogOpen,
+          onJoined: (lobby) => {
+            if (pendingReload) {
+              void finishReload(lobby);
               return;
             }
-            endTableSession();
-            if (landing === 'lobby') {
-              if (ready && saved.tableId.length > 0) {
-                forgetTable();
-              }
-              engine.goToScene('boot');
+            if (openTableId) return;
+            void roomScene.openLobby(lobby.id, lobby.code).then((ready) => {
+              if (ready) void followTableLink(lobby.code);
+            });
+          },
+        },
+      );
+      joined.panel = panel;
+      rejoinAfterReconnect = () => {
+        const saved = readLastRoom();
+        if (!saved) {
+          return;
+        }
+        void connection.reducers
+          .joinLobby({
+            lobbyCode: saved.lobbyCode,
+            clientId,
+            name: saved.name,
+          })
+          .catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : '';
+            if (!roomGoneMessage(message)) {
               return;
             }
             clearLastRoom();
+            endTableSession();
             panel.resetAfterLeave();
             engine.goToScene('menu');
-          } finally {
-            reloadBusy = false;
-          }
+          });
+      };
+      menu.connect(
+        (entry) => panel.enter(entry.kind, entry.name, entry.code),
+        () => {
+          engine.goToScene('boot');
+        },
+      );
+      menu.connectSolo(async (start) => {
+        try {
+          await connection.reducers.startSoloGame({
+            clientId,
+            name: start.name,
+            gameType: start.gameType,
+            seatCount: start.seatCount,
+            settings: start.settings,
+          });
+        } catch (error: unknown) {
+          return error instanceof Error ? error.message : 'Could not start';
         }
+        const seat = findSoloSeat(
+          clientId,
+          readSoloLobbies(connection),
+          readSoloMembers(connection),
+          readSoloTables(connection),
+        );
+        if (!seat) {
+          return 'Could not open the table';
+        }
+        rememberLobby(seat.code, start.name);
+        const ready = await roomScene.openLobby(seat.lobbyId, seat.code);
+        if (!ready) {
+          return 'Could not open the table';
+        }
+        openSeatedTable(seat.tableId, seat.lobbyMemberId);
+        return undefined;
+      });
+      menu.connectLook((look) => {
+        const hex = backgroundHex(look.background);
+        applyPageBackground(hex);
+        const color = ex.Color.fromHex(hex);
+        engine.backgroundColor = color;
+        scene.backgroundColor = color;
+        tableScene.setTableStyle(look.table);
+        tableScene.setBackground(hex);
+      });
+      if (discordLinkResult) {
+        openCasinoAvatarEditor(menu, connection, '', discordLinkResult);
+      } else if (joinCode && !savedRoom) {
+        const joinName = joinNameFromSearch(window.location.search);
+        if (joinName.state === 'ready') {
+          menu.openJoin(joinCode, joinName.name);
+        } else {
+          void fetchDefaultPlayerName(
+            cardroomBotUrl(),
+            joinName.discordUserId,
+          ).then((name) => {
+            menu.openJoin(joinCode, name);
+          });
+        }
+      } else if (savedRoom) {
+        void rejoinSavedRoom(connection, savedRoom);
+      }
 
-        async function rejoinSavedRoom(
-          db: DbConnection,
-          saved: LastRoom,
-        ): Promise<void> {
-          const error = await panel.enter('join', saved.name, saved.lobbyCode);
-          if (error) {
-            pendingReload = undefined;
-            if (roomGoneMessage(error)) {
-              clearLastRoom();
-              endTableSession();
-              panel.resetAfterLeave();
-              const landing = reloadLanding({ atTable: false, inRoom: false });
-              if (landing === 'menu') {
-                engine.goToScene('menu');
-              }
-            } else {
-              loading.show(error, false);
-            }
+      async function finishReload(lobby: LobbyRow): Promise<void> {
+        const saved = pendingReload;
+        if (!saved || reloadBusy || lobby.code !== saved.lobbyCode) {
+          return;
+        }
+        reloadBusy = true;
+        try {
+          const ready = await roomScene.openLobby(lobby.id, lobby.code);
+          const atTable =
+            ready &&
+            (pendingTableCode
+              ? await followTableLink(lobby.code)
+              : saved.tableId.length > 0 &&
+                roomScene.reopenIfSeated(saved.tableId));
+          const landing = reloadLanding({ atTable, inRoom: true });
+          pendingReload = undefined;
+          if (landing === 'table') {
             return;
           }
-          const lobby = lobbyByCode(lobbyRows(db), saved.lobbyCode);
-          if (lobby) {
-            await finishReload(lobby);
+          endTableSession();
+          if (landing === 'lobby') {
+            if (ready && saved.tableId.length > 0) {
+              forgetTable();
+            }
+            engine.goToScene('boot');
+            return;
           }
+          clearLastRoom();
+          panel.resetAfterLeave();
+          engine.goToScene('menu');
+        } finally {
+          reloadBusy = false;
         }
+      }
 
-        connection.db.clientStats.onInsert(() => {
-          publishStats();
-        });
-        connection.db.clientStats.onUpdate(() => {
-          publishStats();
-        });
-        connection.db.clientStats.onDelete(() => {
-          publishStats();
-        });
-        publishStats();
-      },
+      async function rejoinSavedRoom(
+        db: DbConnection,
+        saved: LastRoom,
+      ): Promise<void> {
+        const error = await panel.enter('join', saved.name, saved.lobbyCode);
+        if (error) {
+          pendingReload = undefined;
+          if (roomGoneMessage(error)) {
+            clearLastRoom();
+            endTableSession();
+            panel.resetAfterLeave();
+            const landing = reloadLanding({ atTable: false, inRoom: false });
+            if (landing === 'menu') {
+              engine.goToScene('menu');
+            }
+          } else {
+            loading.show(error, false);
+          }
+          return;
+        }
+        const lobby = lobbyByCode(lobbyRows(db), saved.lobbyCode);
+        if (lobby) {
+          await finishReload(lobby);
+        }
+      }
+
+      connection.db.myLifetimeWinnings.onInsert(publishWinnings);
+      connection.db.myLifetimeWinnings.onUpdate(publishWinnings);
+      connection.db.myLifetimeWinnings.onDelete(publishWinnings);
+      publishWinnings();
     },
-    clientId,
-  );
+  });
 });
 
 function readOwnMembers(

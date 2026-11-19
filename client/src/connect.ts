@@ -1,4 +1,3 @@
-import { clientStatsQuery } from './client-stats';
 import {
   beginOpen,
   decideLink,
@@ -55,8 +54,6 @@ export function roomEntryError(phase: ConnectionPhase): string | undefined {
 export interface CardroomHandlers {
   onPhase: (phase: ConnectionPhase) => void;
   onSubscribed: (connection: DbConnection) => void;
-  /** Fires when this clientId's ClientStats subscription has applied. */
-  onClientStats?: () => void;
   /**
    * Fires after a later socket replaces a dead one and the base queries are
    * already recorded. Scenes stay mounted; they do not reload.
@@ -66,6 +63,7 @@ export interface CardroomHandlers {
 
 interface LobbyQuery {
   myCasinoProfile: unknown;
+  myLifetimeWinnings: unknown;
   lobby: unknown;
   lobbyMember: unknown;
   myCasinoTables: unknown;
@@ -83,10 +81,7 @@ interface LobbyQuery {
  * and `theme` are not touched. The identity token, when one is kept, lives
  * under `stdbToken`.
  */
-export function connectCardroom(
-  handlers: CardroomHandlers,
-  clientId: string,
-): void {
+export function connectCardroom(handlers: CardroomHandlers): void {
   const host = sdkHost(__SPACETIMEDB_HOST__);
   const database = __SPACETIMEDB_DB__;
   const storage = localStorage;
@@ -155,12 +150,6 @@ export function connectCardroom(
     live
       .subscriptionBuilder()
       .onApplied(() => {
-        handlers.onClientStats?.();
-      })
-      .subscribe([clientStatsQuery(clientId)]);
-    live
-      .subscriptionBuilder()
-      .onApplied(() => {
         if (announced) {
           return;
         }
@@ -175,6 +164,7 @@ export function connectCardroom(
       .subscribe((query: LobbyQuery) => [
         query.lobby,
         query.myCasinoProfile,
+        query.myLifetimeWinnings,
         query.lobbyMember,
         query.myCasinoTables,
         query.voicePresence,

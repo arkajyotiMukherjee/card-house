@@ -8,6 +8,7 @@ import {
   floorPath,
   floorRows,
   floorRowsAt,
+  floorStepAllowed,
   nextFloorSlot,
   redirectFloorWalk,
   tableEntrance,
@@ -135,7 +136,6 @@ import {
   shouldRemoveEmptyTable,
 } from './table-cleanup';
 import { chatBodyRejection, chatMessageId } from './lobby-chat';
-import { addSeatCredit, seatStatCredits } from './player-stats';
 import { spectateBlock, spectatorRowId } from './spectator';
 import {
   tableChatBodyError,
@@ -520,12 +520,12 @@ const BotTurnSchedule = table(
   },
 );
 
-const ClientStats = table(
-  { name: 'ClientStats', public: true },
+// Winnings from rooms whose detailed wallet records were cleaned up.
+const ArchivedWinnings = table(
+  { name: 'ArchivedWinnings' },
   {
-    clientId: t.string().primaryKey(),
-    handsPlayed: t.u32(),
-    gamesWon: t.u32(),
+    identity: t.string().primaryKey(),
+    units: t.u128(),
   },
 );
 
@@ -545,7 +545,7 @@ const WalletOwner = table(
   { name: 'WalletOwner' },
   {
     id: t.string().primaryKey(),
-    identity: t.string(),
+    identity: t.string().index('btree'),
   },
 );
 const WalletLedger = table(
@@ -722,7 +722,7 @@ const spacetimedb = schema(
     BotTurnSchedule,
     RoomUpgrade,
     TableBackup,
-    ClientStats,
+    ArchivedWinnings,
     RoomWallet,
     WalletOwner,
     WalletLedger,
@@ -737,46 +737,35 @@ export default spacetimedb;
 
 type ModuleCtx = ReducerCtx<InferSchema<typeof spacetimedb>>;
 
-function recordClientStats(
-  ctx: ModuleCtx,
-  tableId: string,
-  gameType: string,
-  before: unknown,
-  after: unknown,
-): void {
-  const credits = seatStatCredits(gameType, before, after);
-  if (credits.length === 0) {
-    return;
-  }
-  const clientBySeat = new Map<number, string>();
-  for (const seat of ctx.db.GameSeat.byTable.filter(tableId)) {
-    const seated = ctx.db.LobbyMember.id.find(seat.lobbyMemberId);
-    if (seated && !seated.isBot) {
-      clientBySeat.set(seat.seatIndex, seated.clientId);
+function winningsFromLedger(
+  entries: Iterable<{ kind: string; profit: bigint }>,
+): bigint {
+  let units = 0n;
+  for (const { kind, profit } of entries) {
+    if (
+      profit > 0n &&
+      (kind === 'prize' || kind === 'poker_hand' || kind === 'house_hand')
+    ) {
+      units += profit;
     }
   }
-  for (const credit of credits) {
-    const clientId = clientBySeat.get(credit.seatIndex);
-    if (clientId === undefined) {
-      continue;
-    }
-    const existing = ctx.db.ClientStats.clientId.find(clientId);
-    const next = addSeatCredit(existing ?? undefined, credit);
-    if (existing) {
-      ctx.db.ClientStats.clientId.update({
-        ...existing,
-        handsPlayed: next.handsPlayed,
-        gamesWon: next.gamesWon,
-      });
-    } else {
-      ctx.db.ClientStats.insert({
-        clientId,
-        handsPlayed: next.handsPlayed,
-        gamesWon: next.gamesWon,
-      });
-    }
-  }
+  return units;
 }
+
+export const my_lifetime_winnings = spacetimedb.view(
+  { name: 'my_lifetime_winnings', public: true },
+  t.array(t.object('LifetimeWinnings', { units: t.u128() })),
+  (ctx) => {
+    const identity = ctx.sender.toHexString();
+    let units = ctx.db.ArchivedWinnings.identity.find(identity)?.units ?? 0n;
+    for (const wallet of ctx.db.WalletOwner.identity.filter(identity)) {
+      units += winningsFromLedger(
+        ctx.db.WalletLedger.walletId.filter(wallet.id),
+      );
+    }
+    return [{ units }];
+  },
+);
 
 function ensureLobbyIdleJob(ctx: ModuleCtx): void {
   if (ctx.db.LobbyIdleConfig.id.find(LOBBY_IDLE_CONFIG_ID) === null) {
@@ -935,8 +924,21 @@ function deleteRoomShell(ctx: ModuleCtx, lobbyId: string): void {
     }
   }
   for (const wallet of ctx.db.RoomWallet.lobbyId.filter(lobbyId)) {
-    for (const entry of ctx.db.WalletLedger.walletId.filter(wallet.id))
-      ctx.db.WalletLedger.id.delete(entry.id);
+    const entries = [...ctx.db.WalletLedger.walletId.filter(wallet.id)];
+    const owner = ctx.db.WalletOwner.id.find(wallet.id);
+    const units = winningsFromLedger(entries);
+    if (owner && units > 0n) {
+      const archived = ctx.db.ArchivedWinnings.identity.find(owner.identity);
+      if (archived) {
+        ctx.db.ArchivedWinnings.identity.update({
+          ...archived,
+          units: archived.units + units,
+        });
+      } else {
+        ctx.db.ArchivedWinnings.insert({ identity: owner.identity, units });
+      }
+    }
+    for (const entry of entries) ctx.db.WalletLedger.id.delete(entry.id);
     ctx.db.WalletOwner.id.delete(wallet.id);
     ctx.db.RoomWallet.id.delete(wallet.id);
   }
@@ -3390,7 +3392,6 @@ function commitIntent(
     payloadJson: appliedIntentPayload(order, intent, note),
     createdAt: ctx.timestamp,
   });
-  recordClientStats(ctx, gameTable.id, gameTable.gameType, prev, next);
   settleEconomy(ctx, gameTable.id, next);
   noteLobbyActivity(ctx, gameTable.lobbyId);
   return next;
@@ -4880,10 +4881,14 @@ export const move_casino_avatar = spacetimedb.reducer(
       throw new SenderError('Return to the floor before walking');
     const now = ctx.timestamp.microsSinceUnixEpoch;
     const previous = casinoPosition(ctx, member.id, lobbyId);
-    const slots = [...ctx.db.CasinoTableSpot.lobbyId.filter(lobbyId)];
+    const slots = new Set(
+      [...ctx.db.CasinoTableSpot.lobbyId.filter(lobbyId)].map(
+        (row) => row.slot,
+      ),
+    );
     const from = casinoCurrentPoint(previous, now);
     const rows = Math.max(
-      floorRows(Math.max(0, ...slots.map((row) => row.slot + 1))),
+      floorRows(Math.max(-1, ...slots) + 1),
       floorRowsAt(from.y),
     );
     if (
@@ -4914,7 +4919,12 @@ export const move_casino_avatar = spacetimedb.reducer(
       },
       Number(now) / 1000,
       (start) => {
-        const path = floorPath(start, { x, y }, rows);
+        const path = floorPath(
+          start,
+          { x, y },
+          Math.max(rows, floorRowsAt(start.y)),
+          slots,
+        );
         if (!path.length && (start.x !== x || start.y !== y))
           throw new SenderError('That spot cannot be reached');
         return path;
@@ -4944,8 +4954,12 @@ export const steer_casino_avatar = spacetimedb.reducer(
       throw new SenderError('Choose a walking direction');
 
     const previous = casinoPosition(ctx, member.id, lobbyId);
-    const slots = [...ctx.db.CasinoTableSpot.lobbyId.filter(lobbyId)];
-    const rows = floorRows(Math.max(0, ...slots.map((slot) => slot.slot + 1)));
+    const slots = new Set(
+      [...ctx.db.CasinoTableSpot.lobbyId.filter(lobbyId)].map(
+        (row) => row.slot,
+      ),
+    );
+    const rows = floorRows(Math.max(-1, ...slots) + 1);
     const walk = redirectFloorWalk(
       {
         ...previous,
@@ -4958,6 +4972,7 @@ export const steer_casino_avatar = spacetimedb.reducer(
           from,
           { x: dx, y: dy },
           Math.max(rows, floorRowsAt(from.y)),
+          slots,
           FLOOR_STEER_STEPS,
         ),
     );
@@ -5003,16 +5018,20 @@ export const step_casino_avatar = spacetimedb.reducer(
     const currentStep = path[completed];
     const next = currentStep ?? from;
     const end = { x: next.x + dx, y: next.y + dy };
-    const slots = [...ctx.db.CasinoTableSpot.lobbyId.filter(lobbyId)];
+    const slots = new Set(
+      [...ctx.db.CasinoTableSpot.lobbyId.filter(lobbyId)].map(
+        (row) => row.slot,
+      ),
+    );
     const rows = Math.max(
-      floorRows(Math.max(0, ...slots.map((row) => row.slot + 1))),
+      floorRows(Math.max(-1, ...slots) + 1),
       floorRowsAt(next.y),
     );
 
     // Preserve the in-flight step and its original timing. Keep at most
     // one step queued so releasing the keys cannot start a long walk.
     const route = currentStep ? [currentStep] : [];
-    if (walkable(end, rows)) route.push(end);
+    if (floorStepAllowed(next, end, rows, slots)) route.push(end);
     if (!route.length) return;
     const pathJson = JSON.stringify(route);
     const startedAt = currentStep

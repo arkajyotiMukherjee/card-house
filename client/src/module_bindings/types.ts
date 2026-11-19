@@ -16,6 +16,12 @@ export const ActiveConnection = __t.object("ActiveConnection", {
 });
 export type ActiveConnection = __Infer<typeof ActiveConnection>;
 
+export const ArchivedWinnings = __t.object("ArchivedWinnings", {
+  identity: __t.string(),
+  units: __t.u128(),
+});
+export type ArchivedWinnings = __Infer<typeof ArchivedWinnings>;
+
 export const BotTurnSchedule = __t.object("BotTurnSchedule", {
   scheduledId: __t.u64(),
   scheduledAt: __t.scheduleAt(),
@@ -132,13 +138,6 @@ export const CasinoVoiceTarget = __t.object("CasinoVoiceTarget", {
 });
 export type CasinoVoiceTarget = __Infer<typeof CasinoVoiceTarget>;
 
-export const ClientStats = __t.object("ClientStats", {
-  clientId: __t.string(),
-  handsPlayed: __t.u32(),
-  gamesWon: __t.u32(),
-});
-export type ClientStats = __Infer<typeof ClientStats>;
-
 export const ConnectionRate = __t.object("ConnectionRate", {
   id: __t.string(),
   windowStartMicros: __t.u64(),
@@ -207,6 +206,11 @@ export const GameTable = __t.object("GameTable", {
   lastActivityAt: __t.option(__t.timestamp()),
 });
 export type GameTable = __Infer<typeof GameTable>;
+
+export const LifetimeWinnings = __t.object("LifetimeWinnings", {
+  units: __t.u128(),
+});
+export type LifetimeWinnings = __Infer<typeof LifetimeWinnings>;
 
 export const Lobby = __t.object("Lobby", {
   id: __t.string(),
@@ -285,6 +289,9 @@ export type MyCasinoTables = __Infer<typeof MyCasinoTables>;
 
 export const MyCasinoVoiceTargets = __t.object("MyCasinoVoiceTargets", {});
 export type MyCasinoVoiceTargets = __Infer<typeof MyCasinoVoiceTargets>;
+
+export const MyLifetimeWinnings = __t.object("MyLifetimeWinnings", {});
+export type MyLifetimeWinnings = __Infer<typeof MyLifetimeWinnings>;
 
 export const OperatorSession = __t.object("OperatorSession", {
   identity: __t.string(),

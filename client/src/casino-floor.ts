@@ -115,6 +115,7 @@ export interface FloorSnapshot {
   code: string;
   self: string;
   chips: string;
+  lifetimeWinnings: string;
   players: FloorPerson[];
   positions: FloorPosition[];
   tables: FloorTable[];
@@ -441,6 +442,9 @@ export class CasinoFloor {
       floorRowsAt(this.self().y),
     );
   }
+  private get tableSlots(): ReadonlySet<number> {
+    return new Set(this.snapshot.tables.map((table) => table.slot));
+  }
   private get mapScale() {
     return Math.max(1, this.mapWidth / WIDTH);
   }
@@ -448,7 +452,9 @@ export class CasinoFloor {
     this.walkingKeys.clear();
     this.walkingDirection = undefined;
     if (chair === -1) {
-      this.predictWalk(Date.now(), (from) => floorPath(from, to, this.rows));
+      this.predictWalk(Date.now(), (from) =>
+        floorPath(from, to, this.rows, this.tableSlots),
+      );
       this.destination = to;
     }
     this.sendWalk(this.actions.move(to, chair));
@@ -572,6 +578,7 @@ export class CasinoFloor {
           from,
           direction,
           this.rows,
+          this.tableSlots,
           Math.max(FLOOR_COLUMNS, this.rows),
         ),
       );
@@ -644,7 +651,7 @@ export class CasinoFloor {
       x: Math.floor((x / this.mapScale + this.camera.x) / TILE),
       y: Math.floor(((y - TOP) / this.mapScale + this.camera.y) / TILE),
     };
-    if (!walkable(to, this.rows)) return;
+    if (!walkable(to, this.rows, this.tableSlots)) return;
     this.seatTarget = -1;
     this.focusPlayer = '';
     this.reception = false;
@@ -1254,8 +1261,9 @@ export class CasinoFloor {
       (player) => player.id === this.snapshot.self,
     );
     avatarSprite(g, 17, 458, 2, me?.avatar);
-    label(g, me?.name ?? 'Guest', 60, 476, 17, ink.cream, 160);
-    label(g, `${this.snapshot.chips} chips`, 60, 504, 18, ink.gold, 170);
+    label(g, me?.name ?? 'Guest', 60, 472, 17, ink.cream, 150);
+    label(g, `${this.snapshot.chips} chips`, 60, 496, 18, ink.gold, 150);
+    label(g, this.snapshot.lifetimeWinnings, 60, 521, 14, ink.cream, 252);
     this.button(g, { x: 214, y: 466, w: 97, h: 34 }, 'Edit avatar', () =>
       this.actions.avatar(),
     );

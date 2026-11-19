@@ -59,7 +59,7 @@ jobs:
           test -n "$HOSTINGER_API_TOKEN" || { echo 'Missing HOSTINGER_API_TOKEN secret'; exit 1; }
           test -n "$SPACETIMEDB_TOKEN" || { echo 'Missing SPACETIMEDB_TOKEN secret'; exit 1; }
           python3 scripts/deploy_hostinger.py --check
-      - name: Publish Maincloud without deleting data
+      - name: Publish Maincloud and retire obsolete counters if present
         env:
           SPACETIMEDB_TOKEN: ${{ secrets.SPACETIMEDB_TOKEN }}
         shell: bash
@@ -75,9 +75,10 @@ jobs:
               'spacetimedb_token = ' + json.dumps(os.environ['SPACETIMEDB_TOKEN']) + '\n'
           )
           PY
-          spacetimedb-cli --config-path "$config" publish \
+          python3 scripts/retire-client-stats.py \
+            --spacetime spacetimedb-cli --config-path "$config" \
             --server https://maincloud.spacetimedb.com \
-            --module-path server --delete-data=never --yes=remote,migrate,break-clients,skip-login cardhouse
+            --database cardhouse --allow-remote
       - name: Deploy and verify Hostinger client
         env:
           HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}

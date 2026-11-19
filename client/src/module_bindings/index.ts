@@ -79,7 +79,6 @@ import CasinoDiscordMemberRow from "./casino_discord_member_table";
 import CasinoPresenceRow from "./casino_presence_table";
 import CasinoRoomTierRow from "./casino_room_tier_table";
 import CasinoTableSpotRow from "./casino_table_spot_table";
-import ClientStatsRow from "./client_stats_table";
 import DiscordLeaderboardRow from "./discord_leaderboard_table";
 import GameEventRow from "./game_event_table";
 import GameSeatRow from "./game_seat_table";
@@ -103,6 +102,7 @@ import MyCasinoRoomChatRow from "./my_casino_room_chat_table";
 import MyCasinoTableChatRow from "./my_casino_table_chat_table";
 import MyCasinoTablesRow from "./my_casino_tables_table";
 import MyCasinoVoiceTargetsRow from "./my_casino_voice_targets_table";
+import MyLifetimeWinningsRow from "./my_lifetime_winnings_table";
 
 /** Type-only namespace exports for generated type groups. */
 
@@ -161,17 +161,6 @@ const tablesSchema = __schema({
       { name: 'CasinoTableSpot_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, CasinoTableSpotRow),
-  clientStats: __table({
-    name: 'ClientStats',
-    indexes: [
-      { accessor: 'clientId', name: 'ClientStats_clientId_idx_btree', algorithm: 'btree', columns: [
-        'clientId',
-      ] },
-    ],
-    constraints: [
-      { name: 'ClientStats_clientId_key', constraint: 'unique', columns: ['clientId'] },
-    ],
-  }, ClientStatsRow),
   discordLeaderboard: __table({
     name: 'DiscordLeaderboard',
     indexes: [
@@ -466,6 +455,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyCasinoVoiceTargetsRow),
+  myLifetimeWinnings: __table({
+    name: 'my_lifetime_winnings',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyLifetimeWinningsRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
@@ -523,8 +519,6 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "CasinoRoomTier": Omit<typeof tablesSchema.schemaType.tables["casinoRoomTier"], "accessorName"> & { readonly accessorName: "CasinoRoomTier" };
     /** @deprecated Use `casinoTableSpot` instead. This alias will be removed in the next major version. */
     readonly "CasinoTableSpot": Omit<typeof tablesSchema.schemaType.tables["casinoTableSpot"], "accessorName"> & { readonly accessorName: "CasinoTableSpot" };
-    /** @deprecated Use `clientStats` instead. This alias will be removed in the next major version. */
-    readonly "ClientStats": Omit<typeof tablesSchema.schemaType.tables["clientStats"], "accessorName"> & { readonly accessorName: "ClientStats" };
     /** @deprecated Use `discordLeaderboard` instead. This alias will be removed in the next major version. */
     readonly "DiscordLeaderboard": Omit<typeof tablesSchema.schemaType.tables["discordLeaderboard"], "accessorName"> & { readonly accessorName: "DiscordLeaderboard" };
     /** @deprecated Use `gameEvent` instead. This alias will be removed in the next major version. */
@@ -571,6 +565,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "my_casino_tables": Omit<typeof tablesSchema.schemaType.tables["myCasinoTables"], "accessorName"> & { readonly accessorName: "my_casino_tables" };
     /** @deprecated Use `myCasinoVoiceTargets` instead. This alias will be removed in the next major version. */
     readonly "my_casino_voice_targets": Omit<typeof tablesSchema.schemaType.tables["myCasinoVoiceTargets"], "accessorName"> & { readonly accessorName: "my_casino_voice_targets" };
+    /** @deprecated Use `myLifetimeWinnings` instead. This alias will be removed in the next major version. */
+    readonly "my_lifetime_winnings": Omit<typeof tablesSchema.schemaType.tables["myLifetimeWinnings"], "accessorName"> & { readonly accessorName: "my_lifetime_winnings" };
   };
 };
 
@@ -593,7 +589,6 @@ const tableAccessorAliases = {
   "CasinoPresence": "casinoPresence",
   "CasinoRoomTier": "casinoRoomTier",
   "CasinoTableSpot": "casinoTableSpot",
-  "ClientStats": "clientStats",
   "DiscordLeaderboard": "discordLeaderboard",
   "GameEvent": "gameEvent",
   "GameSeat": "gameSeat",
@@ -617,6 +612,7 @@ const tableAccessorAliases = {
   "my_casino_table_chat": "myCasinoTableChat",
   "my_casino_tables": "myCasinoTables",
   "my_casino_voice_targets": "myCasinoVoiceTargets",
+  "my_lifetime_winnings": "myLifetimeWinnings",
 } as const;
 
 function __withTableAccessorAliases<T extends object>(target: T, freeze = false): T {
@@ -647,8 +643,6 @@ export type Tables = __TablesBase & {
   readonly "CasinoRoomTier": __TablesBase["casinoRoomTier"];
   /** @deprecated Use `casinoTableSpot` instead. This alias will be removed in the next major version. */
   readonly "CasinoTableSpot": __TablesBase["casinoTableSpot"];
-  /** @deprecated Use `clientStats` instead. This alias will be removed in the next major version. */
-  readonly "ClientStats": __TablesBase["clientStats"];
   /** @deprecated Use `discordLeaderboard` instead. This alias will be removed in the next major version. */
   readonly "DiscordLeaderboard": __TablesBase["discordLeaderboard"];
   /** @deprecated Use `gameEvent` instead. This alias will be removed in the next major version. */
@@ -695,6 +689,8 @@ export type Tables = __TablesBase & {
   readonly "my_casino_tables": __TablesBase["myCasinoTables"];
   /** @deprecated Use `myCasinoVoiceTargets` instead. This alias will be removed in the next major version. */
   readonly "my_casino_voice_targets": __TablesBase["myCasinoVoiceTargets"];
+  /** @deprecated Use `myLifetimeWinnings` instead. This alias will be removed in the next major version. */
+  readonly "my_lifetime_winnings": __TablesBase["myLifetimeWinnings"];
 };
 
 /** The tables available in this remote SpacetimeDB module. Each table reference doubles as a query builder. */

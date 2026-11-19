@@ -87,7 +87,13 @@ try {
     const fillText = source.fillText;
     source.fillText = function (text, x, y, maxWidth) {
       if (
-        ['Walk over', 'Sit down', 'Watch'].includes(text) ||
+        [
+          'Walk over',
+          'Sit down',
+          'Watch',
+          'Choose the rank to declare',
+          'Flush',
+        ].includes(text) ||
         text.includes('seated · Host')
       )
         labels.add(text);
@@ -305,7 +311,11 @@ try {
     () => fixture.db.gameTable.id.find(bluff.id)?.status.tag === 'InProgress',
     'Multiplayer Bluff dealt',
   );
-  await pause(1700);
+  await desktop.waitForFunction(() =>
+    ['Choose the rank to declare', 'Flush'].some((label) =>
+      (window as Window & { floorProof: Set<string> }).floorProof.has(label),
+    ),
+  );
   await view(desktop, 'bluff-table');
   await desktop.evaluate(() =>
     (window as Window & { floorProof: Set<string> }).floorProof.clear(),
