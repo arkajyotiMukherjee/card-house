@@ -1,3 +1,4 @@
+import { publicPlayerName } from '../../src/shared/discord-player-name';
 import { STATUS_HUD } from './status-hud';
 import {
   DUMMY_GAME_TYPE,
@@ -336,7 +337,7 @@ export function seatLabels(
     const member = byId.get(seat.lobbyMemberId);
     labels.push({
       seatIndex: seat.seatIndex,
-      name: member?.name ?? 'Player',
+      name: publicPlayerName(member?.name ?? 'Player'),
       self: member?.clientId === selfClientId,
       lobbyMemberId: seat.lobbyMemberId,
       inVoice: inVoice.has(seat.lobbyMemberId),

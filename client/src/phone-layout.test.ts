@@ -131,9 +131,7 @@ it('fits six phone actions with separate thumb targets below right-hand opponent
   expect(SOLO_PICKER.seatRow.y + 64).toBeLessThan(
     SOLO_PICKER.variationRow.y - 18,
   );
-  expect(SOLO_PICKER.variationRow.y + 64).toBeLessThan(
-    SOLO_PICKER.nameField.y - 18,
-  );
+  expect(SOLO_PICKER.variationRow.y + 64).toBeLessThan(SOLO_PICKER.play.y - 18);
   const actions = Array.from({ length: 6 }, (_, index) => actionBox(index));
   expect(actions.every((box) => insideCluster(box) && box.h === 48)).toBe(true);
   expect(actions[5]!.y + actions[5]!.h).toBeLessThanOrEqual(540);

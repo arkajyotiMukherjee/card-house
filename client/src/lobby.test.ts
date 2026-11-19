@@ -672,7 +672,8 @@ it('centers the desktop Create Table dialog and keeps its input and actions inse
   expect(box.x + box.w / 2).toBe(480);
   expect(box.y + box.h / 2).toBe(270);
   expect(CREATE_TABLE.name.x).toBe(box.x + 16);
-  expect(CREATE_TABLE.cancel.x + CREATE_TABLE.cancel.w).toBe(
+  expect(CREATE_TABLE.cancel.x).toBe(box.x + 16);
+  expect(CREATE_TABLE.create.x + CREATE_TABLE.create.w).toBe(
     box.x + box.w - 16,
   );
 });

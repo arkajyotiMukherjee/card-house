@@ -267,22 +267,22 @@ describe('canvas text field', () => {
     let open = false;
     handles.push(
       bindCanvasTextField({
-        id: 'menu-name',
-        label: 'Your Name',
-        box: PROMPT.nameField,
-        maxLength: 12,
+        id: 'menu-code',
+        label: 'Room Code',
+        box: PROMPT.codeField,
+        maxLength: 4,
         active: () => open,
-        read: () => 'Bea',
+        read: () => 'BEA2',
         sanitize: (next) => next,
         write: () => {},
         submit: () => {},
         onFocus: () => {
-          focused = 'name';
+          focused = 'code';
         },
       }),
     );
     const input = document.querySelector(
-      'input[data-cardhouse-field="menu-name"]',
+      'input[data-cardhouse-field="menu-code"]',
     );
     if (!(input instanceof HTMLInputElement)) {
       throw new Error('missing input');
@@ -292,10 +292,10 @@ describe('canvas text field', () => {
     open = true;
     refreshCanvasTextFields();
     expect(input.style.pointerEvents).toBe('auto');
-    expect(input.style.left).toBe(`${PROMPT.nameField.x}px`);
-    expect(input.style.top).toBe(`${PROMPT.nameField.y}px`);
-    expect(input.style.width).toBe(`${PROMPT.nameField.w}px`);
-    expect(input.style.height).toBe(`${PROMPT.nameField.h}px`);
+    expect(input.style.left).toBe(`${PROMPT.codeField.x}px`);
+    expect(input.style.top).toBe(`${PROMPT.codeField.y}px`);
+    expect(input.style.width).toBe(`${PROMPT.codeField.w}px`);
+    expect(input.style.height).toBe(`${PROMPT.codeField.h}px`);
     expect(document.activeElement).not.toBe(input);
 
     input.dispatchEvent(
@@ -303,7 +303,7 @@ describe('canvas text field', () => {
     );
     input.dispatchEvent(new Event('touchend', { bubbles: true }));
     expect(document.activeElement).toBe(input);
-    expect(focused).toBe('name');
+    expect(focused).toBe('code');
     expect(input.getAttribute('aria-hidden')).toBeNull();
   });
 
@@ -630,7 +630,7 @@ describe('canvas text field', () => {
   });
 });
 
-describe('pixel caret', () => {
+describe('canvas field caret', () => {
   it('draws a two-pixel block the height of the letters', () => {
     expect(
       layoutFieldCaret({
@@ -669,6 +669,23 @@ describe('pixel caret', () => {
       w: 2,
       h: 8,
     });
+  });
+
+  it('uses measured glyph boundaries for a proportional room code', () => {
+    const value = 'AIW2';
+    const measure = (text: string) => [0, 14, 20, 39, 51][text.length]!;
+    const field = {
+      value,
+      size: 22,
+      originX: 20,
+      index: 2,
+      measure,
+      raster: 0,
+    };
+    expect(layoutFieldCaret({ ...field, originY: 4 }).x).toBe(40);
+    expect(fieldCaretIndexAt({ ...field, localX: 37 })).toBe(2);
+    expect(fieldCaretIndexAt({ ...field, localX: 48 })).toBe(2);
+    expect(fieldCaretIndexAt({ ...field, localX: 51 })).toBe(3);
   });
 
   it('windows chat around the caret', () => {

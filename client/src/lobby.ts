@@ -204,13 +204,13 @@ export const LEAVE_ROOM = {
 export const LEAVE_CONFIRM = PHONE_LAYOUT
   ? ({
       panel: { x: 180, y: 150, w: 600, h: 240 },
-      leave: { x: 196, y: 300, w: 272, h: 64 },
-      cancel: { x: 492, y: 300, w: 272, h: 64 },
+      leave: { x: 492, y: 300, w: 272, h: 64 },
+      cancel: { x: 196, y: 300, w: 272, h: 64 },
     } as const)
   : ({
       panel: { x: 230, y: 170, w: 500, h: 150 },
-      leave: { x: 246, y: 268, w: 220, h: BUTTON_HEIGHT },
-      cancel: { x: 486, y: 268, w: 220, h: BUTTON_HEIGHT },
+      leave: { x: 486, y: 268, w: 220, h: BUTTON_HEIGHT },
+      cancel: { x: 246, y: 268, w: 220, h: BUTTON_HEIGHT },
     } as const);
 
 export type LeaveConfirmHit = 'leave' | 'cancel' | 'panel';
@@ -365,8 +365,8 @@ export const CREATE_TABLE = {
   varPrev: { x: 276, y: 262, w: 72, h: BUTTON_HEIGHT },
   varNext: { x: 356, y: 262, w: 72, h: BUTTON_HEIGHT },
   name: { x: 276, y: 316, w: 408, h: BUTTON_HEIGHT },
-  create: { x: 276, y: 360, w: 198, h: BUTTON_HEIGHT },
-  cancel: { x: 486, y: 360, w: 198, h: BUTTON_HEIGHT },
+  create: { x: 486, y: 360, w: 198, h: BUTTON_HEIGHT },
+  cancel: { x: 276, y: 360, w: 198, h: BUTTON_HEIGHT },
 } as const;
 
 /** Wide landscape dialog with separate thumb-sized selectors. */
@@ -379,8 +379,8 @@ export const MOBILE_CREATE_TABLE = {
   varPrev: { x: 184, y: 308, w: 80, h: 64 },
   varNext: { x: 696, y: 308, w: 80, h: 64 },
   name: { x: 184, y: 393, w: 592, h: 44 },
-  create: { x: 184, y: 451, w: 280, h: 64 },
-  cancel: { x: 496, y: 451, w: 280, h: 64 },
+  create: { x: 496, y: 451, w: 280, h: 64 },
+  cancel: { x: 184, y: 451, w: 280, h: 64 },
 } as const;
 
 export function normalizePlayerName(raw: string): string {

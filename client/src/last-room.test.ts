@@ -49,11 +49,28 @@ describe('last room', () => {
     });
   });
 
-  it('keeps a full Discord ID used as the room name', () => {
+  it('keeps a full Discord username', () => {
     const storage = memoryStorage();
-    const name = '123456789012345678';
+    const name = 'avery_long.discord_username';
     rememberLobby('AB3D', name, storage);
     expect(readLastRoom(storage)?.name).toBe(name);
+  });
+
+  it('keeps a legacy room and its seat while hiding a numeric Discord ID', () => {
+    const storage = memoryStorage();
+    storage.setItem(
+      LAST_ROOM_STORAGE_KEY,
+      JSON.stringify({
+        lobbyCode: 'AB3D',
+        name: '123456789012345678',
+        tableId: 'table_lobby_1',
+      }),
+    );
+    expect(readLastRoom(storage)).toEqual({
+      lobbyCode: 'AB3D',
+      name: 'Guest',
+      tableId: 'table_lobby_1',
+    });
   });
 
   it('drops the table when a different lobby is joined', () => {

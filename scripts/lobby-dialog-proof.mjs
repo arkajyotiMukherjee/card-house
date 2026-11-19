@@ -94,18 +94,22 @@ try {
       scene.actors.some((actor) => actor.pos.y === 168 && actor.width === 400)
     );
   });
+  await tap(desktop.page, 854, 42);
+  const avatarName = desktop.page.getByRole('textbox', {
+    name: 'Display name',
+    exact: true,
+  });
+  await avatarName.focus();
+  await avatarName.fill('Caret Proof');
+  await tap(desktop.page, 722, 451);
   await tap(desktop.page, 480, 190);
-  await desktop.page
-    .getByRole('textbox', { name: 'Your Name', exact: true })
-    .fill('Caret Proof');
-  await tap(desktop.page, 350, 348);
   await desktop.page
     .getByRole('textbox', { name: 'Starting chips', exact: true })
     .waitFor({ state: 'visible' });
   await desktop.page.screenshot({
     path: out + '14-starting-chips-wording.png',
   });
-  await tap(desktop.page, 334, 344);
+  await tap(desktop.page, 625, 355);
   await desktop.page.waitForFunction(() =>
     Boolean(JSON.parse(localStorage.getItem('lastRoom') || '{}').lobbyCode),
   );
@@ -137,7 +141,7 @@ try {
   });
   async function stakes(page, mobile = false) {
     await tap(page, mobile ? 224 : 312, mobile ? 140 : 228);
-    await tap(page, mobile ? 324 : 375, mobile ? 480 : 374);
+    await tap(page, mobile ? 636 : 585, mobile ? 480 : 374);
     const minimum = page.getByRole('textbox', {
       name: 'Minimum buy-in',
       exact: true,
@@ -162,7 +166,7 @@ try {
     await page.keyboard.press('Control+a');
     await page.keyboard.press('Backspace');
     await page.keyboard.type('400');
-    await tap(page, 334, mobile ? 486 : 452);
+    await tap(page, 644, mobile ? 486 : 452);
     await page.waitForFunction(() =>
       window.__lobbyProofEngine.currentScene.actors.some((actor) =>
         actor.graphics.current?.text?.includes('Your buy-in must be at least'),
@@ -181,7 +185,7 @@ try {
   }
   await stakes(desktop.page);
   await stakes(mobile.page, true);
-  await tap(desktop.page, 585, 374);
+  await tap(desktop.page, 375, 374);
   await tap(desktop.page, 720, 30, true);
   const chat = desktop.page.getByRole('textbox', { name: 'Chat', exact: true });
   await chat.fill('hello desktop');
@@ -240,19 +244,19 @@ try {
   for (let i = 0; i < 3; i++) await tap(desktop.page, 512, 228);
   await tap(desktop.page, 392, 276);
   await tap(desktop.page, 392, 276);
-  await tap(desktop.page, 375, 374);
+  await tap(desktop.page, 585, 374);
   await desktop.page
     .getByRole('textbox', { name: 'Your buy-in', exact: true })
     .waitFor({ state: 'visible' });
-  await tap(desktop.page, 334, 452);
+  await tap(desktop.page, 624, 452);
   await waitingCount(desktop.page, 1);
-  await tap(mobile.page, 636, 480);
+  await tap(mobile.page, 324, 480);
   async function join(page, mobile = false) {
     await tap(page, 492, mobile ? 210 : 206, true);
     await page
       .getByRole('textbox', { name: 'Your buy-in', exact: true })
       .waitFor({ state: 'visible' });
-    await tap(page, 334, mobile ? 370 : 344);
+    await tap(page, 624, mobile ? 370 : 344);
   }
   await join(mobile.page, true);
   await waitingCount(desktop.page, 2);

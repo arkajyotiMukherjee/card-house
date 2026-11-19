@@ -1,5 +1,9 @@
 import { NAME_MAX, normalizePlayerName, normalizeRoomCode } from './lobby';
-import { DISCORD_USER_ID } from '../../src/shared/discord-player-name';
+import {
+  DISCORD_USER_ID,
+  discordDisplayUsername,
+  publicPlayerName,
+} from '../../src/shared/discord-player-name';
 
 /** localStorage key for the last lobby and, while seated, its table. */
 export const LAST_ROOM_STORAGE_KEY = 'lastRoom';
@@ -48,7 +52,7 @@ export function readLastRoom(
   if (tableRaw.length > 0 && !isStoredTableId(tableRaw)) {
     return undefined;
   }
-  return { lobbyCode, name, tableId: tableRaw };
+  return { lobbyCode, name: publicPlayerName(name), tableId: tableRaw };
 }
 
 /** Remembers the joined lobby. A different code drops any stored table. */
@@ -64,7 +68,11 @@ export function rememberLobby(
   }
   const previous = readLastRoom(storage);
   const tableId = previous?.lobbyCode === code ? previous.tableId : '';
-  writeLastRoom(storage, { lobbyCode: code, name: playerName, tableId });
+  writeLastRoom(storage, {
+    lobbyCode: code,
+    name: publicPlayerName(playerName),
+    tableId,
+  });
 }
 
 /** Remembers the table this browser is seated at. No lobby means no write. */
@@ -175,7 +183,9 @@ function isStoredRoomCode(code: string): boolean {
 function isStoredName(name: string): boolean {
   if (
     name.length === 0 ||
-    (name.length > NAME_MAX && !DISCORD_USER_ID.test(name))
+    (name.length > NAME_MAX &&
+      !DISCORD_USER_ID.test(name) &&
+      !discordDisplayUsername(name))
   ) {
     return false;
   }

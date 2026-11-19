@@ -5,6 +5,7 @@ import {
   MENU_BACKDROP,
   MENU_BUTTONS,
   MENU_TITLE,
+  PROMPT,
   SOLO_PICKER,
   THEME_PANEL,
   soloSeatCount,
@@ -12,9 +13,7 @@ import {
   floaterPose,
   makeFloaters,
   menuAcceptsAction,
-  nextFieldAfterEnter,
-  promptError,
-  promptFields,
+  joinPromptError,
   splitHowToPlay,
   stepIndex,
   wrapText,
@@ -145,12 +144,7 @@ describe('theme panel', () => {
 
 describe('single player picker', () => {
   it('keeps the picker inside the frame', () => {
-    const boxes = [
-      SOLO_PICKER.panel,
-      SOLO_PICKER.nameField,
-      SOLO_PICKER.play,
-      SOLO_PICKER.cancel,
-    ];
+    const boxes = [SOLO_PICKER.panel, SOLO_PICKER.play, SOLO_PICKER.cancel];
     for (const box of boxes) {
       expect(box.x).toBeGreaterThanOrEqual(0);
       expect(box.y).toBeGreaterThanOrEqual(0);
@@ -177,26 +171,16 @@ describe('single player picker', () => {
 });
 
 describe('menu prompts', () => {
-  it('asks for a code only when joining', () => {
-    expect(promptFields('create').map((field) => field.id)).toEqual(['name']);
-    expect(promptFields('join').map((field) => field.id)).toEqual([
-      'name',
-      'code',
-    ]);
+  it('requires a room code to join', () => {
+    expect(joinPromptError(' ')).toBe('Room code is required');
+    expect(joinPromptError('AB3D')).toBeUndefined();
   });
 
-  it('requires a name, and a code to join', () => {
-    expect(promptError('create', '  ', '')).toBe('Name is required');
-    expect(promptError('create', 'Ada', '')).toBeUndefined();
-    expect(promptError('join', 'Ada', ' ')).toBe('Room code is required');
-    expect(promptError('join', 'Ada', 'AB3D')).toBeUndefined();
-  });
-
-  it('moves from the name to the code, then submits', () => {
-    expect(nextFieldAfterEnter('create', 'name', 'Ada')).toBe('submit');
-    expect(nextFieldAfterEnter('join', 'name', 'Ada')).toBe('code');
-    expect(nextFieldAfterEnter('join', 'name', '')).toBe('submit');
-    expect(nextFieldAfterEnter('join', 'code', 'Ada')).toBe('submit');
+  it('keeps Cancel to the left of the confirming action', () => {
+    expect(PROMPT.cancel.x + PROMPT.cancel.w).toBeLessThan(PROMPT.submit.x);
+    expect(SOLO_PICKER.cancel.x + SOLO_PICKER.cancel.w).toBeLessThan(
+      SOLO_PICKER.play.x,
+    );
   });
 });
 

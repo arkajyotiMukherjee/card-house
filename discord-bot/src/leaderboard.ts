@@ -1,3 +1,4 @@
+import { publicPlayerName } from '../../src/shared/discord-player-name.ts';
 import { createHash } from 'node:crypto';
 import { formatCoins } from '../../src/shared/economy.ts';
 import type { DbConnection } from '../../client/src/module_bindings/index.ts';
@@ -29,7 +30,7 @@ export function leaderboardContent(
   const selected = Math.min(pages, Math.max(1, Math.floor(page)));
   const lines = rows.slice((selected - 1) * 10, selected * 10).map((row) => {
     const rank = rows.findIndex((wallet) => wallet.profit === row.profit) + 1;
-    return `${rank}. ${safeName(row.name)} — ${row.profit > 0n ? '+' : ''}${formatCoins(row.profit)} net · ${formatCoins(row.available + (row.committed ?? 0n))} total (${formatCoins(row.available)} available)`;
+    return `${rank}. ${safeName(publicPlayerName(row.name))} — ${row.profit > 0n ? '+' : ''}${formatCoins(row.profit)} net · ${formatCoins(row.available + (row.committed ?? 0n))} total (${formatCoins(row.available)} available)`;
   });
   return `**Room ${code} leaderboard**\nRanked by net winnings; grants and refills excluded.\n${lines.join('\n') || 'No players yet.'}\nPage ${selected}/${pages} · /cardhouse leaderboard${pages > 1 ? ' page:<number>' : ''}`;
 }

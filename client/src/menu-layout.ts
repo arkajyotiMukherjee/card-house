@@ -61,21 +61,15 @@ export const SOLO_PICKER = {
   gameRow: { x: 220, y: PHONE_LAYOUT ? 100 : 110 },
   seatRow: { x: 220, y: PHONE_LAYOUT ? 190 : 180 },
   variationRow: { x: 220, y: PHONE_LAYOUT ? 280 : 250 },
-  nameField: {
-    x: 220,
-    y: PHONE_LAYOUT ? 370 : 320,
-    w: 520,
-    h: PHONE_LAYOUT ? 44 : 28,
-  },
   error: { x: 220, y: PHONE_LAYOUT ? 416 : 364 },
   play: {
-    x: 220,
+    x: 500,
     y: PHONE_LAYOUT ? 430 : 400,
     w: 240,
     h: PHONE_LAYOUT ? 64 : BUTTON_HEIGHT,
   },
   cancel: {
-    x: 500,
+    x: 220,
     y: PHONE_LAYOUT ? 430 : 400,
     w: 240,
     h: PHONE_LAYOUT ? 64 : BUTTON_HEIGHT,
@@ -113,20 +107,26 @@ export function soloSettingsJson(
 
 export const PROMPT = PHONE_LAYOUT
   ? ({
-      panel: { x: 180, y: 48, w: 600, h: 444 },
-      nameField: { x: 220, y: 144, w: 520, h: 64 },
-      codeField: { x: 220, y: 256, w: 520, h: 64 },
-      submit: { x: 220, y: 400, w: 240, h: 64 },
-      cancel: { x: 500, y: 400, w: 240, h: 64 },
-      error: { x: 220, y: 356 },
+      panel: { x: 144, y: 54, w: 672, h: 432 },
+      padding: 36,
+      nameY: 124,
+      labelY: 181,
+      codeField: { x: 180, y: 216, w: 600, h: 68 },
+      submit: { x: 500, y: 394, w: 280, h: 64 },
+      cancel: { x: 180, y: 394, w: 280, h: 64 },
+      error: { x: 180, y: 306 },
+      font: { name: 24, label: 22, value: 26, button: 24, error: 20 },
     } as const)
   : ({
-      panel: { x: 220, y: 150, w: 520, h: 240 },
-      nameField: { x: 244, y: 214, w: 472, h: 28 },
-      codeField: { x: 244, y: 270, w: 472, h: 28 },
-      submit: { x: 244, y: 336, w: 224, h: BUTTON_HEIGHT },
-      cancel: { x: 492, y: 336, w: 224, h: BUTTON_HEIGHT },
-      error: { x: 244, y: 310 },
+      panel: { x: 192, y: 128, w: 576, h: 264 },
+      padding: 32,
+      nameY: 178,
+      labelY: 209,
+      codeField: { x: 224, y: 236, w: 512, h: 44 },
+      submit: { x: 492, y: 336, w: 244, h: BUTTON_HEIGHT },
+      cancel: { x: 224, y: 336, w: 244, h: BUTTON_HEIGHT },
+      error: { x: 224, y: 294 },
+      font: { name: 19, label: 17, value: 20, button: 17, error: 16 },
     } as const);
 
 export const HOW_TO_PLAY = {
@@ -220,49 +220,8 @@ export function menuAcceptsAction(
   return mode === 'main' && !overlayClaimedClick;
 }
 
-export interface PromptField {
-  id: 'name' | 'code';
-  label: string;
-}
-
-export function promptFields(kind: PromptKind): readonly PromptField[] {
-  return kind === 'create'
-    ? [{ id: 'name', label: 'Your Name' }]
-    : [
-        { id: 'name', label: 'Your Name' },
-        { id: 'code', label: 'Room Code' },
-      ];
-}
-
-export function promptTitle(kind: PromptKind): string {
-  return kind === 'create' ? 'Create Room' : 'Join Room';
-}
-
-export function promptSubmitLabel(kind: PromptKind): string {
-  return kind === 'create' ? 'Create' : 'Join';
-}
-
-/** Where an Enter press lands: the next empty field, or submit on the last. */
-export function nextFieldAfterEnter(
-  kind: PromptKind,
-  focused: 'name' | 'code',
-  name: string,
-): 'name' | 'code' | 'submit' {
-  if (kind === 'create') {
-    return 'submit';
-  }
-  return focused === 'name' && name.trim().length > 0 ? 'code' : 'submit';
-}
-
-export function promptError(
-  kind: PromptKind,
-  name: string,
-  code: string,
-): string | undefined {
-  if (name.trim().length === 0) {
-    return 'Name is required';
-  }
-  if (kind === 'join' && code.trim().length === 0) {
+export function joinPromptError(code: string): string | undefined {
+  if (code.trim().length === 0) {
     return 'Room code is required';
   }
   return undefined;

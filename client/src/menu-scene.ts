@@ -1,3 +1,5 @@
+import { uiCaption, uiFieldLabel, uiSingleLine, uiText } from './ui-text';
+import { classicText } from './classic-table-design';
 import {
   openCasinoAvatarEditor,
   casinoAvatarEditorOpen,
@@ -26,10 +28,7 @@ import {
   GAME_CATALOG,
   applyCodeKey,
   applyCodeText,
-  applyFieldKey,
-  applyFieldText,
   CODE_MAX,
-  NAME_MAX,
   POKER_GAME_TYPE,
   POKER_VARIATION_LABELS,
   POKER_VARIATIONS,
@@ -37,12 +36,9 @@ import {
 import {
   bindCanvasTextField,
   eventTargetsHtmlField,
-  fieldLabelColumns,
   layoutFieldCaret,
   refreshCanvasTextFields,
   type CanvasTextFieldHandle,
-  type FieldLabel,
-  type FieldMoveKey,
 } from './html-field';
 import { makeFieldCaret, showFieldCaret } from './canvas-ui';
 import {
@@ -63,11 +59,7 @@ import {
   SOLO_PICKER,
   THEME_PANEL,
   menuAcceptsAction,
-  nextFieldAfterEnter,
-  promptError,
-  promptFields,
-  promptSubmitLabel,
-  promptTitle,
+  joinPromptError,
   soloSeatCount,
   soloSettingsJson,
   splitHowToPlay,
@@ -79,10 +71,7 @@ import {
   type ThemeChoiceId,
 } from './menu-layout';
 import { lifetimeWinningsCaption } from './lifetime-winnings';
-import {
-  preferredNameForPrompt,
-  rememberPreferredName,
-} from './preferred-name';
+import { preferredPlayerName } from './preferred-name';
 import {
   BUTTON_FONT_SIZE,
   BUTTON_PRESS_SHIFT,
@@ -135,22 +124,7 @@ export type SoloEnter = (start: SoloStart) => Promise<string | undefined>;
 
 type Mode = MenuMode;
 
-const PROMPT_TEXT_SIZE = 16;
-const PROMPT_TEXT_PAD = 8;
-
-function promptLabel(box: {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}): FieldLabel {
-  return {
-    size: PROMPT_TEXT_SIZE,
-    x: box.x + PROMPT_TEXT_PAD,
-    y: box.y + (box.h - PROMPT_TEXT_SIZE) / 2,
-    columns: fieldLabelColumns(box.w, PROMPT_TEXT_PAD, PROMPT_TEXT_SIZE),
-  };
-}
+const codeMetrics = uiFieldLabel(PROMPT.codeField, PROMPT.font.value, 16);
 
 function canvasText(text: string, size: number, color: ex.Color): ex.Text {
   const graphic = new ex.Text({
@@ -211,7 +185,6 @@ export class MenuScene extends ex.Scene {
     Promise.resolve(roomEntryError('connecting'));
   private soloSeatIndex = 0;
   private soloVariationIndex = 0;
-  private soloNameField: CanvasTextFieldHandle | undefined;
   private soloGameText: ex.Text | undefined;
   private soloSeatText: ex.Text | undefined;
   private soloVariationText: ex.Text | undefined;
@@ -221,18 +194,14 @@ export class MenuScene extends ex.Scene {
   private busy = false;
   private readonly loading = new LoadingScreen(this);
 
-  private name = '';
   private code = '';
-  private focused: 'name' | 'code' = 'name';
-  private nameField: CanvasTextFieldHandle | undefined;
+  private codeFocused = false;
+  private joinName = '';
   private codeField: CanvasTextFieldHandle | undefined;
   private menuFieldsReady = false;
-  private nameText: ex.Text | undefined;
   private codeText: ex.Text | undefined;
-  private nameCaret: ex.Actor | undefined;
-  private codeCaret: ex.Actor | undefined;
-  private nameBox: ex.Rectangle | undefined;
   private codeBox: ex.Rectangle | undefined;
+  private codeCaret: ex.Actor | undefined;
   private errorText: ex.Text | undefined;
   private linkLine = '';
   private linkText = canvasText('', 8, GOLD);
@@ -322,16 +291,15 @@ export class MenuScene extends ex.Scene {
   /**
    * Opens Join Room with the code from a `/cardhouse create` join URL.
    * A default Discord name joins without asking the player to type one.
-   * A saved preferred name only fills the field. It does not submit.
    */
   openJoin(code: string, defaultName = ''): void {
     if (this.mode !== 'main') {
       return;
     }
-    const name = defaultName.trim().slice(0, NAME_MAX);
-    this.openPrompt('join', code, name);
+    const name = defaultName.trim();
+    this.openJoinPrompt(code, name);
     if (name.length > 0) {
-      void this.submitPrompt();
+      void this.submitJoin();
     }
   }
 
@@ -486,7 +454,11 @@ export class MenuScene extends ex.Scene {
       this.openSolo();
       return;
     }
-    this.openPrompt(action);
+    if (action === 'create') {
+      void this.openCreateRoom();
+      return;
+    }
+    this.openJoinPrompt();
   }
 
   private closeOverlay(): void {
@@ -496,15 +468,12 @@ export class MenuScene extends ex.Scene {
     this.overlay.length = 0;
     this.listRows = [];
     this.bodyActors = [];
-    this.nameText = undefined;
     this.codeText = undefined;
+    this.codeBox = undefined;
     this.soloGameText = undefined;
     this.soloSeatText = undefined;
     this.soloVariationText = undefined;
-    this.nameCaret = undefined;
     this.codeCaret = undefined;
-    this.nameBox = undefined;
-    this.codeBox = undefined;
     this.errorText = undefined;
     this.frontValueText = undefined;
     this.backValueText = undefined;
@@ -551,11 +520,41 @@ export class MenuScene extends ex.Scene {
     actor.on('pointerup', claim);
   }
 
-  private openPrompt(kind: PromptKind, code = '', name = ''): void {
-    this.mode = kind;
-    this.name = preferredNameForPrompt(this.clientId, name);
+  private async openCreateRoom(): Promise<void> {
+    this.mode = 'create';
+    const name = this.playerName();
+    const grant = await coinDialog(
+      this.engine,
+      this,
+      'Create Room',
+      'Each player receives this grant once per room.',
+      [{ key: 'startingCoins', label: 'Starting chips', value: 10_000 }],
+      'Create room',
+      {
+        playerName: name,
+        focusFirst: true,
+        onSubmit: async ({ startingCoins }) => {
+          const blocked = roomEntryError(this.phase);
+          if (blocked) return blocked;
+          localStorage.setItem('roomStartingCoins', String(startingCoins));
+          this.loading.show('Creating room');
+          try {
+            return await this.enter({ kind: 'create', name, code: '' });
+          } finally {
+            this.loading.hide();
+          }
+        },
+      },
+    );
+    if (this.mode !== 'create') return;
+    this.closeOverlay();
+    if (grant) this.onEntered();
+  }
+
+  private openJoinPrompt(code = '', inviteName = ''): void {
+    this.mode = 'join';
+    this.joinName = this.playerName(inviteName);
     this.code = code;
-    this.focused = 'name';
     this.shade();
 
     const box = PROMPT.panel;
@@ -571,69 +570,79 @@ export class MenuScene extends ex.Scene {
     this.add(panel);
     this.overlay.push(panel);
 
-    this.overlayText(PROMPT.panel.x + 24, PROMPT.panel.y + 20, 16, GOLD, () =>
-      promptTitle(kind),
-    );
-    const fields = promptFields(kind);
-    for (const field of fields) {
-      const spec = field.id === 'name' ? PROMPT.nameField : PROMPT.codeField;
-      this.overlayText(
-        spec.x,
-        spec.y - (isMobileDevice() ? 24 : 16),
-        isMobileDevice() ? 12 : 8,
-        DIM,
-        () => field.label,
-      );
-      const face = rect(spec.w, spec.h, FIELD, STROKE);
-      const actor = new ex.Actor({
-        pos: ex.vec(spec.x, spec.y),
-        anchor: ex.vec(0, 0),
-        width: spec.w,
-        height: spec.h,
-        z: 32,
-      });
-      actor.graphics.use(face);
-      actor.on('pointerdown', (event) => {
-        this.claimOverlayClick(event);
-      });
-      actor.on('pointerup', (event) => {
-        this.claimOverlayClick(event);
-        if (!isMobileDevice()) {
-          this.focusPromptBox(field.id);
-          this.focusMenuField();
-        }
-      });
-      this.add(actor);
-      this.overlay.push(actor);
-      const metrics = promptLabel(spec);
-      const text = canvasText('', metrics.size, GOLD);
-      const textActor = new ex.Actor({
-        pos: ex.vec(metrics.x, metrics.y),
-        anchor: ex.vec(0, 0),
-        z: 33,
-      });
-      textActor.graphics.use(text);
-      const caret = makeFieldCaret(metrics.size, 34);
-      this.add(textActor);
-      this.add(caret);
-      this.overlay.push(textActor, caret);
-      if (field.id === 'name') {
-        this.nameBox = face;
-        this.nameText = text;
-        this.nameCaret = caret;
-      } else {
-        this.codeBox = face;
-        this.codeText = text;
-        this.codeCaret = caret;
-      }
-    }
+    const title = new ex.Actor({
+      pos: ex.vec(box.x + PROMPT.padding, box.y + 20),
+      anchor: ex.vec(0, 0),
+      z: 33,
+    });
+    title.graphics.use(classicText('Join Room', 24, GOLD));
+    this.add(title);
+    this.overlay.push(title);
 
-    const error = canvasText('', 8, DANGER);
-    const errorActor = new ex.Actor({
-      pos: ex.vec(
-        PROMPT.error.x,
-        PROMPT.error.y + (fields.length > 1 ? 0 : -24),
+    const nameLabel = new ex.Actor({
+      pos: ex.vec(box.x + PROMPT.padding, PROMPT.nameY),
+      anchor: ex.vec(0, 0),
+      z: 33,
+    });
+    nameLabel.graphics.use(
+      uiSingleLine(
+        `Playing as ${this.joinName}`,
+        PROMPT.font.name,
+        GOLD,
+        box.w - 2 * PROMPT.padding,
       ),
+    );
+    this.add(nameLabel);
+    this.overlay.push(nameLabel);
+
+    const spec = PROMPT.codeField;
+    const codeLabel = new ex.Actor({
+      pos: ex.vec(spec.x, PROMPT.labelY),
+      anchor: ex.vec(0, 0),
+      z: 33,
+    });
+    codeLabel.graphics.use(uiText('Room code', PROMPT.font.label, GOLD));
+    this.add(codeLabel);
+    this.overlay.push(codeLabel);
+    const face = rect(spec.w, spec.h, FIELD, STROKE);
+    const actor = new ex.Actor({
+      pos: ex.vec(spec.x, spec.y),
+      anchor: ex.vec(0, 0),
+      width: spec.w,
+      height: spec.h,
+      z: 32,
+    });
+    actor.graphics.use(face);
+    actor.on('pointerdown', (event) => {
+      this.claimOverlayClick(event);
+    });
+    actor.on('pointerup', (event) => {
+      this.claimOverlayClick(event);
+      if (!isMobileDevice()) {
+        this.codeField?.focus();
+      }
+    });
+    this.add(actor);
+    this.overlay.push(actor);
+    const text = uiText('', codeMetrics.size, GOLD);
+    const textActor = new ex.Actor({
+      pos: ex.vec(codeMetrics.x, codeMetrics.y),
+      anchor: ex.vec(0, 0),
+      z: 33,
+    });
+    textActor.graphics.use(text);
+    const caret = makeFieldCaret(codeMetrics.size, 34);
+    this.add(textActor);
+    this.add(caret);
+    this.overlay.push(textActor, caret);
+    this.codeText = text;
+    this.codeBox = face;
+    this.codeCaret = caret;
+
+    const error = uiText('', PROMPT.font.error, DANGER);
+    error.maxWidth = spec.w;
+    const errorActor = new ex.Actor({
+      pos: ex.vec(PROMPT.error.x, PROMPT.error.y),
       anchor: ex.vec(0, 0),
       z: 33,
     });
@@ -647,12 +656,13 @@ export class MenuScene extends ex.Scene {
       PROMPT.submit.y,
       PROMPT.submit.w,
       PROMPT.submit.h,
-      promptSubmitLabel(kind),
-      isMobileDevice() ? 16 : BUTTON_FONT_SIZE,
+      'Join',
+      PROMPT.font.button,
       () => {
-        void this.submitPrompt();
+        void this.submitJoin();
       },
       32,
+      true,
       true,
     );
     const cancel = this.button(
@@ -661,120 +671,70 @@ export class MenuScene extends ex.Scene {
       PROMPT.cancel.w,
       PROMPT.cancel.h,
       'Cancel',
-      isMobileDevice() ? 16 : BUTTON_FONT_SIZE,
+      PROMPT.font.button,
       () => {
         this.closeOverlay();
       },
       32,
       true,
+      true,
     );
     this.overlay.push(submit, cancel);
     this.paintPrompt();
     refreshCanvasTextFields();
-    this.focusMenuField();
+    this.codeField?.focus();
   }
 
   private paintPrompt(): void {
-    if (this.mode !== 'create' && this.mode !== 'join') {
+    if (this.mode !== 'join') {
       return;
-    }
-    if (this.nameBox) {
-      this.nameBox.strokeColor = this.focused === 'name' ? STROKE_HOT : STROKE;
     }
     if (this.codeBox) {
-      this.codeBox.strokeColor = this.focused === 'code' ? STROKE_HOT : STROKE;
+      this.codeBox.strokeColor = this.codeFocused ? STROKE_HOT : STROKE;
     }
-    this.paintPromptField(
-      this.nameText,
-      this.nameCaret,
-      this.name,
-      this.focused === 'name',
-      this.nameField,
-      promptLabel(PROMPT.nameField),
-    );
-    this.paintPromptField(
-      this.codeText,
-      this.codeCaret,
-      this.code,
-      this.focused === 'code',
-      this.codeField,
-      promptLabel(PROMPT.codeField),
-    );
-  }
-
-  private paintPromptField(
-    text: ex.Text | undefined,
-    caret: ex.Actor | undefined,
-    value: string,
-    focused: boolean,
-    handle: CanvasTextFieldHandle | undefined,
-    metrics: FieldLabel,
-  ): void {
-    if (!text || !caret) {
-      return;
-    }
-    const index = focused
-      ? (handle?.selectionIndex() ?? value.length)
-      : value.length;
+    if (!this.codeText || !this.codeCaret) return;
+    const index = this.codeFocused
+      ? (this.codeField?.selectionIndex() ?? this.code.length)
+      : this.code.length;
     const layout = layoutFieldCaret({
-      value,
+      value: this.code,
       index,
-      size: metrics.size,
-      originX: metrics.x,
-      originY: metrics.y,
-      columns: metrics.columns,
+      size: codeMetrics.size,
+      originX: codeMetrics.x,
+      originY: codeMetrics.y,
+      measure: codeMetrics.measure,
     });
-    text.text = layout.text;
-    text.color = GOLD;
-    showFieldCaret(caret, focused, layout.x, layout.y);
+    this.codeText.text = layout.text;
+    showFieldCaret(this.codeCaret, this.codeFocused, layout.x, layout.y);
   }
 
-  private async submitPrompt(): Promise<void> {
-    const kind = this.mode;
-    if ((kind !== 'create' && kind !== 'join') || this.busy) {
-      return;
-    }
-    const problem = promptError(kind, this.name, this.code);
+  private async submitJoin(): Promise<void> {
+    if (this.mode !== 'join' || this.busy) return;
+    const problem = joinPromptError(this.code);
     if (problem) {
       this.setError(problem);
       return;
     }
-    rememberPreferredName(this.clientId, this.name);
     const blocked = roomEntryError(this.phase);
     if (blocked) {
       this.setError(blocked);
       return;
     }
     this.busy = true;
-    if (kind === 'create') {
-      const grant = await coinDialog(
-        this.engine,
-        this,
-        'Room chips',
-        'Each player receives this grant once per room.',
-        [{ key: 'startingCoins', label: 'Starting chips', value: 10_000 }],
-        'Create room',
-      );
-      if (!grant) {
-        this.busy = false;
-        return;
-      }
-      localStorage.setItem('roomStartingCoins', String(grant.startingCoins));
-    }
     this.submitAttempt += 1;
     const attempt = this.submitAttempt;
-    this.loading.show(kind === 'create' ? 'Creating room' : 'Joining room');
+    this.loading.show('Joining room');
     let failure: string | undefined;
     try {
       failure = await this.enter({
-        kind,
-        name: this.name,
+        kind: 'join',
+        name: this.joinName,
         code: this.code,
       });
     } catch (error: unknown) {
       failure = error instanceof Error ? error.message : 'Could not join';
     }
-    if (attempt !== this.submitAttempt || this.mode !== kind) {
+    if (attempt !== this.submitAttempt || this.mode !== 'join') {
       return;
     }
     this.busy = false;
@@ -806,7 +766,6 @@ export class MenuScene extends ex.Scene {
     this.gameIndex = 0;
     this.soloSeatIndex = 0;
     this.soloVariationIndex = 0;
-    this.name = preferredNameForPrompt(this.clientId, '');
     this.shade();
 
     const box = SOLO_PICKER.panel;
@@ -878,43 +837,6 @@ export class MenuScene extends ex.Scene {
       },
     );
 
-    const spec = SOLO_PICKER.nameField;
-    this.overlayText(spec.x, spec.y - 16, 8, DIM, () => 'Your Name');
-    const face = rect(spec.w, spec.h, FIELD, STROKE_HOT);
-    const actor = new ex.Actor({
-      pos: ex.vec(spec.x, spec.y),
-      anchor: ex.vec(0, 0),
-      width: spec.w,
-      height: spec.h,
-      z: 32,
-    });
-    actor.graphics.use(face);
-    actor.on('pointerdown', (event) => {
-      this.claimOverlayClick(event);
-    });
-    actor.on('pointerup', (event) => {
-      this.claimOverlayClick(event);
-      this.soloNameField?.focus();
-      this.paintSolo();
-    });
-    this.add(actor);
-    this.overlay.push(actor);
-    this.nameBox = face;
-    const metrics = promptLabel(spec);
-    const text = canvasText('', metrics.size, GOLD);
-    const textActor = new ex.Actor({
-      pos: ex.vec(metrics.x, metrics.y),
-      anchor: ex.vec(0, 0),
-      z: 33,
-    });
-    textActor.graphics.use(text);
-    const caret = makeFieldCaret(metrics.size, 34);
-    this.add(textActor);
-    this.add(caret);
-    this.overlay.push(textActor, caret);
-    this.nameText = text;
-    this.nameCaret = caret;
-
     const error = canvasText('', 8, DANGER);
     const errorActor = new ex.Actor({
       pos: ex.vec(SOLO_PICKER.error.x, SOLO_PICKER.error.y),
@@ -956,7 +878,6 @@ export class MenuScene extends ex.Scene {
     );
     this.paintSolo();
     refreshCanvasTextFields();
-    this.soloNameField?.focus();
   }
 
   private soloArrowRow(
@@ -1023,25 +944,12 @@ export class MenuScene extends ex.Scene {
         this.soloVariationText.text = 'None';
       }
     }
-    this.paintPromptField(
-      this.nameText,
-      this.nameCaret,
-      this.name,
-      true,
-      this.soloNameField,
-      promptLabel(SOLO_PICKER.nameField),
-    );
   }
 
   private async submitSolo(): Promise<void> {
     if (this.mode !== 'solo' || this.busy) {
       return;
     }
-    if (this.name.trim().length === 0) {
-      this.setError('Name is required');
-      return;
-    }
-    rememberPreferredName(this.clientId, this.name);
     const blocked = roomEntryError(this.phase);
     if (blocked) {
       this.setError(blocked);
@@ -1061,7 +969,7 @@ export class MenuScene extends ex.Scene {
     let failure: string | undefined;
     try {
       failure = await this.startSolo({
-        name: this.name.trim(),
+        name: this.playerName(),
         gameType: game.gameType,
         seatCount: soloSeatCount(
           game.minPlayers,
@@ -1395,7 +1303,7 @@ export class MenuScene extends ex.Scene {
   }
 
   private onKey(key: ex.Keys, value: string): void {
-    if (this.mode === 'main') {
+    if (this.mode === 'main' || this.mode === 'create') {
       return;
     }
     if (key === ex.Keys.Escape) {
@@ -1425,29 +1333,19 @@ export class MenuScene extends ex.Scene {
     if (this.busy) {
       return;
     }
-    const kind = this.mode;
     if (key === ex.Keys.Enter) {
-      this.advancePrompt();
-      return;
+      void this.submitJoin();
+    } else if (this.mode === 'join' && key === ex.Keys.Backspace) {
+      this.storeCode(applyCodeKey(this.code, 'Backspace'));
+    } else if (this.mode === 'join' && value.length === 1) {
+      this.storeCode(applyCodeKey(this.code, value));
     }
-    if (
-      kind === 'join' &&
-      (key === ex.Keys.Tab ||
-        key === ex.Keys.ArrowUp ||
-        key === ex.Keys.ArrowDown)
-    ) {
-      this.focused = this.focused === 'name' ? 'code' : 'name';
-      this.paintPrompt();
-      this.focusMenuField();
-      return;
-    }
-    if (key === ex.Keys.Backspace) {
-      this.writeField('Backspace');
-      return;
-    }
-    if (value.length === 1) {
-      this.writeField(value);
-    }
+  }
+
+  private playerName(fallback = ''): string {
+    const profile = this.casinoConnection?.db.myCasinoProfile.iter();
+    const linked = profile && [...profile][0];
+    return preferredPlayerName(this.clientId, fallback, linked?.discordUserId);
   }
 
   private bindMenuFields(): void {
@@ -1455,64 +1353,6 @@ export class MenuScene extends ex.Scene {
       return;
     }
     this.menuFieldsReady = true;
-    const prompting = (): boolean =>
-      this.mode === 'create' || this.mode === 'join';
-    this.soloNameField = bindCanvasTextField({
-      id: 'menu-solo-name',
-      label: 'Your Name',
-      box: SOLO_PICKER.nameField,
-      maxLength: NAME_MAX,
-      active: () => this.mode === 'solo',
-      read: () => this.name,
-      sanitize: (value) => applyFieldText(value, NAME_MAX),
-      write: (value) => {
-        this.storeName(value);
-        this.paintSolo();
-      },
-      submit: () => {
-        void this.submitSolo();
-      },
-      cancel: () => {
-        this.closeOverlay();
-      },
-      onFocus: () => {
-        this.focusPromptBox('name');
-      },
-      enterKeyHint: () => 'go',
-      autoCapitalize: 'words',
-      metrics: promptLabel(SOLO_PICKER.nameField),
-      onCaret: () => {
-        this.paintSolo();
-      },
-    });
-    this.nameField = bindCanvasTextField({
-      id: 'menu-name',
-      label: 'Your Name',
-      box: PROMPT.nameField,
-      maxLength: NAME_MAX,
-      active: prompting,
-      read: () => this.name,
-      sanitize: (value) => applyFieldText(value, NAME_MAX),
-      write: (value) => {
-        this.storeName(value);
-      },
-      submit: () => {
-        this.advancePrompt();
-      },
-      cancel: () => {
-        this.closeOverlay();
-      },
-      move: (key) => this.movePromptField(key),
-      onFocus: () => {
-        this.focusPromptBox('name');
-      },
-      enterKeyHint: () => (this.mode === 'join' ? 'next' : 'go'),
-      autoCapitalize: 'words',
-      metrics: promptLabel(PROMPT.nameField),
-      onCaret: () => {
-        this.paintPrompt();
-      },
-    });
     this.codeField = bindCanvasTextField({
       id: 'menu-code',
       label: 'Room Code',
@@ -1525,86 +1365,26 @@ export class MenuScene extends ex.Scene {
         this.storeCode(value);
       },
       submit: () => {
-        this.advancePrompt();
+        void this.submitJoin();
       },
       cancel: () => {
         this.closeOverlay();
       },
-      move: (key) => this.movePromptField(key),
       onFocus: () => {
-        this.focusPromptBox('code');
+        this.codeFocused = true;
+        this.paintPrompt();
+      },
+      onBlur: () => {
+        this.codeFocused = false;
+        this.paintPrompt();
       },
       enterKeyHint: 'go',
       autoCapitalize: 'characters',
-      metrics: promptLabel(PROMPT.codeField),
+      metrics: codeMetrics,
       onCaret: () => {
         this.paintPrompt();
       },
     });
-  }
-
-  private focusPromptBox(id: 'name' | 'code'): void {
-    if (this.mode !== 'create' && this.mode !== 'join') {
-      return;
-    }
-    if (id === 'code' && this.mode !== 'join') {
-      return;
-    }
-    if (this.focused === id) {
-      return;
-    }
-    this.focused = id;
-    this.paintPrompt();
-  }
-
-  private focusMenuField(fromUserGesture = false): void {
-    if (this.focused === 'code') {
-      this.codeField?.focus(fromUserGesture);
-      return;
-    }
-    this.nameField?.focus(fromUserGesture);
-  }
-
-  private movePromptField(key: FieldMoveKey): boolean {
-    if (this.mode !== 'join') {
-      return false;
-    }
-    if (key !== 'Tab' && key !== 'ArrowUp' && key !== 'ArrowDown') {
-      return false;
-    }
-    this.focused = this.focused === 'name' ? 'code' : 'name';
-    this.paintPrompt();
-    this.focusMenuField(true);
-    return true;
-  }
-
-  private advancePrompt(): void {
-    if (this.busy) {
-      return;
-    }
-    const kind = this.mode;
-    if (kind !== 'create' && kind !== 'join') {
-      return;
-    }
-    const next = nextFieldAfterEnter(kind, this.focused, this.name);
-    if (next === 'submit') {
-      void this.submitPrompt();
-      return;
-    }
-    this.focused = next;
-    this.paintPrompt();
-    this.focusMenuField(true);
-  }
-
-  private storeName(value: string): void {
-    if (this.busy) {
-      this.nameField?.sync();
-      return;
-    }
-    this.setError('');
-    this.name = value;
-    rememberPreferredName(this.clientId, this.name);
-    this.paintPrompt();
   }
 
   private storeCode(value: string): void {
@@ -1615,14 +1395,6 @@ export class MenuScene extends ex.Scene {
     this.setError('');
     this.code = value;
     this.paintPrompt();
-  }
-
-  private writeField(key: string): void {
-    if (this.focused === 'name') {
-      this.storeName(applyFieldKey(this.name, key, NAME_MAX));
-    } else {
-      this.storeCode(applyCodeKey(this.code, key));
-    }
   }
 
   private overlayText(
@@ -1663,6 +1435,7 @@ export class MenuScene extends ex.Scene {
     onPress: () => void,
     z: number,
     claim = false,
+    proportional = false,
   ): ex.Actor {
     const actor = new ex.Actor({
       pos: ex.vec(x, y),
@@ -1673,12 +1446,18 @@ export class MenuScene extends ex.Scene {
     });
     const face = rect(w, h, BUTTON, STROKE);
     actor.graphics.use(face);
-    const rest = buttonCaptionPos(caption, w, h, size);
+    const rest = proportional
+      ? uiCaption(caption, w, h, size)
+      : buttonCaptionPos(caption, w, h, size);
     const captionActor = new ex.Actor({
       pos: ex.vec(rest.x, rest.y),
       anchor: ex.vec(0, 0),
     });
-    captionActor.graphics.use(canvasText(caption, size, GOLD));
+    captionActor.graphics.use(
+      proportional
+        ? uiText(caption, size, GOLD)
+        : canvasText(caption, size, GOLD),
+    );
     actor.addChild(captionActor);
     actor.on('pointerenter', () => {
       face.strokeColor = STROKE_HOT;

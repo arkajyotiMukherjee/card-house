@@ -1,3 +1,4 @@
+import { publicPlayerName } from '../../src/shared/discord-player-name';
 import {
   CasinoFloor,
   casinoAppearance,
@@ -721,10 +722,11 @@ export class LobbyScene {
       const nameLimit = Math.floor(
         (932 - textX - (wallet.crowned ? 32 : 12)) / size,
       );
+      const displayName = publicPlayerName(wallet.name);
       const name =
-        wallet.name.length > nameLimit
-          ? wallet.name.slice(0, nameLimit - 3) + '...'
-          : wallet.name;
+        displayName.length > nameLimit
+          ? displayName.slice(0, nameLimit - 3) + '...'
+          : displayName;
       this.leaderboardActors.push(
         this.addChatLabel(
           CHAT_PANEL.list.x,
@@ -2325,7 +2327,7 @@ export class LobbyScene {
         id: member.id,
         lobbyId: member.lobbyId,
         clientId: member.clientId,
-        name: member.name,
+        name: publicPlayerName(member.name),
       });
     }
     return rows;
@@ -2392,7 +2394,7 @@ export class LobbyScene {
         const connected = row.connected && !row.leftRoom;
         return {
           id: row.id,
-          name: row.name,
+          name: publicPlayerName(row.name),
           connected,
           tableId: seat?.tableId ?? watching?.tableId,
           state: !connected
@@ -2449,7 +2451,7 @@ export class LobbyScene {
       })),
       ranks: leaderboardRows(wallets).map((row) => ({
         id: row.id,
-        name: row.name,
+        name: publicPlayerName(row.name),
         rank: row.rank,
         crowned: row.crowned,
         net: `${row.profit > 0n ? '+' : ''}${formatCoins(row.profit)}`,
@@ -2473,9 +2475,10 @@ export class LobbyScene {
               game: game.gameType.replaceAll('_', ' '),
               name: game.name,
               capacity: game.maxPlayers,
-              host:
+              host: publicPlayerName(
                 members.find((member) => member.id === game.hostMemberId)
                   ?.name ?? 'Away',
+              ),
               status:
                 game.status.tag === 'WaitingForPlayers'
                   ? 'Waiting'
@@ -2520,9 +2523,10 @@ export class LobbyScene {
             id: row.id,
             memberId: row.lobbyMemberId,
             body: row.body,
-            author:
+            author: publicPlayerName(
               members.find((member) => member.id === row.lobbyMemberId)?.name ??
-              'Room',
+                'Room',
+            ),
             at: Number(row.createdAt.microsSinceUnixEpoch / 1000n),
           })),
         ...[...db.myCasinoRoomChat.iter()].map((row) => ({

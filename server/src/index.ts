@@ -1,3 +1,4 @@
+import { publicPlayerName } from '../../src/shared/discord-player-name';
 import {
   FLOOR_STEER_STEPS,
   FLOOR_STEP_MS,
@@ -1644,7 +1645,7 @@ function joinRequest(
 ): { lobbyCode: string; clientId: string; name: string } {
   const lobbyCode = rawCode.trim().toUpperCase();
   const clientId = rawClientId.trim();
-  const name = rawName.trim();
+  const name = rawName.trim() && publicPlayerName(rawName);
   if (lobbyCode.length === 0) {
     throw new SenderError('Room code is required');
   }
@@ -2734,7 +2735,7 @@ export const join_table = spacetimedb.reducer(
       ),
       tableId: gameTable.id,
       lobbyMemberId: '',
-      body: `${member.name} joined the table.`,
+      body: `${publicPlayerName(member.name)} joined the table.`,
       createdAt: ctx.timestamp,
     });
     ctx.db.GameTable.id.update({ ...gameTable, lastActivityAt: ctx.timestamp });
@@ -3829,7 +3830,7 @@ export const start_solo_game = spacetimedb.reducer(
     },
   ) => {
     const clientId = rawClientId.trim();
-    const name = rawName.trim();
+    const name = rawName.trim() && publicPlayerName(rawName);
     const gameType = rawGameType.trim();
     if (clientId.length === 0) {
       throw new SenderError('Client id is required');
@@ -4232,7 +4233,9 @@ function settleEconomy(ctx: ModuleCtx, tableId: string, after: unknown): void {
       summary.push({
         seatIndex: funding.seatIndex,
         walletId: funding.walletId,
-        name: ctx.db.RoomWallet.id.find(funding.walletId)?.name ?? 'Player',
+        name: publicPlayerName(
+          ctx.db.RoomWallet.id.find(funding.walletId)?.name ?? 'Player',
+        ),
         profit: profit.toString(),
       });
     }
@@ -4261,7 +4264,9 @@ function settleEconomy(ctx: ModuleCtx, tableId: string, after: unknown): void {
       summary.push({
         seatIndex: funding.seatIndex,
         walletId: funding.walletId,
-        name: ctx.db.RoomWallet.id.find(funding.walletId)?.name ?? 'Player',
+        name: publicPlayerName(
+          ctx.db.RoomWallet.id.find(funding.walletId)?.name ?? 'Player',
+        ),
         profit: profit.toString(),
         won: winners.includes(funding.seatIndex),
         refunded: prizes === null,
@@ -4498,7 +4503,7 @@ function sweepTableHosting(ctx: ModuleCtx): void {
         ctx,
         table.lobbyId,
         '',
-        `${ctx.db.LobbyMember.id.find(table.hostMemberId)?.name ?? 'A player'} now hosts ${table.name}.`,
+        `${publicPlayerName(ctx.db.LobbyMember.id.find(table.hostMemberId)?.name ?? 'A player')} now hosts ${table.name}.`,
       );
     }
     const full =

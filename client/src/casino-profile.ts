@@ -10,6 +10,7 @@ import {
   readDiscordLinkResult,
   type DiscordLinkResult,
 } from '../../src/shared/casino-discord-link';
+import { discordDisplayUsername } from '../../src/shared/discord-player-name';
 import { avatarSprite, CASINO_PALETTE } from './casino-art';
 import { classicText } from './classic-table-design';
 import { uiText, uiCaption } from './ui-text';
@@ -27,13 +28,14 @@ import {
   fetchDiscordUsername,
 } from './discord-join';
 import { getOrCreateClientId } from './client-id';
-import {
-  bindCanvasTextField,
-  layoutFieldCaret,
-  type CanvasTextFieldHandle,
-} from './html-field';
+import { bindCanvasTextField, layoutFieldCaret } from './html-field';
 import { applyFieldText, NAME_MAX } from './lobby';
 import { rememberLobby } from './last-room';
+import {
+  customPlayerName,
+  readPlayerNamePreference,
+  rememberPlayerNamePreference,
+} from './preferred-name';
 import type { DbConnection } from './module_bindings';
 
 const AVATAR_STORAGE = 'casinoAvatar';
@@ -97,14 +99,18 @@ export function openCasinoAvatarEditor(
         )
       : undefined;
   const member = roomMember();
-  let useDiscordId = !!member && member.name === profile()?.discordUserId;
-  let customName = useDiscordId ? '' : (member?.name ?? '');
-  let nameField: CanvasTextFieldHandle | undefined;
-  let linkedUsername = '';
+  const preference = readPlayerNamePreference(clientId);
+  const linkedId = profile()?.discordUserId;
+  const savedDiscord = preference.discord;
+  let linkedUsername =
+    savedDiscord?.userId === linkedId ? (savedDiscord?.username ?? '') : '';
+  let useDiscordUsername = !!linkedUsername;
+  let customName =
+    preference.customName || customPlayerName(member?.name) || 'Guest';
   const linkedCaption = () =>
     linkedUsername
       ? `Discord · @${linkedUsername}`
-      : `Discord · ${profile()?.discordUserId ?? ''}`;
+      : 'Checking Discord username…';
   const look = {
     ...(readCasinoAvatar(profile()?.avatar ?? '') ?? localCasinoAvatar()),
   };
@@ -150,7 +156,7 @@ export function openCasinoAvatarEditor(
     closed = true;
     linkPopup?.close();
     linkChannel?.close();
-    nameField?.close();
+    nameField.close();
     detach();
     document.removeEventListener('keydown', key);
     scene.off('deactivate', close);
@@ -256,14 +262,25 @@ export function openCasinoAvatarEditor(
   const refreshLinkedCaption = (): void => {
     const id = profile()?.discordUserId;
     if (!id) return;
+    if (savedDiscord?.userId === id && !linkedUsername) {
+      linkedUsername = savedDiscord.username;
+      useDiscordUsername = true;
+    }
     status.text = linkedCaption();
-    void fetchDiscordUsername(botUrl, id).then((username) => {
-      if (closed || profile()?.discordUserId !== id || !username) return;
-      linkedUsername = username;
-      status.text = linkedCaption();
+    paintNameMode();
+    void fetchDiscordUsername(botUrl, id).then((result) => {
+      if (closed || profile()?.discordUserId !== id) return;
+      const username = discordDisplayUsername(result);
+      if (username) {
+        linkedUsername = username;
+        if (!savedDiscord && member?.name === id) useDiscordUsername = true;
+      }
+      status.text = linkedUsername
+        ? linkedCaption()
+        : 'Discord username unavailable';
+      paintNameMode();
     });
   };
-  if (profile()) refreshLinkedCaption();
   let linkButton: ex.Actor | undefined;
   if (connection && botUrl && !profile()) {
     let ready = false;
@@ -351,12 +368,18 @@ export function openCasinoAvatarEditor(
   detach = () => scene.off('preupdate', update);
   const save = () => {
     if (busy) return;
-    const name = useDiscordId ? profile()?.discordUserId : customName.trim();
-    if (member && !name) {
-      status.text = 'Enter a room name';
+    const discordUserId = profile()?.discordUserId;
+    const discord =
+      useDiscordUsername && discordUserId && linkedUsername
+        ? { userId: discordUserId, username: linkedUsername }
+        : undefined;
+    const name = discord?.username ?? customPlayerName(customName);
+    if (!name) {
+      status.text = 'Enter a display name';
       return;
     }
     const avatar = JSON.stringify(look);
+    const namePreference = { customName, discord };
     busy = true;
     void (async () => {
       await connection?.reducers.saveCasinoAvatar({ lobbyId, avatar });
@@ -376,6 +399,7 @@ export function openCasinoAvatarEditor(
       }
     })()
       .then(() => {
+        rememberPlayerNamePreference(clientId, namePreference);
         localStorage.setItem(AVATAR_STORAGE, avatar);
         close();
       })
@@ -385,82 +409,123 @@ export function openCasinoAvatarEditor(
         busy = false;
       });
   };
-  if (member) {
-    add(181, 389, 182, uiText('Room name', 17, ink));
-    const box = { x: 544, y: 382, w: 235, h: 34 };
-    const face = add(box.x, box.y, 182, panelRect(box.w, box.h, dark, gold));
-    const custom = canvasText(customName, 10, ink);
-    const customActor = add(box.x + 10, box.y + 12, 183, custom);
-    const discordText = uiText('', 16, ink);
-    const discordActor = add(box.x + 10, box.y + 8, 183, discordText);
-    const caret = makeFieldCaret(10, 185);
-    scene.add(caret);
-    actors.push(caret);
-    let focused = false;
-    const paintName = (index = customName.length) => {
-      const layout = layoutFieldCaret({
-        value: customName,
-        index,
-        originX: box.x + 10,
-        originY: box.y + 12,
-        size: 10,
-        columns: NAME_MAX,
-      });
-      custom.text = layout.text;
-      showFieldCaret(caret, focused && !useDiscordId, layout.x, layout.y);
-    };
-    nameField = bindCanvasTextField({
-      id: 'casino-room-name',
-      label: 'Custom room name',
-      box,
-      maxLength: NAME_MAX,
-      active: () => !closed && !useDiscordId,
-      read: () => customName,
-      sanitize: (value) => applyFieldText(value, NAME_MAX),
-      write: (value) => {
-        customName = value;
-        paintName();
-      },
-      onCaret: paintName,
-      onFocus: () => {
-        focused = true;
-        paintName(nameField?.selectionIndex());
-      },
-      onBlur: () => {
-        focused = false;
-        paintName();
-      },
-      submit: save,
-      cancel: close,
-      metrics: { x: box.x + 10, y: box.y + 12, size: 10, columns: NAME_MAX },
+  add(181, 389, 182, uiText('Display name', 17, ink));
+  const box = { x: 294, y: 382, w: 244, h: 34 };
+  const face = add(box.x, box.y, 182, panelRect(box.w, box.h, dark, gold));
+  const custom = canvasText(customName, 10, ink);
+  const customActor = add(box.x + 10, box.y + 12, 183, custom);
+  const usernameText = uiText('', 16, ink);
+  const usernameActor = add(box.x + 10, box.y + 8, 183, usernameText);
+  const caret = makeFieldCaret(10, 185);
+  scene.add(caret);
+  actors.push(caret);
+  let focused = false;
+  const paintName = (index = customName.length) => {
+    const layout = layoutFieldCaret({
+      value: customName,
+      index,
+      originX: box.x + 10,
+      originY: box.y + 12,
+      size: 10,
+      columns: NAME_MAX,
     });
-    const repaintMode = () => {
-      customActor.graphics.isVisible = !useDiscordId;
-      discordActor.graphics.isVisible = useDiscordId;
-      discordText.text = profile()?.discordUserId ?? '';
-      customButton.graphics.opacity = useDiscordId ? 0.7 : 1;
-      discordButton.graphics.opacity = useDiscordId ? 1 : 0.7;
-      nameField?.refresh();
+    custom.text = layout.text;
+    showFieldCaret(caret, focused && !useDiscordUsername, layout.x, layout.y);
+  };
+  const nameField = bindCanvasTextField({
+    id: 'casino-display-name',
+    label: 'Display name',
+    box,
+    maxLength: NAME_MAX,
+    active: () => !closed && !useDiscordUsername,
+    read: () => customName,
+    sanitize: (value) => applyFieldText(value, NAME_MAX),
+    write: (value) => {
+      customName = value;
       paintName();
-    };
-    const customButton = button(291, 382, 109, 'Custom', () => {
-      useDiscordId = false;
-      repaintMode();
-      nameField?.focus(true);
-    });
-    const discordButton = button(408, 382, 126, 'Discord ID', () => {
-      if (!profile()) {
-        status.text = 'Link Discord to use its ID';
-        return;
-      }
-      useDiscordId = true;
-      repaintMode();
-    });
-    face.on('pointerup', () => {
-      if (!useDiscordId) nameField?.focus(true);
-    });
-    repaintMode();
+    },
+    onCaret: paintName,
+    onFocus: () => {
+      focused = true;
+      paintName(nameField.selectionIndex());
+    },
+    onBlur: () => {
+      focused = false;
+      paintName();
+    },
+    submit: save,
+    cancel: close,
+    metrics: { x: box.x + 10, y: box.y + 12, size: 10, columns: NAME_MAX },
+  });
+  const checkBox = { x: 551, y: 382, w: 228, h: 34, size: 20 };
+  const checkInsetY = (checkBox.h - checkBox.size) / 2;
+  const checkFace = panelRect(
+    checkBox.size,
+    checkBox.size,
+    ex.Color.fromHex('#215642'),
+    gold,
+  );
+  const checkbox = add(
+    checkBox.x,
+    checkBox.y,
+    184,
+    checkFace,
+    checkBox.w,
+    checkBox.h,
+  );
+  checkbox.graphics.offset = ex.vec(0, checkInsetY);
+  const tick = new ex.Canvas({
+    width: checkBox.size,
+    height: checkBox.size,
+    draw: (g) => {
+      g.strokeStyle = CASINO_PALETTE.cream;
+      g.lineWidth = 2;
+      g.lineCap = 'round';
+      g.lineJoin = 'round';
+      g.beginPath();
+      g.moveTo(5, 10);
+      g.lineTo(8, 14);
+      g.lineTo(15, 6);
+      g.stroke();
+    },
+  });
+  tick.origin = ex.vec(0, 0);
+  const check = add(checkBox.x, checkBox.y + checkInsetY, 185, tick);
+  const checkLabel = add(
+    580,
+    389,
+    182,
+    uiText('Use Discord username', 16, ink),
+  );
+  bindButtonPress(checkbox, undefined, undefined, (event) => {
+    event.cancel();
+    if (!linkedUsername || busy) return;
+    useDiscordUsername = !useDiscordUsername;
+    paintNameMode();
+    if (!useDiscordUsername) nameField.focus(true);
+  });
+  face.on('pointerup', () => {
+    if (!useDiscordUsername) nameField.focus(true);
+  });
+
+  function paintNameMode(): void {
+    customActor.graphics.isVisible = !useDiscordUsername;
+    usernameActor.graphics.isVisible = useDiscordUsername;
+    usernameText.text = linkedUsername;
+    usernameActor.scale = ex.vec(
+      Math.min(1, (box.w - 20) / Math.max(1, usernameText.width)),
+      1,
+    );
+    const showCheckbox = !!profile()?.discordUserId;
+    checkbox.graphics.isVisible = showCheckbox;
+    checkLabel.graphics.isVisible = showCheckbox;
+    checkLabel.graphics.opacity = linkedUsername ? 1 : 0.55;
+    check.graphics.isVisible = showCheckbox && useDiscordUsername;
+    nameField.refresh();
+    paintName();
   }
+  if (profile()) refreshLinkedCaption();
+  else paintNameMode();
   button(544, 434, 113, 'Cancel', close);
   button(667, 434, 112, 'Save', save);
 }

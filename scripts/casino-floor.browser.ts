@@ -59,13 +59,6 @@ async function point(page: Page, x: number, y: number, touch = false) {
 function view(page: Page, name: string) {
   return page.screenshot({ path: join(evidence, name + '.png') });
 }
-async function name(page: Page, who: string) {
-  const input = page.locator('input[aria-label="Your Name"]:focus');
-  await input.waitFor({ timeout: 10000 });
-  await input.fill(who);
-  await input.press('Enter');
-}
-
 const browser = await chromium.launch({
   executablePath: process.env.CASINO_CHROMIUM ?? '/usr/bin/chromium',
   args: [
@@ -108,11 +101,16 @@ try {
   await point(desktop, 840, 42);
   await view(desktop, 'avatar-editor');
   await point(desktop, 756, 166);
+  const avatarName = desktop.getByRole('textbox', {
+    name: 'Display name',
+    exact: true,
+  });
+  await avatarName.focus();
+  await avatarName.fill('Ava Bennett');
   await point(desktop, 725, 450);
   assert.ok(await desktop.evaluate(() => localStorage.getItem('casinoAvatar')));
   await point(desktop, 480, 190);
-  await name(desktop, 'Ava Bennett');
-  await point(desktop, 333, 343);
+  await point(desktop, 627, 355);
   await desktop.waitForFunction(() =>
     /^\/[A-Z0-9]{4}$/.test(location.pathname),
   );
@@ -154,18 +152,20 @@ try {
       'Mozilla/5.0 (Linux; Android 15; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Mobile Safari/537.36',
   });
   player.on('pageerror', (e) => errors.push(e.message));
-  await player.goto(`${base}/${code}`);
-  const phoneName = player
-    .getByRole('textbox', { name: 'Your Name', exact: true })
-    .filter({ visible: true })
-    .last();
-  await phoneName.waitFor({ timeout: 25_000 }).catch(async (error) => {
-    await view(player, 'mobile-join-debug');
-    throw error;
+  await player.goto(base);
+  await point(player, 850, 42, true);
+  const mobileAvatarName = player.getByRole('textbox', {
+    name: 'Display name',
+    exact: true,
   });
-  await phoneName.fill('Finn Walker');
-  await phoneName.press('Enter');
-  await point(player, 340, 433, true);
+  await mobileAvatarName.focus();
+  await mobileAvatarName.fill('Finn Walker');
+  await point(player, 725, 450, true);
+  await player.goto(`${base}/${code}`);
+  await player
+    .getByRole('textbox', { name: 'Room Code', exact: true })
+    .waitFor();
+  await point(player, 620, 433, true);
   try {
     await player.waitForFunction(
       () => localStorage.getItem('lastRoom')?.includes('Finn Walker'),
@@ -294,7 +294,7 @@ try {
     'Opening a paid table confirmation never buys a seat',
   );
   await view(desktop, 'paid-join');
-  await point(desktop, 325, 344);
+  await point(desktop, 625, 344);
   await until(seated, 'Seat reserved after confirming the paid join');
   await desktop.waitForFunction(
     () => !!JSON.parse(localStorage.getItem('lastRoom') ?? '{}').tableId,

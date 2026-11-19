@@ -43,9 +43,12 @@ import { SERVER_UNREACHABLE } from './connect';
 import { joinFailureMessage } from './join-errors';
 import type { DiscordJoinIdentity } from './join-path';
 import { rememberLobby } from './last-room';
-import { DISCORD_USER_ID } from '../../src/shared/discord-player-name';
+import { publicPlayerName } from '../../src/shared/discord-player-name';
 import { roomComposer } from './room-composer';
-import { readPreferredName, rememberPreferredName } from './preferred-name';
+import {
+  readPlayerNamePreference,
+  rememberPlayerNamePreference,
+} from './preferred-name';
 import { wrapText } from './menu-layout';
 import type { DbConnection } from './module_bindings';
 import { lobbyVoiceMemberIds, type PresenceRef } from './voice-presence';
@@ -237,7 +240,7 @@ export function mountLobbyPanel(
   renameBox.graphics.opacity = 0;
   saveButton.graphics.opacity = 0;
 
-  let name = readPreferredName(clientId);
+  let name = readPlayerNamePreference(clientId).customName;
   let code = '';
   let renameName = '';
   let focused: FieldId = 'name';
@@ -422,7 +425,7 @@ export function mountLobbyPanel(
     }
     const self = lines.find((line) => line.self);
     if (self && !renameFocused && !busy) {
-      renameName = self.name.slice(0, NAME_MAX);
+      renameName = publicPlayerName(self.name).slice(0, NAME_MAX);
     }
     paintRename();
   };
@@ -482,7 +485,6 @@ export function mountLobbyPanel(
         renameName = playerName;
         renameFocused = false;
         rememberLobby(room, playerName);
-        rememberPreferredName(clientId, playerName);
         syncJoinedLobby();
         if (
           joinedCode.length > 0 &&
@@ -524,7 +526,7 @@ export function mountLobbyPanel(
       .then(() => {
         renameName = playerName;
         rememberLobby(joinedCode, playerName);
-        rememberPreferredName(clientId, playerName);
+        rememberPlayerNamePreference(clientId, { customName: playerName });
         paintRename();
         syncJoinedLobby();
       })
@@ -807,9 +809,7 @@ export function mountLobbyPanel(
 
   return {
     enter: (kind, playerName, roomCode) => {
-      name = DISCORD_USER_ID.test(playerName)
-        ? playerName
-        : playerName.slice(0, NAME_MAX);
+      name = publicPlayerName(playerName);
       code = roomCode;
       paintFields();
       return submit(kind);
@@ -919,7 +919,7 @@ function readMembers(connection: DbConnection): MemberRecord[] {
       id: member.id,
       lobbyId: member.lobbyId,
       clientId: member.clientId,
-      name: member.name,
+      name: publicPlayerName(member.name),
     });
   }
   return rows;

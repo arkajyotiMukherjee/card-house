@@ -482,7 +482,7 @@ export class RummyDriver implements GameDriver<RummyState> {
         ? []
         : this.meldOpen
           ? acting && state.drawn && state.melds.length
-            ? ['layoff', 'back']
+            ? ['back', 'layoff']
             : ['back']
           : state.phase === 'finished'
             ? []

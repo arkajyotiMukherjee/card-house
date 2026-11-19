@@ -99,11 +99,15 @@ const createPage = await creation.newPage();
 createPage.on('pageerror', (error) => failures.push(error.message));
 await createPage.goto(base + '/');
 await createPage.waitForTimeout(1600);
+await tap(createPage, 854, 42);
+const avatarName = createPage.getByRole('textbox', {
+  name: 'Display name',
+  exact: true,
+});
+await avatarName.focus();
+await avatarName.fill('Ada');
+await tap(createPage, 722, 451);
 await tap(createPage, 480, 190);
-await createPage
-  .getByRole('textbox', { name: 'Your Name', exact: true })
-  .fill('Ada');
-await tap(createPage, 350, 348);
 await capture(createPage, '01-starting-grant-desktop');
 const editNumber = async (label, value) => {
   await createPage.getByRole('textbox', { name: label, exact: true }).focus();
@@ -112,14 +116,14 @@ const editNumber = async (label, value) => {
   await createPage.keyboard.type(String(value));
 };
 await editNumber('Starting chips', 10000);
-await tap(createPage, 334, 344);
+await tap(createPage, 625, 355);
 await createPage.waitForTimeout(1500);
 await capture(createPage, '02-leaderboard-desktop');
 await tap(createPage, 750, 24);
-await tap(createPage, 280, 380);
+await tap(createPage, 586, 380);
 await capture(createPage, '03-entry-fee-desktop');
 await editNumber('Entry fee', 100);
-await tap(createPage, 334, 344);
+await tap(createPage, 625, 344);
 await createPage.waitForTimeout(1500);
 await capture(createPage, '04-creator-host-desktop');
 await api(createPage);
@@ -157,16 +161,16 @@ await tap(alice.page, 625, 24);
 // Exercise both real configuration forms without reserving coins.
 await tap(alice.page, 750, 24);
 await tap(alice.page, 240, 230);
-await tap(alice.page, 280, 380);
+await tap(alice.page, 586, 380);
 await capture(alice.page, '09-poker-stakes-desktop');
-await tap(alice.page, 624, 452);
-await tap(alice.page, 460, 380);
+await tap(alice.page, 335, 452);
+await tap(alice.page, 375, 380);
 await tap(bob.page, 750, 24);
 await tap(bob.page, 224, 140);
-await tap(bob.page, 324, 483);
-await capture(bob.page, '10-poker-stakes-mobile');
-await tap(bob.page, 646, 486);
 await tap(bob.page, 636, 483);
+await capture(bob.page, '10-poker-stakes-mobile');
+await tap(bob.page, 314, 486);
+await tap(bob.page, 324, 483);
 const pokerId = await alice.page.evaluate(async (lobbyId) => {
   const db = window.proofDb;
   const before = new Set([...db.db.gameTable.iter()].map((row) => row.id));

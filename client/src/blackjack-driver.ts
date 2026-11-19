@@ -349,14 +349,14 @@ export class BlackjackDriver implements GameDriver<BlackjackState> {
     if (state.step === 'insurance')
       return [
         {
-          target: 'insurance:yes',
-          label: 'Insurance',
-          intent: { type: 'insurance', take: true } as BlackjackIntent,
-        },
-        {
           target: 'insurance:no',
           label: 'No thanks',
           intent: { type: 'insurance', take: false } as BlackjackIntent,
+        },
+        {
+          target: 'insurance:yes',
+          label: 'Insurance',
+          intent: { type: 'insurance', take: true } as BlackjackIntent,
         },
         {
           target: 'even_money',

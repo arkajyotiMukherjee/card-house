@@ -12,6 +12,7 @@ The approved [classic poker concept](poker-layout-concepts/A-classic-table.png) 
 - Separate the public game area from private hands. A pot, trick, stock/discard, or meld is table state, not an opponent seat.
 - Give each fact one home: do not echo the central claim or rank in the header and personal controls. Use the reclaimed space for readable cards rather than filling it with repeated status text.
 - Give every required value a stable place. Cards, labels, decorations, buttons, and transient messages must not overlap at rest.
+- Place Cancel or Decline on the left and the action it dismisses on the right. Use this same order in every confirmation, on desktop and mobile.
 - Use readable type and measured spacing. Do not solve crowding by reducing all text or cards until they are unreadable.
 - The green page already contains the scene; do not draw an additional border around the entire table UI. Borders identify controls, not every piece of information. The approved prize-pool badge is the deliberate information exception: one warm-gold outline and trophy identify the award. Use flat tonal surfaces for the personal band and poker pot, with no nested name boxes.
 
@@ -51,6 +52,8 @@ Classic tables use **Press Start 2P** for display text at 24 logical pixels or l
 The approved [Walkable Casino](walkable-casino.md) uses pixel display lettering for marquee headings and Chakra Petch for names, controls, and balances. Keep room chat and wallet actions accessible from the floor. The table directory, leaderboard, and gameplay use rectangular controls. Small avatar portraits carry the floor identity through to a seated game without taking space from the cards.
 
 Priority order is cards and legal decisions, chip totals/pot, current personal state, then names and metadata. Typical logical sizes: pot amount 32, own stack 28, opponent stack 22, result title 24, current instruction 20, names 17, seat status 16, nonessential metadata 14. Names stay unboxed and at least 16 when fitting a long name. Test full names, not just one-word placeholders. At a 667-pixel-wide landscape phone, the labels must still be readable.
+
+Room and chip dialogs use Chakra Petch for player names, help text, field labels and values, errors, and action captions. Use the landscape phone layout to give those elements larger type and more padding.
 
 The canvas has 2× backing resolution and smooth CSS scaling for text. Sprite sources keep pixel filtering. Do not change card texture filtering to blur the art when adopting readable text.
 

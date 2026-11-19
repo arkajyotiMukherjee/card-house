@@ -1,21 +1,22 @@
-import { wrapText } from './menu-layout';
 import { isMobileDevice } from './mobile-shell';
 import * as ex from 'excalibur';
 import {
-  canvasText,
   panelRect,
   makeFieldCaret,
+  showFieldCaret,
   GOLD,
   DIM,
   STROKE,
 } from './canvas-ui';
 import {
   bindCanvasTextField,
+  layoutFieldCaret,
   refreshCanvasTextFields,
   type CanvasTextFieldHandle,
 } from './html-field';
 import { bindButtonPress } from './button-press';
-import { buttonCaptionPos } from './button-style';
+import { classicText } from './classic-table-design';
+import { uiCaption, uiFieldLabel, uiSingleLine, uiText } from './ui-text';
 import { coinSetting } from '../../src/shared/economy';
 
 const openDialogs = new WeakSet<ex.Scene>();
@@ -29,6 +30,9 @@ export interface CoinField {
   value: number;
 }
 export interface CoinDialogOptions {
+  playerName?: string;
+  focusFirst?: boolean;
+  onSubmit?: (values: Record<string, number>) => Promise<string | undefined>;
   choice?: {
     values: string[];
     index: number;
@@ -52,13 +56,20 @@ export function coinDialog(
 ): Promise<Record<string, number> | null> {
   return new Promise((resolve) => {
     const mobile = isMobileDevice();
-    const panelX = mobile ? 160 : 180;
-    const panelWidth = mobile ? 640 : 600;
+    const panelWidth = mobile ? 688 : 600;
+    const panelX = (960 - panelWidth) / 2;
+    const padding = mobile ? 32 : 24;
+    const contentWidth = panelWidth - 2 * padding;
+    const nameHeight = options.playerName ? (mobile ? 34 : 28) : 0;
     const panelHeight =
-      (mobile ? 230 : 160) + Math.max(1, fields.length) * (mobile ? 58 : 54);
+      (mobile ? 230 : 160) +
+      Math.max(1, fields.length) * (mobile ? 58 : 54) +
+      nameHeight;
     const panelY = Math.floor((540 - panelHeight) / 2);
-    const left = panelX + 24;
+    const left = panelX + padding;
+    const right = left + contentWidth;
     let open = true;
+    let submitting = false;
     openDialogs.add(scene);
     const actors: ex.Actor[] = [];
     const inputs: CanvasTextFieldHandle[] = [];
@@ -72,14 +83,7 @@ export function coinDialog(
       actors.push(actor);
       return actor;
     };
-    const text = (
-      x: number,
-      y: number,
-      value: string,
-      size = 10,
-      color = GOLD,
-    ): ex.Text => {
-      const graphic = canvasText(value, size, color);
+    const addText = (x: number, y: number, graphic: ex.Text): ex.Text => {
       const actor = new ex.Actor({
         pos: ex.vec(x, y),
         anchor: ex.vec(0, 0),
@@ -113,23 +117,44 @@ export function coinDialog(
       panelRect(panelWidth, panelHeight, ex.Color.fromHex('#0a2e1c'), STROKE),
     );
     add(panel);
-    text(left, panelY + 20, title, mobile ? 16 : 14);
-    text(left, panelY + 52, note, mobile ? 10 : 8, DIM);
+    addText(left, panelY + 18, classicText(title, 24, GOLD));
+    if (options.playerName) {
+      addText(
+        left,
+        panelY + 48,
+        uiSingleLine(
+          `Playing as ${options.playerName}`,
+          mobile ? 24 : 19,
+          GOLD,
+          contentWidth,
+        ),
+      );
+    }
+    const description = uiText(note, mobile ? 21 : 16, DIM);
+    description.maxWidth = contentWidth;
+    addText(left, panelY + 52 + nameHeight, description);
     if (options.choice) {
       const choice = options.choice;
       let index = choice.index;
+      const choiceWidth = 246;
+      const choiceHeight = 38;
       const actor = new ex.Actor({
-        pos: ex.vec(panelX + panelWidth - 270, panelY + 14),
+        pos: ex.vec(right - choiceWidth, panelY + 12),
         anchor: ex.vec(0, 0),
-        width: 246,
-        height: 32,
+        width: choiceWidth,
+        height: choiceHeight,
         z: 104,
       });
       actor.graphics.use(
-        panelRect(246, 32, ex.Color.fromHex('#1b5c38'), STROKE),
+        panelRect(
+          choiceWidth,
+          choiceHeight,
+          ex.Color.fromHex('#1b5c38'),
+          STROKE,
+        ),
       );
-      const size = mobile ? 10 : 8;
-      const caption = canvasText('', size, GOLD);
+      const size = mobile ? 21 : 17;
+      const caption = uiText('', size, GOLD);
       const captionActor = new ex.Actor({ anchor: ex.vec(0, 0), z: 1 });
       captionActor.graphics.use(caption);
       captionActor.pointer.useGraphicsBounds = false;
@@ -137,7 +162,7 @@ export function coinDialog(
       actor.addChild(captionActor);
       const paintChoice = (): void => {
         caption.text = `Betting: ${choice.values[index]} ↔`;
-        const pos = buttonCaptionPos(caption.text, 246, 32, size);
+        const pos = uiCaption(caption.text, choiceWidth, choiceHeight, size);
         captionActor.pos = ex.vec(pos.x, pos.y);
       };
       paintChoice();
@@ -148,13 +173,9 @@ export function coinDialog(
       });
       add(actor);
     }
-    const error = text(
-      left,
-      panelY + panelHeight - (mobile ? 116 : 82),
-      '',
-      mobile ? 10 : 8,
-      ex.Color.fromHex('#e85d4c'),
-    );
+    const error = uiText('', mobile ? 19 : 15, ex.Color.fromHex('#e85d4c'));
+    error.maxWidth = contentWidth;
+    addText(left, panelY + panelHeight - (mobile ? 116 : 82), error);
     const finish = (result: Record<string, number> | null): void => {
       if (!open) return;
       open = false;
@@ -162,10 +183,12 @@ export function coinDialog(
       for (const input of inputs) input.close();
       for (const actor of actors) actor.kill();
       window.removeEventListener('keydown', key);
+      scene.off('deactivate', deactivate);
       refreshCanvasTextFields();
       resolve(result);
     };
-    const submit = (): void => {
+    const submit = async (): Promise<void> => {
+      if (submitting) return;
       try {
         const result: Record<string, number> = {};
         for (const field of fields)
@@ -174,29 +197,50 @@ export function coinDialog(
             field.value,
           );
         options.validate?.(result);
+        if (options.onSubmit) {
+          submitting = true;
+          error.text = '';
+          refreshCanvasTextFields();
+          const failure = await options.onSubmit(result);
+          if (failure) throw new Error(failure);
+        }
         finish(result);
       } catch (reason) {
         const message =
           reason instanceof Error ? reason.message : 'Invalid chips';
-        error.text = wrapText(
-          message,
-          Math.floor((panelWidth - 48) / (mobile ? 10 : 8)),
-        ).join('\n');
+        error.text = message;
+      } finally {
+        if (open && submitting) {
+          submitting = false;
+          refreshCanvasTextFields();
+        }
       }
     };
+    const cancel = (): void => {
+      if (!submitting) finish(null);
+    };
+    const deactivate = (): void => finish(null);
     const key = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') finish(null);
+      if (event.key === 'Escape') cancel();
     };
     window.addEventListener('keydown', key);
+    scene.on('deactivate', deactivate);
     fields.forEach((field, index) => {
-      const y = panelY + (mobile ? 110 : 90) + index * (mobile ? 58 : 54);
-      text(left, y + 12, field.label, mobile ? 12 : 10, DIM);
+      const y =
+        panelY + (mobile ? 110 : 90) + nameHeight + index * (mobile ? 58 : 54);
+      const inputWidth = mobile ? 272 : 246;
       const box = {
-        x: panelX + panelWidth - 270,
+        x: right - inputWidth,
         y,
-        w: 246,
-        h: mobile ? 50 : 38,
+        w: inputWidth,
+        h: mobile ? 54 : 38,
       };
+      const labelSize = mobile ? 22 : 17;
+      addText(
+        left,
+        y + Math.round((box.h - labelSize) / 2),
+        uiText(field.label, labelSize, GOLD),
+      );
       const actor = new ex.Actor({
         pos: ex.vec(box.x, box.y),
         anchor: ex.vec(0, 0),
@@ -208,13 +252,25 @@ export function coinDialog(
         panelRect(box.w, box.h, ex.Color.fromHex('#0b2418'), STROKE),
       );
       add(actor);
-      const label = text(box.x + 10, box.y + 12, values[field.key], 12);
+      const metrics = uiFieldLabel(box, mobile ? 25 : 20, 16);
+      const label = addText(
+        metrics.x,
+        metrics.y,
+        uiText(values[field.key], metrics.size, GOLD),
+      );
       labels.set(field.key, label);
-      const caret = makeFieldCaret(12, 104);
+      const caret = makeFieldCaret(metrics.size, 104);
       add(caret);
       const paintCaret = (index: number): void => {
-        caret.pos = ex.vec(box.x + 10 + index * 12, box.y + 12);
-        caret.graphics.opacity = 1;
+        const layout = layoutFieldCaret({
+          value: values[field.key],
+          index,
+          size: metrics.size,
+          originX: metrics.x,
+          originY: metrics.y,
+          measure: metrics.measure,
+        });
+        showFieldCaret(caret, true, layout.x, layout.y);
       };
       const input = bindCanvasTextField({
         id: `coins-${field.key}`,
@@ -222,7 +278,7 @@ export function coinDialog(
         box,
         maxLength: 10,
         inputMode: 'numeric',
-        active: () => open && engine.currentScene === scene,
+        active: () => open && !submitting && engine.currentScene === scene,
         read: () => values[field.key],
         sanitize: (value) => value.replace(/\D/g, '').slice(0, 10),
         write: (value) => {
@@ -238,42 +294,45 @@ export function coinDialog(
             keyedInputs.get(key)?.sync();
           }
         },
-        submit,
-        cancel: () => finish(null),
+        submit: () => void submit(),
+        cancel,
         onFocus: () => paintCaret(values[field.key].length),
         onBlur: () => {
           caret.graphics.opacity = 0;
         },
         enterKeyHint: 'done',
         autoCapitalize: 'off',
-        metrics: { x: box.x + 10, y: box.y + 12, columns: 18, size: 12 },
+        metrics,
         onCaret: paintCaret,
       });
       inputs.push(input);
       keyedInputs.set(field.key, input);
     });
+    const buttonWidth = (contentWidth - 32) / 2;
+    const buttonHeight = mobile ? 56 : 34;
+    const buttonSize = mobile ? 24 : 18;
     const button = (x: number, label: string, action: () => void): void => {
       const actor = new ex.Actor({
         pos: ex.vec(x, panelY + panelHeight - (mobile ? 72 : 50)),
         anchor: ex.vec(0, 0),
-        width: 260,
-        height: mobile ? 56 : 34,
+        width: buttonWidth,
+        height: buttonHeight,
         z: 103,
       });
       actor.graphics.use(
-        panelRect(260, mobile ? 56 : 34, ex.Color.fromHex('#1b5c38'), STROKE),
+        panelRect(
+          buttonWidth,
+          buttonHeight,
+          ex.Color.fromHex('#1b5c38'),
+          STROKE,
+        ),
       );
-      const place = buttonCaptionPos(
-        label,
-        260,
-        mobile ? 56 : 34,
-        mobile ? 12 : 10,
-      );
+      const place = uiCaption(label, buttonWidth, buttonHeight, buttonSize);
       const caption = new ex.Actor({
         pos: ex.vec(place.x, place.y),
         anchor: ex.vec(0, 0),
       });
-      caption.graphics.use(canvasText(label, mobile ? 12 : 10, GOLD));
+      caption.graphics.use(uiText(label, buttonSize, GOLD));
       actor.addChild(caption);
       bindButtonPress(
         actor,
@@ -283,8 +342,9 @@ export function coinDialog(
       );
       add(actor);
     };
-    button(left, confirm, submit);
-    button(panelX + panelWidth - 284, 'Cancel', () => finish(null));
+    button(left, 'Cancel', cancel);
+    button(right - buttonWidth, confirm, () => void submit());
     refreshCanvasTextFields();
+    if (options.focusFirst) inputs[0]?.focus();
   });
 }

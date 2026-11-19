@@ -93,8 +93,8 @@ export const STAKE_DOWN = { x: 568, y: 478, w: 64, h: 42 };
 export const STAKE_UP = { x: 638, y: 478, w: 64, h: 42 };
 export const STAKE_AMOUNT = { x: 568, y: 478, w: 120, h: 50 };
 export const STAKE_MAX = { x: 708, y: 478, w: 76, h: 42 };
-export const STAKE_CONFIRM = { x: 790, y: 478, w: 68, h: 42 };
-export const STAKE_CANCEL = { x: 864, y: 478, w: 72, h: 42 };
+export const STAKE_CONFIRM = { x: 868, y: 478, w: 68, h: 42 };
+export const STAKE_CANCEL = { x: 790, y: 478, w: 72, h: 42 };
 export const STAKE_SLIDER = { x: 568, y: 438, w: 368, h: 36 };
 
 /** The server uses street totals; the composer shows chips leaving the remaining stack now. */

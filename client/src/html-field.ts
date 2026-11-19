@@ -5,7 +5,7 @@ import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from './sheets';
 
 export const CARET_GOLD = '#f2c14e';
 
-/** Block caret width. The pixel font's advance places it; this is the ink. */
+/** Width of the block caret. The visible label's glyph advances position it. */
 export const FIELD_CARET_WIDTH = 2;
 
 /** Room kept between the focused box and the top of the keyboard. */
@@ -17,7 +17,7 @@ export const KEYBOARD_MARGIN = 12;
  * window, and those events never arrive from an on-screen keyboard.
  *
  * Each canvas text box gets an input laid over that box while the box can be
- * typed in. The input's text is transparent, so the pixel label on the canvas
+ * typed in. The input's text is transparent, so the label on the canvas
  * stays the visible value. `input` events copy the sanitized string back onto
  * that label. Physical keys type into the same input once it is focused, and
  * the keydown does not bubble, so the canvas handler does not insert the
@@ -26,10 +26,8 @@ export const KEYBOARD_MARGIN = 12;
  * The input stays `opacity: 1` with a real size. iOS Safari will not open the
  * keyboard for `display: none`, `visibility: hidden`, or `opacity: 0`.
  * `font-size: 16px` keeps iOS from zooming the page. That font does not place
- * the caret: its advance does not match the pixel label. The input caret is
- * hidden. The canvas draws a gold block at the insertion index, one em tall
- * and at least two pixels wide, using the pixel font's advance. Antialiasing
- * stays off.
+ * the caret. The input caret is hidden. The canvas draws a gold block at
+ * the insertion index using the visible label's glyph widths.
  *
  * iOS opens the keyboard only when the finger lands on the input itself, in
  * the same gesture. So the input is already on the box (pointer events on)
@@ -96,12 +94,13 @@ export interface CanvasTextField {
   onCaret?: (index: number) => void;
 }
 
-/** Where the pixel label is drawn, and how many glyphs fit beside the caret. */
+/** Canvas label position and optional width measurement for proportional text. */
 export interface FieldLabel {
   size: number;
   x: number;
   y: number;
   columns?: number;
+  measure?: (text: string) => number;
 }
 
 export interface FieldCaretLayout {
@@ -145,6 +144,7 @@ export function layoutFieldCaret(options: {
   originY: number;
   columns?: number;
   raster?: number;
+  measure?: FieldLabel['measure'];
 }): FieldCaretLayout {
   const size = options.size;
   const raster = options.raster ?? BUTTON_CAPTION_RASTER;
@@ -160,11 +160,13 @@ export function layoutFieldCaret(options: {
     text = options.value.slice(start, start + columns);
     visibleIndex = index - start;
   }
+  const advance =
+    options.measure?.(text.slice(0, visibleIndex)) ?? visibleIndex * size;
   return {
     text,
     index: visibleIndex,
     start,
-    x: options.originX + raster + visibleIndex * size,
+    x: options.originX + raster + advance,
     y: options.originY + raster,
     w: FIELD_CARET_WIDTH,
     h: size,
@@ -183,15 +185,24 @@ export function fieldCaretIndexAt(options: {
   originX: number;
   columns?: number;
   raster?: number;
+  measure?: FieldLabel['measure'];
 }): number {
   if (options.size <= 0) {
     return 0;
   }
   const layout = layoutFieldCaret({ ...options, originY: 0 });
   const raster = options.raster ?? BUTTON_CAPTION_RASTER;
-  const glyph = Math.round(
-    (options.localX - (options.originX + raster)) / options.size,
-  );
+  const offset = options.localX - (options.originX + raster);
+  if (options.measure) {
+    let left = 0;
+    for (let index = 0; index < layout.text.length; index++) {
+      const right = options.measure(layout.text.slice(0, index + 1));
+      if (offset < (left + right) / 2) return layout.start + index;
+      left = right;
+    }
+    return layout.start + layout.text.length;
+  }
+  const glyph = Math.round(offset / options.size);
   const clamped = Math.max(0, Math.min(layout.text.length, glyph));
   return layout.start + clamped;
 }
@@ -624,6 +635,7 @@ function placeCaretAtPoint(entry: FieldEntry, clientX: number): void {
     size: metrics.size,
     originX: metrics.x,
     columns: metrics.columns,
+    measure: metrics.measure,
   });
   entry.publishedCaret = -1;
   caretSuspend += 1;

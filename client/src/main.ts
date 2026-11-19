@@ -1,3 +1,4 @@
+import { preferredPlayerName } from './preferred-name';
 import { isLobbyViewport, placeLobbyWidths } from './lobby-viewport';
 import { placeTableAnchors, tableViewportWidth } from './table-viewport';
 import * as ex from 'excalibur';
@@ -450,7 +451,13 @@ void engine.start(loader).then(() => {
         db: DbConnection,
         saved: LastRoom,
       ): Promise<void> {
-        const error = await panel.enter('join', saved.name, saved.lobbyCode);
+        const profile = [...db.db.myCasinoProfile.iter()][0];
+        const name = preferredPlayerName(
+          clientId,
+          saved.name,
+          profile?.discordUserId,
+        );
+        const error = await panel.enter('join', name, saved.lobbyCode);
         if (error) {
           pendingReload = undefined;
           if (roomGoneMessage(error)) {

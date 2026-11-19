@@ -4,6 +4,20 @@ export const PLAYER_NAME_MAX = 12;
 /** Discord snowflake. Same width as a channel id. */
 export const DISCORD_USER_ID = /^\d{17,20}$/;
 
+export function discordDisplayUsername(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  const username = value.trim();
+  return /^[a-z0-9_.]{2,32}$/i.test(username) && !DISCORD_USER_ID.test(username)
+    ? username
+    : '';
+}
+
+/** Older clients could use a Discord snowflake as a public player name. */
+export function publicPlayerName(value: string): string {
+  const name = value.trim();
+  return name && !DISCORD_USER_ID.test(name) ? name : 'Guest';
+}
+
 export const DISCORD_USER_ID_PARAM = 'discord_user_id';
 export const DISCORD_USERNAME_PARAM = 'discord_username';
 export const DISCORD_GLOBAL_NAME_PARAM = 'discord_global_name';
