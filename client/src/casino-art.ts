@@ -53,10 +53,11 @@ export function avatarSprite(
   const walking = frame > 0 && !seated;
   const stride = walking ? [0, -1, 0, 1][frame % 4] : 0;
   const bob = walking && stride === 0 ? 1 : 0;
+  const hem = 20 + bob;
   const facingBack = direction === 'up';
   const outline = '#211b23';
   fill('#221a24a0', 2, 22, 12, 2);
-  fill(outline, 3, 12 + bob, 10, 8);
+  fill(outline, 3, hem - 8, 10, 8);
   fill(clothes[look.color], look.body ? 5 : 4, 13 + bob, look.body ? 6 : 8, 6);
   fill('#ffffff38', 5, 13 + bob, 5, 1);
   const swing = facingBack ? -stride : stride;
@@ -65,12 +66,14 @@ export function avatarSprite(
   if (!facingBack && look.outfit === 0) fill('#fff0c5', 7, 13 + bob, 2, 4);
   if (!facingBack && look.outfit === 1) fill('#352a32', 7, 14 + bob, 2, 5);
   const [trouser, shoe] = pants[look.pantsColor];
-  const leg = (x: number, y: number) => {
-    fill(trouser, x, y, 3, 2);
-    fill(shoe, x, y + 2, 3, 1);
+  const legTop = seated ? 19 : hem;
+  const shoeY = seated ? 21 : 22;
+  const leg = (x: number, foot: number) => {
+    fill(trouser, x, legTop, 3, foot - legTop);
+    fill(shoe, x, foot, 3, 1);
   };
-  leg(side ? 5 - stride * 2 : 4, seated ? 19 : 20 + (side ? 0 : swing));
-  leg(side ? 8 + stride * 2 : 9, seated ? 19 : 21 - (side ? 0 : swing));
+  leg(side ? 5 - stride * 2 : 4, shoeY + (side ? 0 : swing));
+  leg(side ? 8 + stride * 2 : 9, shoeY - (side ? 0 : swing));
   const bald = look.hair === NO_AVATAR_HAIR;
   const headColor = bald ? skin[look.skin] : hair[look.hairColor];
   fill(outline, 3, (bald ? 4 : 3) + bob, 10, bald ? 9 : 10);
