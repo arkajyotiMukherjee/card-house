@@ -631,6 +631,12 @@ export class LobbyScene {
           ...to,
           chair,
         }),
+      step: (direction) =>
+        this.connection.reducers.stepCasinoAvatar({
+          lobbyId: this.lobbyId,
+          dx: direction.x,
+          dy: direction.y,
+        }),
       create: () => this.openCreate(),
       join: (id) => void this.joinTable(id),
       watch: (id) => void this.spectateTable(id),
@@ -1559,7 +1565,7 @@ export class LobbyScene {
       anchor: ex.vec(0, 0),
       width: name.w,
       height: name.h,
-      z: 1,
+      z: popup.z,
     });
     nameFace.graphics.use(panelRect(name.w, name.h, FIELD, STROKE));
     popup.addChild(nameFace);
@@ -2607,7 +2613,8 @@ export class LobbyScene {
       anchor: ex.vec(0, 0),
       width: box.w,
       height: box.h,
-      z: parent ? 2 : 20,
+      // Excalibur routes pointer events by local z, even for modal children.
+      z: parent?.z ?? 20,
     });
     const face = panelRect(box.w, box.h, BUTTON, STROKE);
     actor.graphics.use(face);
@@ -2632,7 +2639,7 @@ export class LobbyScene {
       captionActor.pos = ex.vec(rest.x, rest.y);
     });
     const claimEvent = (event: { cancel: () => void }): void => {
-      if (claim) {
+      if (claim || parent) {
         event.cancel();
       }
     };

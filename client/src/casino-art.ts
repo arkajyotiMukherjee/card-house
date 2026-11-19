@@ -41,7 +41,9 @@ export function avatarSprite(
     g.fillStyle = color;
     g.fillRect(x, y, w, h);
   };
-  const bob = frame % 2 && !seated ? 1 : 0;
+  const walking = frame > 0 && !seated;
+  const stride = walking ? [0, -1, 0, 1][frame % 4] : 0;
+  const bob = walking && frame % 2 ? 1 : 0;
   const outline = '#211b23';
   fill('#221a24a0', 2, 22, 12, 2);
   fill(outline, 3, 12 + bob, 10, 8);
@@ -51,8 +53,20 @@ export function avatarSprite(
   fill(skin[look.skin], 11, 17 + bob, 2, 2);
   if (look.outfit === 0) fill('#fff0c5', 7, 13 + bob, 2, 4);
   if (look.outfit === 1) fill('#352a32', 7, 14 + bob, 2, 5);
-  fill(outline, 4, seated ? 19 : 20 + bob, 3, 3);
-  fill(outline, 9, seated ? 19 : 21 - bob, 3, 3);
+  fill(
+    outline,
+    4 - (side ? stride : 0),
+    seated ? 19 : 20 + (side ? 0 : stride),
+    3,
+    3,
+  );
+  fill(
+    outline,
+    9 + (side ? stride : 0),
+    seated ? 19 : 21 - (side ? 0 : stride),
+    3,
+    3,
+  );
   fill(outline, 3, 3 + bob, 10, 10);
   fill(hair[look.hairColor], 4, 2 + bob, 8, 7);
   fill('#ffffff28', 5, 3 + bob, 6, 1);

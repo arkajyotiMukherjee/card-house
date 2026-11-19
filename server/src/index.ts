@@ -4921,6 +4921,65 @@ export const move_casino_avatar = spacetimedb.reducer(
   },
 );
 
+export const step_casino_avatar = spacetimedb.reducer(
+  { name: 'step_casino_avatar' },
+  { lobbyId: t.string(), dx: t.i32(), dy: t.i32() },
+  (ctx, { lobbyId, dx, dy }) => {
+    const { member, session } = casinoMember(ctx, lobbyId);
+    if (session?.tableId)
+      throw new SenderError('Return to the floor before walking');
+    if (Math.abs(dx) + Math.abs(dy) !== 1)
+      throw new SenderError('Choose a walking direction');
+
+    const previous = casinoPosition(ctx, member.id, lobbyId);
+    const path = JSON.parse(previous.pathJson) as FloorPoint[];
+    const now = ctx.timestamp.microsSinceUnixEpoch;
+    const stepMicros = BigInt(FLOOR_STEP_MS * 1000);
+    const elapsed = now - previous.startedAt.microsSinceUnixEpoch;
+    const completed = elapsed > 0n ? Number(elapsed / stepMicros) : 0;
+    const from =
+      completed > 0
+        ? (path[Math.min(path.length, completed) - 1] ?? previous)
+        : previous;
+    const currentStep = path[completed];
+    const next = currentStep ?? from;
+    const end = { x: next.x + dx, y: next.y + dy };
+    const slots = [...ctx.db.CasinoTableSpot.lobbyId.filter(lobbyId)];
+    const rows = Math.max(
+      floorRows(Math.max(0, ...slots.map((row) => row.slot + 1))),
+      floorRowsAt(next.y),
+    );
+
+    // Preserve the in-flight step and its original timing. Keep at most
+    // one step queued so releasing the keys cannot start a long walk.
+    const route = currentStep ? [currentStep] : [];
+    if (walkable(end, rows)) route.push(end);
+    if (!route.length) return;
+    const pathJson = JSON.stringify(route);
+    const startedAt = currentStep
+      ? new Timestamp(
+          previous.startedAt.microsSinceUnixEpoch +
+            BigInt(completed) * stepMicros,
+        )
+      : ctx.timestamp;
+    if (
+      pathJson === previous.pathJson &&
+      startedAt.microsSinceUnixEpoch ===
+        previous.startedAt.microsSinceUnixEpoch &&
+      previous.chair === -1
+    )
+      return;
+    storeCasinoPosition(ctx, {
+      ...previous,
+      x: from.x,
+      y: from.y,
+      chair: -1,
+      pathJson,
+      startedAt,
+    });
+  },
+);
+
 export const save_casino_avatar = spacetimedb.reducer(
   { name: 'save_casino_avatar' },
   { lobbyId: t.string(), avatar: t.string() },

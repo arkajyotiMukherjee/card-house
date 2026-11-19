@@ -49,6 +49,19 @@ const wingNames = [
 ];
 const reducedMotion = () =>
   window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const KEYBOARD_LOOKAHEAD_MS = FLOOR_STEP_MS * 1.5;
+const KEYBOARD_INTERVAL_MS = FLOOR_STEP_MS * 0.65;
+const KEYBOARD_RENDER_DELAY_MS = 50;
+const WALK_DIRECTIONS: Partial<Record<string, FloorPoint>> = {
+  ArrowLeft: { x: -1, y: 0 },
+  KeyA: { x: -1, y: 0 },
+  ArrowRight: { x: 1, y: 0 },
+  KeyD: { x: 1, y: 0 },
+  ArrowUp: { x: 0, y: -1 },
+  KeyW: { x: 0, y: -1 },
+  ArrowDown: { x: 0, y: 1 },
+  KeyS: { x: 0, y: 1 },
+};
 interface Box {
   x: number;
   y: number;
@@ -122,6 +135,7 @@ interface Actions {
   active(): boolean;
   blocked(): boolean;
   move(to: FloorPoint, chair: number): Promise<void>;
+  step(direction: FloorPoint): Promise<void>;
   create(): void;
   join(id: string): void;
   watch(id: string): void;
@@ -173,8 +187,8 @@ function position(
   row: FloorPosition | undefined,
   now: number,
   reduce: boolean,
-): FloorPoint & { walked: boolean; direction: Direction } {
-  if (!row) return { ...SPAWN, walked: false, direction: 'down' };
+): FloorPoint & { walked: boolean; direction: Direction; frame: number } {
+  if (!row) return { ...SPAWN, walked: false, direction: 'down', frame: 0 };
   const t = Math.max(0, (now - row.started) / FLOOR_STEP_MS);
   const i = Math.min(row.path.length, Math.floor(t));
   const from = row.path[i - 1] ?? row;
@@ -184,6 +198,10 @@ function position(
     x: from.x + (to.x - from.x) * f,
     y: from.y + (to.y - from.y) * f,
     walked: i < row.path.length,
+    frame:
+      !reduce && i < row.path.length
+        ? Math.floor(now / (FLOOR_STEP_MS / 2)) + 1
+        : 0,
     direction:
       to.x > from.x
         ? 'right'
@@ -218,6 +236,11 @@ export class CasinoFloor {
   private busy = false;
   private error = '';
   private lastMove = 0;
+  private readonly walkingKeys = new Set<string>();
+  private walkingDirection?: FloorPoint;
+  private stepPending = false;
+  private lastStep = 0;
+  private keyboardRenderUntil = 0;
   private code = '';
   private readonly tableArt = new Image();
   private readonly reducedMotion = reducedMotion();
@@ -302,8 +325,13 @@ export class CasinoFloor {
       enterKeyHint: 'send',
     });
     document.addEventListener('keydown', (event) => this.key(event));
+    document.addEventListener('keyup', (event) =>
+      this.walkingKeys.delete(event.code),
+    );
+    window.addEventListener('blur', () => this.stopKeyboardWalk());
     scene.on('preupdate', () => this.tick());
     scene.on('deactivate', () => {
+      this.stopKeyboardWalk();
       this.quickChat = false;
       this.draft = '';
       this.field.refresh();
@@ -332,6 +360,7 @@ export class CasinoFloor {
       this.lastData = now;
     }
     if (this.snapshot.code !== this.code) {
+      this.stopKeyboardWalk();
       this.code = this.snapshot.code;
       this.selected = '';
       this.destination = undefined;
@@ -351,6 +380,11 @@ export class CasinoFloor {
       this.destination = undefined;
       this.error = 'That table closed';
     }
+    if (!this.interactive() || this.quickChat || this.mode !== 'floor') {
+      this.stopKeyboardWalk();
+    } else {
+      this.keyboardStep(now);
+    }
     if (
       this.seatTarget >= 0 &&
       !this.self().walked &&
@@ -366,12 +400,20 @@ export class CasinoFloor {
         void this.move(point, seat);
     }
   }
-  private self() {
-    return position(
-      this.snapshot.positions.find((row) => row.id === this.snapshot.self),
-      Date.now(),
-      this.reducedMotion,
-    );
+  private self(now = Date.now()) {
+    return this.avatarPosition(this.selfRow(), now);
+  }
+  private selfRow() {
+    return this.snapshot.positions.find((row) => row.id === this.snapshot.self);
+  }
+  private avatarPosition(row: FloorPosition | undefined, now: number) {
+    const delay =
+      !this.reducedMotion &&
+      row?.id === this.snapshot.self &&
+      now < this.keyboardRenderUntil
+        ? KEYBOARD_RENDER_DELAY_MS
+        : 0;
+    return position(row, now - delay, this.reducedMotion);
   }
   private get mapWidth() {
     return isMobileDevice() ? W : 672;
@@ -388,6 +430,8 @@ export class CasinoFloor {
     return Math.max(1, this.mapWidth / WIDTH);
   }
   private async move(to: FloorPoint, chair = -1): Promise<void> {
+    this.stopKeyboardWalk();
+    this.keyboardRenderUntil = 0;
     if (Date.now() - this.lastMove < 145) return;
     this.lastMove = Date.now();
     this.error = '';
@@ -411,6 +455,7 @@ export class CasinoFloor {
     }
   }
   private changeMode(mode: CasinoFloor['mode']): void {
+    this.stopKeyboardWalk();
     this.mode = mode;
     this.quickChat = false;
     this.chatOffset = 0;
@@ -439,28 +484,58 @@ export class CasinoFloor {
       return;
     }
     if (this.mode !== 'floor' || this.quickChat) return;
-    const keys: Record<string, [number, number]> = {
-      ArrowLeft: [-1, 0],
-      a: [-1, 0],
-      ArrowRight: [1, 0],
-      d: [1, 0],
-      ArrowUp: [0, -1],
-      w: [0, -1],
-      ArrowDown: [0, 1],
-      s: [0, 1],
-    };
-    const delta = keys[event.key];
-    if (!delta) return;
+    if (!WALK_DIRECTIONS[event.code]) return;
     event.preventDefault();
-    const self = this.self();
-    const to = {
-      x: Math.round(self.x) + delta[0],
-      y: Math.round(self.y) + delta[1],
-    };
-    if (walkable(to, this.rows)) {
-      this.seatTarget = -1;
-      void this.move(to);
+    if (event.repeat) return;
+    this.walkingKeys.add(event.code);
+    this.seatTarget = -1;
+    this.destination = undefined;
+    this.keyboardStep(Date.now());
+  }
+  private stopKeyboardWalk(): void {
+    this.walkingKeys.clear();
+    this.walkingDirection = undefined;
+  }
+  private keyboardStep(now: number): void {
+    const key = [...this.walkingKeys].at(-1);
+    const direction = key ? WALK_DIRECTIONS[key] : undefined;
+    if (!direction) {
+      this.walkingDirection = undefined;
+      return;
     }
+    if (this.stepPending || now - this.lastStep < KEYBOARD_INTERVAL_MS) return;
+    const row = this.selfRow();
+    if (!row) return;
+    const elapsed = Math.max(0, now - row.started);
+    const remaining = row.path.length * FLOOR_STEP_MS - elapsed;
+    if (direction === this.walkingDirection) {
+      if (remaining > KEYBOARD_LOOKAHEAD_MS) return;
+      const next =
+        row.path[Math.floor(elapsed / FLOOR_STEP_MS)] ?? row.path.at(-1) ?? row;
+      if (
+        !walkable(
+          { x: next.x + direction.x, y: next.y + direction.y },
+          this.rows,
+        )
+      )
+        return;
+    }
+    this.walkingDirection = direction;
+    this.stepPending = true;
+    this.lastStep = now;
+    this.keyboardRenderUntil = now + FLOOR_STEP_MS * 3;
+    this.error = '';
+    void this.actions
+      .step(direction)
+      .catch((error: unknown) => {
+        this.stopKeyboardWalk();
+        this.error =
+          error instanceof Error ? error.message : 'Could not walk there';
+      })
+      .finally(() => {
+        this.stepPending = false;
+        this.invalidate();
+      });
   }
   private async send(): Promise<void> {
     const body = this.draft.trim();
@@ -760,7 +835,7 @@ export class CasinoFloor {
     const route = this.snapshot.positions.find(
       (row) => row.id === this.snapshot.self,
     );
-    if (route && self.walked) {
+    if (route && self.walked && this.destination) {
       const index = Math.max(
         0,
         Math.floor((now - route.started) / FLOOR_STEP_MS),
@@ -787,7 +862,7 @@ export class CasinoFloor {
         const row = this.snapshot.positions.find(
           (point) => point.id === player.id,
         );
-        return { player, row, pose: position(row, now, this.reducedMotion) };
+        return { player, row, pose: this.avatarPosition(row, now) };
       })
       .filter(({ pose }) => pose.y >= start - 2 && pose.y <= end + 1)
       .sort((a, b) => a.pose.y - b.pose.y);
@@ -808,9 +883,7 @@ export class CasinoFloor {
         2,
         player.avatar,
         pose.direction,
-        !this.reducedMotion && pose.walked
-          ? Math.floor(now / FLOOR_STEP_MS)
-          : 0,
+        pose.frame,
         (row?.chair ?? -1) >= 0,
       );
       if (player.speaking) {

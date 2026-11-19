@@ -66,6 +66,7 @@ import SetRoomCapsReducer from "./set_room_caps_reducer";
 import SetTableDiscordVoiceReducer from "./set_table_discord_voice_reducer";
 import SpectateTableReducer from "./spectate_table_reducer";
 import StartSoloGameReducer from "./start_solo_game_reducer";
+import StepCasinoAvatarReducer from "./step_casino_avatar_reducer";
 import TopUpTableReducer from "./top_up_table_reducer";
 import UpdateSpeakingStateReducer from "./update_speaking_state_reducer";
 import UpdateVoicePresenceReducer from "./update_voice_presence_reducer";
@@ -500,6 +501,7 @@ const reducersSchema = __reducers(
   __reducerSchema("set_table_discord_voice", SetTableDiscordVoiceReducer),
   __reducerSchema("spectate_table", SpectateTableReducer),
   __reducerSchema("start_solo_game", StartSoloGameReducer),
+  __reducerSchema("step_casino_avatar", StepCasinoAvatarReducer),
   __reducerSchema("top_up_table", TopUpTableReducer),
   __reducerSchema("update_speaking_state", UpdateSpeakingStateReducer),
   __reducerSchema("update_voice_presence", UpdateVoicePresenceReducer),
