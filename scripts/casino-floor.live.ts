@@ -233,10 +233,11 @@ try {
   const verifiedAppearance = JSON.stringify({
     body: 1,
     skin: 2,
-    hair: 3,
+    hair: 4,
     hairColor: 2,
     outfit: 1,
     color: 4,
+    pantsColor: 2,
   });
   await owner.reducers.saveCasinoAvatar({
     lobbyId: room.id,

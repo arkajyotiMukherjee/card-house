@@ -1,6 +1,5 @@
 import * as ex from 'excalibur';
 import {
-  AVATAR_FIELDS,
   AVATAR_OPTIONS,
   DEFAULT_AVATAR,
   readCasinoAvatar,
@@ -15,14 +14,14 @@ import { cardroomBotUrl, discordLinkAvailable } from './discord-join';
 import type { DbConnection } from './module_bindings';
 
 const AVATAR_STORAGE = 'casinoAvatar';
-const fields = [
-  'Body',
-  'Skin',
-  'Hair',
-  'Hair color',
-  'Outfit',
-  'Clothing color',
-];
+const avatarControls = [
+  ['skin', 'Skin'],
+  ['hair', 'Hair'],
+  ['hairColor', 'Hair color'],
+  ['outfit', 'Outfit'],
+  ['color', 'Top color'],
+  ['pantsColor', 'Pants & shoes'],
+] as const;
 export function localCasinoAvatar(): CasinoAvatar {
   try {
     return (
@@ -162,9 +161,9 @@ export function openCasinoAvatarEditor(
       action();
     });
   };
-  for (const [index, field] of AVATAR_FIELDS.entries()) {
+  for (const [index, [field, caption]] of avatarControls.entries()) {
     const y = 124 + index * 42;
-    add(373, y + 7, 182, uiText(fields[index], 17, ink));
+    add(373, y + 7, 182, uiText(caption, 17, ink));
     const variants = AVATAR_OPTIONS[field];
     const value = uiText(variants[look[field]], 17, ink);
     add(575, y + 7, 182, value);

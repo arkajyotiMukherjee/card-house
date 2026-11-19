@@ -1,6 +1,7 @@
 import * as ex from 'excalibur';
 import {
   DEFAULT_AVATAR,
+  NO_AVATAR_HAIR,
   type CasinoAvatar,
 } from '../../src/shared/casino-avatar';
 
@@ -16,6 +17,14 @@ export const CASINO_PALETTE = {
 const skin = ['#edc3a3', '#cf9170', '#a86c50', '#76503d'];
 const hair = ['#2b262c', '#643828', '#daa55b', '#bbbdc6', '#785075'];
 const clothes = ['#38817a', '#a54753', '#b38843', '#555c91', '#bb677b'];
+const pants = [
+  ['#211b23', '#211b23'],
+  ['#626c79', '#3c444e'],
+  ['#404f81', '#293554'],
+  ['#846046', '#533b2f'],
+  ['#717246', '#474a2c'],
+  ['#884356', '#542939'],
+];
 export type Direction = 'up' | 'down' | 'left' | 'right';
 
 /** A layered 16×24 sprite. Shapes use integer pixel clusters and a shared silhouette. */
@@ -53,24 +62,19 @@ export function avatarSprite(
   fill(skin[look.skin], 11, 17 + bob, 2, 2);
   if (look.outfit === 0) fill('#fff0c5', 7, 13 + bob, 2, 4);
   if (look.outfit === 1) fill('#352a32', 7, 14 + bob, 2, 5);
-  fill(
-    outline,
-    4 - (side ? stride : 0),
-    seated ? 19 : 20 + (side ? 0 : stride),
-    3,
-    3,
-  );
-  fill(
-    outline,
-    9 + (side ? stride : 0),
-    seated ? 19 : 21 - (side ? 0 : stride),
-    3,
-    3,
-  );
-  fill(outline, 3, 3 + bob, 10, 10);
-  fill(hair[look.hairColor], 4, 2 + bob, 8, 7);
-  fill('#ffffff28', 5, 3 + bob, 6, 1);
-  if (direction === 'up') fill(hair[look.hairColor], 4, 5 + bob, 8, 7);
+  const [trouser, shoe] = pants[look.pantsColor];
+  const leg = (x: number, y: number) => {
+    fill(trouser, x, y, 3, 2);
+    fill(shoe, x, y + 2, 3, 1);
+  };
+  leg(4 - (side ? stride : 0), seated ? 19 : 20 + (side ? 0 : stride));
+  leg(9 + (side ? stride : 0), seated ? 19 : 21 - (side ? 0 : stride));
+  const bald = look.hair === NO_AVATAR_HAIR;
+  const headColor = bald ? skin[look.skin] : hair[look.hairColor];
+  fill(outline, 3, (bald ? 4 : 3) + bob, 10, bald ? 9 : 10);
+  fill(headColor, 4, (bald ? 4 : 2) + bob, 8, 7);
+  if (!bald) fill('#ffffff28', 5, 3 + bob, 6, 1);
+  if (direction === 'up') fill(headColor, 4, 5 + bob, 8, 7);
   else {
     fill(skin[look.skin], side ? 7 : 4, 6 + bob, side ? 6 : 8, 6);
     fill(outline, side ? 11 : 6, 8 + bob, 1, 2);
