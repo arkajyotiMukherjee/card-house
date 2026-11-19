@@ -11,7 +11,7 @@ import { classicText } from './classic-table-design';
 import { uiText, uiCaption } from './ui-text';
 import { panelRect } from './canvas-ui';
 import { bindButtonPress } from './button-press';
-import { cardroomBotUrl } from './discord-join';
+import { cardroomBotUrl, discordLinkAvailable } from './discord-join';
 import type { DbConnection } from './module_bindings';
 
 const AVATAR_STORAGE = 'casinoAvatar';
@@ -67,6 +67,8 @@ export function openCasinoAvatarEditor(
   const gold = ex.Color.fromHex(CASINO_PALETTE.gold);
   const dark = ex.Color.fromHex(CASINO_PALETTE.dark);
   let busy = false;
+  let closed = false;
+  let linkPopup: Window | null = null;
   const add = (
     x: number,
     y: number,
@@ -91,6 +93,8 @@ export function openCasinoAvatarEditor(
   };
   let detach = () => {};
   const close = () => {
+    closed = true;
+    linkPopup?.close();
     detach();
     document.removeEventListener('keydown', key);
     scene.off('deactivate', close);
@@ -171,30 +175,62 @@ export function openCasinoAvatarEditor(
     button(525, y, 38, '‹', () => cycle(-1));
     button(741, y, 38, '›', () => cycle(1));
   }
-  if (connection && cardroomBotUrl())
+  const botUrl = cardroomBotUrl();
+  if (connection && botUrl && !profile()) {
+    let ready = false;
+    let checking = false;
+    const check = async (retry: boolean) => {
+      if (checking) return;
+      checking = true;
+      if (retry) status.text = 'Checking Discord…';
+      ready = await discordLinkAvailable(botUrl);
+      checking = false;
+      if (closed || profile() || busy) return;
+      if (!ready) status.text = 'Discord linking is unavailable';
+      else if (retry) status.text = 'Select Link Discord to continue';
+    };
+    void check(false);
     button(181, 434, 212, 'Link Discord', () => {
+      if (busy || profile() || linkPopup) return;
+      if (!ready) {
+        void check(true);
+        return;
+      }
       const popup = window.open('', '_blank');
       if (!popup) {
         status.text = 'Allow popups to link Discord';
         return;
       }
+      linkPopup = popup;
       popup.opener = null;
       const id = [...crypto.getRandomValues(new Uint8Array(32))]
         .map((byte) => byte.toString(16).padStart(2, '0'))
         .join('');
-      void connection.reducers
-        .beginCasinoDiscordLink({ id })
-        .then(() => {
-          const url = new URL('/casino/discord/link', cardroomBotUrl());
-          url.searchParams.set('challenge', id);
-          popup.location.href = url.toString();
-          status.text = 'Finish linking in Discord';
-        })
+      void (async () => {
+        ready = await discordLinkAvailable(botUrl);
+        if (!ready) {
+          popup.close();
+          if (!closed) status.text = 'Discord linking is unavailable';
+          return;
+        }
+        if (closed || popup.closed) return;
+        await connection.reducers.beginCasinoDiscordLink({ id });
+        if (closed || popup.closed) return;
+        const url = new URL('/casino/discord/link', botUrl);
+        url.searchParams.set('challenge', id);
+        popup.location.href = url.toString();
+        linkPopup = null;
+        status.text = 'Finish linking in Discord';
+      })()
         .catch(() => {
           popup.close();
-          status.text = 'Could not start Discord linking';
+          if (!closed) status.text = 'Could not start Discord linking';
+        })
+        .finally(() => {
+          linkPopup = null;
         });
     });
+  }
   const refreshProfile = () => {
     const row = profile();
     if (!row) return;

@@ -6,27 +6,45 @@ import { DiscordHttpError, type DiscordApi } from './discord-http.ts';
 const DISCORD_API = 'https://discord.com/api/v10';
 const LINK_TTL = 5 * 60_000;
 const STATE_COOKIE = 'cardhouse_discord_state';
+const LINK_UNAVAILABLE =
+  'Discord linking is temporarily unavailable. Return to Card House and try again later.';
 const SNOWFLAKE = /^\d{17,20}$/;
 
 interface LinkOptions {
   applicationId: string;
   secret: string;
   redirectUri: string;
+  isReady?(): boolean;
   complete(id: string, discordUserId: string): Promise<void>;
   fetchImpl?: typeof fetch;
 }
 
 export function attachCasinoLink(app: Express, options: LinkOptions): void {
-  if (!options.applicationId || !options.secret || !options.redirectUri) return;
-  const redirect = new URL(options.redirectUri);
+  const redirect = oauthRedirect(options.redirectUri);
+  const configured =
+    SNOWFLAKE.test(options.applicationId) &&
+    Boolean(options.secret) &&
+    Boolean(redirect);
+  const available = () => configured && (options.isReady?.() ?? true);
   const states = new Map<
     string,
     { challenge: string; verifier: string; expiresAt: number }
   >();
   const fetchImpl = options.fetchImpl ?? fetch;
-  const cookieFlags = `Path=/casino/discord; HttpOnly; SameSite=Lax${redirect.protocol === 'https:' ? '; Secure' : ''}`;
+  const cookieFlags = `Path=/casino/discord; HttpOnly; SameSite=Lax${redirect?.protocol === 'https:' ? '; Secure' : ''}`;
+
+  app.get('/casino/discord/status', (_request, response) => {
+    response.set('Access-Control-Allow-Origin', '*');
+    response.set('Cache-Control', 'no-store');
+    response.json({ available: available() });
+  });
 
   app.get('/casino/discord/link', (request, response) => {
+    response.set('Cache-Control', 'no-store');
+    if (!redirect || !available()) {
+      response.status(503).type('text').send(LINK_UNAVAILABLE);
+      return;
+    }
     const challenge = request.query.challenge;
     if (typeof challenge !== 'string' || !/^[a-f0-9]{64}$/.test(challenge)) {
       response.status(400).send('Open Discord linking from Card House.');
@@ -52,7 +70,6 @@ export function attachCasinoLink(app: Express, options: LinkOptions): void {
       code_challenge_method: 'S256',
       code_challenge: createHash('sha256').update(verifier).digest('base64url'),
     }).toString();
-    response.set('Cache-Control', 'no-store');
     response.set(
       'Set-Cookie',
       `${STATE_COOKIE}=${state}; Max-Age=300; ${cookieFlags}`,
@@ -60,7 +77,7 @@ export function attachCasinoLink(app: Express, options: LinkOptions): void {
     response.redirect(url.toString());
   });
 
-  app.get(redirect.pathname, async (request, response) => {
+  app.get('/casino/discord/callback', async (request, response) => {
     const { code, state } = request.query;
     const cookie = request.headers.cookie
       ?.split(';')
@@ -73,6 +90,10 @@ export function attachCasinoLink(app: Express, options: LinkOptions): void {
         : undefined;
     response.set('Cache-Control', 'no-store');
     response.set('Set-Cookie', `${STATE_COOKIE}=; Max-Age=0; ${cookieFlags}`);
+    if (!redirect || !available()) {
+      response.status(503).type('text').send(LINK_UNAVAILABLE);
+      return;
+    }
     if (
       !link ||
       link.expiresAt < Date.now() ||
@@ -121,6 +142,24 @@ export function attachCasinoLink(app: Express, options: LinkOptions): void {
         .send('Discord linking could not finish. Try again from Card House.');
     }
   });
+}
+
+function oauthRedirect(uri: string): URL | undefined {
+  try {
+    const url = new URL(uri);
+    if (
+      (url.protocol === 'https:' || url.protocol === 'http:') &&
+      url.pathname === '/casino/discord/callback' &&
+      !url.username &&
+      !url.password &&
+      !url.hash &&
+      !url.search
+    )
+      return url;
+  } catch {
+    return undefined;
+  }
+  return undefined;
 }
 
 export interface CasinoDiscordMessage {

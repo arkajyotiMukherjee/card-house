@@ -51,6 +51,27 @@ export async function fetchDefaultPlayerName(
   return typeof name === 'string' ? name.trim() : '';
 }
 
+export async function discordLinkAvailable(botUrl: string): Promise<boolean> {
+  try {
+    const url = new URL('/casino/discord/status', botUrl);
+    const response = await fetch(url, {
+      cache: 'no-store',
+      redirect: 'error',
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) return false;
+    const status: unknown = await response.json();
+    return (
+      typeof status === 'object' &&
+      status !== null &&
+      'available' in status &&
+      status.available === true
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function cardroomBotUrl(): string {
   return typeof __CARDROOM_BOT_URL__ === 'string'
     ? __CARDROOM_BOT_URL__

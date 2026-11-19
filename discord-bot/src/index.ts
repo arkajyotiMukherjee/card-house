@@ -83,6 +83,7 @@ export async function main(attached?: Server): Promise<void> {
     applicationId,
     secret: process.env.DISCORD_OAUTH_CLIENT_SECRET?.trim() ?? '',
     redirectUri: process.env.DISCORD_OAUTH_REDIRECT_URI?.trim() ?? '',
+    isReady: () => connection?.isActive === true,
     complete: async (id, discordUserId) => {
       if (!connection) throw new Error('Still connecting to SpacetimeDB');
       await connection.reducers.completeCasinoDiscordLink({

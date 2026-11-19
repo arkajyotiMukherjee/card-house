@@ -69,10 +69,12 @@ test('OAuth challenge consumes only a cookie-bound callback and uses the verifie
   const calls: string[] = [];
   const verified: string[][] = [];
   const challenge = 'a'.repeat(64);
+  let ready = false;
   attachCasinoLink(app, {
     applicationId: guild,
     secret: 'fixture-secret',
     redirectUri: 'http://localhost/casino/discord/callback',
+    isReady: () => ready,
     complete: async (id, userId) => {
       verified.push([id, userId]);
     },
@@ -94,6 +96,19 @@ test('OAuth challenge consumes only a cookie-bound callback and uses the verifie
   assert.ok(address && typeof address !== 'string');
   const base = `http://127.0.0.1:${address.port}`;
   try {
+    const status = () => fetch(`${base}/casino/discord/status`);
+    const waiting = await status();
+    assert.equal(waiting.headers.get('access-control-allow-origin'), '*');
+    assert.equal(waiting.headers.get('cache-control'), 'no-store');
+    assert.deepEqual(await waiting.json(), { available: false });
+    const unavailable = await fetch(
+      `${base}/casino/discord/link?challenge=${challenge}`,
+    );
+    assert.equal(unavailable.status, 503);
+    assert.match(await unavailable.text(), /temporarily unavailable/);
+    assert.equal(calls.length, 0);
+    ready = true;
+    assert.deepEqual(await (await status()).json(), { available: true });
     const start = await fetch(
       `${base}/casino/discord/link?challenge=${challenge}`,
       { redirect: 'manual' },
@@ -111,6 +126,37 @@ test('OAuth challenge consumes only a cookie-bound callback and uses the verifie
     assert.deepEqual(verified, [[challenge, user]]);
     assert.equal((await fetch(callback, { headers })).status, 400);
     assert.equal(calls.length, 2);
+  } finally {
+    server.close();
+    await once(server, 'close');
+  }
+});
+
+test('an unconfigured OAuth server responds with an availability status and a clear error', async () => {
+  const app = express();
+  attachCasinoLink(app, {
+    applicationId: guild,
+    secret: '',
+    redirectUri: 'invalid',
+    complete: async () => {
+      assert.fail('OAuth is disabled');
+    },
+  });
+  const server = app.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  assert.ok(address && typeof address !== 'string');
+  const base = `http://127.0.0.1:${address.port}`;
+  try {
+    assert.deepEqual(
+      await (await fetch(`${base}/casino/discord/status`)).json(),
+      { available: false },
+    );
+    for (const path of ['link', 'callback']) {
+      const response = await fetch(`${base}/casino/discord/${path}`);
+      assert.equal(response.status, 503);
+      assert.match(await response.text(), /temporarily unavailable/);
+    }
   } finally {
     server.close();
     await once(server, 'close');
