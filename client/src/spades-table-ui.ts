@@ -49,6 +49,7 @@ export class SpadesTableUi {
         box.edge,
         false,
         'spades-player-name',
+        box.seat.seatIndex,
       );
       ui.text(
         { x: box.x, y: box.y + 8, w: box.w, h: 30 },
@@ -249,6 +250,7 @@ export class SpadesTableUi {
       'left',
       false,
       'spades-player-name',
+      ctx.meSeatIndex ?? undefined,
     );
     ui.text(
       { x: 24, y: 470, w: 176, h: 32 },

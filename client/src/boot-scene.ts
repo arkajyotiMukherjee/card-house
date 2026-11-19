@@ -1,6 +1,5 @@
 import * as ex from 'excalibur';
-import { tableFont } from './ui-text';
-import { classicFont } from './classic-table-design';
+import { tableFont, retroFont } from './ui-text';
 import {
   getCardAppearance,
   type CardBackStyle,
@@ -165,12 +164,12 @@ function feltSprite(style: TableStyle): ex.Sprite {
   return sprite;
 }
 
-export const pixelFont = new ex.FontSource(
-  '/assets/press-start-2p.ttf',
-  'Press Start 2P',
-);
+export const pixelFont = retroFont;
+
+export const casinoEntrance = new ex.ImageSource('/assets/casino-entrance.png');
 
 export const demoImages = [
+  casinoEntrance,
   heartsImage,
   diamondsImage,
   clubsImage,
@@ -187,7 +186,6 @@ export const demoImages = [
   ...TABLE_STYLES.map((style) => tableSprites[style].image),
   pixelFont,
   tableFont,
-  classicFont,
 ];
 
 export class BootScene extends ex.Scene {

@@ -14,6 +14,7 @@ import {
   createSpeakingGateway,
   probeSpeakingGateway,
 } from './speaking-gateway.ts';
+import { attachCasinoLink, watchCasinoVoiceMoves } from './casino-discord.ts';
 import { connectVoiceGateway } from './voice-gateway.ts';
 import { recordVoiceState, syncGuildVoice } from './voice-presence.ts';
 import {
@@ -76,6 +77,18 @@ export async function main(attached?: Server): Promise<void> {
         return Promise.reject(new Error('Still connecting to SpacetimeDB'));
       }
       return closeEmptyRoom(connection, roomCode);
+    },
+  });
+  attachCasinoLink(app, {
+    applicationId,
+    secret: process.env.DISCORD_OAUTH_CLIENT_SECRET?.trim() ?? '',
+    redirectUri: process.env.DISCORD_OAUTH_REDIRECT_URI?.trim() ?? '',
+    complete: async (id, discordUserId) => {
+      if (!connection) throw new Error('Still connecting to SpacetimeDB');
+      await connection.reducers.completeCasinoDiscordLink({
+        id,
+        discordUserId,
+      });
     },
   });
   if (attached) {
@@ -154,18 +167,74 @@ export async function main(attached?: Server): Promise<void> {
     try {
       attachVoiceWatch(lobby, voice);
       let queue: Promise<void> = Promise.resolve();
-      const enqueue = (task: () => Promise<void>): void => {
-        queue = queue.then(task, task);
+      const failed = (error: unknown): void => {
+        console.error(
+          redact(
+            error instanceof Error
+              ? error.message
+              : 'Discord casino update failed',
+            token,
+          ),
+        );
       };
+      const moves = watchCasinoVoiceMoves(
+        lobby.db.myCasinoVoiceTargets,
+        discordRestApi({ token }),
+        failed,
+      );
+      const enqueue = (task: () => Promise<void>): void => {
+        queue = queue.then(task).catch(failed);
+      };
+      lobby.db.casinoDiscordMember.onInsert((_ctx, row) => {
+        const guildId = lobby.db.lobby.id.find(row.lobbyId)?.discordGuildId;
+        const channelId =
+          guildId && moves.channelFor(guildId, row.discordUserId);
+        if (channelId)
+          enqueue(async () => {
+            await recordVoiceState(lobby, {
+              userId: row.discordUserId,
+              channelId,
+            });
+            moves.refresh();
+          });
+      });
       connectVoiceGateway({
         token,
         handlers: {
+          onDisconnect: moves.reset,
           onGuildVoice: (guildId, states) => {
-            enqueue(() => syncGuildVoice(lobby, guildId, states));
+            moves.resyncGuild(guildId);
+            for (const state of states)
+              moves.record(guildId, state.userId, state.channelId);
+            enqueue(async () => {
+              await syncGuildVoice(lobby, guildId, states);
+              moves.refresh();
+            });
           },
-          onVoiceState: (_guildId, state) => {
-            enqueue(() => recordVoiceState(lobby, state));
+          onVoiceState: (guildId, state) => {
+            moves.record(guildId, state.userId, state.channelId);
+            enqueue(async () => {
+              await recordVoiceState(lobby, state);
+              moves.refresh();
+            });
           },
+          onCasinoMessage:
+            process.env.CARDHOUSE_DISCORD_CHAT === '1'
+              ? (message) => {
+                  const isVoice =
+                    [...lobby.db.lobby.iter()].some(
+                      (row) =>
+                        row.discordLobbyVoiceChannelId === message.channelId,
+                    ) ||
+                    [...lobby.db.gameTable.iter()].some(
+                      (row) => row.discordVoiceChannelId === message.channelId,
+                    );
+                  if (isVoice)
+                    enqueue(() =>
+                      lobby.reducers.mirrorCasinoDiscordMessage(message),
+                    );
+                }
+              : undefined,
         },
       });
     } catch (error: unknown) {

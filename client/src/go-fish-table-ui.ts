@@ -49,6 +49,7 @@ export class GoFishTableUi {
         box.edge,
         false,
         'go-fish-player-name',
+        box.seat.seatIndex,
       );
       ui.text(
         { x: box.x, y: box.y + 8, w: box.w, h: 30 },
@@ -208,6 +209,7 @@ export class GoFishTableUi {
       'left',
       false,
       'go-fish-player-name',
+      ctx.meSeatIndex ?? undefined,
     );
     ui.text(
       { x: 24, y: 470, w: 176, h: 32 },

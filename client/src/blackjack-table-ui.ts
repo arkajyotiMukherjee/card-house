@@ -87,6 +87,7 @@ export class BlackjackTableUi {
         box.edge,
         false,
         'blackjack-player-name',
+        box.seat.seatIndex,
       );
       ui.text(
         { x: box.x, y: box.y + 22, w: 168, h: 30 },
@@ -185,6 +186,7 @@ export class BlackjackTableUi {
       'left',
       false,
       'blackjack-player-name',
+      ctx.meSeatIndex ?? undefined,
     );
     ui.text(
       { x: 24, y: 470, w: 176, h: 32 },

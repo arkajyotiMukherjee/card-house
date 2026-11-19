@@ -34,23 +34,30 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
+import BeginCasinoDiscordLinkReducer from "./begin_casino_discord_link_reducer";
 import ClearLobbyDiscordVoiceReducer from "./clear_lobby_discord_voice_reducer";
 import ClearTableDiscordVoiceReducer from "./clear_table_discord_voice_reducer";
 import CloseLobbyReducer from "./close_lobby_reducer";
+import CompleteCasinoDiscordLinkReducer from "./complete_casino_discord_link_reducer";
 import CreateGameTableReducer from "./create_game_table_reducer";
 import CreateLobbyReducer from "./create_lobby_reducer";
+import EnterCasinoFloorReducer from "./enter_casino_floor_reducer";
 import HandleGameIntentReducer from "./handle_game_intent_reducer";
 import JoinLobbyReducer from "./join_lobby_reducer";
 import JoinLobbyWithDiscordReducer from "./join_lobby_with_discord_reducer";
 import JoinTableReducer from "./join_table_reducer";
 import LeaveLobbyReducer from "./leave_lobby_reducer";
 import LeaveTableReducer from "./leave_table_reducer";
+import MirrorCasinoDiscordMessageReducer from "./mirror_casino_discord_message_reducer";
+import MoveCasinoAvatarReducer from "./move_casino_avatar_reducer";
 import RecordDiscordLeaderboardReducer from "./record_discord_leaderboard_reducer";
 import RefillRoomCoinsReducer from "./refill_room_coins_reducer";
 import RemoveGameTableReducer from "./remove_game_table_reducer";
 import RestoreLegacyTablesReducer from "./restore_legacy_tables_reducer";
+import SaveCasinoAvatarReducer from "./save_casino_avatar_reducer";
 import SendLobbyChatMessageReducer from "./send_lobby_chat_message_reducer";
 import SendTableChatReducer from "./send_table_chat_reducer";
+import SetCasinoRoomTierReducer from "./set_casino_room_tier_reducer";
 import SetEmptyTableIdleTimeoutReducer from "./set_empty_table_idle_timeout_reducer";
 import SetLobbyDiscordChannelReducer from "./set_lobby_discord_channel_reducer";
 import SetLobbyDiscordVoiceReducer from "./set_lobby_discord_voice_reducer";
@@ -66,6 +73,10 @@ import UpdateVoicePresenceReducer from "./update_voice_presence_reducer";
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import CasinoDiscordMemberRow from "./casino_discord_member_table";
+import CasinoPresenceRow from "./casino_presence_table";
+import CasinoRoomTierRow from "./casino_room_tier_table";
+import CasinoTableSpotRow from "./casino_table_spot_table";
 import ClientStatsRow from "./client_stats_table";
 import DiscordLeaderboardRow from "./discord_leaderboard_table";
 import GameEventRow from "./game_event_table";
@@ -85,11 +96,69 @@ import TableChatMessageRow from "./table_chat_message_table";
 import TableCleanupScheduleRow from "./table_cleanup_schedule_table";
 import TableFundingRow from "./table_funding_table";
 import VoicePresenceRow from "./voice_presence_table";
+import MyCasinoProfileRow from "./my_casino_profile_table";
+import MyCasinoRoomChatRow from "./my_casino_room_chat_table";
+import MyCasinoTableChatRow from "./my_casino_table_chat_table";
+import MyCasinoTablesRow from "./my_casino_tables_table";
+import MyCasinoVoiceTargetsRow from "./my_casino_voice_targets_table";
 
 /** Type-only namespace exports for generated type groups. */
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
+  casinoDiscordMember: __table({
+    name: 'CasinoDiscordMember',
+    indexes: [
+      { accessor: 'id', name: 'CasinoDiscordMember_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'lobbyId', name: 'CasinoDiscordMember_lobbyId_idx_btree', algorithm: 'btree', columns: [
+        'lobbyId',
+      ] },
+    ],
+    constraints: [
+      { name: 'CasinoDiscordMember_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, CasinoDiscordMemberRow),
+  casinoPresence: __table({
+    name: 'CasinoPresence',
+    indexes: [
+      { accessor: 'id', name: 'CasinoPresence_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'lobbyId', name: 'CasinoPresence_lobbyId_idx_btree', algorithm: 'btree', columns: [
+        'lobbyId',
+      ] },
+    ],
+    constraints: [
+      { name: 'CasinoPresence_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, CasinoPresenceRow),
+  casinoRoomTier: __table({
+    name: 'CasinoRoomTier',
+    indexes: [
+      { accessor: 'lobbyId', name: 'CasinoRoomTier_lobbyId_idx_btree', algorithm: 'btree', columns: [
+        'lobbyId',
+      ] },
+    ],
+    constraints: [
+      { name: 'CasinoRoomTier_lobbyId_key', constraint: 'unique', columns: ['lobbyId'] },
+    ],
+  }, CasinoRoomTierRow),
+  casinoTableSpot: __table({
+    name: 'CasinoTableSpot',
+    indexes: [
+      { accessor: 'id', name: 'CasinoTableSpot_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'lobbyId', name: 'CasinoTableSpot_lobbyId_idx_btree', algorithm: 'btree', columns: [
+        'lobbyId',
+      ] },
+    ],
+    constraints: [
+      { name: 'CasinoTableSpot_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, CasinoTableSpotRow),
   clientStats: __table({
     name: 'ClientStats',
     indexes: [
@@ -360,27 +429,69 @@ const tablesSchema = __schema({
       { name: 'VoicePresence_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, VoicePresenceRow),
+  myCasinoProfile: __table({
+    name: 'my_casino_profile',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyCasinoProfileRow),
+  myCasinoRoomChat: __table({
+    name: 'my_casino_room_chat',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyCasinoRoomChatRow),
+  myCasinoTableChat: __table({
+    name: 'my_casino_table_chat',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyCasinoTableChatRow),
+  myCasinoTables: __table({
+    name: 'my_casino_tables',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyCasinoTablesRow),
+  myCasinoVoiceTargets: __table({
+    name: 'my_casino_voice_targets',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyCasinoVoiceTargetsRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
+  __reducerSchema("begin_casino_discord_link", BeginCasinoDiscordLinkReducer),
   __reducerSchema("clear_lobby_discord_voice", ClearLobbyDiscordVoiceReducer),
   __reducerSchema("clear_table_discord_voice", ClearTableDiscordVoiceReducer),
   __reducerSchema("close_lobby", CloseLobbyReducer),
+  __reducerSchema("complete_casino_discord_link", CompleteCasinoDiscordLinkReducer),
   __reducerSchema("create_game_table", CreateGameTableReducer),
   __reducerSchema("create_lobby", CreateLobbyReducer),
+  __reducerSchema("enter_casino_floor", EnterCasinoFloorReducer),
   __reducerSchema("handle_game_intent", HandleGameIntentReducer),
   __reducerSchema("join_lobby", JoinLobbyReducer),
   __reducerSchema("join_lobby_with_discord", JoinLobbyWithDiscordReducer),
   __reducerSchema("join_table", JoinTableReducer),
   __reducerSchema("leave_lobby", LeaveLobbyReducer),
   __reducerSchema("leave_table", LeaveTableReducer),
+  __reducerSchema("mirror_casino_discord_message", MirrorCasinoDiscordMessageReducer),
+  __reducerSchema("move_casino_avatar", MoveCasinoAvatarReducer),
   __reducerSchema("record_discord_leaderboard", RecordDiscordLeaderboardReducer),
   __reducerSchema("refill_room_coins", RefillRoomCoinsReducer),
   __reducerSchema("remove_game_table", RemoveGameTableReducer),
   __reducerSchema("restore_legacy_tables", RestoreLegacyTablesReducer),
+  __reducerSchema("save_casino_avatar", SaveCasinoAvatarReducer),
   __reducerSchema("send_lobby_chat_message", SendLobbyChatMessageReducer),
   __reducerSchema("send_table_chat", SendTableChatReducer),
+  __reducerSchema("set_casino_room_tier", SetCasinoRoomTierReducer),
   __reducerSchema("set_empty_table_idle_timeout", SetEmptyTableIdleTimeoutReducer),
   __reducerSchema("set_lobby_discord_channel", SetLobbyDiscordChannelReducer),
   __reducerSchema("set_lobby_discord_voice", SetLobbyDiscordVoiceReducer),
@@ -400,6 +511,14 @@ const proceduresSchema = __procedures(
 
 type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "tables"> & {
   tables: typeof tablesSchema.schemaType.tables & {
+    /** @deprecated Use `casinoDiscordMember` instead. This alias will be removed in the next major version. */
+    readonly "CasinoDiscordMember": Omit<typeof tablesSchema.schemaType.tables["casinoDiscordMember"], "accessorName"> & { readonly accessorName: "CasinoDiscordMember" };
+    /** @deprecated Use `casinoPresence` instead. This alias will be removed in the next major version. */
+    readonly "CasinoPresence": Omit<typeof tablesSchema.schemaType.tables["casinoPresence"], "accessorName"> & { readonly accessorName: "CasinoPresence" };
+    /** @deprecated Use `casinoRoomTier` instead. This alias will be removed in the next major version. */
+    readonly "CasinoRoomTier": Omit<typeof tablesSchema.schemaType.tables["casinoRoomTier"], "accessorName"> & { readonly accessorName: "CasinoRoomTier" };
+    /** @deprecated Use `casinoTableSpot` instead. This alias will be removed in the next major version. */
+    readonly "CasinoTableSpot": Omit<typeof tablesSchema.schemaType.tables["casinoTableSpot"], "accessorName"> & { readonly accessorName: "CasinoTableSpot" };
     /** @deprecated Use `clientStats` instead. This alias will be removed in the next major version. */
     readonly "ClientStats": Omit<typeof tablesSchema.schemaType.tables["clientStats"], "accessorName"> & { readonly accessorName: "ClientStats" };
     /** @deprecated Use `discordLeaderboard` instead. This alias will be removed in the next major version. */
@@ -438,6 +557,16 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "TableFunding": Omit<typeof tablesSchema.schemaType.tables["tableFunding"], "accessorName"> & { readonly accessorName: "TableFunding" };
     /** @deprecated Use `voicePresence` instead. This alias will be removed in the next major version. */
     readonly "VoicePresence": Omit<typeof tablesSchema.schemaType.tables["voicePresence"], "accessorName"> & { readonly accessorName: "VoicePresence" };
+    /** @deprecated Use `myCasinoProfile` instead. This alias will be removed in the next major version. */
+    readonly "my_casino_profile": Omit<typeof tablesSchema.schemaType.tables["myCasinoProfile"], "accessorName"> & { readonly accessorName: "my_casino_profile" };
+    /** @deprecated Use `myCasinoRoomChat` instead. This alias will be removed in the next major version. */
+    readonly "my_casino_room_chat": Omit<typeof tablesSchema.schemaType.tables["myCasinoRoomChat"], "accessorName"> & { readonly accessorName: "my_casino_room_chat" };
+    /** @deprecated Use `myCasinoTableChat` instead. This alias will be removed in the next major version. */
+    readonly "my_casino_table_chat": Omit<typeof tablesSchema.schemaType.tables["myCasinoTableChat"], "accessorName"> & { readonly accessorName: "my_casino_table_chat" };
+    /** @deprecated Use `myCasinoTables` instead. This alias will be removed in the next major version. */
+    readonly "my_casino_tables": Omit<typeof tablesSchema.schemaType.tables["myCasinoTables"], "accessorName"> & { readonly accessorName: "my_casino_tables" };
+    /** @deprecated Use `myCasinoVoiceTargets` instead. This alias will be removed in the next major version. */
+    readonly "my_casino_voice_targets": Omit<typeof tablesSchema.schemaType.tables["myCasinoVoiceTargets"], "accessorName"> & { readonly accessorName: "my_casino_voice_targets" };
   };
 };
 
@@ -456,6 +585,10 @@ const REMOTE_MODULE = {
 >;
 
 const tableAccessorAliases = {
+  "CasinoDiscordMember": "casinoDiscordMember",
+  "CasinoPresence": "casinoPresence",
+  "CasinoRoomTier": "casinoRoomTier",
+  "CasinoTableSpot": "casinoTableSpot",
   "ClientStats": "clientStats",
   "DiscordLeaderboard": "discordLeaderboard",
   "GameEvent": "gameEvent",
@@ -475,6 +608,11 @@ const tableAccessorAliases = {
   "TableCleanupSchedule": "tableCleanupSchedule",
   "TableFunding": "tableFunding",
   "VoicePresence": "voicePresence",
+  "my_casino_profile": "myCasinoProfile",
+  "my_casino_room_chat": "myCasinoRoomChat",
+  "my_casino_table_chat": "myCasinoTableChat",
+  "my_casino_tables": "myCasinoTables",
+  "my_casino_voice_targets": "myCasinoVoiceTargets",
 } as const;
 
 function __withTableAccessorAliases<T extends object>(target: T, freeze = false): T {
@@ -497,6 +635,14 @@ export type DbView = __DbConnectionImpl<typeof REMOTE_MODULE>["db"];
 
 type __TablesBase = __QueryBuilder<typeof tablesSchema.schemaType>;
 export type Tables = __TablesBase & {
+  /** @deprecated Use `casinoDiscordMember` instead. This alias will be removed in the next major version. */
+  readonly "CasinoDiscordMember": __TablesBase["casinoDiscordMember"];
+  /** @deprecated Use `casinoPresence` instead. This alias will be removed in the next major version. */
+  readonly "CasinoPresence": __TablesBase["casinoPresence"];
+  /** @deprecated Use `casinoRoomTier` instead. This alias will be removed in the next major version. */
+  readonly "CasinoRoomTier": __TablesBase["casinoRoomTier"];
+  /** @deprecated Use `casinoTableSpot` instead. This alias will be removed in the next major version. */
+  readonly "CasinoTableSpot": __TablesBase["casinoTableSpot"];
   /** @deprecated Use `clientStats` instead. This alias will be removed in the next major version. */
   readonly "ClientStats": __TablesBase["clientStats"];
   /** @deprecated Use `discordLeaderboard` instead. This alias will be removed in the next major version. */
@@ -535,6 +681,16 @@ export type Tables = __TablesBase & {
   readonly "TableFunding": __TablesBase["tableFunding"];
   /** @deprecated Use `voicePresence` instead. This alias will be removed in the next major version. */
   readonly "VoicePresence": __TablesBase["voicePresence"];
+  /** @deprecated Use `myCasinoProfile` instead. This alias will be removed in the next major version. */
+  readonly "my_casino_profile": __TablesBase["myCasinoProfile"];
+  /** @deprecated Use `myCasinoRoomChat` instead. This alias will be removed in the next major version. */
+  readonly "my_casino_room_chat": __TablesBase["myCasinoRoomChat"];
+  /** @deprecated Use `myCasinoTableChat` instead. This alias will be removed in the next major version. */
+  readonly "my_casino_table_chat": __TablesBase["myCasinoTableChat"];
+  /** @deprecated Use `myCasinoTables` instead. This alias will be removed in the next major version. */
+  readonly "my_casino_tables": __TablesBase["myCasinoTables"];
+  /** @deprecated Use `myCasinoVoiceTargets` instead. This alias will be removed in the next major version. */
+  readonly "my_casino_voice_targets": __TablesBase["myCasinoVoiceTargets"];
 };
 
 /** The tables available in this remote SpacetimeDB module. Each table reference doubles as a query builder. */

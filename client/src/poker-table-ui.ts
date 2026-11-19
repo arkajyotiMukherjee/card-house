@@ -1,3 +1,4 @@
+import { ClassicTableUi } from './classic-table-ui';
 import * as ex from 'excalibur';
 import {
   POKER_VARIATION_LABELS,
@@ -157,7 +158,23 @@ export class PokerTableUi {
       edge?: 'left' | 'right',
       name = 'poker-ui-label',
       body = false,
+      seatIndex?: number,
     ): ex.Text => {
+      if (seatIndex !== undefined) {
+        const player = new ClassicTableUi(ctx);
+        const actor = player.text(
+          box,
+          text,
+          size,
+          color,
+          edge,
+          false,
+          name,
+          seatIndex,
+        );
+        this.actors.push(actor);
+        return actor.graphics.current as ex.Text;
+      }
       const textGraphic = (size: number): ex.Text =>
         body
           ? uiText(text, size, ex.Color.fromHex(color))
@@ -340,6 +357,7 @@ export class PokerTableUi {
             box.edge,
             'poker-player-name',
             true,
+            box.seat.seatIndex,
           );
           label(
             { x: box.x, y: box.edge ? box.y + 24 : 100, w: box.w, h: 28 },
@@ -360,6 +378,7 @@ export class PokerTableUi {
         box.edge,
         'poker-player-name',
         true,
+        box.seat.seatIndex,
       );
       const blind =
         pokerBlindMark(state, index) ??
@@ -547,6 +566,7 @@ export class PokerTableUi {
         'left',
         'poker-player-name',
         true,
+        self.seatIndex,
       );
       const blind =
         pokerBlindMark(state, self.seatIndex) ??

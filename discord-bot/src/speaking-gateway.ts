@@ -1,4 +1,9 @@
-import { createSocket, type Socket } from 'node:dgram';
+import {
+  Networking,
+  type ConnectionOptions,
+  type NetworkingState,
+  type VoiceWebSocket,
+} from '@discordjs/voice';
 import type { SpeakingSignal, WatchedVoiceChannel } from './speaking.ts';
 
 const API = 'https://discord.com/api/v10';
@@ -105,24 +110,18 @@ export async function probeSpeakingGateway(
 
 export function applyVoiceControlFrame(
   channelId: string,
-  text: string,
+  packet: unknown,
   state: VoiceControlState,
 ): SpeakingSignal | undefined {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    return undefined;
-  }
   if (
-    !isRecord(parsed) ||
-    !isRecord(parsed.d) ||
-    typeof parsed.op !== 'number'
+    !isRecord(packet) ||
+    !isRecord(packet.d) ||
+    typeof packet.op !== 'number'
   ) {
     return undefined;
   }
-  const data = parsed.d;
-  if (parsed.op === 12) {
+  const data = packet.d;
+  if (packet.op === 12) {
     const userId = stringField(data, 'user_id');
     const ssrc = numberField(data, 'audio_ssrc');
     if (userId && ssrc !== undefined) {
@@ -130,7 +129,7 @@ export function applyVoiceControlFrame(
     }
     return undefined;
   }
-  if (parsed.op === 13) {
+  if (packet.op === 13) {
     const userId = stringField(data, 'user_id');
     if (userId) {
       for (const [ssrc, id] of state.ssrcToUser) {
@@ -139,9 +138,15 @@ export function applyVoiceControlFrame(
         }
       }
     }
-    return undefined;
+    return userId && /^\d{17,20}$/.test(userId)
+      ? {
+          discordUserId: userId,
+          discordVoiceChannelId: channelId,
+          isSpeaking: false,
+        }
+      : undefined;
   }
-  if (parsed.op !== 5) {
+  if (packet.op !== 5) {
     return undefined;
   }
   const speaking = numberField(data, 'speaking');
@@ -168,42 +173,14 @@ export function applyVoiceControlFrame(
   };
 }
 
-/**
- * IP discovery is 74 bytes. Anything else is not a control packet.
- * Callers drop later datagrams without reading them.
- */
-export function readDiscoveryDatagram(
-  msg: Uint8Array,
-): { address: string; port: number } | undefined {
-  if (msg.length !== 74) {
-    return undefined;
-  }
-  const type = ((msg[0] ?? 0) << 8) | (msg[1] ?? 0);
-  if (type !== 2) {
-    return undefined;
-  }
-  let address = '';
-  for (let i = 8; i < 72; i += 1) {
-    const byte = msg[i] ?? 0;
-    if (byte === 0) {
-      break;
-    }
-    if (byte < 32 || byte > 126) {
-      return undefined;
-    }
-    address += String.fromCharCode(byte);
-  }
-  const port = ((msg[72] ?? 0) << 8) | (msg[73] ?? 0);
-  if (address.length === 0 || port === 0) {
-    return undefined;
-  }
-  return { address, port };
-}
+type VoiceConnection = Pick<Networking, 'state' | 'on' | 'destroy'>;
 
 export function createSpeakingGateway(
   token: string,
   probe: GatewayProbe,
   openSocket: (url: string) => GatewaySocket = openGlobalSocket,
+  connectVoice: (options: ConnectionOptions) => VoiceConnection = (options) =>
+    new Networking(options, { daveEncryption: true }),
 ): SpeakingGateway {
   return {
     listen(channels, onSpeaking) {
@@ -213,7 +190,14 @@ export function createSpeakingGateway(
           sync(): void {},
         };
       }
-      return startGateway(token, probe.url, openSocket, channels, onSpeaking);
+      return startGateway(
+        token,
+        probe.url,
+        openSocket,
+        connectVoice,
+        channels,
+        onSpeaking,
+      );
     },
   };
 }
@@ -222,6 +206,7 @@ function startGateway(
   token: string,
   gatewayUrl: string,
   openSocket: (url: string) => GatewaySocket,
+  connectVoice: (options: ConnectionOptions) => VoiceConnection,
   channels: () => readonly WatchedVoiceChannel[],
   onSpeaking: (signal: SpeakingSignal) => void,
 ): { stop(): void; sync(): void } {
@@ -229,167 +214,69 @@ function startGateway(
   let sequence: number | null = null;
   let botUserId = '';
   let heartbeat: ReturnType<typeof setInterval> | undefined;
-  const voiceSockets: GatewaySocket[] = [];
-  const udpSockets: Socket[] = [];
-  const connected = new Map<string, string>();
-  let sessionId = '';
-  let voiceToken = '';
-  let voiceEndpoint = '';
-  let voiceGuildId = '';
-  let joinedChannelId = '';
-  let voiceOpen = false;
+  const requested = new Map<string, string>();
+  interface VoiceSession {
+    channelId?: string;
+    sessionId?: string;
+    token?: string;
+    endpoint?: string;
+    close?: () => void;
+  }
+  const sessions = new Map<string, VoiceSession>();
 
-  const gateway = openSocket(
-    `${gatewayUrl.replace(/\/$/, '')}/?v=10&encoding=json`,
-  );
+  function clearVoice(guildId: string): void {
+    const voice = sessions.get(guildId);
+    sessions.delete(guildId);
+    voice?.close?.();
+  }
+
+  let gateway: GatewaySocket | undefined;
+  let retry: ReturnType<typeof setTimeout> | undefined;
+  let voiceRetry: ReturnType<typeof setTimeout> | undefined;
 
   function sendGateway(payload: unknown): void {
-    if (stopped) {
-      return;
-    }
-    gateway.send(JSON.stringify(payload));
+    if (!stopped) gateway?.send(JSON.stringify(payload));
+  }
+
+  function scheduleSync(): void {
+    if (stopped || voiceRetry) return;
+    voiceRetry = setTimeout(() => {
+      voiceRetry = undefined;
+      sync();
+    }, 5000);
+    voiceRetry.unref();
   }
 
   function sync(): void {
     if (stopped || botUserId.length === 0) {
       return;
     }
-    const wanted = channels();
-    const byGuild = new Map<string, string[]>();
-    for (const item of wanted) {
-      const list = byGuild.get(item.guildId) ?? [];
-      list.push(item.channelId);
-      byGuild.set(item.guildId, list);
-    }
-    for (const [guildId, channelIds] of byGuild) {
-      const current = connected.get(guildId);
-      if (current && channelIds.includes(current)) {
-        continue;
-      }
-      const next = channelIds[0];
-      if (!next) {
-        continue;
-      }
+    const wanted = new Map(
+      channels().map((item) => [item.guildId, item.channelId]),
+    );
+    for (const [guildId, next] of wanted) {
+      if (requested.get(guildId) === next) continue;
+      clearVoice(guildId);
+      requested.set(guildId, next);
       sendGateway(voiceStatePayload(guildId, next));
     }
-    for (const guildId of [...connected.keys()]) {
-      if (!byGuild.has(guildId)) {
+    for (const guildId of requested.keys()) {
+      if (!wanted.has(guildId)) {
+        requested.delete(guildId);
+        clearVoice(guildId);
         sendGateway(voiceStatePayload(guildId, null));
-        connected.delete(guildId);
       }
     }
   }
 
-  gateway.addEventListener('message', (event) => {
-    if (typeof event.data !== 'string') {
-      return;
-    }
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(event.data);
-    } catch {
-      return;
-    }
-    if (!isRecord(parsed) || typeof parsed.op !== 'number') {
-      return;
-    }
-    if (typeof parsed.s === 'number') {
-      sequence = parsed.s;
-    }
-    if (parsed.op === 10 && isRecord(parsed.d)) {
-      const interval = numberField(parsed.d, 'heartbeat_interval') ?? 41250;
-      sendGateway({ op: 1, d: sequence });
-      heartbeat = setInterval(() => {
-        sendGateway({ op: 1, d: sequence });
-      }, interval);
-      sendGateway({
-        op: 2,
-        d: {
-          token,
-          intents: VOICE_INTENTS,
-          properties: { os: 'linux', browser: 'cardroom', device: 'cardroom' },
-        },
-      });
-      return;
-    }
-    if (parsed.op === 7 || parsed.op === 9) {
-      return;
-    }
-    if (
-      parsed.op !== 0 ||
-      typeof parsed.t !== 'string' ||
-      !isRecord(parsed.d)
-    ) {
-      return;
-    }
-    if (parsed.t === 'READY') {
-      const user = parsed.d.user;
-      if (isRecord(user) && typeof user.id === 'string') {
-        botUserId = user.id;
-      }
-      sync();
-      return;
-    }
-    if (parsed.t === 'VOICE_STATE_UPDATE') {
-      const userId = stringField(parsed.d, 'user_id');
-      if (userId !== botUserId) {
-        return;
-      }
-      sessionId = stringField(parsed.d, 'session_id') ?? '';
-      const channelId = stringField(parsed.d, 'channel_id');
-      const guildId = stringField(parsed.d, 'guild_id') ?? voiceGuildId;
-      if (channelId && guildId) {
-        connected.set(guildId, channelId);
-        joinedChannelId = channelId;
-      }
-      openVoiceIfReady();
-      return;
-    }
-    if (parsed.t === 'VOICE_SERVER_UPDATE') {
-      voiceToken = stringField(parsed.d, 'token') ?? '';
-      voiceEndpoint = stringField(parsed.d, 'endpoint') ?? '';
-      voiceGuildId = stringField(parsed.d, 'guild_id') ?? voiceGuildId;
-      openVoiceIfReady();
-    }
-  });
-
-  gateway.addEventListener('close', (event) => {
-    if (event.code === 4004) {
-      console.log('Discord speaking gateway unauthorized (4004)');
-    }
-  });
-
-  gateway.addEventListener('error', () => {});
-
-  function openVoiceIfReady(): void {
-    if (
-      stopped ||
-      voiceOpen ||
-      botUserId.length === 0 ||
-      sessionId.length === 0 ||
-      voiceToken.length === 0 ||
-      voiceEndpoint.length === 0 ||
-      joinedChannelId.length === 0
-    ) {
-      return;
-    }
-    voiceOpen = true;
-    const channelId = joinedChannelId;
-    const guildId = voiceGuildId;
-    const endpoint = voiceEndpoint.replace(/^wss?:\/\//, '').replace(/\/$/, '');
-    const socket = openSocket(`wss://${endpoint}/?v=8`);
-    voiceSockets.push(socket);
-    const state: VoiceControlState = { ssrcToUser: new Map() };
-    let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
-    let discovered = false;
-
+  function connect(): void {
+    sequence = null;
+    const socket = openSocket(
+      `${gatewayUrl.replace(/\/$/, '')}/?v=10&encoding=json`,
+    );
+    gateway = socket;
     socket.addEventListener('message', (event) => {
-      if (typeof event.data !== 'string') {
-        return;
-      }
-      const signal = applyVoiceControlFrame(channelId, event.data, state);
-      if (signal) {
-        onSpeaking(signal);
+      if (gateway !== socket || typeof event.data !== 'string') {
         return;
       }
       let parsed: unknown;
@@ -401,115 +288,195 @@ function startGateway(
       if (!isRecord(parsed) || typeof parsed.op !== 'number') {
         return;
       }
-      if (parsed.op === 8 && isRecord(parsed.d)) {
+      if (typeof parsed.s === 'number') {
+        sequence = parsed.s;
+      }
+      if (parsed.op === 10 && isRecord(parsed.d)) {
+        if (heartbeat) clearInterval(heartbeat);
         const interval = numberField(parsed.d, 'heartbeat_interval') ?? 41250;
-        let nonce = 0;
-        socket.send(JSON.stringify({ op: 3, d: nonce }));
-        heartbeatTimer = setInterval(() => {
-          nonce += 1;
-          socket.send(JSON.stringify({ op: 3, d: nonce }));
+        sendGateway({ op: 1, d: sequence });
+        heartbeat = setInterval(() => {
+          sendGateway({ op: 1, d: sequence });
         }, interval);
-        socket.send(
-          JSON.stringify({
-            op: 0,
-            d: {
-              server_id: guildId,
-              user_id: botUserId,
-              session_id: sessionId,
-              token: voiceToken,
+        sendGateway({
+          op: 2,
+          d: {
+            token,
+            intents: VOICE_INTENTS,
+            properties: {
+              os: 'linux',
+              browser: 'cardroom',
+              device: 'cardroom',
             },
-          }),
-        );
+          },
+        });
         return;
       }
-      if (parsed.op === 2 && isRecord(parsed.d)) {
-        const ready = parsed.d;
-        const ssrc = numberField(ready, 'ssrc');
-        const ip = stringField(ready, 'ip');
-        const port = numberField(ready, 'port');
-        const mode = selectMode(ready.modes);
-        if (ssrc === undefined || !ip || port === undefined || discovered) {
+      if (parsed.op === 1) {
+        sendGateway({ op: 1, d: sequence });
+        return;
+      }
+      if (parsed.op === 7 || parsed.op === 9) {
+        socket.close();
+        return;
+      }
+      if (
+        parsed.op !== 0 ||
+        typeof parsed.t !== 'string' ||
+        !isRecord(parsed.d)
+      ) {
+        return;
+      }
+      if (parsed.t === 'READY') {
+        const user = parsed.d.user;
+        if (isRecord(user) && typeof user.id === 'string') {
+          botUserId = user.id;
+        }
+        sync();
+        return;
+      }
+      const guildId = stringField(parsed.d, 'guild_id');
+      if (!guildId || !requested.has(guildId)) return;
+      const voice = sessions.get(guildId) ?? {};
+      if (
+        parsed.t === 'VOICE_STATE_UPDATE' &&
+        stringField(parsed.d, 'user_id') === botUserId
+      ) {
+        const channelId = stringField(parsed.d, 'channel_id');
+        if (parsed.d.channel_id === null) {
+          clearVoice(guildId);
+          requested.delete(guildId);
+          scheduleSync();
           return;
         }
-        const udp = createSocket('udp4');
-        udpSockets.push(udp);
-        udp.on('error', () => {
-          udp.close();
-        });
-        udp.on('message', (msg: Buffer) => {
-          if (discovered) {
-            return;
-          }
-          const found = readDiscoveryDatagram(msg);
-          if (!found) {
-            return;
-          }
-          discovered = true;
-          socket.send(
-            JSON.stringify({
-              op: 1,
-              d: {
-                protocol: 'udp',
-                data: {
-                  address: found.address,
-                  port: found.port,
-                  mode,
-                },
-              },
-            }),
-          );
-        });
-        const packet = Buffer.alloc(74);
-        packet.writeUInt16BE(1, 0);
-        packet.writeUInt16BE(70, 2);
-        packet.writeUInt32BE(ssrc, 4);
-        udp.send(packet, port, ip);
-      }
+        if (!channelId || channelId !== requested.get(guildId)) return;
+        const sessionId = stringField(parsed.d, 'session_id');
+        if (voice.close && voice.sessionId !== sessionId) {
+          voice.close();
+          voice.close = undefined;
+        }
+        voice.channelId = channelId;
+        voice.sessionId = sessionId;
+      } else if (parsed.t === 'VOICE_SERVER_UPDATE') {
+        const token = stringField(parsed.d, 'token');
+        const endpoint = stringField(parsed.d, 'endpoint');
+        if (voice.endpoint !== endpoint || voice.token !== token) {
+          voice.close?.();
+          voice.close = undefined;
+        }
+        voice.token = token;
+        voice.endpoint = endpoint;
+      } else return;
+      sessions.set(guildId, voice);
+      openVoiceIfReady(guildId, voice);
     });
 
-    socket.addEventListener('error', () => {});
-    socket.addEventListener('close', () => {
-      if (heartbeatTimer) {
-        clearInterval(heartbeatTimer);
+    socket.addEventListener('close', (event) => {
+      if (gateway !== socket) return;
+      gateway = undefined;
+      botUserId = '';
+      if (heartbeat) clearInterval(heartbeat);
+      heartbeat = undefined;
+      for (const guildId of sessions.keys()) clearVoice(guildId);
+      requested.clear();
+      if (stopped) return;
+      if (event.code === 4004) {
+        console.log('Discord speaking gateway unauthorized (4004)');
+        return;
       }
+      retry = setTimeout(connect, 5000);
+      retry.unref();
     });
+    socket.addEventListener('error', () =>
+      console.error('Discord speaking gateway error'),
+    );
   }
 
+  function openVoiceIfReady(guildId: string, voice: VoiceSession): void {
+    const { channelId, sessionId, token, endpoint: address } = voice;
+    if (
+      stopped ||
+      voice.close ||
+      !botUserId ||
+      !channelId ||
+      !sessionId ||
+      !token ||
+      !address
+    )
+      return;
+    const network = connectVoice({
+      endpoint: address.replace(/^wss?:\/\//, '').replace(/\/$/, ''),
+      serverId: guildId,
+      channelId,
+      sessionId,
+      userId: botUserId,
+      token,
+    });
+    const state: VoiceControlState = { ssrcToUser: new Map() };
+    const speaking = new Set<string>();
+    const handlePacket = (packet: unknown): void => {
+      const signal = applyVoiceControlFrame(channelId, packet, state);
+      if (!signal) return;
+      if (signal.isSpeaking) {
+        if (speaking.has(signal.discordUserId)) return;
+        speaking.add(signal.discordUserId);
+      } else if (!speaking.delete(signal.discordUserId)) return;
+      onSpeaking(signal);
+    };
+    let controlSocket: VoiceWebSocket | undefined;
+    const bindControlSocket = (next: NetworkingState): void => {
+      const ws = 'ws' in next ? next.ws : undefined;
+      if (ws === controlSocket) return;
+      controlSocket?.off('packet', handlePacket);
+      controlSocket = ws;
+      ws?.on('packet', handlePacket);
+    };
+    voice.close = () => {
+      controlSocket?.off('packet', handlePacket);
+      controlSocket = undefined;
+      network.destroy();
+      for (const discordUserId of speaking)
+        onSpeaking({
+          discordUserId,
+          discordVoiceChannelId: channelId,
+          isSpeaking: false,
+        });
+      speaking.clear();
+    };
+    network.on('stateChange', (_previous, next) => bindControlSocket(next));
+    const reconnectVoice = (): void => {
+      if (sessions.get(guildId) !== voice) return;
+      clearVoice(guildId);
+      requested.delete(guildId);
+      scheduleSync();
+    };
+    network.on('error', () => {
+      console.error('Discord voice connection error');
+      reconnectVoice();
+    });
+    network.on('close', (code) => {
+      console.error(`Discord voice connection closed (${code})`);
+      reconnectVoice();
+    });
+    // Only subscribe to voice gateway control packets. Networking handles
+    // DAVE and UDP discovery without installing a voice receiver.
+    bindControlSocket(network.state);
+  }
+
+  connect();
   return {
     sync,
     stop(): void {
-      stopped = true;
-      if (heartbeat) {
-        clearInterval(heartbeat);
-      }
-      for (const guildId of [...connected.keys()]) {
+      if (heartbeat) clearInterval(heartbeat);
+      for (const guildId of requested.keys())
         sendGateway(voiceStatePayload(guildId, null));
-      }
-      gateway.close();
-      for (const socket of voiceSockets) {
-        socket.close();
-      }
-      for (const udp of udpSockets) {
-        udp.close();
-      }
+      stopped = true;
+      if (retry) clearTimeout(retry);
+      if (voiceRetry) clearTimeout(voiceRetry);
+      gateway?.close();
+      for (const guildId of sessions.keys()) clearVoice(guildId);
     },
   };
-}
-
-function selectMode(modes: unknown): string {
-  if (!Array.isArray(modes)) {
-    return 'xsalsa20_poly1305';
-  }
-  for (const mode of modes) {
-    if (mode === 'xsalsa20_poly1305') {
-      return mode;
-    }
-  }
-  const first = modes[0];
-  if (typeof first === 'string' && first.length > 0 && first.length < 64) {
-    return first;
-  }
-  return 'xsalsa20_poly1305';
 }
 
 function openGlobalSocket(url: string): GatewaySocket {

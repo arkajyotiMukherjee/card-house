@@ -8,7 +8,7 @@ Conventions: [../repo-conventions.md](../repo-conventions.md). The plan is [../d
 
 - `src/index.ts` — starts the interactions server. Registers `/cardhouse create`, `/cardhouse status`, and `/cardhouse close` when `DISCORD_BOT_TOKEN` and `DISCORD_APPLICATION_ID` are set. `GET /default-player-name` uses that token to map a Discord user id. When the token is set, watches lobbies and tables and creates or deletes voice channels, and listens for speaking on those channels.
 - `src/speaking.ts` — debounces speaking updates and calls `updateSpeakingState` with the user id, the channel, and the boolean.
-- `src/speaking-gateway.ts` — Discord gateway probe and deafened voice control frames. UDP datagrams after discovery are dropped. A 401 does not open a socket.
+- `src/speaking-gateway.ts` — Discord gateway probe and deafened voice control frames. The DAVE-capable voice connection exposes WebSocket speaking metadata to the app and has no audio receiver. A 401 does not open a socket.
 - `src/commands.ts` — the slash command list. Later commands are added to `SLASH_COMMANDS`.
 - `src/interactions.ts` — routes a Discord interaction to a subcommand. `/cardhouse create` passes `guild_id` through.
 - `src/lobby-client.ts` — calls `createLobby({})` on the generated client, then `setLobbyDiscordChannel`. The subscription also includes `LobbyMember`, `GameTable`, and `GameSeat` so status and close can count them.

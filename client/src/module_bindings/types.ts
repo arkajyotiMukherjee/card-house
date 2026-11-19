@@ -23,6 +23,115 @@ export const BotTurnSchedule = __t.object("BotTurnSchedule", {
 });
 export type BotTurnSchedule = __Infer<typeof BotTurnSchedule>;
 
+export const CasinoAvatarProfile = __t.object("CasinoAvatarProfile", {
+  discordUserId: __t.string(),
+  avatar: __t.string(),
+});
+export type CasinoAvatarProfile = __Infer<typeof CasinoAvatarProfile>;
+
+export const CasinoDiscordChallenge = __t.object("CasinoDiscordChallenge", {
+  id: __t.string(),
+  identity: __t.string(),
+  expiresAt: __t.u64(),
+});
+export type CasinoDiscordChallenge = __Infer<typeof CasinoDiscordChallenge>;
+
+export const CasinoDiscordIdentity = __t.object("CasinoDiscordIdentity", {
+  identity: __t.string(),
+  discordUserId: __t.string(),
+});
+export type CasinoDiscordIdentity = __Infer<typeof CasinoDiscordIdentity>;
+
+export const CasinoDiscordMember = __t.object("CasinoDiscordMember", {
+  id: __t.string(),
+  lobbyId: __t.string(),
+  discordUserId: __t.string(),
+});
+export type CasinoDiscordMember = __Infer<typeof CasinoDiscordMember>;
+
+export const CasinoDiscordMessage = __t.object("CasinoDiscordMessage", {
+  id: __t.string(),
+  lobbyId: __t.string(),
+  tableId: __t.string(),
+  channelId: __t.string(),
+  lobbyMemberId: __t.string(),
+  author: __t.string(),
+  body: __t.string(),
+  createdAt: __t.timestamp(),
+  deleted: __t.bool(),
+});
+export type CasinoDiscordMessage = __Infer<typeof CasinoDiscordMessage>;
+
+export const CasinoOperator = __t.object("CasinoOperator", {
+  identity: __t.string(),
+  role: __t.string(),
+});
+export type CasinoOperator = __Infer<typeof CasinoOperator>;
+
+export const CasinoPresence = __t.object("CasinoPresence", {
+  id: __t.string(),
+  lobbyId: __t.string(),
+  x: __t.i32(),
+  y: __t.i32(),
+  pathJson: __t.string(),
+  startedAt: __t.timestamp(),
+  chair: __t.i32(),
+  avatar: __t.string(),
+});
+export type CasinoPresence = __Infer<typeof CasinoPresence>;
+
+export const CasinoRoomTier = __t.object("CasinoRoomTier", {
+  lobbyId: __t.string(),
+  tier: __t.string(),
+});
+export type CasinoRoomTier = __Infer<typeof CasinoRoomTier>;
+
+export const CasinoSelfProfile = __t.object("CasinoSelfProfile", {
+  discordUserId: __t.string(),
+  avatar: __t.string(),
+});
+export type CasinoSelfProfile = __Infer<typeof CasinoSelfProfile>;
+
+export const CasinoTableSpot = __t.object("CasinoTableSpot", {
+  id: __t.string(),
+  lobbyId: __t.string(),
+  slot: __t.u32(),
+});
+export type CasinoTableSpot = __Infer<typeof CasinoTableSpot>;
+
+export const CasinoTableSummary = __t.object("CasinoTableSummary", {
+  id: __t.string(),
+  lobbyId: __t.string(),
+  gameType: __t.string(),
+  name: __t.string(),
+  get status() {
+    return TableStatus;
+  },
+  maxPlayers: __t.u32(),
+  economyJson: __t.string(),
+  hostMemberId: __t.string(),
+  startsAt: __t.option(__t.u64()),
+  createdAt: __t.timestamp(),
+});
+export type CasinoTableSummary = __Infer<typeof CasinoTableSummary>;
+
+export const CasinoVisibleDiscordMessage = __t.object("CasinoVisibleDiscordMessage", {
+  id: __t.string(),
+  lobbyMemberId: __t.string(),
+  author: __t.string(),
+  body: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type CasinoVisibleDiscordMessage = __Infer<typeof CasinoVisibleDiscordMessage>;
+
+export const CasinoVoiceTarget = __t.object("CasinoVoiceTarget", {
+  discordUserId: __t.string(),
+  guildId: __t.string(),
+  sourceChannelId: __t.string(),
+  targetChannelId: __t.string(),
+});
+export type CasinoVoiceTarget = __Infer<typeof CasinoVoiceTarget>;
+
 export const ClientStats = __t.object("ClientStats", {
   clientId: __t.string(),
   handsPlayed: __t.u32(),
@@ -161,6 +270,21 @@ export const LobbyStatus = __t.enum("LobbyStatus", {
   Closed: __t.unit(),
 });
 export type LobbyStatus = __Infer<typeof LobbyStatus>;
+
+export const MyCasinoProfile = __t.object("MyCasinoProfile", {});
+export type MyCasinoProfile = __Infer<typeof MyCasinoProfile>;
+
+export const MyCasinoRoomChat = __t.object("MyCasinoRoomChat", {});
+export type MyCasinoRoomChat = __Infer<typeof MyCasinoRoomChat>;
+
+export const MyCasinoTableChat = __t.object("MyCasinoTableChat", {});
+export type MyCasinoTableChat = __Infer<typeof MyCasinoTableChat>;
+
+export const MyCasinoTables = __t.object("MyCasinoTables", {});
+export type MyCasinoTables = __Infer<typeof MyCasinoTables>;
+
+export const MyCasinoVoiceTargets = __t.object("MyCasinoVoiceTargets", {});
+export type MyCasinoVoiceTargets = __Infer<typeof MyCasinoVoiceTargets>;
 
 export const OperatorSession = __t.object("OperatorSession", {
   identity: __t.string(),

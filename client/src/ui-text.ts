@@ -1,5 +1,12 @@
 import * as ex from 'excalibur';
 
+/** Large display lettering only; smaller table text stays proportional. */
+export const retroFont = new ex.FontSource(
+  '/assets/press-start-2p.ttf',
+  'Press Start 2P',
+);
+export const RETRO_DISPLAY_MIN_SIZE = 24;
+
 /** Locally hosted SIL-OFL block lettering; card sprites retain nearest-neighbor filtering. */
 export const tableFont = new ex.FontSource(
   '/assets/chakra-petch-semibold.ttf',

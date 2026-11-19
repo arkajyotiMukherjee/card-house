@@ -1,14 +1,17 @@
+import {
+  openCasinoAvatarEditor,
+  casinoAvatarEditorOpen,
+} from './casino-profile';
+import type { DbConnection } from './module_bindings';
 import { coinDialog } from './coin-dialog';
 import * as ex from 'excalibur';
 import { isMobileDevice } from './mobile-shell';
 import {
-  chipsImage,
+  casinoEntrance,
   personalCardAtlas,
   pixelFont,
   tableSprites,
 } from './boot-scene';
-import { ChipAtlas, type ChipColor } from './chip-atlas';
-import type { Rank, Suit } from './card-atlas';
 import {
   CARD_BACK_LABELS,
   CARD_FRONT_LABELS,
@@ -58,8 +61,6 @@ import {
   PROMPT,
   SOLO_PICKER,
   THEME_PANEL,
-  floaterPose,
-  makeFloaters,
   menuAcceptsAction,
   nextFieldAfterEnter,
   promptError,
@@ -71,7 +72,6 @@ import {
   splitHowToPlay,
   stepIndex,
   wrapText,
-  type FloaterSpec,
   type MenuAction,
   type MenuMode,
   type PromptKind,
@@ -109,7 +109,6 @@ const SHADE = ex.Color.fromRGB(4, 16, 10, 0.72);
 const PLATE = ex.Color.fromRGB(4, 16, 10, 0.62);
 const TITLE_SHADOW = ex.Color.fromHex('#07140d');
 
-const FLOATER_COUNT = 14;
 const TITLE_DROP = 4;
 /** Below the Theme button (y 408, h 44) and above the version marker. */
 const STATS_Y = typeof window !== 'undefined' && isMobileDevice() ? 150 : 480;
@@ -195,11 +194,6 @@ function scaled(sprite: ex.Sprite, scale: number): ex.Sprite {
   return sprite;
 }
 
-interface Drifter {
-  actor: ex.Actor;
-  spec: FloaterSpec;
-}
-
 export class MenuScene extends ex.Scene {
   constructor(private readonly clientId = '') {
     super();
@@ -226,9 +220,7 @@ export class MenuScene extends ex.Scene {
     DIM,
   );
   private statsActor: ex.Actor | undefined;
-  private readonly drifters: Drifter[] = [];
   private readonly overlay: ex.Actor[] = [];
-  private elapsed = 0;
   private busy = false;
 
   private name = '';
@@ -263,8 +255,7 @@ export class MenuScene extends ex.Scene {
 
   private look: ClientLook = readClientLook('');
   private onLookChange: (look: ClientLook) => void = () => {};
-  private tableActor: ex.Actor | undefined;
-  private readonly chips = new ChipAtlas(chipsImage);
+  casinoConnection?: DbConnection;
 
   /**
    * Create and Join read this before they call a reducer. A drop while the
@@ -350,15 +341,19 @@ export class MenuScene extends ex.Scene {
     this.backgroundColor = ex.Color.fromHex(
       backgroundHex(this.look.background),
     );
-    this.buildTable();
-    this.buildDrifters();
+    const room = new ex.Actor({ pos: ex.vec(480, 270), z: 0 });
+    const artwork = casinoEntrance.toSprite();
+    const cover = Math.max(960 / artwork.width, 540 / artwork.height);
+    artwork.scale = ex.vec(cover, cover);
+    room.graphics.use(artwork);
+    this.add(room);
     this.buildBackdrop();
     this.buildTitle();
     this.buildButtons();
     this.buildFooter();
     this.bindMenuFields();
     engine.input.keyboard.on('press', (evt) => {
-      if (engine.currentScene !== this) {
+      if (engine.currentScene !== this || casinoAvatarEditorOpen(this)) {
         return;
       }
       if (eventTargetsHtmlField(evt.originalEvent)) {
@@ -379,65 +374,10 @@ export class MenuScene extends ex.Scene {
     this.closeOverlay();
   }
 
-  onPreUpdate(_engine: ex.Engine, delta: number): void {
-    this.elapsed += delta / 1000;
-    for (const drifter of this.drifters) {
-      const pose = floaterPose(drifter.spec, this.elapsed);
-      drifter.actor.pos = ex.vec(Math.round(pose.x), Math.round(pose.y));
-      drifter.actor.rotation = pose.rotation;
-    }
-  }
-
-  private buildTable(): void {
-    const table = new ex.Actor({
-      pos: ex.vec(LOGICAL_WIDTH / 2, LOGICAL_HEIGHT / 2),
-      anchor: ex.vec(0.5, 0.5),
-      z: 0,
-    });
-    table.graphics.use(scaled(tableSprites[this.look.table].clone(), 8));
-    this.tableActor = table;
-    this.add(table);
-  }
-
   private paintLook(): void {
     this.backgroundColor = ex.Color.fromHex(
       backgroundHex(this.look.background),
     );
-    this.tableActor?.graphics.use(
-      scaled(tableSprites[this.look.table].clone(), 8),
-    );
-    for (const drifter of this.drifters) {
-      drifter.actor.graphics.use(
-        scaled(this.floaterSprite(drifter.spec), drifter.spec.scale),
-      );
-      drifter.actor.graphics.opacity = 0.9;
-    }
-  }
-
-  private buildDrifters(): void {
-    for (const spec of makeFloaters(FLOATER_COUNT)) {
-      const actor = new ex.Actor({
-        pos: ex.vec(spec.x, spec.y),
-        anchor: ex.vec(0.5, 0.5),
-        z: 1,
-      });
-      actor.graphics.use(scaled(this.floaterSprite(spec), spec.scale));
-      actor.graphics.opacity = 0.9;
-      this.add(actor);
-      this.drifters.push({ actor, spec });
-    }
-  }
-
-  private floaterSprite(spec: FloaterSpec): ex.Sprite {
-    if (spec.kind === 'chip') {
-      return this.chips.sprite(spec.face as ChipColor);
-    }
-    const mine = personalCardAtlas();
-    if (spec.kind === 'back') {
-      return mine.back();
-    }
-    const [rank, suit] = spec.face.split(':');
-    return mine.sprite({ rank: rank as Rank, suit: suit as Suit });
   }
 
   private buildBackdrop(): void {
@@ -475,6 +415,16 @@ export class MenuScene extends ex.Scene {
   }
 
   private buildButtons(): void {
+    this.button(
+      781,
+      20,
+      156,
+      44,
+      'Avatar',
+      14,
+      () => openCasinoAvatarEditor(this, this.casinoConnection),
+      10,
+    );
     for (const spec of MENU_BUTTONS) {
       this.button(
         spec.x,

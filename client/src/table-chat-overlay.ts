@@ -278,8 +278,25 @@ export class TableChatOverlay {
       this.tableId,
     );
     const members = [...this.readMembers()];
-    const lines = rows.flatMap((row) => {
-      const name = tableChatSender(row, members, this.lobbyMemberId);
+    const entries = [
+      ...rows.map((row) => ({
+        ...row,
+        name: tableChatSender(row, members, this.lobbyMemberId),
+      })),
+      ...[...this.connection.db.myCasinoTableChat.iter()].map((row) => ({
+        id: row.id,
+        name: row.author + ' · Discord',
+        body: row.body,
+        lobbyMemberId: row.lobbyMemberId,
+        createdAtMicros: row.createdAt.microsSinceUnixEpoch,
+      })),
+    ].sort(
+      (left, right) =>
+        Number(left.createdAtMicros - right.createdAtMicros) ||
+        left.id.localeCompare(right.id),
+    );
+    const lines = entries.flatMap((row) => {
+      const name = row.name;
       return wrapChatLines(name, row.body, TABLE_CHAT_TEXT.columns).map(
         (line) => ({
           ...line,

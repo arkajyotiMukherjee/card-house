@@ -1,3 +1,9 @@
+import { casinoTableBackdrop } from './casino-art';
+import {
+  DEFAULT_AVATAR,
+  readCasinoAvatar,
+} from '../../src/shared/casino-avatar';
+import { localCasinoAvatar } from './casino-profile';
 import * as ex from 'excalibur';
 import {
   casinoGame,
@@ -290,6 +296,9 @@ export class GameScene extends ex.Scene {
     this.topUpActor = topUp;
     this.applyStoredLook();
 
+    const trim = new ex.Actor({ x: -240, y: 0, anchor: ex.vec(0, 0), z: -1 });
+    trim.graphics.use(casinoTableBackdrop());
+    this.add(trim);
     const sprite = tableSprites[this.style].clone();
     sprite.scale = ex.vec(TABLE_SCALE, TABLE_SCALE);
     const table = new ex.Actor({
@@ -550,14 +559,23 @@ export class GameScene extends ex.Scene {
     this.connection.db.lobbyMember.onUpdate(() => {
       this.paintSeats();
     });
-    this.connection.db.speakingState.onInsert(() => {
-      this.refreshSpeaking();
+    this.connection.db.speakingState.onInsert((_ctx, row) => {
+      if (this.active && row.tableId === this.tableId) {
+        this.refreshSpeaking();
+        this.paintGame();
+      }
     });
-    this.connection.db.speakingState.onUpdate(() => {
-      this.refreshSpeaking();
+    this.connection.db.speakingState.onUpdate((_ctx, _previous, row) => {
+      if (this.active && row.tableId === this.tableId) {
+        this.refreshSpeaking();
+        this.paintGame();
+      }
     });
-    this.connection.db.speakingState.onDelete(() => {
-      this.refreshSpeaking();
+    this.connection.db.speakingState.onDelete((_ctx, row) => {
+      if (this.active && row.tableId === this.tableId) {
+        this.refreshSpeaking();
+        this.paintGame();
+      }
     });
     this.connection.db.voicePresence.onInsert(() => {
       this.paintSeats();
@@ -574,6 +592,23 @@ export class GameScene extends ex.Scene {
       }
       this.announce(row);
     });
+    this.connection.db.casinoPresence.onUpdate((_ctx, previous, row) => {
+      if (
+        this.active &&
+        previous.avatar !== row.avatar &&
+        this.placed.some((seat) => seat.lobbyMemberId === row.id)
+      )
+        this.paintGame();
+    });
+    this.connection.db.myCasinoTableChat.onInsert(() =>
+      this.tableChat.refresh(),
+    );
+    this.connection.db.myCasinoTableChat.onUpdate(() =>
+      this.tableChat.refresh(),
+    );
+    this.connection.db.myCasinoTableChat.onDelete(() =>
+      this.tableChat.refresh(),
+    );
     this.connection.db.tableChatMessage.onInsert(() => {
       this.tableChat.refresh();
     });
@@ -617,7 +652,7 @@ export class GameScene extends ex.Scene {
             : 'Could not subscribe';
         this.showError(detail);
       })
-      .subscribe([...queries]);
+      .subscribe([...queries, 'SELECT * FROM my_casino_table_chat']);
     this.paintSeats();
   }
 
@@ -1512,7 +1547,28 @@ export class GameScene extends ex.Scene {
     const phase = table ? JSON.parse(table.stateJson).phase : '';
     return {
       scene: this,
-      seats: this.placed,
+      seats: this.placed.map((seat) => {
+        const db = this.connection.db;
+        const presence = [...db.casinoPresence.iter()].find(
+          (row) => row.id === seat.lobbyMemberId,
+        );
+        const verified = [...db.casinoDiscordMember.iter()].some(
+          (row) => row.id === seat.lobbyMemberId,
+        );
+        const inVoice = [...db.voicePresence.iter()].some(
+          (row) =>
+            row.tableId === this.tableId &&
+            row.lobbyMemberId === seat.lobbyMemberId,
+        );
+        return {
+          ...seat,
+          avatar:
+            readCasinoAvatar(presence?.avatar ?? '') ??
+            (seat.self ? localCasinoAvatar() : DEFAULT_AVATAR),
+          speaking:
+            !!verified && inVoice && this.speaking.has(seat.lobbyMemberId),
+        };
+      }),
       meSeatIndex,
       finishedMessage,
       tableName: table?.name,

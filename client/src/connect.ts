@@ -65,9 +65,10 @@ export interface CardroomHandlers {
 }
 
 interface LobbyQuery {
+  myCasinoProfile: unknown;
   lobby: unknown;
   lobbyMember: unknown;
-  gameTable: unknown;
+  myCasinoTables: unknown;
   voicePresence: unknown;
   speakingState: unknown;
 }
@@ -173,8 +174,9 @@ export function connectCardroom(
       })
       .subscribe((query: LobbyQuery) => [
         query.lobby,
+        query.myCasinoProfile,
         query.lobbyMember,
-        query.gameTable,
+        query.myCasinoTables,
         query.voicePresence,
         query.speakingState,
       ]);
@@ -308,9 +310,10 @@ export function connectCardroom(
 export function subscribeLobbyTables(
   connection: DbConnection,
   lobbyId: string,
+  track?: (handle: { isEnded(): boolean; unsubscribe(): void }) => void,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    connection
+    const handle = connection
       .subscriptionBuilder()
       .onApplied(() => {
         resolve();
@@ -322,6 +325,19 @@ export function subscribeLobbyTables(
             : 'subscription failed';
         reject(new Error(detail));
       })
-      .subscribe(lobbyTableQueries(lobbyId));
+      .subscribe([
+        ...lobbyTableQueries(lobbyId).filter(
+          (query) => !query.startsWith('SELECT * FROM "GameTable"'),
+        ),
+        ...['CasinoPresence', 'CasinoTableSpot', 'CasinoDiscordMember'].map(
+          (table) =>
+            `SELECT * FROM "${table}" WHERE "lobbyId" = '${lobbyId.replaceAll("'", "''")}'`,
+        ),
+        `SELECT * FROM "CasinoRoomTier" WHERE "lobbyId" = '${lobbyId.replaceAll("'", "''")}'`,
+        `SELECT * FROM "VoicePresence" WHERE "lobbyId" = '${lobbyId.replaceAll("'", "''")}'`,
+        `SELECT * FROM "SpeakingState" WHERE "lobbyId" = '${lobbyId.replaceAll("'", "''")}'`,
+        'SELECT * FROM my_casino_room_chat',
+      ]);
+    track?.(handle);
   });
 }

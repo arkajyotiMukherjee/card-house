@@ -1,0 +1,267 @@
+import assert from 'node:assert/strict';
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { chromium, type Page } from 'playwright';
+import { DbConnection } from '../client/src/module_bindings/index.ts';
+
+const base = process.env.CASINO_BROWSER_URL ?? 'http://127.0.0.1:5181';
+const host = process.env.SPACETIMEDB_HOST ?? 'http://127.0.0.1:3000';
+const database = process.env.SPACETIMEDB_DB ?? 'room-economy-test';
+const evidence =
+  process.env.CASINO_EVIDENCE_DIR ?? '/tmp/cardhouse-casino-proof';
+assert.match(base, /^http:\/\/(127\.0\.0\.1|localhost):\d+$/);
+assert.match(host, /^http:\/\/(127\.0\.0\.1|localhost):\d+$/);
+assert.match(database, /^room-economy-/);
+mkdirSync(evidence, { recursive: true });
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function connect() {
+  return new Promise<DbConnection>((resolve, reject) => {
+    DbConnection.builder()
+      .withUri(host)
+      .withDatabaseName(database)
+      .onConnect((db) =>
+        db
+          .subscriptionBuilder()
+          .onApplied(() => resolve(db))
+          .onError(reject)
+          .subscribe([
+            'SELECT * FROM Lobby',
+            'SELECT * FROM GameTable',
+            'SELECT * FROM GameSeat',
+            'SELECT * FROM LobbyChatMessage',
+            'SELECT * FROM CasinoPresence',
+          ]),
+      )
+      .onConnectError((_ctx, error) => reject(error))
+      .build();
+  });
+}
+
+async function until(test: () => boolean, error: string) {
+  const deadline = Date.now() + 9000;
+  while (!test()) {
+    assert.ok(Date.now() < deadline, error);
+    await pause(50);
+  }
+}
+async function point(page: Page, x: number, y: number, touch = false) {
+  const region = await page.locator('canvas').boundingBox();
+  assert.ok(region);
+  const left = region.x + (x * region.width) / 960;
+  const top = region.y + (y * region.height) / 540;
+  if (touch) await page.touchscreen.tap(left, top);
+  else await page.mouse.click(left, top);
+  await pause(180);
+}
+function view(page: Page, name: string) {
+  return page.screenshot({ path: join(evidence, name + '.png') });
+}
+async function name(page: Page, who: string) {
+  const input = page.locator('input[aria-label="Your Name"]:focus');
+  await input.waitFor({ timeout: 10000 });
+  await input.fill(who);
+  await input.press('Enter');
+}
+
+const browser = await chromium.launch({
+  executablePath: process.env.CASINO_CHROMIUM ?? '/usr/bin/chromium',
+  args: [
+    '--no-sandbox',
+    '--disable-dev-shm-usage',
+    '--enable-unsafe-swiftshader',
+  ],
+});
+const errors: string[] = [];
+const connections: DbConnection[] = [];
+try {
+  const desktop = await browser.newPage({
+    viewport: { width: 1280, height: 720 },
+  });
+  desktop.on('pageerror', (e) => errors.push(e.message));
+  await desktop.goto(base);
+  await desktop.locator('canvas').waitFor();
+  await pause(1600);
+  await view(desktop, 'entrance');
+  await point(desktop, 840, 42);
+  await view(desktop, 'avatar-editor');
+  await point(desktop, 756, 166);
+  await point(desktop, 725, 450);
+  assert.ok(await desktop.evaluate(() => localStorage.getItem('casinoAvatar')));
+  await point(desktop, 480, 190);
+  await name(desktop, 'Ava Bennett');
+  await point(desktop, 333, 343);
+  await desktop.waitForFunction(() =>
+    /^\/[A-Z0-9]{4}$/.test(location.pathname),
+  );
+  const code = new URL(desktop.url()).pathname.slice(1);
+
+  const fixture = await connect();
+  connections.push(fixture);
+  const room = [...fixture.db.lobby.iter()].find((row) => row.code === code)!;
+  assert.ok(room);
+  const owners = [
+    { name: 'Ben Harrison', table: 'Evening Bluff', game: 'bluff' },
+    { name: 'Chloe Martin', table: 'Emerald Poker', game: 'poker' },
+    { name: 'Dev Sharma', table: 'Grand President', game: 'president' },
+  ];
+  const hosts = new Map<string, { db: DbConnection; clientId: string }>();
+  for (const owner of owners) {
+    const db = await connect();
+    connections.push(db);
+    const clientId = crypto.randomUUID();
+    hosts.set(owner.game, { db, clientId });
+    await db.reducers.joinLobby({
+      lobbyCode: code,
+      clientId,
+      name: owner.name,
+    });
+    await db.reducers.enterCasinoFloor({ lobbyId: room.id });
+    await db.reducers.createGameTable({
+      lobbyId: room.id,
+      gameType: owner.game,
+      settings: JSON.stringify({ name: owner.table, maxPlayers: 6 }),
+    });
+  }
+  const player = await browser.newPage({
+    viewport: { width: 844, height: 390 },
+    hasTouch: true,
+    isMobile: true,
+    deviceScaleFactor: 1,
+    userAgent:
+      'Mozilla/5.0 (Linux; Android 15; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Mobile Safari/537.36',
+  });
+  player.on('pageerror', (e) => errors.push(e.message));
+  await player.goto(`${base}/${code}`);
+  const phoneName = player
+    .getByRole('textbox', { name: 'Your Name', exact: true })
+    .filter({ visible: true })
+    .last();
+  await phoneName.waitFor({ timeout: 25_000 }).catch(async (error) => {
+    await view(player, 'mobile-join-debug');
+    throw error;
+  });
+  await phoneName.fill('Finn Walker');
+  await phoneName.press('Enter');
+  await point(player, 340, 433, true);
+  try {
+    await player.waitForFunction(
+      () => localStorage.getItem('lastRoom')?.includes('Finn Walker'),
+      undefined,
+      { timeout: 5000 },
+    );
+  } catch (error) {
+    await view(player, 'mobile-join-debug');
+    throw error;
+  }
+  await pause(900);
+  await view(player, 'mobile-reception');
+
+  await desktop.keyboard.press('/');
+  const quick = desktop.locator(
+    'input[data-cardhouse-field="casino-chat"]:focus',
+  );
+  await quick.waitFor({ timeout: 4000 });
+  await quick.fill('Anyone for Bluff?');
+  await quick.press('Enter');
+  await until(
+    () =>
+      [...fixture.db.lobbyChatMessage.iter()].some(
+        (row) => row.lobbyId === room.id && row.body === 'Anyone for Bluff?',
+      ),
+    'Room chat delivered',
+  );
+  await pause(300);
+  await view(desktop, 'reception-chat');
+  await point(player, 620, 23, true);
+  const phoneChat = player.locator('input[data-cardhouse-field="casino-chat"]');
+  await phoneChat.fill('Ready to play');
+  await phoneChat.press('Enter');
+  await until(
+    () =>
+      [...fixture.db.lobbyChatMessage.iter()].some(
+        (row) => row.lobbyId === room.id && row.body === 'Ready to play',
+      ),
+    'Touch chat delivered',
+  );
+  await view(player, 'mobile-chat');
+  await point(player, 620, 23, true);
+  await point(player, 852, 420, true);
+  const phoneClient = await player.evaluate(() =>
+    localStorage.getItem('clientId'),
+  );
+  await until(
+    () =>
+      [...fixture.db.casinoPresence.iter()].some(
+        (row) =>
+          row.id.endsWith(phoneClient ?? 'no-client') &&
+          JSON.parse(row.pathJson).at(-1)?.y === 18,
+      ),
+    'Touch walk to gaming wing',
+  );
+  await pause(2200);
+  await view(player, 'mobile-gaming-wing');
+
+  await point(desktop, 337, 396);
+  const ownClient = await desktop.evaluate(() =>
+    localStorage.getItem('clientId'),
+  );
+  await until(
+    () =>
+      [...fixture.db.casinoPresence.iter()].some(
+        (row) =>
+          row.id.endsWith(ownClient ?? 'no-client') &&
+          JSON.parse(row.pathJson).at(-1)?.y === 18,
+      ),
+    'Avatar walked toward the gaming wing',
+  );
+  await pause(2200);
+  await view(desktop, 'gaming-wing');
+  await point(desktop, 421, 23);
+  await view(desktop, 'table-directory');
+
+  const bluff = [...fixture.db.gameTable.iter()].find(
+    (table) => table.lobbyId === room.id && table.gameType === 'bluff',
+  )!;
+  assert.ok(bluff);
+  const seated = () =>
+    [...fixture.db.gameSeat.iter()].some(
+      (row) =>
+        row.tableId === bluff.id &&
+        row.lobbyMemberId.endsWith(ownClient ?? 'no-client'),
+    );
+  await point(desktop, 500, 134);
+  assert.equal(
+    seated(),
+    false,
+    'Opening a paid table confirmation never buys a seat',
+  );
+  await view(desktop, 'paid-join');
+  await point(desktop, 325, 344);
+  await until(seated, 'Seat reserved after confirming the paid join');
+  await desktop.waitForFunction(
+    () => !!JSON.parse(localStorage.getItem('lastRoom') ?? '{}').tableId,
+  );
+  await pause(600);
+  await view(desktop, 'table-lobby');
+  const bluffHost = hosts.get('bluff')!;
+  await bluffHost.db.reducers.handleGameIntent({
+    tableId: bluff.id,
+    clientId: bluffHost.clientId,
+    intentPayload: JSON.stringify({ type: 'start_game' }),
+  });
+  await until(
+    () => fixture.db.gameTable.id.find(bluff.id)?.status.tag === 'InProgress',
+    'Multiplayer Bluff dealt',
+  );
+  await pause(1700);
+  await view(desktop, 'bluff-table');
+  assert.deepEqual(errors, []);
+  console.log(
+    'Desktop and touch multiplayer verified. Captures saved to',
+    evidence,
+  );
+} finally {
+  await browser.close();
+  connections.forEach((db) => db.disconnect());
+}

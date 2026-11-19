@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
+import type { ConnectionOptions } from '@discordjs/voice';
 import { test } from 'node:test';
 import {
   createSpeakingReporter,
@@ -11,7 +13,6 @@ import {
   applyVoiceControlFrame,
   createSpeakingGateway,
   probeSpeakingGateway,
-  readDiscoveryDatagram,
   voiceStatePayload,
 } from './speaking-gateway.ts';
 
@@ -77,19 +78,13 @@ test('voice control frames do not forward audio fields', () => {
   const state = { ssrcToUser: new Map<number, string>() };
   const mapped = applyVoiceControlFrame(
     CHANNEL,
-    JSON.stringify({
-      op: 12,
-      d: { user_id: OTHER, audio_ssrc: 9, audio: 'opus-payload' },
-    }),
+    { op: 12, d: { user_id: OTHER, audio_ssrc: 9, audio: 'opus-payload' } },
     state,
   );
   assert.equal(mapped, undefined);
   const signal = applyVoiceControlFrame(
     CHANNEL,
-    JSON.stringify({
-      op: 5,
-      d: { speaking: 0, ssrc: 9, delay: 0, packet: 'rtp-audio' },
-    }),
+    { op: 5, d: { speaking: 0, ssrc: 9, delay: 0, packet: 'rtp-audio' } },
     state,
   );
   assert.deepEqual(signal, {
@@ -99,19 +94,6 @@ test('voice control frames do not forward audio fields', () => {
   });
   assert.equal(JSON.stringify(signal).includes('rtp'), false);
   assert.equal(JSON.stringify(signal).includes('opus'), false);
-});
-
-test('discovery reads an address and drops other datagrams', () => {
-  const audio = Buffer.from('opus-audio-payload-not-a-discovery-packet');
-  assert.equal(readDiscoveryDatagram(audio), undefined);
-  const packet = Buffer.alloc(74);
-  packet.writeUInt16BE(2, 0);
-  packet.write('203.0.113.8', 8);
-  packet.writeUInt16BE(12345, 72);
-  assert.deepEqual(readDiscoveryDatagram(packet), {
-    address: '203.0.113.8',
-    port: 12345,
-  });
 });
 
 test('a voice join is deafened and muted', () => {
@@ -173,6 +155,95 @@ test('watched channels include lobby and table voice', () => {
     { guildId: GUILD, channelId: LOBBY_CHANNEL },
     { guildId: GUILD, channelId: CHANNEL },
   ]);
+});
+
+test('the voice monitor switches channels and clears the old speaking indicator', () => {
+  const main = new EventEmitter();
+  const requests: unknown[] = [];
+  const networks: {
+    options: ConnectionOptions;
+    ws: EventEmitter;
+    destroyed: boolean;
+  }[] = [];
+  const socket: ReturnType<
+    NonNullable<Parameters<typeof createSpeakingGateway>[2]>
+  > = {
+    addEventListener: (type, listener) => {
+      main.on(type, listener);
+    },
+    send: (value) => {
+      requests.push(JSON.parse(value));
+    },
+    close: () => {
+      main.emit('close', { code: 1000 });
+    },
+  };
+  const gateway = createSpeakingGateway(
+    'fixture',
+    { status: 200, url: 'wss://discord.invalid' },
+    () => socket,
+    (options) => {
+      const fixture = { options, ws: new EventEmitter(), destroyed: false };
+      networks.push(fixture);
+      return Object.assign(new EventEmitter(), {
+        state: { ws: fixture.ws },
+        destroy() {
+          fixture.destroyed = true;
+        },
+      }) as unknown as ReturnType<
+        NonNullable<Parameters<typeof createSpeakingGateway>[3]>
+      >;
+    },
+  );
+  let channelId = LOBBY_CHANNEL;
+  const signals: SpeakingSignal[] = [];
+  const monitor = gateway.listen(
+    () => [{ guildId: GUILD, channelId }],
+    (signal) => signals.push(signal),
+  );
+  const dispatch = (event: string, d: unknown) =>
+    main.emit('message', { data: JSON.stringify({ op: 0, t: event, d }) });
+  const join = (channel: string, id: string) => {
+    dispatch('VOICE_SERVER_UPDATE', {
+      guild_id: GUILD,
+      token: 'fixture-voice',
+      endpoint: 'voice.discord.invalid',
+    });
+    dispatch('VOICE_STATE_UPDATE', {
+      guild_id: GUILD,
+      channel_id: channel,
+      user_id: OTHER,
+      session_id: id,
+    });
+  };
+  try {
+    dispatch('READY', { user: { id: OTHER } });
+    assert.deepEqual(requests, [voiceStatePayload(GUILD, LOBBY_CHANNEL)]);
+    join(LOBBY_CHANNEL, 'lobby-session');
+    assert.equal(networks[0]?.options.sessionId, 'lobby-session');
+    const speaking = { op: 5, d: { user_id: USER, speaking: 1 } };
+    networks[0]?.ws.emit('packet', speaking);
+    networks[0]?.ws.emit('packet', speaking);
+    channelId = CHANNEL;
+    monitor.sync();
+    assert.equal(networks[0]?.destroyed, true);
+    assert.equal(networks[0]?.ws.listenerCount('packet'), 0);
+    assert.deepEqual(requests.at(-1), voiceStatePayload(GUILD, CHANNEL));
+    join(CHANNEL, 'table-session');
+    networks[1]?.ws.emit('packet', speaking);
+    networks[1]?.ws.emit('packet', { op: 13, d: { user_id: USER } });
+    assert.deepEqual(
+      signals.map((row) => [row.discordVoiceChannelId, row.isSpeaking]),
+      [
+        [LOBBY_CHANNEL, true],
+        [LOBBY_CHANNEL, false],
+        [CHANNEL, true],
+        [CHANNEL, false],
+      ],
+    );
+  } finally {
+    monitor.stop();
+  }
 });
 
 function delay(ms: number): Promise<void> {

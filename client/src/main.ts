@@ -115,9 +115,7 @@ function applyContainScale(): void {
   if (shell.button && !shell.gate && !classicControls) {
     insets.left += 60;
   }
-  const tableActive =
-    engine.currentScene instanceof GameScene ||
-    isLobbyViewport(engine.currentScene);
+  const tableActive = engine.currentScene instanceof GameScene;
   const logicalWidth = tableActive
     ? tableViewportWidth(
         settledSize.width - insets.left - insets.right,
@@ -181,9 +179,7 @@ mountMobileShell({ onChange: applyContainScale });
 installGameGestureGuard();
 installTouchTargets(engine);
 engine.on('postframe', () => {
-  const tableActive =
-    engine.currentScene instanceof GameScene ||
-    isLobbyViewport(engine.currentScene);
+  const tableActive = engine.currentScene instanceof GameScene;
   const insets = readSafeInsets();
   const shell = shellView(readShellInputs());
   if (
@@ -243,6 +239,7 @@ void engine.start(loader).then(() => {
         publishStats();
       },
       onSubscribed: (connection) => {
+        menu.casinoConnection = connection;
         const joined: { panel?: LobbyPanel } = {};
         let openTableId = '';
         let endTableSession = (): void => {};
@@ -558,7 +555,7 @@ function readSoloMembers(connection: DbConnection) {
 
 function readSoloTables(connection: DbConnection) {
   const rows = [];
-  for (const table of connection.db.gameTable.iter()) {
+  for (const table of connection.db.myCasinoTables.iter()) {
     rows.push({
       id: table.id,
       lobbyId: table.lobbyId,

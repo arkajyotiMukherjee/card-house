@@ -1,5 +1,6 @@
 import * as ex from 'excalibur';
 import type { DriverSeat } from './game-driver';
+import { retroFont, RETRO_DISPLAY_MIN_SIZE, uiText } from './ui-text';
 
 const CLASSIC_GAMES = new Set([
   'poker',
@@ -41,10 +42,7 @@ export const CLASSIC = {
   feltBox: { x: 144, y: 80, w: 672, h: 352 },
 } as const;
 
-export const classicFont = new ex.FontSource(
-  '/assets/bree-serif.ttf',
-  'Bree Serif',
-);
+export const classicFont = retroFont;
 
 export function classicText(
   text: string,
@@ -52,15 +50,16 @@ export function classicText(
   color: string | ex.Color = CLASSIC.cream,
 ): ex.Text {
   const ink = typeof color === 'string' ? ex.Color.fromHex(color) : color;
+  if (size < RETRO_DISPLAY_MIN_SIZE) return uiText(text, size, ink);
   const graphic = new ex.Text({
     text,
     color: ink,
     font: classicFont.toFont({
-      family: 'Bree Serif',
+      family: '"Press Start 2P"',
       size,
       color: ink,
       quality: 2,
-      filtering: ex.ImageFiltering.Blended,
+      filtering: ex.ImageFiltering.Pixel,
     }),
   });
   graphic.origin = ex.vec(0, 0);

@@ -50,6 +50,7 @@ export class HeartsTableUi {
         box.edge,
         false,
         'hearts-player-name',
+        box.seat.seatIndex,
       );
       ui.text(
         { x: box.x, y: box.y + 8, w: box.w, h: 30 },
@@ -201,6 +202,7 @@ export class HeartsTableUi {
       'left',
       false,
       'hearts-player-name',
+      ctx.meSeatIndex ?? undefined,
     );
     ui.text(
       { x: 24, y: 470, w: 176, h: 32 },

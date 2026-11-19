@@ -12,7 +12,9 @@ const fixture = JSON.parse(
 const base = process.env.ROOM_ECONOMY_URL ?? 'http://127.0.0.1:5175';
 if (!/^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(base))
   throw new Error('Browser proofs require an isolated local app');
-const out = new URL('../docs/room-economy-evidence', import.meta.url).pathname;
+const out =
+  process.env.ROOM_ECONOMY_EVIDENCE_DIR ??
+  new URL('../docs/room-economy-evidence', import.meta.url).pathname;
 mkdirSync(out, { recursive: true });
 const browser = await chromium.launch({
   ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
@@ -113,7 +115,7 @@ await editNumber('Starting chips', 10000);
 await tap(createPage, 334, 344);
 await createPage.waitForTimeout(1500);
 await capture(createPage, '02-leaderboard-desktop');
-await tap(createPage, 550, 106);
+await tap(createPage, 750, 24);
 await tap(createPage, 280, 380);
 await capture(createPage, '03-entry-fee-desktop');
 await editNumber('Entry fee', 100);
@@ -141,23 +143,25 @@ const [alice, bob] = await Promise.all([
   persona(fixture.actors[1], true),
 ]);
 await capture(alice.page, '05-room-rankings-desktop');
+await tap(bob.page, 524, 24);
 await capture(bob.page, '06-room-rankings-mobile');
-await tap(alice.page, 720, 30, 'right');
+await tap(bob.page, 345, 24);
+await tap(alice.page, 625, 24);
 await alice.page
-  .getByRole('textbox', { name: 'Chat', exact: true })
+  .getByRole('textbox', { name: 'Room chat', exact: true })
   .fill('Ready for the next table');
-await tap(alice.page, 910, 462, 'right');
+await tap(alice.page, 890, 503);
 await capture(alice.page, '07-compact-chat-desktop');
 await capture(bob.page, '08-unread-chat-mobile');
-await tap(alice.page, 720, 30, 'right');
+await tap(alice.page, 625, 24);
 // Exercise both real configuration forms without reserving coins.
-await tap(alice.page, 550, 106, 'right');
+await tap(alice.page, 750, 24);
 await tap(alice.page, 240, 230);
 await tap(alice.page, 280, 380);
 await capture(alice.page, '09-poker-stakes-desktop');
 await tap(alice.page, 624, 452);
 await tap(alice.page, 460, 380);
-await tap(bob.page, 550, 106, 'right');
+await tap(bob.page, 750, 24);
 await tap(bob.page, 224, 140);
 await tap(bob.page, 324, 483);
 await capture(bob.page, '10-poker-stakes-mobile');

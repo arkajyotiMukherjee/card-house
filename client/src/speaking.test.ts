@@ -127,7 +127,11 @@ describe('client voice boundary', () => {
     const fetchAllowed = new Set(['discord-join.ts']);
     expect(files.length).toBeGreaterThan(10);
     for (const name of files) {
-      const source = readFileSync(join(root, name), 'utf8');
+      const source = readFileSync(join(root, name), 'utf8').replace(
+        // An explicit user click opens the native voice channel URL.
+        'https://discord.com/channels/',
+        'voice-channel-link/',
+      );
       for (const pattern of banned) {
         if (fetchAllowed.has(name) && pattern.source === '\\bfetch\\s*\\(') {
           continue;

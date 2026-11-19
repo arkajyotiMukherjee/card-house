@@ -119,6 +119,42 @@ export function watchedVoiceChannels(snapshot: {
   return channels;
 }
 
+function occupiedChannels(connection: DbConnection): WatchedVoiceChannel[] {
+  const lobbyChannels = new Map(
+    [...connection.db.lobby.iter()]
+      .filter((row) => row.status.tag === 'Open')
+      .map((row) => [row.id, row.discordLobbyVoiceChannelId]),
+  );
+  const tableChannels = new Map(
+    [...connection.db.gameTable.iter()].map((row) => [
+      row.id,
+      row.discordVoiceChannelId,
+    ]),
+  );
+  const counts = new Map<string, number>();
+  for (const row of connection.db.voicePresence.iter()) {
+    const channel = row.tableId
+      ? tableChannels.get(row.tableId)
+      : lobbyChannels.get(row.lobbyId);
+    if (channel) counts.set(channel, (counts.get(channel) ?? 0) + 1);
+  }
+  const rooms = new Set(lobbyChannels.values());
+  const sorted = watchedVoiceChannels(connection)
+    .filter((row) => counts.has(row.channelId))
+    .sort(
+      (left, right) =>
+        Number(rooms.has(right.channelId)) -
+          Number(rooms.has(left.channelId)) ||
+        (counts.get(right.channelId) ?? 0) -
+          (counts.get(left.channelId) ?? 0) ||
+        left.channelId.localeCompare(right.channelId),
+    );
+  const selected = new Map<string, WatchedVoiceChannel>();
+  for (const row of sorted)
+    if (!selected.has(row.guildId)) selected.set(row.guildId, row);
+  return [...selected.values()];
+}
+
 export function attachSpeakingWatch(
   connection: DbConnection,
   gateway: SpeakingGateway,
@@ -127,7 +163,7 @@ export function attachSpeakingWatch(
     connection.reducers.updateSpeakingState(signal),
   );
   const session = gateway.listen(
-    () => watchedVoiceChannels(connection),
+    () => occupiedChannels(connection),
     (signal) => {
       reporter.note(signal);
     },
@@ -135,6 +171,9 @@ export function attachSpeakingWatch(
   const refresh = (): void => {
     session.sync();
   };
+  connection.db.voicePresence.onInsert(refresh);
+  connection.db.voicePresence.onUpdate(refresh);
+  connection.db.voicePresence.onDelete(refresh);
   connection.db.lobby.onInsert(refresh);
   connection.db.lobby.onUpdate(refresh);
   connection.db.gameTable.onInsert(refresh);
@@ -143,6 +182,9 @@ export function attachSpeakingWatch(
   session.sync();
   return () => {
     session.stop();
+    connection.db.voicePresence.removeOnInsert(refresh);
+    connection.db.voicePresence.removeOnUpdate(refresh);
+    connection.db.voicePresence.removeOnDelete(refresh);
     connection.db.lobby.removeOnInsert(refresh);
     connection.db.lobby.removeOnUpdate(refresh);
     connection.db.gameTable.removeOnInsert(refresh);

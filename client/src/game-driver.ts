@@ -1,3 +1,4 @@
+import type { CasinoAvatar } from '../../src/shared/casino-avatar';
 import type { Scene } from 'excalibur';
 import type { CardAtlas } from './card-atlas';
 
@@ -5,6 +6,8 @@ export interface DriverSeat {
   seatIndex: number;
   name: string;
   self: boolean;
+  avatar?: CasinoAvatar;
+  speaking?: boolean;
   x: number;
   y: number;
 }

@@ -1,4 +1,14 @@
 import {
+  CasinoFloor,
+  casinoAppearance,
+  type FloorSnapshot,
+} from './casino-floor';
+import {
+  casinoAvatarEditorOpen,
+  openCasinoAvatarEditor,
+  syncCasinoAvatar,
+} from './casino-profile';
+import {
   stakeFieldUpdates,
   validateStakeForm,
   validateBuyIn,
@@ -187,6 +197,7 @@ export class LobbyScene {
   private lobbyId = '';
   private lobbyCode = '';
   private subscribedLobbyId = '';
+  private tableScope?: { isEnded(): boolean; unsubscribe(): void };
   private panelReady = false;
   private watching = false;
   private busy = false;
@@ -255,6 +266,9 @@ export class LobbyScene {
   private leavingRoom = false;
   private returnedToMenu = false;
   private viewportGutter = -1;
+  private floor?: CasinoFloor;
+  private floorError = '';
+  private floorReady = false;
 
   constructor(
     private readonly engine: ex.Engine,
@@ -270,7 +284,10 @@ export class LobbyScene {
 
   get dialogOpen(): boolean {
     return (
-      this.creating || this.fundingDialog || this.leaveConfirm !== undefined
+      this.creating ||
+      this.fundingDialog ||
+      this.leaveConfirm !== undefined ||
+      casinoAvatarEditorOpen(this.scene)
     );
   }
 
@@ -302,7 +319,7 @@ export class LobbyScene {
       if (second !== lastSecond) {
         lastSecond = second;
         if (
-          [...this.connection.db.gameTable.iter()].some(
+          [...this.connection.db.myCasinoTables.iter()].some(
             (row) => row.startsAt !== undefined,
           ) ||
           [...this.connection.db.seatAbsence.iter()].some(
@@ -320,13 +337,13 @@ export class LobbyScene {
     });
     this.linkActor.graphics.use(this.linkText);
     this.scene.add(this.linkActor);
-    this.connection.db.gameTable.onInsert(() => {
+    this.connection.db.myCasinoTables.onInsert(() => {
       this.render();
     });
-    this.connection.db.gameTable.onUpdate(() => {
+    this.connection.db.myCasinoTables.onUpdate(() => {
       this.render();
     });
-    this.connection.db.gameTable.onDelete(() => {
+    this.connection.db.myCasinoTables.onDelete(() => {
       this.render();
     });
     this.connection.db.gameSeat.onInsert(() => {
@@ -375,12 +392,18 @@ export class LobbyScene {
       );
       if (
         !this.chatOpen &&
+        !this.floor?.isChatOpen() &&
         ctx.event.tag !== 'SubscribeApplied' &&
         message.lobbyMemberId !== me?.id
       )
         this.chatUnread += 1;
       this.renderLeaderboard();
       this.renderChat();
+    });
+    this.connection.db.myCasinoRoomChat.onInsert((ctx) => {
+      if (!this.floor?.isChatOpen() && ctx.event.tag !== 'SubscribeApplied')
+        this.chatUnread += 1;
+      this.floor?.invalidate();
     });
     this.connection.db.lobbyChatMessage.onUpdate(() => {
       this.renderChat();
@@ -414,7 +437,11 @@ export class LobbyScene {
 
   openLobby(lobbyId: string, code = ''): Promise<boolean> {
     this.returnedToMenu = false;
-    if (this.lobbyId !== lobbyId) showLobbyUrl(code);
+    if (this.lobbyId !== lobbyId) {
+      showLobbyUrl(code);
+      this.floorReady = false;
+      this.floorError = '';
+    }
     if (this.lobbyId !== lobbyId) this.leaderboardOffset = 0;
     this.lobbyId = lobbyId;
     this.lobbyCode = code;
@@ -434,9 +461,23 @@ export class LobbyScene {
       this.renderChat();
       return this.tablesReady;
     }
+    if (this.tableScope && !this.tableScope.isEnded())
+      this.tableScope.unsubscribe();
     this.subscribedLobbyId = lobbyId;
-    this.tablesReady = subscribeLobbyTables(this.connection, lobbyId)
-      .then(() => {
+    this.tablesReady = subscribeLobbyTables(
+      this.connection,
+      lobbyId,
+      (handle) => {
+        this.tableScope = handle;
+      },
+    )
+      .then(async () => {
+        try {
+          await syncCasinoAvatar(this.connection, lobbyId);
+        } catch (error) {
+          if (this.lobbyId === lobbyId) this.floorError = errorMessage(error);
+        }
+        if (this.lobbyId === lobbyId) this.floorReady = true;
         if (this.lobbyId === lobbyId) {
           this.render();
           this.renderChat();
@@ -577,6 +618,39 @@ export class LobbyScene {
     anchorLobbyActor(stats);
     this.statsActor = stats;
     this.scene.add(stats);
+    this.floor = new CasinoFloor(this.scene, {
+      snapshot: () => this.casinoSnapshot(),
+      active: () =>
+        this.floorReady &&
+        this.lobbyId !== '' &&
+        this.engine.currentScene === this.scene,
+      blocked: () => this.dialogOpen || this.busy || this.leavingRoom,
+      move: (to, chair) =>
+        this.connection.reducers.moveCasinoAvatar({
+          lobbyId: this.lobbyId,
+          ...to,
+          chair,
+        }),
+      create: () => this.openCreate(),
+      join: (id) => void this.joinTable(id),
+      watch: (id) => void this.spectateTable(id),
+      leave: () => this.openLeaveConfirm(),
+      refill: () =>
+        void this.connection.reducers
+          .refillRoomCoins({ lobbyId: this.lobbyId, clientId: this.clientId })
+          .catch((error) => this.setError(errorMessage(error))),
+      avatar: () =>
+        openCasinoAvatarEditor(this.scene, this.connection, this.lobbyId),
+      send: (body) =>
+        this.connection.reducers.sendLobbyChatMessage({
+          lobbyId: this.lobbyId,
+          clientId: this.clientId,
+          body,
+        }),
+      readChat: () => {
+        this.chatUnread = 0;
+      },
+    });
   }
 
   private setChatVisible(): void {
@@ -1029,6 +1103,10 @@ export class LobbyScene {
     this.returnedToMenu = true;
     this.leavingRoom = false;
     this.closeLeaveConfirm();
+    if (this.tableScope && !this.tableScope.isEnded())
+      this.tableScope.unsubscribe();
+    this.tableScope = undefined;
+    this.subscribedLobbyId = '';
     this.lobbyId = '';
     this.lobbyCode = '';
     this.onLeftRoom();
@@ -1782,7 +1860,7 @@ export class LobbyScene {
   }
 
   async followTableLink(code: string): Promise<boolean> {
-    const table = [...this.connection.db.gameTable.iter()].find(
+    const table = [...this.connection.db.myCasinoTables.iter()].find(
       (row) => row.lobbyId === this.lobbyId && tableCodeForId(row.id) === code,
     );
     if (!table) {
@@ -1806,7 +1884,7 @@ export class LobbyScene {
       return false;
     }
     const linkedTable = fromLink
-      ? [...this.connection.db.gameTable.iter()].find(
+      ? [...this.connection.db.myCasinoTables.iter()].find(
           (row) => row.id === tableId,
         )
       : undefined;
@@ -1818,7 +1896,7 @@ export class LobbyScene {
       return this.spectateTable(tableId);
     }
     if (this.fundingDialog) return false;
-    const table = [...this.connection.db.gameTable.iter()].find(
+    const table = [...this.connection.db.myCasinoTables.iter()].find(
       (row) => row.id === tableId,
     );
     if (table?.gameType === 'poker' && table.status.tag === 'Finished')
@@ -2041,7 +2119,7 @@ export class LobbyScene {
       line.seated ? STROKE_HOT : STROKE,
     );
     actor.graphics.use(face);
-    const dbTable = [...this.connection.db.gameTable.iter()].find(
+    const dbTable = [...this.connection.db.myCasinoTables.iter()].find(
       (row) => row.id === line.id,
     );
     if (dbTable?.economyJson) {
@@ -2200,7 +2278,7 @@ export class LobbyScene {
 
   private readTables(): TableRow[] {
     const rows: TableRow[] = [];
-    for (const table of this.connection.db.gameTable.iter()) {
+    for (const table of this.connection.db.myCasinoTables.iter()) {
       rows.push({
         id: table.id,
         lobbyId: table.lobbyId,
@@ -2248,7 +2326,216 @@ export class LobbyScene {
     return rows;
   }
 
+  private casinoSnapshot(): FloorSnapshot {
+    const db = this.connection.db;
+    const members = [...db.lobbyMember.iter()].filter(
+      (member) => member.lobbyId === this.lobbyId,
+    );
+    const me = members.find((row) => row.clientId === this.clientId);
+    const games = [...db.myCasinoTables.iter()].filter(
+      (game) => game.lobbyId === this.lobbyId,
+    );
+    const gameById = new Map(games.map((game) => [game.id, game]));
+    const tableIds = new Set(gameById.keys());
+    const seats = [...db.gameSeat.iter()].filter((seat) =>
+      tableIds.has(seat.tableId),
+    );
+    const watchers = [...db.spectator.iter()].filter((watcher) =>
+      tableIds.has(watcher.tableId),
+    );
+    const places = [...db.casinoPresence.iter()].filter(
+      (row) => row.lobbyId === this.lobbyId,
+    );
+    const spots = new Map(
+      [...db.casinoTableSpot.iter()].map((spot) => [spot.id, spot.slot]),
+    );
+    const verified = new Set(
+      [...db.casinoDiscordMember.iter()].map((row) => row.id),
+    );
+    const voice = new Set(
+      [...db.voicePresence.iter()]
+        .filter((row) => row.lobbyId === this.lobbyId && row.tableId === '')
+        .map((row) => row.lobbyMemberId),
+    );
+    const now = Date.now();
+    const speaking = new Set(
+      [...db.speakingState.iter()]
+        .filter(
+          (row) =>
+            row.lobbyId === this.lobbyId &&
+            row.tableId === '' &&
+            row.isSpeaking &&
+            now - Number(row.lastUpdatedAt.microsSinceUnixEpoch / 1000n) < 8000,
+        )
+        .map((row) => row.lobbyMemberId),
+    );
+    const placeById = new Map(places.map((place) => [place.id, place]));
+    const seatByMember = new Map(
+      seats
+        .filter((seat) => seat.seatState?.tag !== 'Disconnected')
+        .map((seat) => [seat.lobbyMemberId, seat]),
+    );
+    const watchingByMember = new Map(
+      watchers.map((watcher) => [watcher.lobbyMemberId, watcher]),
+    );
+    const players = members
+      .filter((row) => !row.isBot)
+      .map((row) => {
+        const seat = seatByMember.get(row.id);
+        const watching = watchingByMember.get(row.id);
+        const place = placeById.get(row.id);
+        const connected = row.connected && !row.leftRoom;
+        return {
+          id: row.id,
+          name: row.name,
+          connected,
+          tableId: seat?.tableId ?? watching?.tableId,
+          state: !connected
+            ? 'Offline'
+            : seat
+              ? gameById.get(seat.tableId)?.status.tag === 'WaitingForPlayers'
+                ? 'Waiting at table'
+                : 'Playing'
+              : watching
+                ? 'Watching'
+                : (place?.chair ?? -1) >= 0
+                  ? 'Lounge'
+                  : 'On the floor',
+          avatar: casinoAppearance(place?.avatar),
+          voice: verified.has(row.id) && voice.has(row.id),
+          speaking:
+            verified.has(row.id) && voice.has(row.id) && speaking.has(row.id),
+        };
+      });
+    const playerById = new Map(players.map((player) => [player.id, player]));
+    const wallets = [...db.roomWallet.iter()].filter(
+      (wallet) => wallet.lobbyId === this.lobbyId,
+    );
+    const fundingByWallet = new Map<string, bigint>();
+    for (const row of db.tableFunding.iter())
+      fundingByWallet.set(
+        row.walletId,
+        (fundingByWallet.get(row.walletId) ?? 0n) + row.units,
+      );
+    const lobby = [...db.lobby.iter()].find((row) => row.id === this.lobbyId);
+    return {
+      code: this.lobbyCode,
+      self: me?.id ?? '',
+      tier:
+        [...db.casinoRoomTier.iter()].find(
+          (row) => row.lobbyId === this.lobbyId,
+        )?.tier ?? 'free',
+      chips: formatCoins(
+        wallets.find((wallet) => wallet.clientId === this.clientId)
+          ?.available ?? 0n,
+      ),
+      roomVoice:
+        lobby?.discordLobbyVoiceChannelId && lobby.discordGuildId
+          ? `https://discord.com/channels/${lobby.discordGuildId}/${lobby.discordLobbyVoiceChannelId}`
+          : undefined,
+      players,
+      positions: places.map((row) => ({
+        id: row.id,
+        x: row.x,
+        y: row.y,
+        chair: row.chair,
+        path: JSON.parse(row.pathJson),
+        started: Number(row.startedAt.microsSinceUnixEpoch / 1000n),
+      })),
+      ranks: leaderboardRows(wallets).map((row) => ({
+        id: row.id,
+        name: row.name,
+        rank: row.rank,
+        crowned: row.crowned,
+        net: `${row.profit > 0n ? '+' : ''}${formatCoins(row.profit)}`,
+        chips: formatCoins(row.available + (fundingByWallet.get(row.id) ?? 0n)),
+      })),
+      tables: games
+        .flatMap((game) => {
+          const slot = spots.get(game.id);
+          if (slot === undefined) return [];
+          const set = seats.filter((row) => row.tableId === game.id);
+          const settings = game.economyJson
+            ? (JSON.parse(game.economyJson) as TableEconomy)
+            : tableEconomy(game.gameType);
+          return [
+            {
+              id: game.id,
+              slot,
+              game: game.gameType.replaceAll('_', ' '),
+              name: game.name,
+              capacity: game.maxPlayers,
+              host:
+                members.find((member) => member.id === game.hostMemberId)
+                  ?.name ?? 'Away',
+              status:
+                game.status.tag === 'WaitingForPlayers'
+                  ? 'Waiting'
+                  : game.status.tag === 'Finished'
+                    ? 'Finished'
+                    : 'Playing',
+              stakes:
+                game.gameType === 'poker'
+                  ? `Blinds ${settings.smallBlind}/${settings.bigBlind} · Buy-in ${settings.minBuyIn}+`
+                  : game.gameType === 'blackjack'
+                    ? `Wagers ${settings.minBet}–${settings.maxBet} chips`
+                    : `Entry ${settings.entryFee} chips`,
+              seats: set.map(
+                (row) =>
+                  playerById.get(row.lobbyMemberId) ?? {
+                    id: row.lobbyMemberId,
+                    name: 'CPU',
+                    state: 'Playing',
+                    connected: false,
+                    voice: false,
+                    speaking: false,
+                  },
+              ),
+              countdown:
+                game.startsAt === undefined
+                  ? ''
+                  : `Starts in ${Math.max(0, Math.ceil((Number(game.startsAt / 1000n) - now) / 1000))}s`,
+              returning: set.some((row) => row.lobbyMemberId === me?.id),
+              join:
+                game.status.tag !== 'Finished' &&
+                set.length < game.maxPlayers &&
+                (game.status.tag === 'WaitingForPlayers' ||
+                  casinoGame(game.gameType)),
+            },
+          ];
+        })
+        .sort((a, b) => a.slot - b.slot),
+      chat: [
+        ...[...db.lobbyChatMessage.iter()]
+          .filter((row) => row.lobbyId === this.lobbyId)
+          .map((row) => ({
+            id: row.id,
+            memberId: row.lobbyMemberId,
+            body: row.body,
+            author:
+              members.find((member) => member.id === row.lobbyMemberId)?.name ??
+              'Room',
+            at: Number(row.createdAt.microsSinceUnixEpoch / 1000n),
+          })),
+        ...[...db.myCasinoRoomChat.iter()].map((row) => ({
+          id: row.id,
+          memberId: row.lobbyMemberId,
+          body: row.body,
+          author: `${row.author} · Discord`,
+          at: Number(row.createdAt.microsSinceUnixEpoch / 1000n),
+          discord: true,
+        })),
+      ]
+        .sort((a, b) => a.at - b.at || a.id.localeCompare(b.id))
+        .slice(-150),
+      unread: this.chatUnread,
+      notice: this.linkLine || this.floorError,
+    };
+  }
+
   private setError(message: string): void {
+    this.floorError = message;
+    this.floor?.invalidate();
     if (this.errorText) {
       const columns = Math.floor(
         (TABLE_LIST.row.w + tableGutter() * 2) / (PHONE_LAYOUT ? 10 : 8),

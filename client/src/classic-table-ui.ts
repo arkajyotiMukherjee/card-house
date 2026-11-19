@@ -5,6 +5,7 @@ import { panelRect } from './canvas-ui';
 import { anchorTableActor, tableGutter } from './table-viewport';
 import { bindButtonPress } from './button-press';
 import { isMobileDevice } from './mobile-shell';
+import { casinoPortrait } from './casino-art';
 import type { RenderContext } from './game-driver';
 export interface ClassicBox {
   x: number;
@@ -33,19 +34,25 @@ export class ClassicTableUi {
     edge?: 'left' | 'right',
     display = false,
     name = 'classic-label',
+    seatIndex?: number,
   ): ex.Actor {
+    const seat = this.ctx.seats.find((row) => row.seatIndex === seatIndex);
+    const portrait =
+      seat?.avatar && casinoPortrait(seat.avatar, !!seat.speaking);
+    const textWidth = box.w - (portrait ? 23 : 0);
     const make = (size: number, text = value): ex.Text =>
       display
         ? classicText(text, size, color)
         : uiText(text, size, ex.Color.fromHex(color));
     let graphic = make(size);
-    while (graphic.width > box.w && size > 16) graphic = make(--size);
-    if (name.endsWith('player-name') && graphic.width > box.w) {
+    while ((graphic.width > textWidth || graphic.height > box.h) && size > 16)
+      graphic = make(--size);
+    if (name.endsWith('player-name') && graphic.width > textWidth) {
       let short = value;
       do {
         short = short.slice(0, -1);
         graphic = make(size, `${short}…`);
-      } while (graphic.width > box.w && short.length > 1);
+      } while (graphic.width > textWidth && short.length > 1);
     }
     if (!name.endsWith('player-name')) {
       const lines: string[] = [];
@@ -53,7 +60,7 @@ export class ClassicTableUi {
         let line = '';
         for (const word of paragraph.split(/\s+/)) {
           const next = line ? `${line} ${word}` : word;
-          if (line && make(size, next).width > box.w) {
+          if (line && make(size, next).width > textWidth) {
             lines.push(line);
             line = word;
           } else line = next;
@@ -71,11 +78,24 @@ export class ClassicTableUi {
       height: box.h,
       z: 25,
     });
-    actor.graphics.use(graphic);
-    actor.graphics.offset = ex.vec(
-      (box.w - graphic.width) / 2,
-      (box.h - graphic.height) / 2,
-    );
+    if (portrait) {
+      const x = (textWidth - graphic.width) / 2;
+      actor.graphics.use(
+        new ex.GraphicsGroup({
+          members: [
+            { graphic: portrait, offset: ex.vec(x, (box.h - 19) / 2) },
+            { graphic, offset: ex.vec(x + 23, (box.h - graphic.height) / 2) },
+          ],
+          useAnchor: false,
+        }),
+      );
+    } else {
+      actor.graphics.use(graphic);
+      actor.graphics.offset = ex.vec(
+        (box.w - graphic.width) / 2,
+        (box.h - graphic.height) / 2,
+      );
+    }
     actor.pointer.useGraphicsBounds = false;
     actor.pointer.useColliderShape = false;
     if (edge) anchorTableActor(actor, edge);
@@ -155,7 +175,7 @@ export class ClassicTableUi {
     this.text(
       { x: 312, y: 16, w: 336, h: 40 },
       title,
-      20,
+      24,
       CLASSIC.cream,
       undefined,
       true,

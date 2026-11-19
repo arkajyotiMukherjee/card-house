@@ -1,3 +1,17 @@
+import {
+  FLOOR_STEP_MS,
+  LOUNGE_CHAIRS,
+  ROOM_TIERS,
+  SPAWN,
+  floorPath,
+  floorRows,
+  floorRowsAt,
+  nextFloorSlot,
+  tableEntrance,
+  walkable,
+  type FloorPoint,
+} from '../../src/shared/casino-floor';
+import { readCasinoAvatar } from '../../src/shared/casino-avatar';
 import { paidGameWinners } from './game-prizes';
 import { Timestamp } from 'spacetimedb';
 import {
@@ -593,9 +607,98 @@ const TableBackup = table(
   },
 );
 
+const CasinoOperator = table(
+  { name: 'CasinoOperator' },
+  {
+    identity: t.string().primaryKey(),
+    role: t.string(),
+  },
+);
+const CasinoRoomTier = table(
+  { name: 'CasinoRoomTier', public: true },
+  {
+    lobbyId: t.string().primaryKey(),
+    tier: t.string(),
+  },
+);
+const CasinoTableSpot = table(
+  { name: 'CasinoTableSpot', public: true },
+  {
+    id: t.string().primaryKey(),
+    lobbyId: t.string().index('btree'),
+    slot: t.u32(),
+  },
+);
+const CasinoPresence = table(
+  { name: 'CasinoPresence', public: true },
+  {
+    id: t.string().primaryKey(),
+    lobbyId: t.string().index('btree'),
+    x: t.i32(),
+    y: t.i32(),
+    pathJson: t.string(),
+    startedAt: t.timestamp(),
+    chair: t.i32(),
+    avatar: t.string(),
+  },
+);
+const CasinoAvatarProfile = table(
+  { name: 'CasinoAvatarProfile' },
+  {
+    discordUserId: t.string().primaryKey(),
+    avatar: t.string(),
+  },
+);
+const CasinoDiscordIdentity = table(
+  { name: 'CasinoDiscordIdentity' },
+  {
+    identity: t.string().primaryKey(),
+    discordUserId: t.string().index('btree'),
+  },
+);
+const CasinoDiscordChallenge = table(
+  { name: 'CasinoDiscordChallenge' },
+  {
+    id: t.string().primaryKey(),
+    identity: t.string().unique(),
+    expiresAt: t.u64(),
+  },
+);
+const CasinoDiscordMember = table(
+  { name: 'CasinoDiscordMember', public: true },
+  {
+    id: t.string().primaryKey(),
+    lobbyId: t.string().index('btree'),
+    discordUserId: t.string(),
+  },
+);
+const CasinoDiscordMessage = table(
+  { name: 'CasinoDiscordMessage' },
+  {
+    id: t.string().primaryKey(),
+    lobbyId: t.string().index('btree'),
+    tableId: t.string().index('btree'),
+    channelId: t.string(),
+    lobbyMemberId: t.string(),
+    author: t.string(),
+    body: t.string(),
+    createdAt: t.timestamp(),
+    deleted: t.bool(),
+  },
+);
+
 const spacetimedb = schema(
   {
     Lobby,
+    CasinoOperator,
+    CasinoRoomTier,
+    CasinoTableSpot,
+    CasinoPresence,
+    CasinoAvatarProfile,
+    CasinoDiscordIdentity,
+    CasinoDiscordChallenge,
+    CasinoDiscordMember,
+    CasinoDiscordMessage,
     LobbyMember,
     GameTable,
     GameSeat,
@@ -756,6 +859,13 @@ function roomVoiceChannelIds(ctx: ModuleCtx, lobbyId: string): string[] {
 
 /** Drops people, seats, chat, and presence. Table rows stay until voice ids are clear. */
 function clearRoomOccupants(ctx: ModuleCtx, lobbyId: string): void {
+  ctx.db.CasinoRoomTier.lobbyId.delete(lobbyId);
+  for (const row of ctx.db.CasinoPresence.lobbyId.filter(lobbyId))
+    ctx.db.CasinoPresence.id.delete(row.id);
+  for (const row of ctx.db.CasinoDiscordMember.lobbyId.filter(lobbyId))
+    ctx.db.CasinoDiscordMember.id.delete(row.id);
+  for (const row of ctx.db.CasinoDiscordMessage.lobbyId.filter(lobbyId))
+    ctx.db.CasinoDiscordMessage.id.delete(row.id);
   const tableIds = tableIdsInLobby(ctx, lobbyId);
   for (const tableId of tableIds)
     for (const funding of ctx.db.TableFunding.tableId.filter(tableId))
@@ -961,6 +1071,10 @@ function ensureRoomCaps(ctx: ModuleCtx): void {
 }
 
 export const init = spacetimedb.init({ name: 'init' }, (ctx) => {
+  ctx.db.CasinoOperator.insert({
+    identity: ctx.sender.toHexString(),
+    role: 'admin',
+  });
   ensureRoomCaps(ctx);
   ensureLobbyIdleJob(ctx);
   ensureTableCleanup(ctx);
@@ -1027,6 +1141,7 @@ export const client_disconnected = spacetimedb.clientDisconnected(
     if (!member) {
       return;
     }
+    releaseCasinoChair(ctx, member.id);
     const away = markDisconnected(member);
     ctx.db.LobbyMember.id.update({
       ...away,
@@ -1175,6 +1290,11 @@ interface TableRows {
   GameTable: {
     id: { delete(id: string): unknown };
   };
+  CasinoTableSpot: { id: { delete(id: string): unknown } };
+  CasinoDiscordMessage: {
+    tableId: { filter(id: string): Iterable<{ id: string }> };
+    id: { delete(id: string): unknown };
+  };
   VoicePresence: {
     lobbyId: { filter(lobbyId: string): Iterable<PresenceRow> };
     id: { delete(id: string): unknown };
@@ -1219,6 +1339,9 @@ function deleteGameTable(
   }
   clearPresence(db, gameTable.lobbyId, gameTable.id);
   clearSpeaking(db, gameTable.lobbyId, gameTable.id);
+  db.CasinoTableSpot.id.delete(gameTable.id);
+  for (const message of db.CasinoDiscordMessage.tableId.filter(gameTable.id))
+    db.CasinoDiscordMessage.id.delete(message.id);
   db.GameTable.id.delete(gameTable.id);
 }
 
@@ -1314,6 +1437,7 @@ export const set_lobby_discord_voice = spacetimedb.reducer(
       discordLobbyVoiceChannelId: rawVoiceId,
     },
   ) => {
+    casinoOperator(ctx, 'discord');
     const lobbyCode = rawCode.trim().toUpperCase();
     const guildId = discordSnowflake(rawGuildId, 'Discord guild id');
     const voiceId = discordSnowflake(rawVoiceId, 'Discord voice channel id');
@@ -1324,6 +1448,13 @@ export const set_lobby_discord_voice = spacetimedb.reducer(
       (code) => ctx.db.Lobby.code.find(code),
       lobbyCode,
     );
+    const priorPlace = voicePlace(
+      ctx.db.Lobby.iter(),
+      ctx.db.GameTable.iter(),
+      voiceId,
+    );
+    if (priorPlace && (priorPlace.lobbyId !== lobby.id || priorPlace.tableId))
+      throw new SenderError('Discord channel already has a casino scope');
     if (lobby.discordGuildId.length > 0 && lobby.discordGuildId !== guildId) {
       throw new SenderError('Room already linked to a Discord guild');
     }
@@ -1346,6 +1477,7 @@ export const clear_lobby_discord_voice = spacetimedb.reducer(
   { name: 'clear_lobby_discord_voice' },
   { lobbyCode: t.string() },
   (ctx, { lobbyCode: rawCode }) => {
+    casinoOperator(ctx, 'discord');
     const lobbyCode = rawCode.trim().toUpperCase();
     if (lobbyCode.length === 0) {
       throw new SenderError('Room code is required');
@@ -1563,6 +1695,7 @@ export const join_lobby = spacetimedb.reducer(
     }
 
     ensureWallet(ctx, lobby.id, request.clientId, request.name);
+    checkCasinoAdmission(ctx, lobby, request.clientId);
     const member = firstRow(
       ctx.db.LobbyMember.byLobbyAndClient.filter([lobby.id, request.clientId]),
     );
@@ -1651,6 +1784,7 @@ export const join_lobby_with_discord = spacetimedb.reducer(
     }
 
     ensureWallet(ctx, lobby.id, request.clientId, request.name);
+    checkCasinoAdmission(ctx, lobby, request.clientId);
     const member = firstRow(
       ctx.db.LobbyMember.byLobbyAndClient.filter([lobby.id, request.clientId]),
     );
@@ -1737,6 +1871,15 @@ export const send_lobby_chat_message = spacetimedb.reducer(
       throw new SenderError('Member not found');
     }
 
+    const session = ctx.db.OperatorSession.identity.find(
+      ctx.sender.toHexString(),
+    );
+    if (
+      session?.lobbyId !== lobbyId ||
+      session.clientId !== clientId ||
+      member.leftRoom
+    )
+      throw new SenderError('Join this room before sending chat');
     appendLobbyChat(ctx, lobbyId, member.id, body);
     noteLobbyActivity(ctx, lobbyId);
   },
@@ -1770,12 +1913,26 @@ export const update_speaking_state = spacetimedb.reducer(
     if (!place) {
       return;
     }
-    const member = firstRow(
-      ctx.db.LobbyMember.byLobbyAndDiscordUser.filter([
-        place.lobbyId,
-        discordUserId,
-      ]),
-    );
+    const verified = [
+      ...ctx.db.CasinoDiscordMember.lobbyId.filter(place.lobbyId),
+    ].filter((row) => row.discordUserId === discordUserId);
+    if (verified.length) casinoOperator(ctx, 'discord');
+    const member = verified.length
+      ? verified
+          .map((row) => ctx.db.LobbyMember.id.find(row.id))
+          .find(
+            (row) =>
+              row?.connected &&
+              !row.leftRoom &&
+              ctx.db.VoicePresence.id.find(`presence_${row.id}`)?.tableId ===
+                place.tableId,
+          )
+      : firstRow(
+          ctx.db.LobbyMember.byLobbyAndDiscordUser.filter([
+            place.lobbyId,
+            discordUserId,
+          ]),
+        );
     if (!member) {
       return;
     }
@@ -2039,12 +2196,15 @@ export const create_game_table = spacetimedb.reducer(
     }
 
     const settings = tableSettings(rawSettings);
-    const caps = currentRoomCaps(ctx.db);
+    const caps = {
+      ...currentRoomCaps(ctx.db),
+      maxTablesPerLobby: casinoLimits(ctx, lobby.id).tables,
+    };
 
     let existing = 0;
     let sameType = 0;
     for (const table of ctx.db.GameTable.byLobby.filter(lobby.id)) {
-      existing += 1;
+      if (table.status.tag !== 'finished') existing += 1;
       if (table.gameType === gameType) {
         sameType += 1;
       }
@@ -2089,6 +2249,8 @@ export const create_game_table = spacetimedb.reducer(
       hostMemberId: creator.id,
       economyJson: JSON.stringify(validTableEconomy(gameType, settings)),
     });
+    assignCasinoSpot(ctx, lobby.id, row.id);
+    parkCasinoAvatar(ctx, creator.id, row.id);
     reserveFunding(ctx, row.id, creator.id, 0, settings.buyIn);
     ctx.db.GameSeat.insert({
       id: `seat_${row.id}_${creator.id}`,
@@ -2112,6 +2274,7 @@ export const set_table_discord_voice = spacetimedb.reducer(
     discordVoiceChannelId: t.string(),
   },
   (ctx, { tableId: rawTableId, discordVoiceChannelId: rawVoiceId }) => {
+    casinoOperator(ctx, 'discord');
     const tableId = rawTableId.trim();
     const voiceId = discordSnowflake(rawVoiceId, 'Discord voice channel id');
     if (tableId.length === 0) {
@@ -2131,6 +2294,13 @@ export const set_table_discord_voice = spacetimedb.reducer(
     if (lobby.discordGuildId.length === 0) {
       throw new SenderError('Room is not linked to Discord');
     }
+    const priorPlace = voicePlace(
+      ctx.db.Lobby.iter(),
+      ctx.db.GameTable.iter(),
+      voiceId,
+    );
+    if (priorPlace && priorPlace.tableId !== gameTable.id)
+      throw new SenderError('Discord channel already has a casino scope');
     if (gameTable.status.tag === 'finished') {
       throw new SenderError('Table finished');
     }
@@ -2152,6 +2322,7 @@ export const clear_table_discord_voice = spacetimedb.reducer(
   { name: 'clear_table_discord_voice' },
   { tableId: t.string() },
   (ctx, { tableId: rawTableId }) => {
+    casinoOperator(ctx, 'discord');
     const tableId = rawTableId.trim();
     if (tableId.length === 0) {
       throw new SenderError('Table id is required');
@@ -2191,8 +2362,24 @@ export const update_voice_presence = spacetimedb.reducer(
       ctx.db.Lobby.iter(),
       ctx.db.GameTable.iter(),
     );
+    const staleVerified = [
+      ...ctx.db.VoicePresence.discordUserId.filter(userId),
+    ].some((row) => ctx.db.CasinoDiscordMember.id.find(row.lobbyMemberId));
+    const verified = scope
+      ? [...ctx.db.CasinoDiscordMember.lobbyId.filter(scope.lobbyId)].filter(
+          (row) => row.discordUserId === userId,
+        )
+      : [];
+    if (staleVerified || verified?.length) casinoOperator(ctx, 'discord');
     if (scope) {
       for (const member of ctx.db.LobbyMember.lobbyId.filter(scope.lobbyId)) {
+        if (
+          verified?.length &&
+          (!member.connected ||
+            member.leftRoom ||
+            !verified.some((row) => row.id === member.id))
+        )
+          continue;
         if (member.discordUserId === userId) {
           desired = {
             memberId: member.id,
@@ -2214,6 +2401,11 @@ export const update_voice_presence = spacetimedb.reducer(
       }
     }
     for (const id of staleIds) {
+      const previous = ctx.db.VoicePresence.id.find(id);
+      if (previous)
+        ctx.db.SpeakingState.id.delete(
+          speakingRowId(previous.lobbyMemberId, previous.tableId),
+        );
       ctx.db.VoicePresence.id.delete(id);
     }
     if (!desired) {
@@ -2230,6 +2422,9 @@ export const update_voice_presence = spacetimedb.reducer(
     if (!current) {
       ctx.db.VoicePresence.insert(row);
     } else if (current.tableId !== desired.tableId) {
+      ctx.db.SpeakingState.id.delete(
+        speakingRowId(desired.memberId, current.tableId),
+      );
       ctx.db.VoicePresence.id.update(row);
     } else {
       return;
@@ -2424,6 +2619,7 @@ export const join_table = spacetimedb.reducer(
           leaving: false,
         });
       ctx.db.GameSeat.id.update({ ...existing, seatState: { tag: 'active' } });
+      parkCasinoAvatar(ctx, member.id, gameTable.id);
       rememberTable(ctx.db, ctx.sender.toHexString(), lobby.id, gameTable.id);
       return;
     }
@@ -2514,6 +2710,7 @@ export const join_table = spacetimedb.reducer(
       createdAt: ctx.timestamp,
     });
     ctx.db.GameTable.id.update({ ...gameTable, lastActivityAt: ctx.timestamp });
+    parkCasinoAvatar(ctx, member.id, gameTable.id);
     rememberTable(ctx.db, ctx.sender.toHexString(), lobby.id, gameTable.id);
     noteLobbyActivity(ctx, lobby.id);
     queueTableBeat(ctx, gameTable.id);
@@ -2585,6 +2782,7 @@ export const spectate_table = spacetimedb.reducer(
       ...gameTable,
       lastActivityAt: ctx.timestamp,
     });
+    parkCasinoAvatar(ctx, member.id, gameTable.id);
     rememberTable(ctx.db, ctx.sender.toHexString(), lobby.id, gameTable.id);
     noteLobbyActivity(ctx, lobby.id);
   },
@@ -2674,6 +2872,7 @@ export const leave_lobby = spacetimedb.reducer(
       return;
     }
 
+    releaseCasinoChair(ctx, member.id);
     const seats = memberSeatRefs(ctx, member.id);
     const spectators = memberSpectatorRefs(ctx, member.id);
     const presence = memberPresenceIds(ctx, lobby.id, member.id);
@@ -2927,6 +3126,15 @@ export const send_table_chat = spacetimedb.reducer(
       throw new SenderError('Member not found');
     }
 
+    const session = ctx.db.OperatorSession.identity.find(
+      ctx.sender.toHexString(),
+    );
+    if (
+      session?.lobbyId !== lobby.id ||
+      session.clientId !== clientId ||
+      member.leftRoom
+    )
+      throw new SenderError('Join this room before sending chat');
     let seated = false;
     for (const seat of ctx.db.GameSeat.byTable.filter(gameTable.id)) {
       if (seat.lobbyMemberId === member.id) {
@@ -4467,3 +4675,618 @@ function cashOutUnbetBlackjack(
   settleEconomy(ctx, tableId, next);
   return true;
 }
+
+function casinoLimits(ctx: ModuleCtx, lobbyId: string) {
+  return ctx.db.CasinoRoomTier.lobbyId.find(lobbyId)?.tier === 'pro'
+    ? ROOM_TIERS.pro
+    : ROOM_TIERS.free;
+}
+
+function checkCasinoAdmission(
+  ctx: ModuleCtx,
+  lobby: { id: string; solo: boolean },
+  clientId: string,
+): void {
+  if (lobby.solo) return;
+  const reserved = new Set<string>();
+  for (const row of ctx.db.LobbyMember.lobbyId.filter(lobby.id)) {
+    if (row.connected && !row.leftRoom && !row.isBot) reserved.add(row.id);
+  }
+  for (const game of ctx.db.GameTable.byLobby.filter(lobby.id)) {
+    for (const seat of ctx.db.GameSeat.byTable.filter(game.id)) {
+      if (!ctx.db.LobbyMember.id.find(seat.lobbyMemberId)?.isBot)
+        reserved.add(seat.lobbyMemberId);
+    }
+  }
+  const member = firstRow(
+    ctx.db.LobbyMember.byLobbyAndClient.filter([lobby.id, clientId]),
+  );
+  if (
+    !reserved.has(member?.id ?? '') &&
+    reserved.size >= casinoLimits(ctx, lobby.id).players
+  )
+    throw new SenderError('Room is full');
+}
+
+function casinoOperator(ctx: ModuleCtx, role: 'admin' | 'discord'): void {
+  const entry = ctx.db.CasinoOperator.identity.find(ctx.sender.toHexString());
+  if (entry?.role !== role && entry?.role !== 'admin')
+    throw new SenderError('Casino operator required');
+}
+
+export const set_casino_room_tier = spacetimedb.reducer(
+  { name: 'set_casino_room_tier' },
+  { lobbyId: t.string(), tier: t.string() },
+  (ctx, { lobbyId, tier }) => {
+    casinoOperator(ctx, 'admin');
+    if (!ctx.db.Lobby.id.find(lobbyId) || (tier !== 'free' && tier !== 'pro'))
+      throw new SenderError('Invalid room tier');
+    const row = { lobbyId, tier };
+    if (ctx.db.CasinoRoomTier.lobbyId.find(lobbyId))
+      ctx.db.CasinoRoomTier.lobbyId.update(row);
+    else ctx.db.CasinoRoomTier.insert(row);
+  },
+);
+
+function assignCasinoSpot(
+  ctx: ModuleCtx,
+  lobbyId: string,
+  tableId: string,
+): number {
+  const prior = ctx.db.CasinoTableSpot.id.find(tableId);
+  if (prior) return prior.slot;
+  const slot = nextFloorSlot(
+    [...ctx.db.CasinoTableSpot.lobbyId.filter(lobbyId)].map((row) => row.slot),
+  );
+  ctx.db.CasinoTableSpot.insert({ id: tableId, lobbyId, slot });
+  return slot;
+}
+
+function casinoMember(ctx: ModuleCtx, lobbyId: string) {
+  const session = ctx.db.OperatorSession.identity.find(
+    ctx.sender.toHexString(),
+  );
+  const lobby = ctx.db.Lobby.id.find(lobbyId);
+  const member =
+    session?.lobbyId === lobbyId
+      ? firstRow(
+          ctx.db.LobbyMember.byLobbyAndClient.filter([
+            lobbyId,
+            session.clientId,
+          ]),
+        )
+      : undefined;
+  if (
+    !member ||
+    member.leftRoom ||
+    !member.connected ||
+    lobby?.status.tag !== 'open' ||
+    lobby.solo
+  )
+    throw new SenderError('Join this casino first');
+  return { member, session };
+}
+
+function casinoPosition(ctx: ModuleCtx, memberId: string, lobbyId: string) {
+  const previous = ctx.db.CasinoPresence.id.find(memberId);
+  if (previous) return previous;
+  const occupied = new Set<string>();
+  for (const row of ctx.db.CasinoPresence.lobbyId.filter(lobbyId)) {
+    const member = ctx.db.LobbyMember.id.find(row.id);
+    if (!member?.connected || member.leftRoom) continue;
+    const point = casinoCurrentPoint(row, ctx.timestamp.microsSinceUnixEpoch);
+    occupied.add(`${point.x}:${point.y}`);
+  }
+  // Space newcomers out along the central aisle. Existing players can still cross paths.
+  const aisle = [
+    SPAWN,
+    ...Array.from({ length: 60 }, (_, i) => ({
+      x: 11 + (i % 10),
+      y: 5 + Math.floor(i / 10),
+    })),
+  ];
+  const spawn =
+    aisle.find(
+      (point) =>
+        !occupied.has(`${point.x}:${point.y}`) && walkable(point, floorRows(0)),
+    ) ?? SPAWN;
+  return {
+    id: memberId,
+    lobbyId,
+    ...spawn,
+    pathJson: '[]',
+    startedAt: ctx.timestamp,
+    chair: -1,
+    avatar: '',
+  };
+}
+
+function storeCasinoPosition(
+  ctx: ModuleCtx,
+  row: ReturnType<typeof casinoPosition>,
+): void {
+  if (ctx.db.CasinoPresence.id.find(row.id))
+    ctx.db.CasinoPresence.id.update(row);
+  else ctx.db.CasinoPresence.insert(row);
+}
+
+function releaseCasinoChair(ctx: ModuleCtx, memberId: string): void {
+  const row = ctx.db.CasinoPresence.id.find(memberId);
+  if (row && row.chair >= 0)
+    ctx.db.CasinoPresence.id.update({ ...row, chair: -1 });
+}
+
+function parkCasinoAvatar(
+  ctx: ModuleCtx,
+  memberId: string,
+  tableId: string,
+): void {
+  const spot = ctx.db.CasinoTableSpot.id.find(tableId);
+  if (!spot) return;
+  const row = casinoPosition(ctx, memberId, spot.lobbyId);
+  storeCasinoPosition(ctx, {
+    ...row,
+    ...tableEntrance(spot.slot),
+    chair: -1,
+    pathJson: '[]',
+    startedAt: ctx.timestamp,
+  });
+}
+
+function casinoCurrentPoint(
+  row: ReturnType<typeof casinoPosition>,
+  now: bigint,
+): FloorPoint {
+  const path = JSON.parse(row.pathJson) as FloorPoint[];
+  const step = Math.floor(
+    Number(now - row.startedAt.microsSinceUnixEpoch) / (FLOOR_STEP_MS * 1000),
+  );
+  return step > 0 ? (path[Math.min(path.length, step) - 1] ?? row) : row;
+}
+
+export const enter_casino_floor = spacetimedb.reducer(
+  { name: 'enter_casino_floor' },
+  { lobbyId: t.string() },
+  (ctx, { lobbyId }) => {
+    const { member } = casinoMember(ctx, lobbyId);
+    for (const game of ctx.db.GameTable.byLobby.filter(lobbyId))
+      assignCasinoSpot(ctx, lobbyId, game.id);
+    const linked = ctx.db.CasinoDiscordIdentity.identity.find(
+      ctx.sender.toHexString(),
+    );
+    const row = casinoPosition(ctx, member.id, lobbyId);
+    storeCasinoPosition(ctx, {
+      ...row,
+      avatar:
+        (linked &&
+          ctx.db.CasinoAvatarProfile.discordUserId.find(linked.discordUserId)
+            ?.avatar) ||
+        row.avatar,
+    });
+    if (linked)
+      publishCasinoDiscordMember(ctx, member.id, lobbyId, linked.discordUserId);
+  },
+);
+
+export const move_casino_avatar = spacetimedb.reducer(
+  { name: 'move_casino_avatar' },
+  { lobbyId: t.string(), x: t.i32(), y: t.i32(), chair: t.i32() },
+  (ctx, { lobbyId, x, y, chair }) => {
+    const { member, session } = casinoMember(ctx, lobbyId);
+    if (session?.tableId)
+      throw new SenderError('Return to the floor before walking');
+    const now = ctx.timestamp.microsSinceUnixEpoch;
+    const previous = casinoPosition(ctx, member.id, lobbyId);
+    if (
+      ctx.db.CasinoPresence.id.find(member.id) &&
+      now - previous.startedAt.microsSinceUnixEpoch < 120_000n
+    )
+      return;
+    const slots = [...ctx.db.CasinoTableSpot.lobbyId.filter(lobbyId)];
+    const from = casinoCurrentPoint(previous, now);
+    const rows = Math.max(
+      floorRows(Math.max(0, ...slots.map((row) => row.slot + 1))),
+      floorRowsAt(from.y),
+    );
+    if (
+      chair < -1 ||
+      (chair >= 0 &&
+        (LOUNGE_CHAIRS[chair]?.x !== x || LOUNGE_CHAIRS[chair]?.y !== y))
+    )
+      throw new SenderError('Choose a lounge chair');
+    if (chair >= 0) {
+      if (from.x !== x || from.y !== y)
+        throw new SenderError('Walk to the chair first');
+      for (const row of ctx.db.CasinoPresence.lobbyId.filter(lobbyId)) {
+        const owner = ctx.db.LobbyMember.id.find(row.id);
+        if (
+          row.id !== member.id &&
+          row.chair === chair &&
+          owner?.connected &&
+          !owner.leftRoom
+        )
+          throw new SenderError('That chair is occupied');
+      }
+    }
+    const path = floorPath(from, { x, y }, rows);
+    if (!path.length && (from.x !== x || from.y !== y))
+      throw new SenderError('That spot cannot be reached');
+    storeCasinoPosition(ctx, {
+      ...previous,
+      ...from,
+      chair,
+      startedAt: ctx.timestamp,
+      pathJson: JSON.stringify(path),
+    });
+  },
+);
+
+export const save_casino_avatar = spacetimedb.reducer(
+  { name: 'save_casino_avatar' },
+  { lobbyId: t.string(), avatar: t.string() },
+  (ctx, { lobbyId, avatar }) => {
+    const appearance = readCasinoAvatar(avatar);
+    if (!appearance) throw new SenderError('Invalid avatar appearance');
+    const canonical = JSON.stringify(appearance);
+    if (lobbyId) {
+      const { member } = casinoMember(ctx, lobbyId);
+      storeCasinoPosition(ctx, {
+        ...casinoPosition(ctx, member.id, lobbyId),
+        avatar: canonical,
+      });
+    }
+    const linked = ctx.db.CasinoDiscordIdentity.identity.find(
+      ctx.sender.toHexString(),
+    );
+    if (linked) {
+      const row = { discordUserId: linked.discordUserId, avatar: canonical };
+      if (ctx.db.CasinoAvatarProfile.discordUserId.find(row.discordUserId))
+        ctx.db.CasinoAvatarProfile.discordUserId.update(row);
+      else ctx.db.CasinoAvatarProfile.insert(row);
+    }
+  },
+);
+
+function publishCasinoDiscordMember(
+  ctx: ModuleCtx,
+  id: string,
+  lobbyId: string,
+  discordUserId: string,
+): void {
+  const row = { id, lobbyId, discordUserId };
+  if (ctx.db.CasinoDiscordMember.id.find(id))
+    ctx.db.CasinoDiscordMember.id.update(row);
+  else ctx.db.CasinoDiscordMember.insert(row);
+  const member = ctx.db.LobbyMember.id.find(id);
+  if (member && member.discordUserId !== discordUserId)
+    ctx.db.LobbyMember.id.update({ ...member, discordUserId });
+}
+
+export const begin_casino_discord_link = spacetimedb.reducer(
+  { name: 'begin_casino_discord_link' },
+  { id: t.string() },
+  (ctx, { id }) => {
+    if (!/^[a-f0-9]{64}$/.test(id))
+      throw new SenderError('Invalid verification request');
+    const identity = ctx.sender.toHexString();
+    const previous = ctx.db.CasinoDiscordChallenge.identity.find(identity);
+    if (previous) ctx.db.CasinoDiscordChallenge.id.delete(previous.id);
+    ctx.db.CasinoDiscordChallenge.insert({
+      id,
+      identity,
+      expiresAt: ctx.timestamp.microsSinceUnixEpoch + 300_000_000n,
+    });
+  },
+);
+
+export const complete_casino_discord_link = spacetimedb.reducer(
+  { name: 'complete_casino_discord_link' },
+  { id: t.string(), discordUserId: t.string() },
+  (ctx, { id, discordUserId }) => {
+    casinoOperator(ctx, 'discord');
+    const grant = ctx.db.CasinoDiscordChallenge.id.find(id);
+    if (
+      !grant ||
+      ctx.timestamp.microsSinceUnixEpoch > grant.expiresAt ||
+      !DISCORD_CHANNEL_ID.test(discordUserId)
+    )
+      throw new SenderError('Verification expired');
+    ctx.db.CasinoDiscordChallenge.id.delete(id);
+    const linked = { identity: grant.identity, discordUserId };
+    const prior = ctx.db.CasinoDiscordIdentity.identity.find(grant.identity);
+    if (prior && prior.discordUserId !== discordUserId)
+      throw new SenderError(
+        'This browser already has a linked Discord account',
+      );
+    if (!prior) ctx.db.CasinoDiscordIdentity.insert(linked);
+    const session = ctx.db.OperatorSession.identity.find(grant.identity);
+    if (!session?.lobbyId) return;
+    const member = firstRow(
+      ctx.db.LobbyMember.byLobbyAndClient.filter([
+        session.lobbyId,
+        session.clientId,
+      ]),
+    );
+    if (!member || member.leftRoom) return;
+    publishCasinoDiscordMember(ctx, member.id, member.lobbyId, discordUserId);
+    const profile =
+      ctx.db.CasinoAvatarProfile.discordUserId.find(discordUserId);
+    if (profile)
+      storeCasinoPosition(ctx, {
+        ...casinoPosition(ctx, member.id, member.lobbyId),
+        avatar: profile.avatar,
+      });
+  },
+);
+
+export const my_casino_profile = spacetimedb.view(
+  { name: 'my_casino_profile', public: true },
+  t.array(
+    t.object('CasinoSelfProfile', {
+      discordUserId: t.string(),
+      avatar: t.string(),
+    }),
+  ),
+  (ctx) => {
+    const linked = ctx.db.CasinoDiscordIdentity.identity.find(
+      ctx.sender.toHexString(),
+    );
+    return linked
+      ? [
+          {
+            discordUserId: linked.discordUserId,
+            avatar:
+              ctx.db.CasinoAvatarProfile.discordUserId.find(
+                linked.discordUserId,
+              )?.avatar ?? '',
+          },
+        ]
+      : [];
+  },
+);
+
+export const mirror_casino_discord_message = spacetimedb.reducer(
+  { name: 'mirror_casino_discord_message' },
+  {
+    channelId: t.string(),
+    messageId: t.string(),
+    discordUserId: t.string(),
+    author: t.string(),
+    body: t.string(),
+    deleted: t.bool(),
+  },
+  (ctx, { channelId, messageId, discordUserId, author, body, deleted }) => {
+    casinoOperator(ctx, 'discord');
+    if (
+      !DISCORD_CHANNEL_ID.test(channelId) ||
+      !DISCORD_CHANNEL_ID.test(messageId)
+    )
+      return;
+    const scope = voicePlace(
+      ctx.db.Lobby.iter(),
+      ctx.db.GameTable.iter(),
+      channelId,
+    );
+    if (!scope || ctx.db.Lobby.id.find(scope.lobbyId)?.status.tag !== 'open')
+      return;
+    const id = `${channelId}:${messageId}`;
+    const existing = ctx.db.CasinoDiscordMessage.id.find(id);
+    // Keep tombstones so a retried gateway create cannot resurrect a deleted post.
+    if (existing?.deleted || (existing && existing.channelId !== channelId))
+      return;
+    const verified = [
+      ...ctx.db.CasinoDiscordMember.lobbyId.filter(scope.lobbyId),
+    ].find((row) => row.discordUserId === discordUserId);
+    const row = {
+      id,
+      channelId,
+      lobbyId: scope.lobbyId,
+      tableId: scope.tableId,
+      lobbyMemberId: verified?.id ?? existing?.lobbyMemberId ?? '',
+      author:
+        existing?.author || author.trim().slice(0, 64) || 'Discord member',
+      body: deleted ? '' : body.trim().slice(0, scope.tableId ? 240 : 500),
+      createdAt: existing?.createdAt ?? ctx.timestamp,
+      deleted,
+    };
+    if (!row.body && !deleted) return;
+    if (existing) ctx.db.CasinoDiscordMessage.id.update(row);
+    else ctx.db.CasinoDiscordMessage.insert(row);
+  },
+);
+
+export const my_casino_tables = spacetimedb.view(
+  { name: 'my_casino_tables', public: true },
+  t.array(
+    t.object('CasinoTableSummary', {
+      id: t.string(),
+      lobbyId: t.string(),
+      gameType: t.string(),
+      name: t.string(),
+      status: TableStatus,
+      maxPlayers: t.u32(),
+      economyJson: t.string(),
+      hostMemberId: t.string(),
+      startsAt: t.option(t.u64()),
+      createdAt: t.timestamp(),
+    }),
+  ),
+  (ctx) => {
+    const session = ctx.db.OperatorSession.identity.find(
+      ctx.sender.toHexString(),
+    );
+    if (
+      !session?.lobbyId ||
+      ctx.db.Lobby.id.find(session.lobbyId)?.status.tag !== 'open'
+    )
+      return [];
+    const member = firstRow(
+      ctx.db.LobbyMember.byLobbyAndClient.filter([
+        session.lobbyId,
+        session.clientId,
+      ]),
+    );
+    if (!member || member.leftRoom) return [];
+    return [...ctx.db.GameTable.byLobby.filter(session.lobbyId)].map(
+      (table) => ({
+        id: table.id,
+        lobbyId: table.lobbyId,
+        gameType: table.gameType,
+        name: table.name,
+        status: table.status,
+        maxPlayers: table.maxPlayers,
+        economyJson: table.economyJson,
+        hostMemberId: table.hostMemberId,
+        startsAt: table.startsAt,
+        createdAt: table.createdAt,
+      }),
+    );
+  },
+);
+
+export const my_casino_voice_targets = spacetimedb.view(
+  { name: 'my_casino_voice_targets', public: true },
+  t.array(
+    t.object('CasinoVoiceTarget', {
+      discordUserId: t.string(),
+      guildId: t.string(),
+      sourceChannelId: t.string(),
+      targetChannelId: t.string(),
+    }),
+  ),
+  (ctx) => {
+    const operator = ctx.db.CasinoOperator.identity.find(
+      ctx.sender.toHexString(),
+    );
+    if (operator?.role !== 'discord' && operator?.role !== 'admin') return [];
+    return [...ctx.db.OperatorSession.iter()].flatMap((session) => {
+      if (!session.connected || !session.lobbyId || !session.clientId)
+        return [];
+      const lobby = ctx.db.Lobby.id.find(session.lobbyId);
+      if (
+        !lobby?.discordLobbyVoiceChannelId ||
+        !lobby.discordGuildId ||
+        lobby.status.tag !== 'open'
+      )
+        return [];
+      const member = firstRow(
+        ctx.db.LobbyMember.byLobbyAndClient.filter([
+          session.lobbyId,
+          session.clientId,
+        ]),
+      );
+      if (!member?.connected || member.leftRoom) return [];
+      const verified = ctx.db.CasinoDiscordMember.id.find(member.id);
+      const presence = ctx.db.VoicePresence.id.find(`presence_${member.id}`);
+      if (
+        !verified ||
+        !presence ||
+        presence.discordUserId !== verified.discordUserId
+      )
+        return [];
+      const sourceChannelId = presence.tableId
+        ? ctx.db.GameTable.id.find(presence.tableId)?.discordVoiceChannelId
+        : lobby.discordLobbyVoiceChannelId;
+      const target = session.tableId
+        ? ctx.db.GameTable.id.find(session.tableId)
+        : null;
+      if (
+        session.tableId &&
+        (target?.lobbyId !== lobby.id || target.status.tag === 'finished')
+      )
+        return [];
+      const targetChannelId = target
+        ? target.discordVoiceChannelId
+        : lobby.discordLobbyVoiceChannelId;
+      if (
+        !sourceChannelId ||
+        !targetChannelId ||
+        sourceChannelId === targetChannelId
+      )
+        return [];
+      return [
+        {
+          discordUserId: verified.discordUserId,
+          guildId: lobby.discordGuildId,
+          sourceChannelId,
+          targetChannelId,
+        },
+      ];
+    });
+  },
+);
+
+function byCasinoMessageTime(
+  left: { createdAt: { microsSinceUnixEpoch: bigint }; id: string },
+  right: typeof left,
+): number {
+  const duration = Number(
+    left.createdAt.microsSinceUnixEpoch - right.createdAt.microsSinceUnixEpoch,
+  );
+  return duration || left.id.localeCompare(right.id);
+}
+
+const casinoVisibleDiscordMessage = t.object('CasinoVisibleDiscordMessage', {
+  id: t.string(),
+  lobbyMemberId: t.string(),
+  author: t.string(),
+  body: t.string(),
+  createdAt: t.timestamp(),
+});
+export const my_casino_room_chat = spacetimedb.view(
+  { name: 'my_casino_room_chat', public: true },
+  t.array(casinoVisibleDiscordMessage),
+  (ctx) => {
+    const session = ctx.db.OperatorSession.identity.find(
+      ctx.sender.toHexString(),
+    );
+    if (
+      !session?.lobbyId ||
+      ctx.db.Lobby.id.find(session.lobbyId)?.status.tag !== 'open'
+    )
+      return [];
+    const member = firstRow(
+      ctx.db.LobbyMember.byLobbyAndClient.filter([
+        session.lobbyId,
+        session.clientId,
+      ]),
+    );
+    if (!member || member.leftRoom) return [];
+    return [...ctx.db.CasinoDiscordMessage.lobbyId.filter(session.lobbyId)]
+      .filter((row) => !row.deleted && row.tableId === '')
+      .sort(byCasinoMessageTime)
+      .slice(-100);
+  },
+);
+export const my_casino_table_chat = spacetimedb.view(
+  { name: 'my_casino_table_chat', public: true },
+  t.array(casinoVisibleDiscordMessage),
+  (ctx) => {
+    const session = ctx.db.OperatorSession.identity.find(
+      ctx.sender.toHexString(),
+    );
+    if (
+      !session?.tableId ||
+      ctx.db.Lobby.id.find(session.lobbyId)?.status.tag !== 'open'
+    )
+      return [];
+    const member = firstRow(
+      ctx.db.LobbyMember.byLobbyAndClient.filter([
+        session.lobbyId,
+        session.clientId,
+      ]),
+    );
+    if (!member || member.leftRoom) return [];
+    if (
+      ![
+        ...ctx.db.GameSeat.byTable.filter(session.tableId),
+        ...ctx.db.Spectator.byTable.filter(session.tableId),
+      ].some((row) => row.lobbyMemberId === member.id)
+    )
+      return [];
+    return [...ctx.db.CasinoDiscordMessage.tableId.filter(session.tableId)]
+      .filter((row) => !row.deleted)
+      .sort(byCasinoMessageTime)
+      .slice(-100);
+  },
+);

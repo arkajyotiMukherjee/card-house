@@ -1,8 +1,13 @@
+import {
+  casinoDiscordMessages,
+  type CasinoDiscordMessage,
+} from './casino-discord.ts';
 import type { VoiceStateEvent } from './voice-presence.ts';
 
 const GATEWAY_URL = 'wss://gateway.discord.gg/?v=10&encoding=json';
 const INTENT_GUILDS = 1 << 0;
 const INTENT_GUILD_VOICE_STATES = 1 << 7;
+const INTENT_GUILD_MESSAGES = (1 << 9) | (1 << 15);
 
 export interface GatewaySocket {
   send(data: string): void;
@@ -14,8 +19,10 @@ export interface GatewaySocket {
 }
 
 export interface VoiceGatewayHandlers {
+  onDisconnect?(): void;
   onGuildVoice(guildId: string, states: VoiceStateEvent[]): void;
   onVoiceState(guildId: string, state: VoiceStateEvent): void;
+  onCasinoMessage?(message: CasinoDiscordMessage): void;
 }
 
 export interface VoiceGatewayOptions {
@@ -26,9 +33,8 @@ export interface VoiceGatewayOptions {
 }
 
 /**
- * Listens to Discord voice state updates through the gateway. It subscribes to
- * guild and voice-state events only. A voice state carries a user id and a
- * channel id, never audio. The token is sent in Identify and is never logged.
+ * Listens to guild and voice-state events, plus text events when enabled.
+ * A voice state carries a user id and channel id. The token stays in Identify.
  */
 export function connectVoiceGateway(options: VoiceGatewayOptions): () => void {
   const open =
@@ -65,9 +71,12 @@ export function connectVoiceGateway(options: VoiceGatewayOptions): () => void {
     const current = open(GATEWAY_URL);
     socket = current;
     current.onmessage = (event) => {
-      handleFrame(current, event.data);
+      if (socket === current && !stopped) handleFrame(current, event.data);
     };
     current.onclose = () => {
+      if (socket !== current || stopped) return;
+      socket = undefined;
+      options.handlers.onDisconnect?.();
       scheduleReconnect();
     };
     current.onerror = () => {
@@ -104,7 +113,10 @@ export function connectVoiceGateway(options: VoiceGatewayOptions): () => void {
           op: 2,
           d: {
             token: options.token,
-            intents: INTENT_GUILDS | INTENT_GUILD_VOICE_STATES,
+            intents:
+              INTENT_GUILDS |
+              INTENT_GUILD_VOICE_STATES |
+              (options.handlers.onCasinoMessage ? INTENT_GUILD_MESSAGES : 0),
             properties: {
               os: 'linux',
               browser: 'discordcardgames',
@@ -143,6 +155,10 @@ export function connectVoiceGateway(options: VoiceGatewayOptions): () => void {
       }
       options.handlers.onGuildVoice(guildId, states);
       return;
+    }
+    if (typeof frame.t === 'string' && options.handlers.onCasinoMessage) {
+      for (const entry of casinoDiscordMessages(frame.t, frame.d))
+        options.handlers.onCasinoMessage(entry);
     }
     if (frame.t === 'VOICE_STATE_UPDATE') {
       const guildId = stringField(frame.d, 'guild_id');
