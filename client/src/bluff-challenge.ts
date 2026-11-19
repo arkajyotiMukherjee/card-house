@@ -58,7 +58,7 @@ function named(name: string, seatIndex: number): string {
 
 /**
  * The pile moved into one hand. That is a challenge.
- * A pass that sets the pile aside adds those cards to nobody.
+ * Flushing the pile adds those cards to nobody.
  */
 export function challengePickup(
   before: BluffState,

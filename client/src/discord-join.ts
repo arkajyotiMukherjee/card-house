@@ -105,6 +105,26 @@ export async function discordLinkAvailable(botUrl: string): Promise<boolean> {
   }
 }
 
+export async function fetchDiscordUsername(
+  botUrl: string,
+  discordUserId: string,
+): Promise<string> {
+  try {
+    const url = new URL('/default-player-name', botUrl);
+    url.searchParams.set('discord_user_id', discordUserId);
+    url.searchParams.set('username', '1');
+    const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!response.ok) return '';
+    const body = await response.json();
+    return body.discordUserId === discordUserId &&
+      typeof body.username === 'string'
+      ? body.username.trim().slice(0, 32)
+      : '';
+  } catch {
+    return '';
+  }
+}
+
 export function cardroomBotUrl(): string {
   return typeof __CARDROOM_BOT_URL__ === 'string'
     ? __CARDROOM_BOT_URL__

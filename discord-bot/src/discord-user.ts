@@ -7,7 +7,13 @@ import {
 const DISCORD_API = 'https://discord.com/api/v10';
 
 export type PlayerNameLookup =
-  | { ok: true; status: 200; discordUserId: string; name: string }
+  | {
+      ok: true;
+      status: 200;
+      discordUserId: string;
+      name: string;
+      username: string;
+    }
   | { ok: false; status: number; discordUserId: string; name: null };
 
 /**
@@ -57,7 +63,13 @@ export async function lookupDefaultPlayerName(
   if (name.length === 0) {
     return { ok: false, status: 502, discordUserId: id, name: null };
   }
-  return { ok: true, status: 200, discordUserId: id, name };
+  return {
+    ok: true,
+    status: 200,
+    discordUserId: id,
+    name,
+    username: user.username,
+  };
 }
 
 function readDiscordUser(

@@ -282,8 +282,6 @@ void engine.start(loader).then(() => {
         const [row] = connection.db.myLifetimeWinnings.iter();
         const caption = lifetimeWinningsCaption(row?.units ?? 0n);
         menu.setLifetimeWinnings(caption);
-        roomScene.setLifetimeWinnings(caption);
-        tableScene.setLifetimeWinnings(caption);
       };
       endTableSession = (): void => {
         openTableId = '';

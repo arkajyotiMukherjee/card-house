@@ -43,6 +43,7 @@ import { SERVER_UNREACHABLE } from './connect';
 import { joinFailureMessage } from './join-errors';
 import type { DiscordJoinIdentity } from './join-path';
 import { rememberLobby } from './last-room';
+import { DISCORD_USER_ID } from '../../src/shared/discord-player-name';
 import { roomComposer } from './room-composer';
 import { readPreferredName, rememberPreferredName } from './preferred-name';
 import { wrapText } from './menu-layout';
@@ -806,7 +807,9 @@ export function mountLobbyPanel(
 
   return {
     enter: (kind, playerName, roomCode) => {
-      name = playerName.slice(0, NAME_MAX);
+      name = DISCORD_USER_ID.test(playerName)
+        ? playerName
+        : playerName.slice(0, NAME_MAX);
       code = roomCode;
       paintFields();
       return submit(kind);

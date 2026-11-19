@@ -5,6 +5,7 @@ import * as ex from 'excalibur';
 import {
   BLUFF_GAME_TYPE,
   BLUFF_RANKS,
+  canFlushBluff,
   isJoker,
   type BluffRank,
   type BluffState,
@@ -206,6 +207,7 @@ export class BluffDriver implements GameDriver<BluffState> {
   private ranksOpen = false;
   private playControl: ControlFace | null = null;
   private passControl: ControlFace | null = null;
+  private flushControl: ControlFace | null = null;
   private challengeControl: ControlFace | null = null;
   private handPage = 0;
   private handPageCount = 1;
@@ -246,6 +248,12 @@ export class BluffDriver implements GameDriver<BluffState> {
         'challenge',
       );
       this.passControl = this.addButton(ctx, BLUFF_PASS_BUTTON, 'Pass', 'pass');
+      this.flushControl = this.addButton(
+        ctx,
+        BLUFF_PASS_BUTTON,
+        'Flush',
+        'flush',
+      );
       for (const box of rankCallButtons()) {
         const made = this.addButton(ctx, box, box.rank, `rank:${box.rank}`);
         this.rankActors.push({
@@ -310,6 +318,11 @@ export class BluffDriver implements GameDriver<BluffState> {
     }
     if (event.target === 'pass' && event.type === 'pointerup') {
       ctx.sendIntent({ type: 'pass' });
+      return;
+    }
+    if (event.target === 'flush' && event.type === 'pointerup') {
+      if (canFlushBluff(state, ctx.meSeatIndex))
+        ctx.sendIntent({ type: 'flush' });
       return;
     }
     if (event.target === 'challenge' && event.type === 'pointerup') {
@@ -438,6 +451,7 @@ export class BluffDriver implements GameDriver<BluffState> {
     this.buttonsReady = false;
     this.playControl = null;
     this.passControl = null;
+    this.flushControl = null;
     this.challengeControl = null;
     this.prevHandControl = null;
     this.nextHandControl = null;
@@ -491,16 +505,17 @@ export class BluffDriver implements GameDriver<BluffState> {
     this.playControl?.setLabel?.(
       this.selected.size > 0 ? `Play ${this.selected.size}` : 'Play',
     );
-    this.setShown(this.playControl, canPlay(state, seat));
-    this.setShown(this.passControl, canPass(state, seat));
-    this.setShown(this.challengeControl, canChallenge(state, seat));
-    const controls = [
-      ...(canPlay(state, seat) && this.playControl ? [this.playControl] : []),
-      ...(canPass(state, seat) && this.passControl ? [this.passControl] : []),
-      ...(canChallenge(state, seat) && this.challengeControl
-        ? [this.challengeControl]
-        : []),
-    ];
+    const choices = [
+      [this.playControl, canPlay(state, seat)],
+      [this.passControl, canPass(state, seat)],
+      [this.flushControl, canFlushBluff(state, seat)],
+      [this.challengeControl, canChallenge(state, seat)],
+    ] as const;
+    const controls: ControlFace[] = [];
+    for (const [control, shown] of choices) {
+      this.setShown(control, shown);
+      if (control && shown) controls.push(control);
+    }
     const boxes = bluffControlBoxes(controls.length);
     controls.forEach((control, index) => control.place?.(boxes[index]));
     this.paintRanks(calling);
@@ -1114,6 +1129,7 @@ export class BluffDriver implements GameDriver<BluffState> {
       | 'play'
       | 'challenge'
       | 'pass'
+      | 'flush'
       | 'hand-prev'
       | 'hand-next'
       | `rank:${BluffRank}`,

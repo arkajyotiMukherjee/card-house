@@ -115,7 +115,7 @@ export interface FloorSnapshot {
   code: string;
   self: string;
   chips: string;
-  lifetimeWinnings: string;
+  roomNet: string;
   players: FloorPerson[];
   positions: FloorPosition[];
   tables: FloorTable[];
@@ -173,17 +173,20 @@ function label(
   color = ink.cream,
   max = Infinity,
   retro = false,
-): void {
+): number {
   g.font = `${size}px '${retro ? 'Press Start 2P' : 'Chakra Petch'}', sans-serif`;
   g.fillStyle = color;
   g.textBaseline = 'middle';
-  if (g.measureText(value).width > max) {
+  let width = g.measureText(value).width;
+  if (width > max) {
     let short = value;
     while (short && g.measureText(`${short}…`).width > max)
       short = short.slice(0, -1);
     value = `${short}…`;
+    width = g.measureText(value).width;
   }
   g.fillText(value, x, y);
+  return width;
 }
 
 function position(
@@ -1097,17 +1100,19 @@ export class CasinoFloor {
         mine ? ink.gold : ink.cream,
         29,
       );
-      if (row.crowned) label(g, '♛', x + 32, y + 14, 17, ink.gold);
-      const textX = x + (row.crowned ? 51 : 35);
-      label(
+      const textX = x + 35;
+      const crownSpace = row.crowned ? 24 : 0;
+      const nameWidth = label(
         g,
         row.name,
         textX,
         y + 13,
         15,
         ink.cream,
-        Math.max(28, x + w - 145 - textX),
+        Math.max(28, x + w - 145 - textX - crownSpace),
       );
+      if (row.crowned)
+        label(g, '♛', textX + nameWidth + 5, y + 14, 17, ink.gold);
       label(
         g,
         mine
@@ -1263,7 +1268,15 @@ export class CasinoFloor {
     avatarSprite(g, 17, 458, 2, me?.avatar);
     label(g, me?.name ?? 'Guest', 60, 472, 17, ink.cream, 150);
     label(g, `${this.snapshot.chips} chips`, 60, 496, 18, ink.gold, 150);
-    label(g, this.snapshot.lifetimeWinnings, 60, 521, 14, ink.cream, 252);
+    label(
+      g,
+      `Room net ${this.snapshot.roomNet} chips`,
+      60,
+      521,
+      14,
+      ink.cream,
+      252,
+    );
     this.button(g, { x: 214, y: 466, w: 97, h: 34 }, 'Edit avatar', () =>
       this.actions.avatar(),
     );

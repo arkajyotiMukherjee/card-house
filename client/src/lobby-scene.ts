@@ -43,7 +43,6 @@ import {
   buttonFontSize,
 } from './button-style';
 import { pixelFont } from './boot-scene';
-import { lifetimeWinningsCaption } from './lifetime-winnings';
 import { subscribeLobbyTables } from './connect';
 import { joinFailureMessage } from './join-errors';
 import { showLobbyUrl, tableCodeForId } from './join-path';
@@ -218,7 +217,6 @@ export class LobbyScene {
   private codeText: ex.Text | undefined;
   private codeActor: ex.Actor | undefined;
   private errorText: ex.Text | undefined;
-  private winningsActor: ex.Actor | undefined;
   private linkLine = '';
   private linkText = canvasText('', 8, GOLD);
   private linkActor: ex.Actor | undefined;
@@ -230,7 +228,6 @@ export class LobbyScene {
   private popup: ex.Actor | undefined;
   private discordBadge: ex.Actor | undefined;
   private tablesReady: Promise<boolean> = Promise.resolve(false);
-  private winningsText = canvasText(lifetimeWinningsCaption(), 8, DIM);
   private chatOpen = false;
   private chatUnread = 0;
   private chatToggle?: ex.Actor;
@@ -289,11 +286,6 @@ export class LobbyScene {
       this.leaveConfirm !== undefined ||
       casinoAvatarEditorOpen(this.scene)
     );
-  }
-
-  setLifetimeWinnings(line: string): void {
-    this.winningsText.text = line;
-    this.floor?.invalidate();
   }
 
   /** A short line while the socket is being replaced. Empty once it is up. */
@@ -613,15 +605,6 @@ export class LobbyScene {
         .catch((error) => this.setError(errorMessage(error)));
     });
     this.buildLeaveRoom();
-    const winnings = new ex.Actor({
-      pos: ex.vec(20, 518),
-      anchor: ex.vec(0, 0),
-      z: 20,
-    });
-    winnings.graphics.use(this.winningsText);
-    anchorLobbyActor(winnings);
-    this.winningsActor = winnings;
-    this.scene.add(winnings);
     this.floor = new CasinoFloor(this.scene, {
       snapshot: () => this.casinoSnapshot(),
       active: () =>
@@ -721,7 +704,7 @@ export class LobbyScene {
       capacity,
     );
     const start = this.leaderboardOffset;
-    const textX = CHAT_PANEL.list.x + 24;
+    const textX = CHAT_PANEL.list.x + 48;
     const rowLabel = (
       y: number,
       value: string,
@@ -735,14 +718,25 @@ export class LobbyScene {
       const y = 158 + index * (PHONE_LAYOUT ? 70 : 54);
       const mine = wallet.clientId === this.clientId;
       const size = PHONE_LAYOUT ? 14 : 10;
-      const prefix = `${wallet.rank}. `;
-      const nameLimit = Math.floor((932 - textX - 12) / size) - prefix.length;
+      const nameLimit = Math.floor(
+        (932 - textX - (wallet.crowned ? 32 : 12)) / size,
+      );
       const name =
         wallet.name.length > nameLimit
           ? wallet.name.slice(0, nameLimit - 3) + '...'
           : wallet.name;
-      rowLabel(y, prefix + name, size, mine ? SELF : GOLD);
-      if (wallet.crowned) this.addLeaderCrown(CHAT_PANEL.list.x, y - 1);
+      this.leaderboardActors.push(
+        this.addChatLabel(
+          CHAT_PANEL.list.x,
+          y,
+          `${wallet.rank}.`,
+          PHONE_LAYOUT ? 10 : 8,
+          mine ? SELF : GOLD,
+        ),
+      );
+      rowLabel(y, name, size, mine ? SELF : GOLD);
+      if (wallet.crowned)
+        this.addLeaderCrown(textX + name.length * size + 5, y - 1);
       const committed = [...this.connection.db.tableFunding.iter()]
         .filter((row) => row.walletId === wallet.id)
         .reduce((sum, row) => sum + row.units, 0n);
@@ -2429,6 +2423,8 @@ export class LobbyScene {
         (fundingByWallet.get(row.walletId) ?? 0n) + row.units,
       );
     const lobby = [...db.lobby.iter()].find((row) => row.id === this.lobbyId);
+    const myWallet = wallets.find((wallet) => wallet.id === me?.id);
+    const profit = myWallet?.profit ?? 0n;
     return {
       code: this.lobbyCode,
       self: me?.id ?? '',
@@ -2436,11 +2432,8 @@ export class LobbyScene {
         [...db.casinoRoomTier.iter()].find(
           (row) => row.lobbyId === this.lobbyId,
         )?.tier ?? 'free',
-      chips: formatCoins(
-        wallets.find((wallet) => wallet.clientId === this.clientId)
-          ?.available ?? 0n,
-      ),
-      lifetimeWinnings: this.winningsText.text,
+      chips: formatCoins(myWallet?.available ?? 0n),
+      roomNet: `${profit > 0n ? '+' : ''}${formatCoins(profit)}`,
       roomVoice:
         lobby?.discordLobbyVoiceChannelId && lobby.discordGuildId
           ? `https://discord.com/channels/${lobby.discordGuildId}/${lobby.discordLobbyVoiceChannelId}`
@@ -2556,9 +2549,6 @@ export class LobbyScene {
         (TABLE_LIST.row.w + tableGutter() * 2) / (PHONE_LAYOUT ? 10 : 8),
       );
       this.errorText.text = wrapText(message, columns).join('\n');
-      if (PHONE_LAYOUT && this.winningsActor) {
-        this.winningsActor.graphics.isVisible = message.length === 0;
-      }
     }
   }
 

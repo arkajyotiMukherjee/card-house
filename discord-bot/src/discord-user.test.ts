@@ -71,6 +71,7 @@ test('a Discord user becomes the default player name', async () => {
     status: 200,
     discordUserId: USER_ID,
     name: 'Nelly',
+    username: 'nelly',
   });
 });
 

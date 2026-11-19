@@ -1,5 +1,5 @@
 import type { BluffState, BluffRank } from '../../src/shared/games/bluff';
-import { BLUFF_RANK_NAMES } from '../../src/shared/games/bluff';
+import { BLUFF_RANK_NAMES, canFlushBluff } from '../../src/shared/games/bluff';
 import { canPlay, rankWord } from './bluff-layout';
 import { CLASSIC, classicSeats } from './classic-table-design';
 import { ClassicTableUi } from './classic-table-ui';
@@ -27,6 +27,10 @@ export class BluffTableUi {
       state.requiredRank === null &&
       !view.arrival;
     const finished = state.phase === 'finished';
+    const result = state.lastPileResult;
+    const flushed = result?.kind === 'flush';
+    const seatName = (seat: number) =>
+      ctx.seats.find((row) => row.seatIndex === seat)?.name ?? 'Player';
     ui.header(ctx.tableName?.trim() || 'Bluff');
     ui.personalBand();
     for (const box of classicSeats(ctx.seats)) {
@@ -75,7 +79,9 @@ export class BluffTableUi {
         { x: 256, y: 232, w: 448, h: 30 },
         view.claim
           ? `Declare ${BLUFF_RANK_NAMES[view.claim]} · select cards`
-          : 'Choose the rank to declare',
+          : flushed
+            ? 'Flush · Choose the rank to declare'
+            : 'Choose the rank to declare',
         22,
         CLASSIC.accent,
         undefined,
@@ -83,25 +89,44 @@ export class BluffTableUi {
       );
     } else {
       ui.surface({ x: 248, y: 212, w: 464, h: 64 }, 'bluff-claim-surface');
-      const hasDetail = state.lastPlay !== null && !view.arrival;
+      const last = state.lastPlay;
+      const waitingForFlush = canFlushBluff(state, state.turnSeatIndex);
+      let title = 'Choosing a rank';
+      let detail = '';
+      if (state.requiredRank) {
+        title = `Called rank · ${rankWord(state.requiredRank, 2)}`;
+        if (waitingForFlush) detail = 'Everyone else passed';
+        else if (last)
+          detail = `${seatName(last.seat)} · ${last.cards.length} ${last.cards.length === 1 ? 'card' : 'cards'} played`;
+      } else if (flushed) {
+        title = 'Flush';
+      } else if (result?.kind === 'challenge') {
+        title = result.bluff ? 'Bluff caught' : 'Claim was honest';
+        const picker =
+          result.pickedUp === ctx.meSeatIndex
+            ? 'You'
+            : seatName(result.pickedUp);
+        detail = result.count
+          ? `${picker} picked up ${result.count} ${result.count === 1 ? 'card' : 'cards'}`
+          : `${picker} picked up the pile`;
+      }
+      if (view.arrival) {
+        title = view.arrival;
+        detail = '';
+      }
       ui.text(
-        { x: 256, y: 216, w: 448, h: hasDetail ? 28 : 56 },
-        view.arrival ??
-          (state.requiredRank
-            ? `Called rank · ${rankWord(state.requiredRank, 2)}`
-            : 'Flush'),
+        { x: 256, y: 216, w: 448, h: detail ? 28 : 56 },
+        title,
         24,
         CLASSIC.cream,
         undefined,
         true,
         'bluff-public-state',
       );
-      const last = state.lastPlay,
-        name = ctx.seats.find((seat) => seat.seatIndex === last?.seat)?.name;
-      if (last && !view.arrival)
+      if (detail)
         ui.text(
           { x: 264, y: 248, w: 432, h: 24 },
-          `${name ?? 'Player'} · ${last.cards.length} ${last.cards.length === 1 ? 'card' : 'cards'} played`,
+          detail,
           18,
           CLASSIC.secondary,
           undefined,

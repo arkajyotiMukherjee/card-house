@@ -62,7 +62,10 @@ import {
   STROKE_HOT,
 } from './canvas-ui';
 import { tableScenePaint } from './client-look';
-import { lifetimeWinningsCaption } from './lifetime-winnings';
+import {
+  tableReviewEndsAt,
+  TABLE_RESULT_REVIEW_SECONDS,
+} from '../../src/shared/table-review';
 import { coinDialog, coinDialogOpen } from './coin-dialog';
 import { CrazyEightsDriver } from './crazy-eights-driver';
 import { eventMessage, readStoredEvent } from './event-messages';
@@ -179,11 +182,9 @@ export class GameScene extends ex.Scene {
   private hudTurn!: ex.Text;
   private hudPhase!: ex.Text;
   private hudRound!: ex.Text;
-  private winningsText!: ex.Text;
-  private winningsLine = lifetimeWinningsCaption();
+  private reviewText = uiText('', 15, GOLD);
   private tableActor: ex.Actor | undefined;
   private leaveControl?: ex.Actor;
-  private winningsActor?: ex.Actor;
   private readonly prizeBadge = new PrizePoolBadge();
 
   get usesClassicLayout(): boolean {
@@ -213,13 +214,6 @@ export class GameScene extends ex.Scene {
     }
   }
 
-  setLifetimeWinnings(line: string): void {
-    this.winningsLine = line;
-    if (this.winningsText) {
-      this.winningsText.text = line;
-    }
-  }
-
   /** Repaints the felt for a theme switch without waiting for a reload. */
   setTableStyle(style: TableStyle): void {
     this.style = style;
@@ -244,6 +238,8 @@ export class GameScene extends ex.Scene {
     this.tableId = tableId;
     this.lobbyMemberId = lobbyMemberId;
     this.leaving = false;
+    this.reviewText.text = '';
+    this.economySecond = -1;
     this.lastRow = null;
     this.waiting = false;
     this.starting = false;
@@ -343,16 +339,15 @@ export class GameScene extends ex.Scene {
     anchorTableActor(this.linkActor, 'left');
     this.add(this.linkActor);
 
-    this.winningsText = uiText(this.winningsLine, 15, GOLD);
-    const winnings = new ex.Actor({
-      pos: ex.vec(isMobileDevice() ? 256 : 280, 22),
+    const countdown = new ex.Actor({
+      name: 'table-review-countdown',
+      pos: ex.vec(16, 61),
       anchor: ex.vec(0, 0),
       z: 21,
     });
-    winnings.graphics.use(this.winningsText);
-    this.winningsActor = winnings;
-    anchorTableActor(winnings, 'left');
-    this.add(winnings);
+    countdown.graphics.use(this.reviewText);
+    anchorTableActor(countdown, 'left');
+    this.add(countdown);
 
     this.addLeaveButton();
     this.addCounterButton();
@@ -400,10 +395,11 @@ export class GameScene extends ex.Scene {
     const table = [...this.connection.db.gameTable.iter()].find(
       (row) => row.id === this.tableId,
     );
-    const funding = [...this.connection.db.tableFunding.iter()].find(
-      (row) =>
-        row.tableId === this.tableId && row.walletId === this.lobbyMemberId,
+    const fundings = [...this.connection.db.tableFunding.iter()].filter(
+      (row) => row.tableId === this.tableId,
     );
+    this.updateResultReview(table, fundings.length > 0);
+    if (!this.tableId) return;
     if (table && isClassicGame(table.gameType)) {
       if (this.economyText) this.economyText.text = '';
       if (this.topUpActor) this.topUpActor.pos.y = -2000;
@@ -429,7 +425,51 @@ export class GameScene extends ex.Scene {
     const paused = !closed && (phase === 'finished' || phase === 'lobby');
     if (this.topUpActor)
       this.topUpActor.pos.y =
-        table && funding && casinoGame(table.gameType) && paused ? 234 : -2000;
+        table &&
+        fundings.some((row) => row.walletId === this.lobbyMemberId) &&
+        casinoGame(table.gameType) &&
+        paused
+          ? 234
+          : -2000;
+  }
+
+  private updateResultReview(
+    table:
+      | NonNullable<ReturnType<DbConnection['db']['gameTable']['id']['find']>>
+      | undefined,
+    hasFunding: boolean,
+  ): void {
+    const deadline =
+      table &&
+      tableReviewEndsAt(
+        table.status.tag === 'Finished',
+        hasFunding,
+        (table.lastActivityAt ?? table.createdAt).microsSinceUnixEpoch,
+      );
+    if (!table || deadline === undefined) {
+      this.reviewText.text = '';
+      return;
+    }
+    const seconds = Math.min(
+      TABLE_RESULT_REVIEW_SECONDS,
+      Math.ceil((Number(deadline / 1000n) - Date.now()) / 1000),
+    );
+    const solo = [...this.connection.db.lobby.iter()].some(
+      (lobby) => lobby.id === table.lobbyId && lobby.solo,
+    );
+    const destination = solo ? 'main menu' : 'lobby';
+    this.reviewText.text =
+      seconds > 0
+        ? `Back to ${destination} in ${seconds}s`
+        : `Returning to ${destination}…`;
+    if (seconds > 0) return;
+    const belongsHere = (row: { tableId: string; lobbyMemberId: string }) =>
+      row.tableId === this.tableId && row.lobbyMemberId === this.lobbyMemberId;
+    if (
+      ![...this.connection.db.gameSeat.iter()].some(belongsHere) &&
+      ![...this.connection.db.spectator.iter()].some(belongsHere)
+    )
+      this.returnFromTable();
   }
 
   private placeTablePresentation(): void {
@@ -469,14 +509,6 @@ export class GameScene extends ex.Scene {
         )
       : undefined;
     this.prizeBadge.setAmount(prizePool);
-    if (this.winningsActor) {
-      this.winningsActor.pos.y = classic ? 61 : 22;
-      anchorTableActor(
-        this.winningsActor,
-        'left',
-        classic ? 16 : isMobileDevice() ? 256 : 280,
-      );
-    }
     // Keep fallback HUD geometry separate from the scene-owned prize badge.
     anchorTableActor(
       this.hudPlate,
@@ -627,6 +659,9 @@ export class GameScene extends ex.Scene {
     this.connection.db.gameTable.onUpdate((_ctx, _old, row) => {
       this.applySubscribedState(row);
     });
+    this.connection.db.gameTable.onDelete((_ctx, row) => {
+      if (this.active && row.id === this.tableId) this.returnFromTable();
+    });
   }
 
   private bindTable(): void {
@@ -649,6 +684,14 @@ export class GameScene extends ex.Scene {
       .subscriptionBuilder()
       .onApplied(() => {
         if (this.subscribedTableId === tableId) {
+          if (
+            ![...this.connection.db.gameTable.iter()].some(
+              (table) => table.id === tableId,
+            )
+          ) {
+            this.returnFromTable();
+            return;
+          }
           this.eventsLive = true;
           this.paintSeats();
           this.readSubscribedState();
@@ -1741,19 +1784,26 @@ export class GameScene extends ex.Scene {
     void this.connection.reducers
       .leaveTable({ tableId, lobbyMemberId })
       .then(() => {
-        this.onLeft();
+        if (this.tableId === tableId) this.returnFromTable();
       })
       .catch((error: unknown) => {
+        if (this.tableId !== tableId) return;
         this.leaving = false;
         const message =
           error instanceof Error ? error.message : 'Could not leave';
         if (/^(Not seated|Table not found)$/.test(message)) {
-          this.onLeft();
+          this.returnFromTable();
           return;
         }
         if (fromWaiting) this.tableChat.showError(message);
         else this.showError(message);
       });
+  }
+
+  private returnFromTable(): void {
+    if (!this.active || !this.tableId) return;
+    this.tableId = '';
+    this.onLeft();
   }
 
   private showError(message: string): void {

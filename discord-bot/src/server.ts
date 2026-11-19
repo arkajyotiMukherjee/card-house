@@ -56,6 +56,9 @@ export function createApp(options: AppOptions): Express {
           discordUserId: result.discordUserId,
           name: result.ok ? result.name : null,
           status: result.ok ? 200 : result.status,
+          ...(result.ok && req.query.username === '1'
+            ? { username: result.username }
+            : {}),
         });
       })
       .catch(() => {

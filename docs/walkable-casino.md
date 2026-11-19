@@ -15,6 +15,8 @@ The lobby subscribes to room-scoped table summaries, wallet, occupancy, movement
 
 ## Discord setup
 
+Edit avatar shows the linked Discord username. Room members can choose a custom room name or their linked Discord ID before saving.
+
 Use the same persistent bot identity the leaderboard uses. Run the bot with its configured session file. Get the bot’s **public** SpacetimeDB identity from its connection. Use database-owner credentials to grant the identity the `discord` role.
 
 ```sql

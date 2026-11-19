@@ -149,6 +149,9 @@ export function eventMessage(
   if (parsed.kind === 'pass') {
     return clip(`${seatName(parsed.seat).trim() || 'Player'} passed`);
   }
+  if (parsed.kind === 'flush') {
+    return clip(`${seatName(parsed.seat).trim() || 'Player'} flushed the pile`);
+  }
   if (parsed.kind === 'play') {
     const cards = parsed.count === 1 ? 'card' : 'cards';
     return clip(

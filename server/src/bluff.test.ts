@@ -21,6 +21,15 @@ function assert(condition: boolean, message: string): asserts condition {
   }
 }
 
+function assertThrows(call: () => unknown, message: string): void {
+  try {
+    call();
+  } catch {
+    return;
+  }
+  throw new Error(message);
+}
+
 function seat(seatIndex: number): GameSeat {
   return {
     id: `seat-${seatIndex}`,
@@ -534,7 +543,7 @@ assert(
 );
 
 const openRound = playing({
-  hands: { '0': ['4S'], '1': ['KH'], '2': ['4C', '4D'] },
+  hands: { '0': ['4S', 'KS'], '1': ['KH'], '2': ['4C', '4D'] },
   discardPile: ['4H'],
   requiredRank: '4',
   turnSeatIndex: 1,
@@ -548,6 +557,10 @@ const firstPass = bluffRules.applyIntent(
 assert(firstPass.requiredRank === '4', 'one pass keeps the called rank');
 assert(firstPass.discardPile.length === 1, 'one pass leaves the pile');
 assert(firstPass.turnSeatIndex === 2, 'one pass moves to the next seat');
+assertThrows(
+  () => bluffRules.applyIntent(firstPass, { type: 'flush' }, context(2)),
+  'a seat cannot flush another player’s claim',
+);
 const followed = bluffRules.applyIntent(
   firstPass,
   { type: 'play', cards: ['4C', '4D'] },
@@ -570,21 +583,74 @@ assert(
   secondPass.turnSeatIndex === 0,
   'the last player to play leads after everyone else passes',
 );
-assert(secondPass.requiredRank === null, 'passes start a new call');
-assert(secondPass.discardPile.length === 0, 'passes set the pile aside');
-assert(secondPass.passed.length === 0, 'a new call clears the passes');
-assert(secondPass.lastPlay === null, 'the set-aside pile is not a last play');
+assert(secondPass.requiredRank === '4', 'passes keep the called rank');
+assert(secondPass.discardPile.length === 1, 'passes leave the pile in place');
+assert(secondPass.passed.length === 2, 'both passes remain visible');
+assertThrows(
+  () => bluffRules.applyIntent(secondPass, { type: 'challenge' }, context(2)),
+  'the last pass closes the challenge window',
+);
+assertThrows(
+  () => bluffRules.applyIntent(secondPass, { type: 'pass' }, context(0)),
+  'the last player can play or flush',
+);
+const continued = bluffRules.applyIntent(
+  secondPass,
+  { type: 'play', cards: ['4S'] },
+  context(0),
+);
 assert(
-  secondPass.hands['0'].length === 1 && secondPass.hands['0'][0] === '4S',
+  continued.requiredRank === '4' &&
+    continued.discardPile.length === 2 &&
+    continued.turnSeatIndex === 1 &&
+    continued.passed.length === 0,
+  'playing again keeps rank and pile and reopens the round',
+);
+const continuedBluff = bluffRules.applyIntent(
+  secondPass,
+  { type: 'play', cards: ['KS'] },
+  context(0),
+);
+assert(
+  continuedBluff.lastPlay?.claimRank === '4' &&
+    continuedBluff.lastPlay.cards[0] === 'KS',
+  'the player can bluff again under the same rank',
+);
+const afterChallenge = bluffRules.applyIntent(
+  continued,
+  { type: 'challenge' },
+  context(1),
+);
+assert(
+  afterChallenge.lastPileResult?.kind === 'challenge' &&
+    afterChallenge.lastPileResult.pickedUp === 1 &&
+    afterChallenge.lastPileResult.count === 2,
+  'the new play can be challenged and records the pickup',
+);
+const flushed = bluffRules.applyIntent(
+  secondPass,
+  { type: 'flush' },
+  context(0),
+);
+assert(
+  flushed.discardPile.length === 0 &&
+    flushed.requiredRank === null &&
+    flushed.passed.length === 0 &&
+    flushed.lastPlay === null &&
+    flushed.lastPileResult?.kind === 'flush' &&
+    flushed.turnSeatIndex === 0,
+  'an explicit flush clears the pile and lets the same player lead',
+);
+assert(
+  flushed.hands['0'].length === 2 && flushed.hands['0'][0] === '4S',
   'the lead does not pick up a set-aside pile',
 );
 assert(
-  !secondPass.hands['1'].includes('4H') &&
-    !secondPass.hands['2'].includes('4H'),
+  !flushed.hands['1'].includes('4H') && !flushed.hands['2'].includes('4H'),
   'no other seat picks up a set-aside pile',
 );
 const calledAgain = bluffRules.applyIntent(
-  secondPass,
+  flushed,
   { type: 'play', cards: ['4S'], claimRank: 'K' },
   context(0),
 );

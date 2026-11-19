@@ -128,6 +128,7 @@ import {
   type RoomCaps,
 } from './room-caps';
 import { stubIntentRules } from './stub-rules';
+import { tableReviewEndsAt } from '../../src/shared/table-review';
 import {
   EMPTY_TABLE_IDLE_MICROS,
   ABANDONED_TABLE_GRACE_MICROS,
@@ -2509,13 +2510,35 @@ export const clean_empty_tables = spacetimedb.reducer(
       }
       const activity = gameTable.lastActivityAt ?? gameTable.createdAt;
       const idleMicros = now - activity.microsSinceUnixEpoch;
-      if (
-        seats === 0 &&
-        gameTable.status.tag === 'finished' &&
-        rowCount(ctx.db.Spectator.byTable.filter(gameTable.id)) > 0 &&
-        idleMicros < idleLimit
-      )
+      const reviewEndsAt = tableReviewEndsAt(
+        gameTable.status.tag === 'finished',
+        false,
+        activity.microsSinceUnixEpoch,
+      );
+      if (reviewEndsAt !== undefined) {
+        if (now < reviewEndsAt) continue;
+        const lobby = ctx.db.Lobby.id.find(gameTable.lobbyId);
+        if (lobby?.solo) {
+          deleteRoomShell(ctx, lobby.id);
+          continue;
+        }
+        const seatIds = collectIds(
+          ctx.db.GameSeat.byTable.filter(gameTable.id),
+        );
+        const watchers = collectIds(
+          ctx.db.Spectator.byTable.filter(gameTable.id),
+        );
+        for (const id of seatIds) {
+          ctx.db.SeatAbsence.id.delete(id);
+          ctx.db.GameSeat.id.delete(id);
+        }
+        deleteIds(watchers, (id) => ctx.db.Spectator.id.delete(id));
+        if (seatIds.length || watchers.length)
+          forgetTableForEveryone(ctx.db, gameTable.id);
+        // Discord can keep the row while it removes the channel.
+        if (!gameTable.discordVoiceChannelId) doomed.push(gameTable.id);
         continue;
+      }
       if (
         shouldRemoveEmptyTable(
           seats,
@@ -2742,6 +2765,16 @@ export const spectate_table = spacetimedb.reducer(
     if (!gameTable) {
       throw new SenderError('Table not found');
     }
+    const reviewEndsAt = tableReviewEndsAt(
+      gameTable.status.tag === 'finished',
+      rowCount(ctx.db.TableFunding.tableId.filter(gameTable.id)) > 0,
+      (gameTable.lastActivityAt ?? gameTable.createdAt).microsSinceUnixEpoch,
+    );
+    if (
+      reviewEndsAt !== undefined &&
+      ctx.timestamp.microsSinceUnixEpoch >= reviewEndsAt
+    )
+      throw new SenderError('Game already ended');
 
     const lobby = ctx.db.Lobby.id.find(gameTable.lobbyId);
     if (!lobby) {
@@ -2785,7 +2818,8 @@ export const spectate_table = spacetimedb.reducer(
     });
     ctx.db.GameTable.id.update({
       ...gameTable,
-      lastActivityAt: ctx.timestamp,
+      lastActivityAt:
+        reviewEndsAt === undefined ? ctx.timestamp : gameTable.lastActivityAt,
     });
     parkCasinoAvatar(ctx, member.id, gameTable.id);
     rememberTable(ctx.db, ctx.sender.toHexString(), lobby.id, gameTable.id);
@@ -3000,6 +3034,9 @@ export const leave_table = spacetimedb.reducer(
       forgetLobby(ctx.db, ctx.sender.toHexString());
       return;
     }
+    const alreadyReviewing =
+      gameTable.status.tag === 'finished' &&
+      rowCount(ctx.db.TableFunding.tableId.filter(gameTable.id)) === 0;
     if (
       seatIds.length &&
       cashOutUnbetBlackjack(ctx, gameTable.id, seatIds[0])
@@ -3077,7 +3114,9 @@ export const leave_table = spacetimedb.reducer(
       ...gameTable,
       stateJson,
       status,
-      lastActivityAt: ctx.timestamp,
+      lastActivityAt: alreadyReviewing
+        ? gameTable.lastActivityAt
+        : ctx.timestamp,
     });
     if (gameTable.gameType === POKER_GAME_TYPE && leavingSeats.length > 0) {
       queueTableBeat(ctx, gameTable.id);
@@ -4316,6 +4355,8 @@ function closeFinishedPokerSession(ctx: ModuleCtx, tableId: string): boolean {
     ...table,
     status: { tag: 'finished' },
     startsAt: undefined,
+    lastActivityAt:
+      table.status.tag === 'finished' ? table.lastActivityAt : ctx.timestamp,
   });
   return true;
 }

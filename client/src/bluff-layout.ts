@@ -2,6 +2,7 @@ import type { CardFace } from './card-atlas';
 import {
   BLUFF_RANK_NAMES,
   BLUFF_RANKS,
+  canFlushBluff,
   rankOfCard,
   type BluffRank,
   type BluffState,
@@ -258,7 +259,11 @@ export function canPlay(state: BluffState, seatIndex: number | null): boolean {
 
 /** Pass is legal only after a rank has been called, and only on your turn. */
 export function canPass(state: BluffState, seatIndex: number | null): boolean {
-  return canPlay(state, seatIndex) && state.requiredRank !== null;
+  return (
+    canPlay(state, seatIndex) &&
+    state.requiredRank !== null &&
+    !canFlushBluff(state, seatIndex)
+  );
 }
 
 /** A challenge judges someone else's latest play. */
@@ -270,7 +275,8 @@ export function canChallenge(
     state.phase === 'play' &&
     seatedHere(state, seatIndex) &&
     state.lastPlay !== null &&
-    state.lastPlay.seat !== seatIndex
+    state.lastPlay.seat !== seatIndex &&
+    !canFlushBluff(state, state.turnSeatIndex)
   );
 }
 

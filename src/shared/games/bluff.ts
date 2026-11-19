@@ -76,7 +76,7 @@ export interface BluffState {
   discardPile: string[];
   /** Rank called for this round. Null while the lead has not called. */
   requiredRank: BluffRank | null;
-  /** Seats that passed and cannot play again until the next call. */
+  /** Seats that passed and sit out until the pile is flushed or play reopens. */
   passed: number[];
   /** Plays each seat has made in the current hand. The Bluff bot reads its own. */
   playCounts: Record<string, number>;
@@ -84,18 +84,21 @@ export interface BluffState {
   turnCounts: Record<string, number>;
   turnSeatIndex: number | null;
   lastPlay: BluffLastPlay | null;
+  lastPileResult?: Extract<BluffEventNote, { kind: 'flush' | 'challenge' }>;
   winnerSeatIndex: number | null;
 }
 
 export type BluffIntent =
   | { type: 'play'; cards: string[]; claimRank?: BluffRank }
   | { type: 'pass' }
+  | { type: 'flush' }
   | { type: 'challenge' };
 
 /** What a table event says. Seat numbers stay indexes; clients add names. */
 export type BluffEventNote =
   | { kind: 'play'; seat: number; count: number; claimRank: BluffRank }
   | { kind: 'pass'; seat: number }
+  | { kind: 'flush'; seat: number }
   | {
       kind: 'challenge';
       challenger: number;
@@ -103,6 +106,7 @@ export type BluffEventNote =
       /** True when the accused played a card that was not the called rank. */
       bluff: boolean;
       pickedUp: number;
+      count?: number;
     };
 
 export const bluffGameDefinition = {
@@ -111,7 +115,7 @@ export const bluffGameDefinition = {
   minPlayers: 2,
   maxPlayers: 6,
   howToPlay:
-    '# Bluff\n\nThe lead selects any number of cards and chooses a rank before playing them face down. One card is a legal play. That call may be a lie. A joker is wild and is always a true card. It is not a queen. Each other player plays any number of cards as that rank, or passes. A pass sits out for the rest of the round. Only the lead calls a rank. Anyone else may challenge the latest play. Four of a rank plus both jokers is the most that claim can honestly be. A lie makes the player who played pick up the pile, and the challenger leads. An honest call, including a joker, makes the challenger pick it up, and the player who was challenged leads. If everyone else passes, the pile is set aside and the last player to play leads. Empty your hand to win.',
+    '# Bluff\n\nThe lead selects any number of cards and chooses a rank before playing them face down. One card is a legal play. That call may be a lie. A joker is wild and is always a true card. It is not a queen. Each other player plays any number of cards as that rank, or passes. Only the lead calls a rank. Anyone else may challenge the latest play before everyone else passes. Four of a rank plus both jokers is the most that claim can honestly be. A lie makes the player who played pick up the pile, and the challenger leads. An honest call, including a joker, makes the challenger pick it up, and the player who was challenged leads. When everyone else passes, the last player to play chooses whether to flush the pile and declare a new rank, or add cards under the same rank. Adding cards keeps the pile and gives everyone a chance to play, pass or challenge again. Empty your hand to win.',
 } satisfies GameDefinition;
 
 function asRecord(value: unknown, message: string): Record<string, unknown> {
@@ -263,6 +267,7 @@ export function readBluffState(value: unknown): BluffState {
     }
     hands[key] = hand.slice();
   }
+  const lastPileResult = readBluffEventNote(record.lastPileResult);
   return {
     phase: record.phase,
     hands,
@@ -274,6 +279,9 @@ export function readBluffState(value: unknown): BluffState {
       record.turnCounts === undefined ? {} : readPlayCounts(record.turnCounts),
     turnSeatIndex: record.turnSeatIndex,
     lastPlay: readLastPlay(record.lastPlay),
+    ...(lastPileResult?.kind === 'flush' || lastPileResult?.kind === 'challenge'
+      ? { lastPileResult }
+      : {}),
     winnerSeatIndex: record.winnerSeatIndex,
   };
 }
@@ -285,6 +293,9 @@ export function readBluffIntent(value: unknown): BluffIntent {
   }
   if (record.type === 'pass') {
     return { type: 'pass' };
+  }
+  if (record.type === 'flush') {
+    return { type: 'flush' };
   }
   if (record.type !== 'play' || !Array.isArray(record.cards)) {
     throw new Error('Invalid intent');
@@ -313,6 +324,9 @@ export function readBluffEventNote(value: unknown): BluffEventNote | null {
   if (note.kind === 'pass' && isSeatIndex(note.seat)) {
     return { kind: 'pass', seat: note.seat };
   }
+  if (note.kind === 'flush' && isSeatIndex(note.seat)) {
+    return { kind: 'flush', seat: note.seat };
+  }
   if (
     note.kind === 'play' &&
     isSeatIndex(note.seat) &&
@@ -339,6 +353,9 @@ export function readBluffEventNote(value: unknown): BluffEventNote | null {
       accused: note.accused,
       bluff: note.bluff,
       pickedUp: note.pickedUp,
+      ...(isSeatIndex(note.count) && note.count > 0
+        ? { count: note.count }
+        : {}),
     };
   }
   return null;
@@ -569,15 +586,16 @@ function applyPlay(
     ...state.playCounts,
     [key]: (state.playCounts[key] ?? 0) + 1,
   };
+  const passed = canFlushBluff(state, seatIndex) ? [] : state.passed.slice();
   return {
     phase: 'play',
     hands,
     discardPile: state.discardPile.concat(cards),
     requiredRank: rank,
-    passed: state.passed.slice(),
+    passed,
     playCounts,
     turnCounts: bumpTurns(state.turnCounts, seatIndex),
-    turnSeatIndex: nextActive(state, seatIndex),
+    turnSeatIndex: nextActive({ ...state, passed }, seatIndex),
     lastPlay: {
       seat: seatIndex,
       cards: cards.slice(),
@@ -587,22 +605,20 @@ function applyPlay(
   };
 }
 
-/** Every seated player except the last one to play has passed. */
-function everyOtherSeatPassed(
-  hands: Record<string, string[]>,
-  passed: readonly number[],
-  lastSeat: number,
-): boolean {
-  const seats = seatedIndexes(hands);
-  if (seats.length === 0 || !seats.includes(lastSeat)) {
-    return false;
-  }
-  for (const seat of seats) {
-    if (seat !== lastSeat && !passed.includes(seat)) {
-      return false;
-    }
-  }
-  return true;
+/** The unchallenged pile is still on the table when play returns to its owner. */
+export function canFlushBluff(state: BluffState, seat: number | null): boolean {
+  return (
+    state.phase === 'play' &&
+    seat !== null &&
+    state.turnSeatIndex === seat &&
+    state.lastPlay?.seat === seat &&
+    state.requiredRank !== null &&
+    state.discardPile.length > 0 &&
+    !state.passed.includes(seat) &&
+    seatedIndexes(state.hands).every(
+      (other) => other === seat || state.passed.includes(other),
+    )
+  );
 }
 
 function applyPass(state: BluffState, seatIndex: number): BluffState {
@@ -616,45 +632,39 @@ function applyPass(state: BluffState, seatIndex: number): BluffState {
   if (state.requiredRank === null) {
     throw new Error('Call a rank');
   }
+  if (canFlushBluff(state, seatIndex)) {
+    throw new Error('Play cards or flush the pile');
+  }
   if (state.passed.includes(seatIndex)) {
     throw new Error('You passed');
   }
   const passed = state.passed.concat(seatIndex);
-  const lastSeat = state.lastPlay?.seat;
-  const othersDone =
-    lastSeat !== undefined &&
-    everyOtherSeatPassed(state.hands, passed, lastSeat);
-  const stillIn = seatedIndexes(state.hands).filter(
-    (seat) => !passed.includes(seat),
-  );
-  if (othersDone || stillIn.length === 0) {
-    const lead = state.lastPlay?.seat ?? seatIndex;
-    const leadHand = state.hands[handKey(lead)];
-    const leadOut = leadHand !== undefined && leadHand.length === 0;
-    return {
-      phase: leadOut ? 'finished' : 'play',
-      hands: state.hands,
-      discardPile: [],
-      requiredRank: null,
-      passed: [],
-      playCounts: state.playCounts,
-      turnCounts: bumpTurns(state.turnCounts, seatIndex),
-      turnSeatIndex: leadOut ? null : lead,
-      lastPlay: null,
-      winnerSeatIndex: leadOut ? lead : null,
-    };
-  }
+  const turn = nextActive({ ...state, passed }, seatIndex);
   return {
     phase: 'play',
     hands: state.hands,
     discardPile: state.discardPile.slice(),
     requiredRank: state.requiredRank,
-    passed,
+    passed: turn === null ? [] : passed,
     playCounts: state.playCounts,
     turnCounts: bumpTurns(state.turnCounts, seatIndex),
-    turnSeatIndex: nextActive({ ...state, passed }, seatIndex),
+    turnSeatIndex: turn ?? seatIndex,
     lastPlay: copyLastPlay(state.lastPlay),
     winnerSeatIndex: null,
+  };
+}
+
+function applyFlush(state: BluffState, seat: number): BluffState {
+  if (!canFlushBluff(state, seat)) {
+    throw new Error('Flush is available after everyone else passes');
+  }
+  return {
+    ...state,
+    requiredRank: null,
+    discardPile: [],
+    passed: [],
+    lastPlay: null,
+    lastPileResult: { kind: 'flush', seat },
   };
 }
 
@@ -676,8 +686,11 @@ function givePile(
  * An emptied hand wins only when that play was honest.
  */
 function applyChallenge(state: BluffState, challenger: number): BluffState {
-  if (state.lastPlay === null) {
+  if (state.phase !== 'play' || state.lastPlay === null) {
     throw new Error('Nothing to challenge');
+  }
+  if (canFlushBluff(state, state.turnSeatIndex)) {
+    throw new Error('The challenge window has closed');
   }
   if (state.lastPlay.seat === challenger) {
     throw new Error('Not your play to challenge');
@@ -702,6 +715,14 @@ function applyChallenge(state: BluffState, challenger: number): BluffState {
     turnCounts: bumpTurns(state.turnCounts, challenger),
     turnSeatIndex: confirmedWin ? null : lead,
     lastPlay: null,
+    lastPileResult: {
+      kind: 'challenge',
+      challenger,
+      accused: lastPlay.seat,
+      bluff: !honest,
+      pickedUp: picker,
+      count: state.discardPile.length,
+    },
     winnerSeatIndex: confirmedWin ? lastPlay.seat : null,
   };
 }
@@ -709,25 +730,18 @@ function applyChallenge(state: BluffState, challenger: number): BluffState {
 function leaveSeat(state: BluffState, seatIndex: number): BluffState {
   const key = handKey(seatIndex);
   if (!(key in state.hands)) {
-    return {
-      phase: state.phase,
-      hands: state.hands,
-      discardPile: state.discardPile.slice(),
-      requiredRank: state.requiredRank,
-      passed: state.passed.slice(),
-      playCounts: state.playCounts,
-      turnCounts: state.turnCounts,
-      turnSeatIndex: state.turnSeatIndex,
-      lastPlay: copyLastPlay(state.lastPlay),
-      winnerSeatIndex: state.winnerSeatIndex,
-    };
+    return state;
   }
   const hands: Record<string, string[]> = { ...state.hands };
   delete hands[key];
-  const passed = state.passed.filter((seat) => seat !== seatIndex);
+  let passed = state.passed.filter((seat) => seat !== seatIndex);
   let turnSeatIndex = state.turnSeatIndex;
   if (turnSeatIndex === seatIndex) {
     turnSeatIndex = nextActive({ ...state, hands, passed }, seatIndex);
+    if (turnSeatIndex === null) {
+      passed = [];
+      turnSeatIndex = nextActive({ ...state, hands, passed }, seatIndex);
+    }
   }
   const holding = seatsWithCards(hands);
   let phase = state.phase;
@@ -741,15 +755,13 @@ function leaveSeat(state: BluffState, seatIndex: number): BluffState {
     winnerSeatIndex = null;
   }
   return {
+    ...state,
     phase,
     hands,
-    discardPile: state.discardPile.slice(),
-    requiredRank: state.requiredRank,
     passed,
-    playCounts: state.playCounts,
-    turnCounts: state.turnCounts,
     turnSeatIndex,
-    lastPlay: copyLastPlay(state.lastPlay),
+    lastPlay:
+      state.lastPlay?.seat === seatIndex ? null : copyLastPlay(state.lastPlay),
     winnerSeatIndex,
   };
 }
@@ -798,6 +810,9 @@ export const bluffRules = {
     if (action.type === 'pass') {
       return applyPass(state, ctx.seat.seatIndex);
     }
+    if (action.type === 'flush') {
+      return applyFlush(state, ctx.seat.seatIndex);
+    }
     return applyPlay(state, action.cards, action.claimRank, ctx.seat.seatIndex);
   },
   eventNote(
@@ -809,6 +824,9 @@ export const bluffRules = {
     const before = readBluffState(prev);
     const after = readBluffState(next);
     const action = readBluffIntent(intent);
+    if (action.type === 'flush') {
+      return { kind: 'flush', seat: ctx.seat.seatIndex };
+    }
     if (action.type === 'pass') {
       if (playWasAcceptedOut(before, after)) {
         return null;

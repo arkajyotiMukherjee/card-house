@@ -8,6 +8,10 @@ import { orderedBluffHand } from '../client/src/bluff-layout.ts';
 import type { BluffState } from '../src/shared/games/bluff.ts';
 process.env.PW_TEST_SCREENSHOT_NO_FONTS_READY = '1';
 const preview = process.env.BLUFF_PREVIEW === '1';
+const database = process.env.SPACETIMEDB_DB ?? 'room-economy-test';
+assert.match(database, /^room-economy-/);
+const browserUrl = process.env.BLUFF_BROWSER_URL ?? 'http://127.0.0.1:5175/';
+assert.match(browserUrl, /^http:\/\/127\.0\.0\.1:\d+\/$/);
 const baseOut =
   process.env.BLUFF_EVIDENCE_DIR ??
   '../docs/classic-bluff-evidence/space-revision/';
@@ -28,7 +32,7 @@ async function connect(name: string) {
   const db = await new Promise<DbConnection>((resolve, reject) =>
     DbConnection.builder()
       .withUri('http://127.0.0.1:3000')
-      .withDatabaseName('room-economy-test')
+      .withDatabaseName(database)
       .onConnect((db, _id, credential) => {
         token = credential;
         db.subscriptionBuilder()
@@ -150,7 +154,7 @@ try {
     });
     const page = await context.newPage();
     page.on('pageerror', (error) => errors.push(error.message));
-    await page.goto('http://127.0.0.1:5175/');
+    await page.goto(browserUrl);
     await page.waitForFunction(
       (id) =>
         window.__classicBluffEngine?.currentScene.lastRow?.id === id &&
@@ -167,15 +171,19 @@ try {
     await open('small-mobile', 0, 667, 375, true);
   }
   const sync = async (): Promise<void> => {
-    const actual = JSON.stringify(state());
+    const actual = state();
     for (const view of views)
-      await view.page.waitForFunction(
-        (actual) =>
-          JSON.stringify(
-            window.__classicBluffEngine.currentScene.bluffDriver.state,
-          ) === actual,
-        actual,
-      );
+      await view.page.waitForFunction((actual) => {
+        const visible =
+          window.__classicBluffEngine.currentScene.bluffDriver.state;
+        return (
+          Object.keys(visible).length === Object.keys(actual).length &&
+          Object.entries(actual).every(
+            ([key, value]) =>
+              JSON.stringify(visible[key]) === JSON.stringify(value),
+          )
+        );
+      }, actual);
   };
   const capture = async (stage: string): Promise<void> => {
     await sync();
@@ -230,12 +238,15 @@ try {
     const scene = window.__classicBluffEngine.currentScene;
     return [4, 5].map((index) => {
       const name = scene.placed.find((seat) => seat.seatIndex === index).name;
-      const label = scene.actors.find(
-        (actor) =>
-          actor.name === 'bluff-player-name' &&
-          !actor.isKilled() &&
-          actor.graphics.current?.text === name,
-      );
+      const label = scene.actors.find((actor) => {
+        if (actor.name !== 'bluff-player-name' || actor.isKilled())
+          return false;
+        const graphic = actor.graphics.current;
+        return (
+          graphic?.text === name ||
+          graphic?.members?.some((member) => member.graphic.text === name)
+        );
+      });
       const cards = [...scene.bluffDriver.backs]
         .filter(([key]) => key.startsWith(`${index}:`))
         .map(([, actor]) => actor.pos.x);
@@ -354,35 +365,18 @@ try {
     await delay(1500);
     assert.equal(state().hands['0'].length, 25);
     await capture('05-wide-phone-large-hand');
-    const flush = await hostView.page.evaluate(() => {
-      const actors = window.__classicBluffEngine.currentScene.actors.filter(
-        (actor) => !actor.isKilled(),
+    await open('desktop', 0, 1440, 900, false);
+    await capture('08-challenge-pickup');
+    assert.equal(state().lastPileResult?.kind, 'challenge');
+    for (const view of views) {
+      const heading = await view.page.evaluate(
+        () =>
+          window.__classicBluffEngine.currentScene.actors.find(
+            (actor) => actor.name === 'bluff-public-state' && !actor.isKilled(),
+          ).graphics.current.text,
       );
-      const surface = actors.find(
-        (actor) => actor.name === 'bluff-claim-surface',
-      );
-      const label = actors.find((actor) => actor.name === 'bluff-public-state');
-      const graphic = label.graphics.current;
-      return {
-        text: graphic.text,
-        horizontalError:
-          label.pos.x +
-          label.graphics.offset.x +
-          graphic.width / 2 -
-          (surface.pos.x + surface.width / 2),
-        verticalError:
-          label.pos.y +
-          label.graphics.offset.y +
-          graphic.height / 2 -
-          (surface.pos.y + surface.height / 2),
-      };
-    });
-    assert.equal(flush.text, 'Flush');
-    assert.ok(
-      Math.abs(flush.horizontalError) < 0.1 &&
-        Math.abs(flush.verticalError) < 0.1,
-    );
-    writeFileSync(out + 'flush-proof.json', JSON.stringify(flush, null, 2));
+      assert.equal(heading, 'Bluff caught');
+    }
 
     assert.equal(
       await hostView.page.evaluate(
@@ -411,6 +405,44 @@ try {
       ),
       3,
     );
+    // Make the host the last player to lay cards, then exercise both options.
+    await move(2, {
+      type: 'play',
+      cards: [state().hands['2'][0]],
+      claimRank: 'A',
+    });
+    for (const seat of [3, 4, 5]) await move(seat, { type: 'pass' });
+    await move(0, { type: 'play', cards: [state().hands['0'][0]] });
+    await move(1, { type: 'pass' });
+    await move(2, { type: 'pass' });
+    assert.equal(state().turnSeatIndex, 0);
+    assert.equal(state().discardPile.length, 2);
+    await sync();
+    const chosen = await hostView.page.evaluate(
+      () => window.__classicBluffEngine.currentScene.bluffDriver.visibleHand[0],
+    );
+    await tapActor(hostView, `bluff-card-${chosen}`);
+    await capture('09-play-or-flush');
+    await tapActor(hostView, 'bluff-control-play');
+    await until(
+      () => state().discardPile.length === 3,
+      'Continue kept the pile',
+    );
+    assert.equal(state().requiredRank, 'A');
+    assert.equal(state().turnSeatIndex, 1);
+    assert.deepEqual(state().passed, []);
+    await capture('10-continued-play');
+    for (const seat of [1, 2, 3, 4, 5]) await move(seat, { type: 'pass' });
+    await sync();
+    await tapActor(hostView, 'bluff-control-flush');
+    await until(
+      () => state().lastPileResult?.kind === 'flush',
+      'Flush was explicit',
+    );
+    assert.equal(state().discardPile.length, 0);
+    assert.equal(state().requiredRank, null);
+    assert.equal(state().turnSeatIndex, 0);
+    await capture('11-flushed-new-rank');
     for (let n = 0; state().phase !== 'finished' && n < 40; n++) {
       const seat = state().turnSeatIndex!,
         hand = state().hands[String(seat)];
@@ -444,13 +476,16 @@ try {
           tableNameHeader: true,
           disabledPlayCannotSubmit: true,
           activePlayConfirmed: true,
+          challengePickupLabel: true,
+          continuedPlayKeptPile: true,
+          explicitFlushOpenedRankPicker: true,
           errors,
         },
         null,
         2,
       ),
     );
-    console.log('BLUFF SINGLE-VIEW PREVIEW PASSED');
+    console.log('BLUFF DESKTOP AND TOUCH PREVIEW PASSED');
   } else {
     await tapActor(hostView, 'bluff-control-play');
     await until(

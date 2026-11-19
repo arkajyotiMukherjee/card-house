@@ -5,6 +5,7 @@ import {
   type BluffIntent,
   type BluffRank,
   type BluffState,
+  canFlushBluff,
   cardIsTrue,
   isJoker,
   rankOfCard,
@@ -139,6 +140,9 @@ export const bluffStrategy: BotStrategy<BluffState, BluffIntent> = {
     return [state.turnSeatIndex];
   },
   choose(state, seatIndex) {
+    if (canFlushBluff(state, seatIndex)) {
+      return { type: 'flush' };
+    }
     if (
       canChallenge(state, seatIndex) &&
       (claimCannotBeTrue(state, seatIndex) || wantsChallenge(state, seatIndex))

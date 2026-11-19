@@ -49,6 +49,13 @@ describe('last room', () => {
     });
   });
 
+  it('keeps a full Discord ID used as the room name', () => {
+    const storage = memoryStorage();
+    const name = '123456789012345678';
+    rememberLobby('AB3D', name, storage);
+    expect(readLastRoom(storage)?.name).toBe(name);
+  });
+
   it('drops the table when a different lobby is joined', () => {
     const storage = memoryStorage();
     rememberLobby('AB3D', 'Ada', storage);

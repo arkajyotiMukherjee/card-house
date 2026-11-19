@@ -1,4 +1,5 @@
 import { NAME_MAX, normalizePlayerName, normalizeRoomCode } from './lobby';
+import { DISCORD_USER_ID } from '../../src/shared/discord-player-name';
 
 /** localStorage key for the last lobby and, while seated, its table. */
 export const LAST_ROOM_STORAGE_KEY = 'lastRoom';
@@ -172,7 +173,10 @@ function isStoredRoomCode(code: string): boolean {
 }
 
 function isStoredName(name: string): boolean {
-  if (name.length === 0 || name.length > NAME_MAX) {
+  if (
+    name.length === 0 ||
+    (name.length > NAME_MAX && !DISCORD_USER_ID.test(name))
+  ) {
     return false;
   }
   for (const char of name) {
