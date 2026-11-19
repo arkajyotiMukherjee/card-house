@@ -3,6 +3,7 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium, type Page } from 'playwright';
 import { DbConnection } from '../client/src/module_bindings/index.ts';
+import { FLOOR_STEP_MS, tableEntrance } from '../src/shared/casino-floor.ts';
 
 const base = process.env.CASINO_BROWSER_URL ?? 'http://127.0.0.1:5181';
 const host = process.env.SPACETIMEDB_HOST ?? 'http://127.0.0.1:3000';
@@ -31,6 +32,7 @@ async function connect() {
             'SELECT * FROM GameSeat',
             'SELECT * FROM LobbyChatMessage',
             'SELECT * FROM CasinoPresence',
+            'SELECT * FROM CasinoTableSpot',
           ]),
       )
       .onConnectError((_ctx, error) => reject(error))
@@ -77,6 +79,20 @@ const connections: DbConnection[] = [];
 try {
   const desktop = await browser.newPage({
     viewport: { width: 1280, height: 720 },
+  });
+  await desktop.addInitScript(() => {
+    const labels = new Set<string>();
+    (window as Window & { floorProof: Set<string> }).floorProof = labels;
+    const source = CanvasRenderingContext2D.prototype;
+    const fillText = source.fillText;
+    source.fillText = function (text, x, y, maxWidth) {
+      if (
+        ['Walk over', 'Sit down', 'Watch'].includes(text) ||
+        text.includes('seated · Host')
+      )
+        labels.add(text);
+      fillText.call(this, text, x, y, maxWidth);
+    };
   });
   desktop.on('pageerror', (e) => errors.push(e.message));
   await desktop.goto(base);
@@ -217,8 +233,22 @@ try {
   );
   await pause(2200);
   await view(desktop, 'gaming-wing');
+  await desktop.evaluate(() =>
+    (window as Window & { floorProof: Set<string> }).floorProof.clear(),
+  );
   await point(desktop, 421, 23);
   await view(desktop, 'table-directory');
+  const controls = await desktop.evaluate(() => [
+    ...(window as Window & { floorProof: Set<string> }).floorProof,
+  ]);
+  assert.ok(
+    controls.includes('Walk over'),
+    'Directory offers to walk from a distance',
+  );
+  assert.ok(
+    !controls.includes('Sit down') && !controls.includes('Watch'),
+    'Distant tables have no join or watch controls',
+  );
 
   const bluff = [...fixture.db.gameTable.iter()].find(
     (table) => table.lobbyId === room.id && table.gameType === 'bluff',
@@ -230,7 +260,28 @@ try {
         row.tableId === bluff.id &&
         row.lobbyMemberId.endsWith(ownClient ?? 'no-client'),
     );
-  await point(desktop, 500, 134);
+  // The directory offers a walk from a distance. Joining starts at the table.
+  await point(desktop, 580, 134);
+  const spot = [...fixture.db.casinoTableSpot.iter()].find(
+    (row) => row.id === bluff.id,
+  );
+  assert.ok(spot);
+  const entrance = tableEntrance(spot.slot);
+  await until(() => {
+    const position = [...fixture.db.casinoPresence.iter()].find(
+      (row) =>
+        row.lobbyId === room.id && row.id.endsWith(ownClient ?? 'no-client'),
+    );
+    if (!position) return false;
+    const route = JSON.parse(position.pathJson);
+    const arrived =
+      Date.now() >=
+      Number(position.startedAt.microsSinceUnixEpoch / 1000n) +
+        route.length * FLOOR_STEP_MS;
+    const end = route.at(-1) ?? position;
+    return arrived && end.x === entrance.x && end.y === entrance.y;
+  }, 'Walked to the table before joining');
+  await point(desktop, 798, 495);
   assert.equal(
     seated(),
     false,
@@ -256,6 +307,30 @@ try {
   );
   await pause(1700);
   await view(desktop, 'bluff-table');
+  await desktop.evaluate(() =>
+    (window as Window & { floorProof: Set<string> }).floorProof.clear(),
+  );
+  await point(desktop, 86, 35);
+  await desktop.waitForFunction(
+    () => !JSON.parse(localStorage.getItem('lastRoom') ?? '{}').tableId,
+  );
+  assert.ok(
+    [...fixture.db.gameSeat.iter()].some(
+      (row) =>
+        row.tableId === bluff.id &&
+        row.lobbyMemberId.endsWith(ownClient ?? 'no-client') &&
+        row.seatState?.tag === 'Disconnected',
+    ),
+    'The running hand retains a disconnected reservation',
+  );
+  await desktop.waitForFunction(
+    () =>
+      [...(window as Window & { floorProof: Set<string> }).floorProof].some(
+        (text) => text.includes('1/6 seated'),
+      ),
+    undefined,
+    { timeout: 4000 },
+  );
   assert.deepEqual(errors, []);
   console.log(
     'Desktop and touch multiplayer verified. Captures saved to',

@@ -1,7 +1,8 @@
 import { isLobbyViewport, placeLobbyWidths } from './lobby-viewport';
 import { placeTableAnchors, tableViewportWidth } from './table-viewport';
 import * as ex from 'excalibur';
-import { BootScene, demoImages } from './boot-scene';
+import { demoImages } from './boot-scene';
+import { CardHouseLoader, LoadingScreen } from './loading-screen';
 import { getOrCreateClientId } from './client-id';
 import { reloadLanding, reloadLoadingLine } from './reload-landing';
 import {
@@ -152,8 +153,10 @@ function applyContainScale(): void {
   refreshCanvasTextFields();
 }
 
-const scene = new BootScene(theme.table, theme.background);
-const loading = new BootScene(theme.table, theme.background);
+const scene = new ex.Scene();
+scene.backgroundColor = ex.Color.fromHex(theme.background);
+const reloadScene = new ex.Scene();
+const loading = new LoadingScreen(reloadScene);
 const menu = new MenuScene(clientId);
 const savedRoomAtStart =
   readLastRoom()?.lobbyCode === joinCode || !joinCode
@@ -161,14 +164,14 @@ const savedRoomAtStart =
     : undefined;
 const loadingLine = reloadLoadingLine(savedRoomAtStart);
 if (loadingLine) {
-  loading.setStatus(loadingLine);
-  engine.add('loading', loading);
+  loading.show(loadingLine);
+  engine.add('loading', reloadScene);
   engine.add('boot', scene);
   engine.add('menu', menu);
 } else {
   engine.add('menu', menu);
   engine.add('boot', scene);
-  engine.add('loading', loading);
+  engine.add('loading', reloadScene);
 }
 
 window.addEventListener('resize', applyContainScale);
@@ -210,7 +213,7 @@ engine.on('postframe', () => {
     placeLobbyWidths(engine.currentScene);
 });
 
-const loader = new ex.Loader(demoImages);
+const loader = new CardHouseLoader({ loadables: demoImages });
 void engine.start(loader).then(() => {
   if (loadingLine) {
     engine.goToScene('loading');
@@ -345,7 +348,6 @@ void engine.start(loader).then(() => {
                 return;
               }
               if (openTableId) return;
-              scene.setStatus('');
               void roomScene.openLobby(lobby.id, lobby.code).then((ready) => {
                 if (ready) void followTableLink(lobby.code);
               });
@@ -415,10 +417,7 @@ void engine.start(loader).then(() => {
           applyPageBackground(hex);
           const color = ex.Color.fromHex(hex);
           engine.backgroundColor = color;
-          scene.setTableStyle(look.table);
-          scene.setBackground(hex);
-          loading.setTableStyle(look.table);
-          loading.setBackground(hex);
+          scene.backgroundColor = color;
           tableScene.setTableStyle(look.table);
           tableScene.setBackground(hex);
         });
@@ -462,7 +461,6 @@ void engine.start(loader).then(() => {
               if (ready && saved.tableId.length > 0) {
                 forgetTable();
               }
-              scene.setStatus('');
               engine.goToScene('boot');
               return;
             }
@@ -490,7 +488,7 @@ void engine.start(loader).then(() => {
                 engine.goToScene('menu');
               }
             } else {
-              loading.setStatus(error);
+              loading.show(error, false);
             }
             return;
           }

@@ -5,6 +5,7 @@ import {
 import type { DbConnection } from './module_bindings';
 import { coinDialog } from './coin-dialog';
 import * as ex from 'excalibur';
+import { LoadingScreen } from './loading-screen';
 import { isMobileDevice } from './mobile-shell';
 import {
   casinoEntrance,
@@ -222,6 +223,7 @@ export class MenuScene extends ex.Scene {
   private statsActor: ex.Actor | undefined;
   private readonly overlay: ex.Actor[] = [];
   private busy = false;
+  private readonly loading = new LoadingScreen(this);
 
   private name = '';
   private code = '';
@@ -272,6 +274,7 @@ export class MenuScene extends ex.Scene {
     }
     this.submitAttempt += 1;
     this.busy = false;
+    this.loading.hide();
     this.setError(
       phase === 'reconnecting' ? RECONNECTING_LABEL : SERVER_UNREACHABLE,
     );
@@ -371,6 +374,7 @@ export class MenuScene extends ex.Scene {
   }
 
   onDeactivate(): void {
+    this.loading.hide();
     this.closeOverlay();
   }
 
@@ -516,6 +520,7 @@ export class MenuScene extends ex.Scene {
     this.previewBackground = undefined;
     this.mode = 'main';
     this.busy = false;
+    this.loading.hide();
     refreshCanvasTextFields();
   }
 
@@ -762,7 +767,7 @@ export class MenuScene extends ex.Scene {
     }
     this.submitAttempt += 1;
     const attempt = this.submitAttempt;
-    this.setError('Working...', DIM);
+    this.loading.show(kind === 'create' ? 'Creating room' : 'Joining room');
     let failure: string | undefined;
     try {
       failure = await this.enter({
@@ -777,6 +782,7 @@ export class MenuScene extends ex.Scene {
       return;
     }
     this.busy = false;
+    this.loading.hide();
     if (failure) {
       this.setError(failure);
       return;
@@ -1055,7 +1061,7 @@ export class MenuScene extends ex.Scene {
     this.busy = true;
     this.submitAttempt += 1;
     const attempt = this.submitAttempt;
-    this.setError('Working...', DIM);
+    this.loading.show('Opening table');
     let failure: string | undefined;
     try {
       failure = await this.startSolo({
@@ -1075,6 +1081,7 @@ export class MenuScene extends ex.Scene {
       return;
     }
     this.busy = false;
+    this.loading.hide();
     if (failure) {
       this.setError(failure);
       return;

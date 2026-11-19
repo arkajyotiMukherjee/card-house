@@ -33,6 +33,7 @@ import {
 } from './lobby-viewport';
 import { anchorTableActor, tableGutter } from './table-viewport';
 import * as ex from 'excalibur';
+import { LoadingScreen } from './loading-screen';
 import { bindButtonPress } from './button-press';
 import { isMobileDevice } from './mobile-shell';
 import {
@@ -267,6 +268,7 @@ export class LobbyScene {
   private returnedToMenu = false;
   private viewportGutter = -1;
   private floor?: CasinoFloor;
+  private readonly loading: LoadingScreen;
   private floorError = '';
   private floorReady = false;
 
@@ -280,7 +282,9 @@ export class LobbyScene {
       lobbyMemberId: string,
     ) => void = () => {},
     private readonly onLeftRoom: () => void = () => {},
-  ) {}
+  ) {
+    this.loading = new LoadingScreen(scene);
+  }
 
   get dialogOpen(): boolean {
     return (
@@ -464,6 +468,7 @@ export class LobbyScene {
     if (this.tableScope && !this.tableScope.isEnded())
       this.tableScope.unsubscribe();
     this.subscribedLobbyId = lobbyId;
+    this.loading.show('Loading room');
     this.tablesReady = subscribeLobbyTables(
       this.connection,
       lobbyId,
@@ -477,8 +482,9 @@ export class LobbyScene {
         } catch (error) {
           if (this.lobbyId === lobbyId) this.floorError = errorMessage(error);
         }
-        if (this.lobbyId === lobbyId) this.floorReady = true;
         if (this.lobbyId === lobbyId) {
+          this.floorReady = true;
+          this.loading.hide();
           this.render();
           this.renderChat();
         }
@@ -487,6 +493,7 @@ export class LobbyScene {
       .catch((error: unknown) => {
         if (this.subscribedLobbyId === lobbyId) {
           this.subscribedLobbyId = '';
+          this.loading.hide();
         }
         this.setError(errorMessage(error));
         return false;
@@ -631,8 +638,8 @@ export class LobbyScene {
           ...to,
           chair,
         }),
-      step: (direction) =>
-        this.connection.reducers.stepCasinoAvatar({
+      steer: (direction) =>
+        this.connection.reducers.steerCasinoAvatar({
           lobbyId: this.lobbyId,
           dx: direction.x,
           dy: direction.y,
@@ -1570,18 +1577,19 @@ export class LobbyScene {
     nameFace.graphics.use(panelRect(name.w, name.h, FIELD, STROKE));
     popup.addChild(nameFace);
     const metrics = chatFieldLabel(name, PHONE_LAYOUT ? 12 : BUTTON_FONT_SIZE);
-    this.tableNameText = this.addLabel(
-      metrics.x,
-      metrics.y,
-      '',
-      metrics.size,
-      GOLD,
-      popup,
-    );
-    const caret = makeFieldCaret(metrics.size, 3);
+    const nameText = new ex.Actor({
+      pos: ex.vec(metrics.x - name.x, metrics.y - name.y),
+      anchor: ex.vec(0, 0),
+      z: 1,
+    });
+    this.tableNameText = canvasText('', metrics.size, GOLD);
+    nameText.graphics.use(this.tableNameText);
+    this.silencePointer(nameText);
+    nameFace.addChild(nameText);
+    const caret = makeFieldCaret(metrics.size, 2);
     caret.name = 'table-name-caret';
     this.silencePointer(caret);
-    popup.addChild(caret);
+    nameFace.addChild(caret);
     let nameFocused = false;
     const paintName = (index = this.tableNameDraft.length): void => {
       const layout = layoutFieldCaret({
@@ -1596,8 +1604,8 @@ export class LobbyScene {
       showFieldCaret(
         caret,
         nameFocused && this.creating && !this.fundingDialog,
-        layout.x - box.x,
-        layout.y - box.y,
+        layout.x - name.x,
+        layout.y - name.y,
       );
     };
     const nameField = bindCanvasTextField({
@@ -2461,6 +2469,9 @@ export class LobbyScene {
           const slot = spots.get(game.id);
           if (slot === undefined) return [];
           const set = seats.filter((row) => row.tableId === game.id);
+          const seated = set.filter(
+            (row) => row.seatState?.tag !== 'Disconnected',
+          );
           const settings = game.economyJson
             ? (JSON.parse(game.economyJson) as TableEconomy)
             : tableEconomy(game.gameType);
@@ -2486,7 +2497,7 @@ export class LobbyScene {
                   : game.gameType === 'blackjack'
                     ? `Wagers ${settings.minBet}–${settings.maxBet} chips`
                     : `Entry ${settings.entryFee} chips`,
-              seats: set.map(
+              seats: seated.map(
                 (row) =>
                   playerById.get(row.lobbyMemberId) ?? {
                     id: row.lobbyMemberId,

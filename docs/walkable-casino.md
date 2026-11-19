@@ -6,12 +6,12 @@ The approved [casino concept](lobby-casino-concepts/B-walkable-casino.png) estab
 
 - Reception is the starting point. The wallet and chip refill use the existing room economy. Clicking a lounge chair walks to it and claims it on arrival. Walking away, losing the connection, or opening a table releases it.
 - The gaming floor extends into irregular wings as tables are created. Each table keeps its slot for its lifetime. Finished and abandoned tables follow the existing table cleanup policy.
-- Click or tap the floor to walk. Desktop also supports the arrow keys or WASD. Selecting a table walks to it and shows its stakes, host, and seated count. Players can use Tables to go directly to a seat or watch. Both routes confirm the room-chip entry fee or buy-in before changing the wallet.
+- Click or tap the floor to walk. Desktop also supports holding the arrow keys or WASD. The floor and the table directory show stakes, host, and seated count. Walk over to a table to sit down or watch. Paid seating confirms the entry fee or buy-in before changing the wallet.
 - The scrollable leaderboard ranks room wallets by net winnings and shows online, lounge, table, and offline status. Selecting a player opens their location or table. The local avatar can be edited at the entrance or in the floor footer.
 - Desktop `/` opens free-text quick chat, Enter sends, and Esc closes. The Chat button opens history on both desktop and touch devices. A recent room message can appear over the sender on the floor, then expires. Table chat has its own history.
 - Free rooms support 16 concurrent humans including reserved seats, and 3 live tables. Pro test rooms support 100 humans and 25 live tables. Room-tier changes require an operator. The planned Pro price is $5 per month. Billing is outside this release.
 
-The lobby subscribes to room-scoped table summaries, wallet, occupancy, movement, and chat. Full table state is fetched when opening a table. Movement is server-validated against the same terrain grid the client renders. Players can cross paths. Lounge seats are exclusive. Reduced-motion users see movement without camera easing or animated walking frames.
+The lobby subscribes to room-scoped table summaries, wallet, occupancy, movement, and chat. Full table state is fetched when opening a table. Walking starts on the local client, and the server validates routes against the shared terrain grid. Players can cross paths. Lounge seats are exclusive. Leaving a running hand removes the player from the visible seated count while the game holds their seat for its existing return period. Reduced-motion users see movement without camera easing or animated walking frames.
 
 ## Discord setup
 

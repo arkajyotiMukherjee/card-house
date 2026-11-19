@@ -9,7 +9,7 @@ describe('reload landing', () => {
     expect(reloadLanding({ atTable: false, inRoom: false })).toBe('menu');
   });
 
-  it('names the saved session on the empty table while it resolves', () => {
+  it('names the destination on the shared loading screen', () => {
     expect(reloadLoadingLine({ tableId: 'table_1' })).toBe('Loading table');
     expect(reloadLoadingLine({ tableId: '  ' })).toBe('Loading room');
     expect(reloadLoadingLine({ tableId: '' })).toBe('Loading room');

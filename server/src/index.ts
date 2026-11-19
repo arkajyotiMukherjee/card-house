@@ -1,12 +1,15 @@
 import {
+  FLOOR_STEER_STEPS,
   FLOOR_STEP_MS,
   LOUNGE_CHAIRS,
   ROOM_TIERS,
   SPAWN,
+  floorDirectionPath,
   floorPath,
   floorRows,
   floorRowsAt,
   nextFloorSlot,
+  redirectFloorWalk,
   tableEntrance,
   walkable,
   type FloorPoint,
@@ -4877,11 +4880,6 @@ export const move_casino_avatar = spacetimedb.reducer(
       throw new SenderError('Return to the floor before walking');
     const now = ctx.timestamp.microsSinceUnixEpoch;
     const previous = casinoPosition(ctx, member.id, lobbyId);
-    if (
-      ctx.db.CasinoPresence.id.find(member.id) &&
-      now - previous.startedAt.microsSinceUnixEpoch < 120_000n
-    )
-      return;
     const slots = [...ctx.db.CasinoTableSpot.lobbyId.filter(lobbyId)];
     const from = casinoCurrentPoint(previous, now);
     const rows = Math.max(
@@ -4908,15 +4906,76 @@ export const move_casino_avatar = spacetimedb.reducer(
           throw new SenderError('That chair is occupied');
       }
     }
-    const path = floorPath(from, { x, y }, rows);
-    if (!path.length && (from.x !== x || from.y !== y))
-      throw new SenderError('That spot cannot be reached');
+    const walk = redirectFloorWalk(
+      {
+        ...previous,
+        path: JSON.parse(previous.pathJson),
+        started: Number(previous.startedAt.microsSinceUnixEpoch) / 1000,
+      },
+      Number(now) / 1000,
+      (start) => {
+        const path = floorPath(start, { x, y }, rows);
+        if (!path.length && (start.x !== x || start.y !== y))
+          throw new SenderError('That spot cannot be reached');
+        return path;
+      },
+    );
+    if (chair >= 0 && walk.path.length)
+      throw new SenderError('Walk to the chair first');
     storeCasinoPosition(ctx, {
       ...previous,
-      ...from,
+      x: walk.x,
+      y: walk.y,
       chair,
-      startedAt: ctx.timestamp,
-      pathJson: JSON.stringify(path),
+      startedAt: new Timestamp(BigInt(Math.round(walk.started * 1000))),
+      pathJson: JSON.stringify(walk.path),
+    });
+  },
+);
+
+export const steer_casino_avatar = spacetimedb.reducer(
+  { name: 'steer_casino_avatar' },
+  { lobbyId: t.string(), dx: t.i32(), dy: t.i32() },
+  (ctx, { lobbyId, dx, dy }) => {
+    const { member, session } = casinoMember(ctx, lobbyId);
+    if (session?.tableId)
+      throw new SenderError('Return to the floor before walking');
+    if (Math.abs(dx) + Math.abs(dy) > 1)
+      throw new SenderError('Choose a walking direction');
+
+    const previous = casinoPosition(ctx, member.id, lobbyId);
+    const slots = [...ctx.db.CasinoTableSpot.lobbyId.filter(lobbyId)];
+    const rows = floorRows(Math.max(0, ...slots.map((slot) => slot.slot + 1)));
+    const walk = redirectFloorWalk(
+      {
+        ...previous,
+        path: JSON.parse(previous.pathJson),
+        started: Number(previous.startedAt.microsSinceUnixEpoch) / 1000,
+      },
+      Number(ctx.timestamp.microsSinceUnixEpoch) / 1000,
+      (from) =>
+        floorDirectionPath(
+          from,
+          { x: dx, y: dy },
+          Math.max(rows, floorRowsAt(from.y)),
+          FLOOR_STEER_STEPS,
+        ),
+    );
+    if (!walk.path.length && previous.pathJson === '[]') return;
+    const pathJson = JSON.stringify(walk.path);
+    const startedAt = new Timestamp(BigInt(Math.round(walk.started * 1000)));
+    if (
+      pathJson === previous.pathJson &&
+      startedAt.microsSinceUnixEpoch === previous.startedAt.microsSinceUnixEpoch
+    )
+      return;
+    storeCasinoPosition(ctx, {
+      ...previous,
+      x: walk.x,
+      y: walk.y,
+      pathJson,
+      startedAt,
+      chair: -1,
     });
   },
 );

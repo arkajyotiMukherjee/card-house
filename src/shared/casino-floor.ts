@@ -18,6 +18,51 @@ export const LOUNGE_CHAIRS: readonly FloorPoint[] = [
   { x: 28, y: 11 },
 ];
 export const FLOOR_STEP_MS = 145;
+export const FLOOR_STEER_STEPS = 4;
+
+export interface FloorWalk extends FloorPoint {
+  path: FloorPoint[];
+  started: number;
+}
+
+/** Change direction at the next tile without restarting the current stride. */
+export function redirectFloorWalk(
+  walk: FloorWalk,
+  now: number,
+  nextPath: (point: FloorPoint) => FloorPoint[],
+): FloorWalk {
+  const completed = Math.max(
+    0,
+    Math.floor((now - walk.started) / FLOOR_STEP_MS),
+  );
+  const from = walk.path[Math.min(walk.path.length, completed) - 1] ?? walk;
+  const inFlight = walk.path[completed];
+  return {
+    x: from.x,
+    y: from.y,
+    started: inFlight ? walk.started + completed * FLOOR_STEP_MS : now,
+    path: [...(inFlight ? [inFlight] : []), ...nextPath(inFlight ?? from)],
+  };
+}
+
+export function floorDirectionPath(
+  from: FloorPoint,
+  direction: FloorPoint,
+  rows: number,
+  limit = FLOOR_STEER_STEPS,
+): FloorPoint[] {
+  const path: FloorPoint[] = [];
+  if (!direction.x && !direction.y) return path;
+  for (let step = 1; step <= limit; step += 1) {
+    const next = {
+      x: from.x + step * direction.x,
+      y: from.y + step * direction.y,
+    };
+    if (!walkable(next, rows)) break;
+    path.push(next);
+  }
+  return path;
+}
 export const ROOM_TIERS = {
   free: { players: 16, tables: 3 },
   pro: { players: 100, tables: 25 },

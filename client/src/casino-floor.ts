@@ -12,9 +12,12 @@ import {
   RECEPTION,
   SPAWN,
   WING_ROWS,
+  floorDirectionPath,
+  floorPath,
   floorRows,
   floorRowsAt,
   floorTable,
+  redirectFloorWalk,
   tableEntrance,
   walkable,
   type FloorPoint,
@@ -49,9 +52,8 @@ const wingNames = [
 ];
 const reducedMotion = () =>
   window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-const KEYBOARD_LOOKAHEAD_MS = FLOOR_STEP_MS * 1.5;
-const KEYBOARD_INTERVAL_MS = FLOOR_STEP_MS * 0.65;
-const KEYBOARD_RENDER_DELAY_MS = 50;
+const KEYBOARD_INTERVAL_MS = FLOOR_STEP_MS * 2;
+const REMOTE_RENDER_DELAY_MS = 80;
 const WALK_DIRECTIONS: Partial<Record<string, FloorPoint>> = {
   ArrowLeft: { x: -1, y: 0 },
   KeyA: { x: -1, y: 0 },
@@ -135,7 +137,7 @@ interface Actions {
   active(): boolean;
   blocked(): boolean;
   move(to: FloorPoint, chair: number): Promise<void>;
-  step(direction: FloorPoint): Promise<void>;
+  steer(direction: FloorPoint): Promise<void>;
   create(): void;
   join(id: string): void;
   watch(id: string): void;
@@ -193,21 +195,19 @@ function position(
   const i = Math.min(row.path.length, Math.floor(t));
   const from = row.path[i - 1] ?? row;
   const to = row.path[i] ?? from;
+  const headingFrom = i < row.path.length ? from : (row.path[i - 2] ?? row);
   const f = reduce ? 0 : t - Math.floor(t);
   return {
     x: from.x + (to.x - from.x) * f,
     y: from.y + (to.y - from.y) * f,
     walked: i < row.path.length,
-    frame:
-      !reduce && i < row.path.length
-        ? Math.floor(now / (FLOOR_STEP_MS / 2)) + 1
-        : 0,
+    frame: !reduce && i < row.path.length ? Math.floor(now / 78) + 1 : 0,
     direction:
-      to.x > from.x
+      to.x > headingFrom.x
         ? 'right'
-        : to.x < from.x
+        : to.x < headingFrom.x
           ? 'left'
-          : to.y < from.y
+          : to.y < headingFrom.y
             ? 'up'
             : 'down',
   };
@@ -235,12 +235,13 @@ export class CasinoFloor {
   private draft = '';
   private busy = false;
   private error = '';
-  private lastMove = 0;
   private readonly walkingKeys = new Set<string>();
   private walkingDirection?: FloorPoint;
-  private stepPending = false;
-  private lastStep = 0;
-  private keyboardRenderUntil = 0;
+  private lastSteer = 0;
+  private localWalk?: FloorPosition;
+  private walkRequest = 0;
+  private walkAwaiting = false;
+  private correction?: FloorPoint & { started: number };
   private code = '';
   private readonly tableArt = new Image();
   private readonly reducedMotion = reducedMotion();
@@ -325,13 +326,13 @@ export class CasinoFloor {
       enterKeyHint: 'send',
     });
     document.addEventListener('keydown', (event) => this.key(event));
-    document.addEventListener('keyup', (event) =>
-      this.walkingKeys.delete(event.code),
-    );
+    document.addEventListener('keyup', (event) => {
+      if (this.walkingKeys.delete(event.code)) this.keyboardStep(Date.now());
+    });
     window.addEventListener('blur', () => this.stopKeyboardWalk());
     scene.on('preupdate', () => this.tick());
     scene.on('deactivate', () => {
-      this.stopKeyboardWalk();
+      this.resetWalk();
       this.quickChat = false;
       this.draft = '';
       this.field.refresh();
@@ -360,7 +361,7 @@ export class CasinoFloor {
       this.lastData = now;
     }
     if (this.snapshot.code !== this.code) {
-      this.stopKeyboardWalk();
+      this.resetWalk();
       this.code = this.snapshot.code;
       this.selected = '';
       this.destination = undefined;
@@ -385,35 +386,49 @@ export class CasinoFloor {
     } else {
       this.keyboardStep(now);
     }
-    if (
-      this.seatTarget >= 0 &&
-      !this.self().walked &&
-      now - this.lastMove > 500
-    ) {
+    if (!this.walkAwaiting && !this.walkingDirection && this.localWalk) {
+      const predicted = position(this.localWalk, now, this.reducedMotion);
+      const settled = position(this.selfRow(), now, this.reducedMotion);
+      if (!predicted.walked && !settled.walked) {
+        this.localWalk = undefined;
+        this.correction = {
+          x: predicted.x - settled.x,
+          y: predicted.y - settled.y,
+          started: now,
+        };
+      }
+    }
+    if (this.seatTarget >= 0 && !this.walkAwaiting && !this.self().walked) {
+      const current = position(this.selfRow(), now, this.reducedMotion);
+      if (current.walked) return;
       const seat = this.seatTarget;
       this.seatTarget = -1;
       const point = LOUNGE_CHAIRS[seat];
-      if (
-        Math.round(this.self().x) === point.x &&
-        Math.round(this.self().y) === point.y
-      )
+      if (current.x === point.x && current.y === point.y)
         void this.move(point, seat);
     }
   }
   private self(now = Date.now()) {
-    return this.avatarPosition(this.selfRow(), now);
+    const pose = position(
+      this.localWalk ?? this.selfRow(),
+      now,
+      this.reducedMotion,
+    );
+    const offset = this.correction;
+    if (!offset || this.reducedMotion) return pose;
+    const weight = Math.max(0, 1 - (now - offset.started) / FLOOR_STEP_MS);
+    return {
+      ...pose,
+      x: pose.x + offset.x * weight,
+      y: pose.y + offset.y * weight,
+    };
   }
   private selfRow() {
     return this.snapshot.positions.find((row) => row.id === this.snapshot.self);
   }
   private avatarPosition(row: FloorPosition | undefined, now: number) {
-    const delay =
-      !this.reducedMotion &&
-      row?.id === this.snapshot.self &&
-      now < this.keyboardRenderUntil
-        ? KEYBOARD_RENDER_DELAY_MS
-        : 0;
-    return position(row, now - delay, this.reducedMotion);
+    if (row?.id === this.snapshot.self) return this.self(now);
+    return position(row, now - REMOTE_RENDER_DELAY_MS, this.reducedMotion);
   }
   private get mapWidth() {
     return isMobileDevice() ? W : 672;
@@ -429,30 +444,67 @@ export class CasinoFloor {
   private get mapScale() {
     return Math.max(1, this.mapWidth / WIDTH);
   }
-  private async move(to: FloorPoint, chair = -1): Promise<void> {
-    this.stopKeyboardWalk();
-    this.keyboardRenderUntil = 0;
-    if (Date.now() - this.lastMove < 145) return;
-    this.lastMove = Date.now();
-    this.error = '';
-    if (chair === -1) this.destination = to;
-    try {
-      await this.actions.move(to, chair);
-      this.invalidate();
-    } catch (error) {
-      this.destination = undefined;
-      this.error =
-        error instanceof Error ? error.message : 'Could not walk there';
+  private move(to: FloorPoint, chair = -1): void {
+    this.walkingKeys.clear();
+    this.walkingDirection = undefined;
+    if (chair === -1) {
+      this.predictWalk(Date.now(), (from) => floorPath(from, to, this.rows));
+      this.destination = to;
     }
+    this.sendWalk(this.actions.move(to, chair));
   }
-  private selectTable(table: FloorTable, walk: boolean): void {
+  private predictWalk(
+    now: number,
+    next: (point: FloorPoint) => FloorPoint[],
+  ): void {
+    const start = this.localWalk ?? this.selfRow();
+    if (!start) return;
+    this.correction = undefined;
+    this.localWalk = {
+      ...start,
+      ...redirectFloorWalk(start, now, next),
+      chair: -1,
+    };
+  }
+  private sendWalk(request: Promise<void>): void {
+    const revision = ++this.walkRequest;
+    this.walkAwaiting = true;
+    this.error = '';
+    void request
+      .catch((error: unknown) => {
+        if (revision !== this.walkRequest) return;
+        this.walkingKeys.clear();
+        this.walkingDirection = undefined;
+        this.predictWalk(Date.now(), () => []);
+        this.destination = undefined;
+        this.error =
+          error instanceof Error ? error.message : 'Could not walk there';
+      })
+      .finally(() => {
+        if (revision !== this.walkRequest) return;
+        this.snapshot = this.actions.snapshot();
+        this.lastData = Date.now();
+        this.walkAwaiting = false;
+      });
+  }
+  private selectTable(table: FloorTable): void {
     this.selected = table.id;
     this.reception = false;
     this.focusPlayer = '';
-    if (walk) {
-      this.seatTarget = -1;
-      void this.move(tableEntrance(table.slot));
-    }
+    this.seatTarget = -1;
+    this.move(tableEntrance(table.slot));
+  }
+  private tableDistance(table: FloorTable): number {
+    const { x, y } = this.self();
+    const entrance = tableEntrance(table.slot);
+    return Math.abs(entrance.x - x) + Math.abs(entrance.y - y);
+  }
+  private nearTable(table: FloorTable): boolean {
+    return this.tableDistance(table) <= 2;
+  }
+  private walkToTable(table: FloorTable): void {
+    this.changeMode('floor');
+    this.selectTable(table);
   }
   private changeMode(mode: CasinoFloor['mode']): void {
     this.stopKeyboardWalk();
@@ -494,48 +546,46 @@ export class CasinoFloor {
   }
   private stopKeyboardWalk(): void {
     this.walkingKeys.clear();
+    if (this.walkingDirection) this.keyboardStep(Date.now());
+  }
+  private resetWalk(): void {
+    this.walkingKeys.clear();
     this.walkingDirection = undefined;
+    this.localWalk = undefined;
+    this.correction = undefined;
+    this.walkRequest += 1;
+    this.walkAwaiting = false;
   }
   private keyboardStep(now: number): void {
     const key = [...this.walkingKeys].at(-1);
     const direction = key ? WALK_DIRECTIONS[key] : undefined;
     if (!direction) {
+      if (!this.walkingDirection) return;
       this.walkingDirection = undefined;
+      this.predictWalk(now, () => []);
+      this.sendWalk(this.actions.steer({ x: 0, y: 0 }));
       return;
     }
-    if (this.stepPending || now - this.lastStep < KEYBOARD_INTERVAL_MS) return;
-    const row = this.selfRow();
-    if (!row) return;
-    const elapsed = Math.max(0, now - row.started);
-    const remaining = row.path.length * FLOOR_STEP_MS - elapsed;
-    if (direction === this.walkingDirection) {
-      if (remaining > KEYBOARD_LOOKAHEAD_MS) return;
-      const next =
-        row.path[Math.floor(elapsed / FLOOR_STEP_MS)] ?? row.path.at(-1) ?? row;
-      if (
-        !walkable(
-          { x: next.x + direction.x, y: next.y + direction.y },
+    if (direction !== this.walkingDirection) {
+      this.predictWalk(now, (from) =>
+        floorDirectionPath(
+          from,
+          direction,
           this.rows,
-        )
+          Math.max(FLOOR_COLUMNS, this.rows),
+        ),
+      );
+      this.walkingDirection = direction;
+    } else {
+      if (now - this.lastSteer < KEYBOARD_INTERVAL_MS) return;
+      if (
+        !this.self(now).walked &&
+        !position(this.selfRow(), now, this.reducedMotion).walked
       )
         return;
     }
-    this.walkingDirection = direction;
-    this.stepPending = true;
-    this.lastStep = now;
-    this.keyboardRenderUntil = now + FLOOR_STEP_MS * 3;
-    this.error = '';
-    void this.actions
-      .step(direction)
-      .catch((error: unknown) => {
-        this.stopKeyboardWalk();
-        this.error =
-          error instanceof Error ? error.message : 'Could not walk there';
-      })
-      .finally(() => {
-        this.stepPending = false;
-        this.invalidate();
-      });
+    this.lastSteer = now;
+    this.sendWalk(this.actions.steer(direction));
   }
   private async send(): Promise<void> {
     const body = this.draft.trim();
@@ -832,9 +882,7 @@ export class CasinoFloor {
     }
     for (const table of this.snapshot.tables)
       this.drawMapTable(g, table, start, end);
-    const route = this.snapshot.positions.find(
-      (row) => row.id === this.snapshot.self,
-    );
+    const route = this.localWalk ?? this.selfRow();
     if (route && self.walked && this.destination) {
       const index = Math.max(
         0,
@@ -874,8 +922,6 @@ export class CasinoFloor {
       const x = (pose.x + 0.5) * TILE,
         y = (pose.y + 0.5) * TILE;
       const me = player.id === this.snapshot.self;
-      if (me)
-        box(g, { x: x - 17, y: y - 14, w: 34, h: 32 }, '#f4d98135', ink.gold);
       avatarSprite(
         g,
         x - 16,
@@ -884,7 +930,7 @@ export class CasinoFloor {
         player.avatar,
         pose.direction,
         pose.frame,
-        (row?.chair ?? -1) >= 0,
+        ((me ? (this.localWalk ?? row) : row)?.chair ?? -1) >= 0,
       );
       if (player.speaking) {
         box(g, { x: x + 13, y: y - 36, w: 28, h: 18 }, '#143e2f', '#9cd9af');
@@ -1007,7 +1053,7 @@ export class CasinoFloor {
       136,
     );
     g.textAlign = 'left';
-    this.mapHit(x - 70, y - 78, 140, 122, () => this.selectTable(table, true));
+    this.mapHit(x - 70, y - 78, 140, 122, () => this.selectTable(table));
   }
   private drawRanks(g: CanvasRenderingContext2D): void {
     const x = this.mode === 'ranks' ? 24 : this.mapWidth + 9;
@@ -1102,7 +1148,7 @@ export class CasinoFloor {
             (value) => value.id === person.tableId,
           );
           this.changeMode('floor');
-          if (table) this.selectTable(table, true);
+          if (table) this.selectTable(table);
           else {
             this.focusPlayer = person.id;
             this.selected = '';
@@ -1165,18 +1211,32 @@ export class CasinoFloor {
         '#c8d4ba',
         width - 213,
       );
-      this.button(
-        g,
-        { x: width - 184, y: y + 10, w: 95, h: 37 },
-        table.returning ? 'Return' : table.join ? 'Sit down' : 'Details',
-        () => {
-          if (table.join || table.returning) this.actions.join(table.id);
-          else this.selectTable(table, false);
-        },
-      );
-      this.button(g, { x: width - 80, y: y + 10, w: 87, h: 37 }, 'Watch', () =>
-        this.actions.watch(table.id),
-      );
+      if (this.nearTable(table)) {
+        if (table.returning || table.join)
+          this.button(
+            g,
+            { x: width - 184, y: y + 10, w: 95, h: 37 },
+            table.returning ? 'Rejoin' : 'Sit down',
+            () => {
+              if (this.nearTable(table)) this.actions.join(table.id);
+            },
+          );
+        this.button(
+          g,
+          { x: width - 80, y: y + 10, w: 87, h: 37 },
+          'Watch',
+          () => {
+            if (this.nearTable(table)) this.actions.watch(table.id);
+          },
+        );
+      } else {
+        this.button(
+          g,
+          { x: width - 108, y: y + 10, w: 115, h: 37 },
+          'Walk over',
+          () => this.walkToTable(table),
+        );
+      }
     });
     if (this.snapshot.tables.length > 5)
       label(
@@ -1199,9 +1259,17 @@ export class CasinoFloor {
     this.button(g, { x: 214, y: 466, w: 97, h: 34 }, 'Edit avatar', () =>
       this.actions.avatar(),
     );
-    const table = this.snapshot.tables.find(
+    const selected = this.snapshot.tables.find(
       (value) => value.id === this.selected,
     );
+    const nearby =
+      this.mode === 'floor' && !this.focusPlayer && !this.reception
+        ? this.snapshot.tables
+            .filter((table) => this.nearTable(table))
+            .sort((a, b) => this.tableDistance(a) - this.tableDistance(b))[0]
+        : undefined;
+    const table =
+      selected && this.nearTable(selected) ? selected : (nearby ?? selected);
     const friend = this.snapshot.players.find(
       (player) => player.id === this.focusPlayer,
     );
@@ -1216,17 +1284,25 @@ export class CasinoFloor {
         ink.cream,
         418,
       );
-      if (table.returning || table.join)
-        this.button(
-          g,
-          { x: 753, y: 473, w: 99, h: 43 },
-          table.returning ? 'Return' : 'Sit down',
-          () => this.actions.join(table.id),
-          'gold',
+      if (!this.nearTable(table)) {
+        this.button(g, { x: 826, y: 473, w: 120, h: 43 }, 'Walk over', () =>
+          this.walkToTable(table),
         );
-      this.button(g, { x: 861, y: 473, w: 85, h: 43 }, 'Watch', () =>
-        this.actions.watch(table.id),
-      );
+      } else {
+        if (table.returning || table.join)
+          this.button(
+            g,
+            { x: 753, y: 473, w: 99, h: 43 },
+            table.returning ? 'Rejoin' : 'Sit down',
+            () => {
+              if (this.nearTable(table)) this.actions.join(table.id);
+            },
+            'gold',
+          );
+        this.button(g, { x: 861, y: 473, w: 85, h: 43 }, 'Watch', () => {
+          if (this.nearTable(table)) this.actions.watch(table.id);
+        });
+      }
     } else if (friend) {
       avatarSprite(g, 334, 463, 2, friend.avatar);
       label(g, friend.name, 379, 476, 20, ink.gold, 300);

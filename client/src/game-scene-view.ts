@@ -5,6 +5,7 @@ import {
 } from '../../src/shared/casino-avatar';
 import { localCasinoAvatar } from './casino-profile';
 import * as ex from 'excalibur';
+import { LoadingScreen } from './loading-screen';
 import {
   casinoGame,
   coinUnits,
@@ -134,6 +135,7 @@ export class GameScene extends ex.Scene {
   private linkText = canvasText('', 8, GOLD);
   private linkActor: ex.Actor | undefined;
   private active = false;
+  private readonly loading = new LoadingScreen(this);
   private waiting = false;
   private starting = false;
   private dealActors: ex.Actor[] = [];
@@ -237,6 +239,7 @@ export class GameScene extends ex.Scene {
   }
 
   open(tableId: string, lobbyMemberId: string): void {
+    this.loading.show('Loading table');
     this.applyStoredLook();
     this.tableId = tableId;
     this.lobbyMemberId = lobbyMemberId;
@@ -629,6 +632,7 @@ export class GameScene extends ex.Scene {
       this.paintSeats();
       this.readSubscribedState();
       this.tableChat.refresh();
+      this.loading.hide();
       return;
     }
     this.endSubscription();
@@ -643,6 +647,7 @@ export class GameScene extends ex.Scene {
           this.paintSeats();
           this.readSubscribedState();
           this.tableChat.refresh();
+          this.loading.hide();
         }
       })
       .onError((ctx) => {
@@ -650,7 +655,10 @@ export class GameScene extends ex.Scene {
           ctx.event instanceof Error
             ? ctx.event.message
             : 'Could not subscribe';
-        this.showError(detail);
+        if (this.subscribedTableId === tableId) {
+          this.loading.hide();
+          this.showError(detail);
+        }
       })
       .subscribe([...queries, 'SELECT * FROM my_casino_table_chat']);
     this.paintSeats();

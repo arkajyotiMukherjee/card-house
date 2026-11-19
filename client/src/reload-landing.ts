@@ -2,8 +2,7 @@
 export type ReloadLanding = 'table' | 'lobby' | 'menu';
 
 /**
- * The line on the empty table while a saved session is still resolving.
- * No saved session means the main menu, so there is no loading line.
+ * The message on the shared loading screen while a saved session resolves.
  * A stored table id is a table. A stored room with an empty table id is a room.
  */
 export function reloadLoadingLine(
