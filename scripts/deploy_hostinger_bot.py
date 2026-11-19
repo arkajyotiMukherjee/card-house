@@ -31,17 +31,21 @@ PACKAGE_FILES = ("index.js", "package.json", "package-lock.json")
 
 def target(token):
     websites = api(f"{API}/hosting/v1/websites?{urlencode({'domain': DOMAIN})}", token)
-    matches = [site for site in websites if site["domain"] == DOMAIN]
+    if not isinstance(websites, list):
+        raise DeploymentError("Hostinger did not return a website list")
+    matches = [site for site in websites if site.get("domain") == DOMAIN]
     if len(matches) != 1:
         raise DeploymentError(f"Expected one Hostinger website for {DOMAIN}")
-    username = matches[0]["username"]
-    if not re.fullmatch(r"u[0-9]+", username):
+    username = matches[0].get("username")
+    if not isinstance(username, str) or not re.fullmatch(r"u[0-9]+", username):
         raise DeploymentError("Unexpected Hostinger account username")
     builds = f"{API}/hosting/v1/accounts/{username}/websites/{DOMAIN}/nodejs/builds"
     try:
         variables = api(f"{builds}/settings/env", token)
     except DeploymentError as error:
         raise DeploymentError(f"Reading Node.js environment for {DOMAIN} failed ({error})") from None
+    if not isinstance(variables, list):
+        raise DeploymentError("Hostinger did not return a Node.js environment variable list")
     missing = REQUIRED_ENV - {variable["key"] for variable in variables}
     if missing:
         raise DeploymentError(f"Set these variables on {DOMAIN} in hPanel: {', '.join(sorted(missing))}")
@@ -135,6 +139,7 @@ if __name__ == "__main__":
     except DeploymentError as error:
         print(f"Discord bot deployment failed: {error}", file=sys.stderr)
         sys.exit(1)
-    except Exception:
-        print("Discord bot deployment failed; details withheld to protect credentials", file=sys.stderr)
+    except Exception as error:
+        print(f"Discord bot deployment failed ({type(error).__name__}); details withheld to protect credentials",
+              file=sys.stderr)
         sys.exit(1)

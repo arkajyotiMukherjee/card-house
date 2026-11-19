@@ -59,7 +59,7 @@ def api(path, token, payload=None):
         expected=(200, 201, 202, 204),
     )
     result = json.loads(raw) if raw else {}
-    return result.get("data", result)
+    return result.get("data", result) if isinstance(result, dict) else result
 
 
 def upload(archive, credentials, remote_name):

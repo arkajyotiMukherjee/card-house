@@ -11,6 +11,10 @@ import deploy_hostinger as deploy
 
 
 class UploadTests(unittest.TestCase):
+    def test_api_can_read_unwrapped_hostinger_lists(self):
+        with patch.object(deploy, "request", return_value=(b'[{"key":"DISCORD_PUBLIC_KEY"}]', {})):
+            self.assertEqual(deploy.api("https://api.example.test", "token"), [{"key": "DISCORD_PUBLIC_KEY"}])
+
     def test_identifies_application_instead_of_blocked_python_client(self):
         response = unittest.mock.MagicMock()
         response.__enter__.return_value.status = 200
