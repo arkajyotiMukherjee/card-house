@@ -1,3 +1,4 @@
+import { gameAudio } from './game-audio';
 import { anchorTableActor, tableGutter } from './table-viewport';
 import { bindButtonPress } from './button-press';
 import { isMobileDevice } from './mobile-shell';
@@ -336,6 +337,7 @@ export class RummyDriver implements GameDriver<RummyState> {
       return;
     }
     if (event.type === 'pointerup') {
+      gameAudio.play('lift');
       if (this.selected.has(event.target)) {
         this.selected.delete(event.target);
       } else {

@@ -1,5 +1,6 @@
 import * as ex from 'excalibur';
 import { bindButtonPress } from './button-press';
+import { gameAudio } from './game-audio';
 import {
   BUTTON_HEIGHT,
   BUTTON_PRESS_SHIFT,
@@ -99,8 +100,10 @@ export class HowToPlayOverlay {
 
   toggle(): void {
     if (this.opened) {
+      gameAudio.play('back');
       this.close();
-    } else {
+    } else if (definitionFor(this.gameType)) {
+      gameAudio.play('button');
       this.open();
     }
   }
@@ -333,7 +336,10 @@ export class HowToPlayOverlay {
         face.color = BUTTON;
         caption.pos = ex.vec(rest.x, rest.y);
       },
-      () => press(),
+      () => {
+        gameAudio.play(label === 'Close' ? 'back' : 'button');
+        press();
+      },
     );
     return actor;
   }

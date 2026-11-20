@@ -6,6 +6,10 @@ import {
 } from './casino-profile';
 import type { DbConnection } from './module_bindings';
 import { coinDialog } from './coin-dialog';
+import { audioSettingsOpen, openAudioSettings } from './audio-settings';
+import { gameAudio } from './game-audio';
+import { bindButtonPress } from './button-press';
+import { MENU_TRACK, MUSIC_ARTIST, openMusicCredit } from './game-music';
 import * as ex from 'excalibur';
 import { LoadingScreen } from './loading-screen';
 import { isMobileDevice } from './mobile-shell';
@@ -320,7 +324,11 @@ export class MenuScene extends ex.Scene {
     this.buildFooter();
     this.bindMenuFields();
     engine.input.keyboard.on('press', (evt) => {
-      if (engine.currentScene !== this || casinoAvatarEditorOpen(this)) {
+      if (
+        engine.currentScene !== this ||
+        casinoAvatarEditorOpen(this) ||
+        audioSettingsOpen(this)
+      ) {
         return;
       }
       if (eventTargetsHtmlField(evt.originalEvent)) {
@@ -335,9 +343,11 @@ export class MenuScene extends ex.Scene {
 
   onActivate(): void {
     this.closeOverlay();
+    gameAudio.select('menu', MENU_TRACK.file);
   }
 
   onDeactivate(): void {
+    gameAudio.stop('menu');
     this.loading.hide();
     this.closeOverlay();
   }
@@ -390,7 +400,35 @@ export class MenuScene extends ex.Scene {
       44,
       'Avatar',
       14,
-      () => openCasinoAvatarEditor(this, this.casinoConnection),
+      () => {
+        if (
+          this.mode !== 'main' ||
+          casinoAvatarEditorOpen(this) ||
+          audioSettingsOpen(this)
+        )
+          return;
+        gameAudio.play('button');
+        openCasinoAvatarEditor(this, this.casinoConnection);
+      },
+      10,
+    );
+    this.button(
+      781,
+      74,
+      156,
+      44,
+      'Settings',
+      13,
+      () => {
+        if (
+          this.mode === 'main' &&
+          !casinoAvatarEditorOpen(this) &&
+          !audioSettingsOpen(this)
+        ) {
+          gameAudio.play('button');
+          openAudioSettings(this);
+        }
+      },
       10,
     );
     for (const spec of MENU_BUTTONS) {
@@ -410,6 +448,45 @@ export class MenuScene extends ex.Scene {
   }
 
   private buildFooter(): void {
+    const track = new ex.Actor({
+      pos: ex.vec(20, 484),
+      anchor: ex.vec(0, 0),
+      z: 10,
+    });
+    track.graphics.use(uiText(MENU_TRACK.title, 16, GOLD));
+    this.add(track);
+    const credit = new ex.Actor({
+      pos: ex.vec(20, 505),
+      anchor: ex.vec(0, 0),
+      width: 118,
+      height: 27,
+      z: 10,
+    });
+    const artist = uiText(MUSIC_ARTIST, 16, DIM);
+    credit.graphics.use(artist);
+    const underline = new ex.Actor({
+      pos: ex.vec(0, 18),
+      anchor: ex.vec(0, 0),
+    });
+    const line = new ex.Rectangle({
+      width: Math.ceil(artist.width),
+      height: 1,
+      color: DIM,
+    });
+    line.origin = ex.vec(0, 0);
+    underline.graphics.use(line);
+    credit.addChild(underline);
+    bindButtonPress(credit, undefined, undefined, () => {
+      if (
+        this.mode === 'main' &&
+        !casinoAvatarEditorOpen(this) &&
+        !audioSettingsOpen(this)
+      ) {
+        gameAudio.play('button');
+        openMusicCredit();
+      }
+    });
+    this.add(credit);
     const winningsLine = this.winningsText.text;
     const winningsWidth = winningsLine.length * 8;
     this.winningsActor = new ex.Actor({
@@ -442,6 +519,7 @@ export class MenuScene extends ex.Scene {
     if (!menuAcceptsAction(this.mode, this.clickClaimedByOverlay)) {
       return;
     }
+    gameAudio.play('button');
     if (action === 'howto') {
       this.openHowToPlay();
       return;
@@ -548,7 +626,10 @@ export class MenuScene extends ex.Scene {
     );
     if (this.mode !== 'create') return;
     this.closeOverlay();
-    if (grant) this.onEntered();
+    if (grant) {
+      gameAudio.play('door');
+      this.onEntered();
+    }
   }
 
   private openJoinPrompt(code = '', inviteName = ''): void {
@@ -744,10 +825,12 @@ export class MenuScene extends ex.Scene {
       return;
     }
     this.closeOverlay();
+    gameAudio.play('door');
     this.onEntered();
   }
 
   private setError(message: string, color: ex.Color = DANGER): void {
+    if (message && color === DANGER) gameAudio.play('blocked');
     if (this.errorText) {
       this.errorText.text = message;
       this.errorText.color = color;
@@ -1307,13 +1390,16 @@ export class MenuScene extends ex.Scene {
       return;
     }
     if (key === ex.Keys.Escape) {
+      gameAudio.play('back');
       this.closeOverlay();
       return;
     }
     if (this.mode === 'howto') {
       if (key === ex.Keys.ArrowUp) {
+        gameAudio.play('selector');
         this.selectGame(stepIndex(this.gameIndex, -1, GAME_CATALOG.length));
       } else if (key === ex.Keys.ArrowDown) {
+        gameAudio.play('selector');
         this.selectGame(stepIndex(this.gameIndex, 1, GAME_CATALOG.length));
       }
       return;
@@ -1467,21 +1553,25 @@ export class MenuScene extends ex.Scene {
       face.color = BUTTON;
       captionActor.pos = ex.vec(rest.x, rest.y);
     });
-    actor.on('pointerdown', (event) => {
-      if (claim) {
-        this.claimOverlayClick(event);
-      }
-      face.color = BUTTON_DOWN;
-      captionActor.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
-    });
-    actor.on('pointerup', (event) => {
-      if (claim) {
-        this.claimOverlayClick(event);
-      }
-      face.color = BUTTON;
-      captionActor.pos = ex.vec(rest.x, rest.y);
-      onPress();
-    });
+    bindButtonPress(
+      actor,
+      (event) => {
+        if (claim) this.claimOverlayClick(event);
+        face.color = BUTTON_DOWN;
+        captionActor.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
+      },
+      () => {
+        face.color = BUTTON;
+        captionActor.pos = ex.vec(rest.x, rest.y);
+      },
+      (event) => {
+        if (claim) this.claimOverlayClick(event);
+        if (caption === '<' || caption === '>') gameAudio.play('selector');
+        if (caption === 'Cancel' || caption === 'Close' || caption === 'Back')
+          gameAudio.play('back');
+        onPress();
+      },
+    );
     this.add(actor);
     return actor;
   }

@@ -73,6 +73,19 @@ export function formatCoins(units: bigint): string {
 export function casinoGame(gameType: string): boolean {
   return gameType === 'poker' || gameType === 'blackjack';
 }
+export function roomRefillLimit(
+  startingCoins: number,
+  tables: readonly { gameType: string; economyJson: string }[],
+): bigint {
+  const costs = tables.flatMap(({ gameType, economyJson }) => {
+    if (!economyJson) return [];
+    const settings = JSON.parse(economyJson) as TableEconomy;
+    return casinoGame(gameType) ? settings.minBuyIn : settings.entryFee;
+  });
+  return coinUnits(
+    Math.min(startingCoins, costs.length ? Math.min(...costs) : 20),
+  );
+}
 export function splitPool(
   pool: bigint,
   winners: readonly number[],

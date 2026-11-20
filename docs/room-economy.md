@@ -4,7 +4,7 @@ Each multiplayer room has one wallet per browser identity. The creator chooses a
 
 The lobby defaults to a leaderboard beside the table browser. Rankings use settled net winnings, with equal profits sharing a rank. Available chips and table commitments are shown separately; total chips include both. Initial grants and refills never count as winnings. The floor footer shows your room net winnings. The list scrolls with the mouse wheel, scrollbar, or a touch swipe. A pixel crown follows the single positive-profit leader’s name; zero-profit initial ties and tied leaders have no crown. Chat is closed initially and opens from its button, with an unread indicator for new messages.
 
-A player who cannot afford the cheapest payable table and has no committed funds can refill to the room's original grant. With no payable tables, the threshold is 20 chips. Every refill is tracked and excluded from profit.
+A player at reception who cannot afford the cheapest payable table and has no committed funds can refill to the room's original grant. With no payable tables, the threshold is 20 chips. Every refill is tracked and excluded from profit.
 
 **Lifetime winnings** on the main menu sum the positive chips earned after stakes on settled multiplayer results. Solo practice, payouts that only return the stake, and transfers do not count. Losses affect the room's net ranking and leave the lifetime winnings total unchanged. The total uses the signed-in SpacetimeDB identity and survives room cleanup. Past results count when their ledger entries still exist. Previously purged rooms have no settlement history to recover.
 
@@ -28,7 +28,7 @@ Disconnecting during the top-up pause preserves the seat for the normal 30-secon
 
 Poker defaults to 10/20 blinds and a 400–2,000 buy-in range. Hold'em remains no-limit; Omaha and Oklahoma remain pot-limit. Table blind settings persist between hands. All-in runouts, side pots, and unmatched refunds apply before wallet settlement.
 
-Blackjack defaults to 10–50 wagers and a 200 minimum buy-in. The dealer has an unlimited hidden bankroll. Player losses go to the house; winnings come from the house, so Blackjack is intentionally not zero-sum among room players. Main wagers use whole chips and all accounting uses integer half-chips, including 3:2 naturals and surrender.
+Blackjack defaults to 10–50 wagers and a 200 minimum buy-in. Leaving before placing a wager returns the full buy-in and leaves net winnings unchanged. Only resolved wagers enter the settlement. The dealer has an unlimited hidden bankroll. Player losses go to the house; winnings come from the house, so Blackjack is intentionally not zero-sum among room players. Main wagers use whole chips and all accounting uses integer half-chips, including 3:2 naturals and surrender.
 
 Blackjack uses six decks, a 75% cut, a US hole-card check, and stands on soft 17. Insurance pays 2:1; a natural can take even money against an ace. Late surrender is available on an initial unsplit hand after the check. Equal-value cards can split into at most four hands. Doubling is allowed on eligible two-card hands, including after splits. Split aces receive one card and cannot be doubled or resplit. Split-hand 21 pays even money. A ten-second review pause separates casino hands.
 

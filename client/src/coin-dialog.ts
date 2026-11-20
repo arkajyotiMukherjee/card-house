@@ -15,6 +15,7 @@ import {
   type CanvasTextFieldHandle,
 } from './html-field';
 import { bindButtonPress } from './button-press';
+import { gameAudio } from './game-audio';
 import { classicText } from './classic-table-design';
 import { uiCaption, uiFieldLabel, uiSingleLine, uiText } from './ui-text';
 import { coinSetting } from '../../src/shared/economy';
@@ -169,6 +170,7 @@ export function coinDialog(
       bindButtonPress(actor, undefined, undefined, () => {
         index = (index + 1) % choice.values.length;
         paintChoice();
+        gameAudio.play('selector');
         choice.onChange(index);
       });
       add(actor);
@@ -208,6 +210,7 @@ export function coinDialog(
       } catch (reason) {
         const message =
           reason instanceof Error ? reason.message : 'Invalid chips';
+        if (open) gameAudio.play('blocked');
         error.text = message;
       } finally {
         if (open && submitting) {
@@ -217,7 +220,10 @@ export function coinDialog(
       }
     };
     const cancel = (): void => {
-      if (!submitting) finish(null);
+      if (!submitting) {
+        gameAudio.play('back');
+        finish(null);
+      }
     };
     const deactivate = (): void => finish(null);
     const key = (event: KeyboardEvent): void => {

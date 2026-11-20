@@ -9,6 +9,7 @@ import {
   floorPath,
   floorRows,
   floorRowsAt,
+  floorServiceAt,
   floorStepAllowed,
   nextFloorSlot,
   redirectFloorWalk,
@@ -24,6 +25,7 @@ import {
   coinSetting,
   coinUnits,
   DEFAULT_ROOM_GRANT,
+  roomRefillLimit,
   splitPool,
   tableEconomy,
   type TableEconomy,
@@ -4213,12 +4215,18 @@ function settleEconomy(ctx: ModuleCtx, tableId: string, after: unknown): void {
   const casino = casinoGame(table.gameType);
   if (casino) {
     const state = after as unknown as {
-      seats: Record<string, { chips: number }>;
+      seats: Record<
+        string,
+        { chips: number; bet?: number; results?: unknown[] }
+      >;
     };
     for (const funding of fundings) {
-      const chips = state.seats[String(funding.seatIndex)]?.chips;
-      if (chips === undefined) continue; // A newcomer is waiting for the next hand.
-      const units = coinUnits(chips);
+      const seat = state.seats[String(funding.seatIndex)];
+      if (!seat) continue; // A newcomer is waiting for the next hand.
+      // A balance on a seat without a resolved wager is still just a buy-in.
+      if (table.gameType === 'blackjack' && !(seat.bet && seat.results?.length))
+        continue;
+      const units = coinUnits(seat.chips);
       const profit = units - funding.units;
       walletChange(
         ctx,
@@ -4323,6 +4331,7 @@ function settleEconomy(ctx: ModuleCtx, tableId: string, after: unknown): void {
     )
       ctx.db.GameTable.id.update({ ...table, status: { tag: 'in_progress' } });
   }
+  if (table.gameType === 'blackjack' && !summary.length) return;
   ctx.db.GameSettlement.insert({
     id,
     lobbyId: table.lobbyId,
@@ -4378,15 +4387,21 @@ export const refill_room_coins = spacetimedb.reducer(
       throw new SenderError('Room not found');
     if ([...ctx.db.TableFunding.iter()].some((row) => row.walletId === id))
       throw new SenderError('Cash out or finish your current game first');
-    const costs = [...ctx.db.GameTable.byLobby.filter(lobbyId)]
-      .filter((row) => row.economyJson && row.status.tag !== 'finished')
-      .map((row) => {
-        const settings = JSON.parse(row.economyJson) as TableEconomy;
-        return casinoGame(row.gameType) ? settings.minBuyIn : settings.entryFee;
-      });
-    const threshold = coinUnits(costs.length ? Math.min(...costs) : 20);
-    const grant = coinUnits(lobby.startingCoins);
-    if (wallet.available >= threshold || wallet.available >= grant)
+    const { member, session } = casinoMember(ctx, lobbyId);
+    const presence = ctx.db.CasinoPresence.id.find(id);
+    if (
+      member.id !== id ||
+      session?.tableId ||
+      !presence ||
+      floorServiceAt(
+        casinoCurrentPoint(presence, ctx.timestamp.microsSinceUnixEpoch),
+      ) !== 'reception'
+    )
+      throw new SenderError('Visit reception to refill your chips');
+    const activeTables = [...ctx.db.GameTable.byLobby.filter(lobbyId)].filter(
+      (row) => row.status.tag !== 'finished',
+    );
+    if (wallet.available >= roomRefillLimit(lobby.startingCoins, activeTables))
       throw new SenderError(
         'Refill is only available when you cannot afford a table',
       );
@@ -4396,7 +4411,7 @@ export const refill_room_coins = spacetimedb.reducer(
       `refill:${id}:${ctx.timestamp.microsSinceUnixEpoch}`,
       '',
       'refill',
-      grant - wallet.available,
+      coinUnits(lobby.startingCoins) - wallet.available,
     );
     noteLobbyActivity(ctx, lobbyId);
   },

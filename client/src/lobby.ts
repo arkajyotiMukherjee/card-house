@@ -185,7 +185,6 @@ export const CHAT_PANEL = {
   send: { x: 876, y: 448, w: 64, h: PHONE_LAYOUT ? 44 : BUTTON_HEIGHT },
 } as const;
 
-export const REFILL_CHIPS_BUTTON = { x: 20, y: 346, w: 160, h: 30 } as const;
 export const WALLET_SUMMARY = { y: 132, rowHeight: 26 } as const;
 export const CHAT_TOGGLE = {
   x: 656,

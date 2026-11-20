@@ -1,3 +1,4 @@
+import { gameAudio } from './game-audio';
 import { anchorTableActor } from './table-viewport';
 import { bindButtonPress } from './button-press';
 import { isMobileDevice } from './mobile-shell';
@@ -350,6 +351,7 @@ export class BluffDriver implements GameDriver<BluffState> {
     }
     if (event.type === 'pointerup') {
       const previous = [...this.selected];
+      gameAudio.play('lift');
       if (this.selected.has(event.target)) {
         this.selected.delete(event.target);
       } else {

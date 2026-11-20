@@ -69,6 +69,14 @@ import {
 import { coinDialog, coinDialogOpen } from './coin-dialog';
 import { CrazyEightsDriver } from './crazy-eights-driver';
 import { eventMessage, readStoredEvent } from './event-messages';
+import { gameAudio } from './game-audio';
+import type { SfxCue } from './sfx-cues';
+import {
+  actionSounds,
+  readAudibleState,
+  settlementSound,
+  unfundedResultSound,
+} from './table-sfx';
 import type { GameDriver, RenderContext } from './game-driver';
 import {
   COUNTER_BUTTON,
@@ -173,6 +181,10 @@ export class GameScene extends ex.Scene {
   private strip: ex.Actor | null = null;
   private eventsLive = false;
   private readonly shownEvents = new Set<string>();
+  private readonly heardSettlements = new Set<string>();
+  private soundQueue: { cue: SfxCue; time: number }[] = [];
+  private countdownSound = '';
+  private reviewSoundDeadline?: number;
   private countText!: ex.Text;
   private countValue!: ex.Actor;
   private counterPlate!: ex.Actor;
@@ -240,6 +252,9 @@ export class GameScene extends ex.Scene {
     this.leaving = false;
     this.reviewText.text = '';
     this.economySecond = -1;
+    this.countdownSound = '';
+    this.reviewSoundDeadline = undefined;
+    this.soundQueue = [];
     this.lastRow = null;
     this.waiting = false;
     this.starting = false;
@@ -376,6 +391,7 @@ export class GameScene extends ex.Scene {
 
   onDeactivate(): void {
     this.active = false;
+    this.soundQueue = [];
     this.waiting = false;
     this.clearOpeningDeal();
     this.input.keyboard.off('press', this.onKeyPress);
@@ -388,8 +404,24 @@ export class GameScene extends ex.Scene {
 
   onPreUpdate(): void {
     this.placeTablePresentation();
-    const second = Math.floor(Date.now() / 1000);
-    if (second === this.economySecond || !this.active) return;
+    if (this.soundQueue.length) {
+      const now = performance.now();
+      this.soundQueue = this.soundQueue.filter(({ cue, time }) => {
+        if (time > now) return true;
+        if (now - time < 180) gameAudio.play(cue);
+        return false;
+      });
+    }
+    if (!this.active) return;
+    const now = Date.now();
+    const startsAt = this.lastRow?.startsAt;
+    const deadline =
+      this.reviewSoundDeadline ??
+      (startsAt === undefined ? undefined : Number(startsAt / 1000n));
+    if (deadline !== undefined)
+      this.tickCountdown(deadline, Math.ceil((deadline - now) / 1000));
+    const second = Math.floor(now / 1000);
+    if (second === this.economySecond) return;
     this.economySecond = second;
     if (this.lastRow?.waiting) this.readSubscribedState();
     const table = [...this.connection.db.gameTable.iter()].find(
@@ -447,6 +479,7 @@ export class GameScene extends ex.Scene {
         (table.lastActivityAt ?? table.createdAt).microsSinceUnixEpoch,
       );
     if (!table || deadline === undefined) {
+      this.reviewSoundDeadline = undefined;
       this.reviewText.text = '';
       return;
     }
@@ -454,6 +487,7 @@ export class GameScene extends ex.Scene {
       TABLE_RESULT_REVIEW_SECONDS,
       Math.ceil((Number(deadline / 1000n) - Date.now()) / 1000),
     );
+    this.reviewSoundDeadline = Number(deadline / 1000n);
     const solo = [...this.connection.db.lobby.iter()].some(
       (lobby) => lobby.id === table.lobbyId && lobby.solo,
     );
@@ -465,11 +499,32 @@ export class GameScene extends ex.Scene {
     if (seconds > 0) return;
     const belongsHere = (row: { tableId: string; lobbyMemberId: string }) =>
       row.tableId === this.tableId && row.lobbyMemberId === this.lobbyMemberId;
+    const hasPlace =
+      [...this.connection.db.gameSeat.iter()].some(belongsHere) ||
+      [...this.connection.db.spectator.iter()].some(belongsHere);
+    if (hasPlace) this.requestLeave();
+    else this.returnFromTable();
+  }
+
+  private tickCountdown(deadline: number, seconds: number): void {
+    const key = `${deadline}:${seconds}`;
     if (
-      ![...this.connection.db.gameSeat.iter()].some(belongsHere) &&
-      ![...this.connection.db.spectator.iter()].some(belongsHere)
+      !this.eventsLive ||
+      seconds < 1 ||
+      seconds > 3 ||
+      key === this.countdownSound
     )
-      this.returnFromTable();
+      return;
+    this.countdownSound = key;
+    gameAudio.play('clock_tick');
+  }
+
+  private queueSounds(cues: readonly SfxCue[], spacing = 110, delay = 0): void {
+    const now = performance.now() + delay;
+    cues.forEach((cue, index) => {
+      if (!delay && index === 0) gameAudio.play(cue);
+      else this.soundQueue.push({ cue, time: now + index * spacing });
+    });
   }
 
   private placeTablePresentation(): void {
@@ -551,12 +606,14 @@ export class GameScene extends ex.Scene {
       ],
       'Add chips',
     );
-    if (!selected) return;
+    if (!selected || this.tableId !== table.id) return;
     try {
       await this.connection.reducers.topUpTable({
-        tableId: this.tableId,
+        tableId: table.id,
         amount: selected.amount,
       });
+      if (this.active && this.tableId === table.id)
+        gameAudio.play('chip_stack');
     } catch (error) {
       this.showError(
         error instanceof Error ? error.message : 'Could not top up',
@@ -568,7 +625,8 @@ export class GameScene extends ex.Scene {
     if (this.tableChat.handleKey(event)) {
       return;
     }
-    if (event.key === ex.Keys.Escape) {
+    if (event.key === ex.Keys.Escape && this.howToPlay.isOpen) {
+      gameAudio.play('back');
       this.howToPlay.close();
     }
   };
@@ -578,7 +636,21 @@ export class GameScene extends ex.Scene {
   };
 
   private watchRows(): void {
-    this.connection.db.gameSettlement.onInsert(() => this.paintSeats());
+    this.connection.db.gameSettlement.onInsert((ctx, row) => {
+      this.paintSeats();
+      if (
+        ctx.event.tag === 'SubscribeApplied' ||
+        !this.active ||
+        !this.eventsLive ||
+        row.tableId !== this.tableId ||
+        this.heardSettlements.has(row.id)
+      )
+        return;
+      this.heardSettlements.add(row.id);
+      const cue = settlementSound(row.summaryJson, this.lobbyMemberId);
+      if (cue === 'chip_stack') gameAudio.play(cue);
+      else if (cue) gameAudio.result(cue);
+    });
     this.connection.db.gameSeat.onInsert(() => {
       this.paintSeats();
     });
@@ -641,22 +713,43 @@ export class GameScene extends ex.Scene {
       )
         this.paintGame();
     });
-    this.connection.db.myCasinoTableChat.onInsert(() =>
-      this.tableChat.refresh(),
-    );
+    this.connection.db.myCasinoTableChat.onInsert((ctx) => {
+      this.tableChat.refresh();
+      if (
+        ctx.event.tag !== 'SubscribeApplied' &&
+        this.active &&
+        this.eventsLive
+      )
+        gameAudio.play('message');
+    });
     this.connection.db.myCasinoTableChat.onUpdate(() =>
       this.tableChat.refresh(),
     );
     this.connection.db.myCasinoTableChat.onDelete(() =>
       this.tableChat.refresh(),
     );
-    this.connection.db.tableChatMessage.onInsert(() => {
+    this.connection.db.tableChatMessage.onInsert((ctx, row) => {
       this.tableChat.refresh();
+      if (
+        ctx.event.tag !== 'SubscribeApplied' &&
+        this.active &&
+        this.eventsLive &&
+        row.tableId === this.tableId
+      )
+        gameAudio.play('message');
     });
     this.connection.db.gameTable.onInsert((_ctx, row) => {
       this.applySubscribedState(row);
     });
-    this.connection.db.gameTable.onUpdate((_ctx, _old, row) => {
+    this.connection.db.gameTable.onUpdate((ctx, old, row) => {
+      if (
+        ctx.event.tag !== 'SubscribeApplied' &&
+        this.active &&
+        this.eventsLive &&
+        row.id === this.tableId &&
+        old.stateJson !== row.stateJson
+      )
+        this.playTableUpdate(row, old.stateJson);
       this.applySubscribedState(row);
     });
     this.connection.db.gameTable.onDelete((_ctx, row) => {
@@ -913,6 +1006,7 @@ export class GameScene extends ex.Scene {
         intentPayload,
       })
       .catch((error: unknown) => {
+        if (!this.active || this.tableId !== tableId) return;
         const message =
           error instanceof Error ? error.message : 'Intent rejected';
         const driver = this.driverFor(this.lastRow?.gameType);
@@ -929,8 +1023,14 @@ export class GameScene extends ex.Scene {
     id: string;
     tableId: string;
     payloadJson: string;
+    type: string;
   }): void {
-    if (!this.ready || !this.eventsLive || row.tableId !== this.tableId) {
+    if (
+      !this.ready ||
+      !this.active ||
+      !this.eventsLive ||
+      row.tableId !== this.tableId
+    ) {
       return;
     }
     if (this.shownEvents.has(row.id)) {
@@ -946,8 +1046,10 @@ export class GameScene extends ex.Scene {
       names.set(seat.seatIndex, seat.name);
     }
     const viewer = this.placed.find((seat) => seat.self)?.seatIndex ?? null;
+    const game = this.gameTypeOfTable();
+    this.queueSounds(actionSounds(game, stored.note, row.type));
     const message = eventMessage(
-      this.gameTypeOfTable(),
+      game,
       stored.note,
       (seatIndex) => names.get(seatIndex) ?? `Seat ${seatIndex + 1}`,
       viewer,
@@ -972,6 +1074,7 @@ export class GameScene extends ex.Scene {
   /** Keep the latest accepted action visible; only warnings fade away. */
   private showStrip(message: string, warning: boolean): void {
     this.clearStrip();
+    if (warning && this.active) gameAudio.play('blocked');
     const gameType = this.gameTypeOfTable();
     const classic = isClassicGame(gameType);
     if (classic && !warning) {
@@ -1047,6 +1150,70 @@ export class GameScene extends ex.Scene {
     this.strip = null;
   }
 
+  private playTableUpdate(
+    row: { gameType: string; stateJson: string; economyJson: string },
+    previousJson: string,
+  ): void {
+    const before = readAudibleState(previousJson);
+    const after = readAudibleState(row.stateJson);
+    if (!before || !after) return;
+    const opening =
+      before.phase === 'lobby' &&
+      (after.phase === 'pass' || after.phase === 'play');
+    const newHand =
+      (after.handNumber !== undefined &&
+        after.handNumber !== before.handNumber) ||
+      (after.handIndex !== undefined && after.handIndex !== before.handIndex);
+    const seat = this.placed.find((entry) => entry.self)?.seatIndex;
+    const ownTurn =
+      seat !== undefined &&
+      after.turnSeatIndex === seat &&
+      (before.turnSeatIndex !== seat ||
+        before.step !== after.step ||
+        before.stage !== after.stage);
+    if (opening || newHand) {
+      gameAudio.play('shuffle');
+      if (
+        !opening ||
+        !this.waiting ||
+        !this.placed.length ||
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      )
+        this.queueSounds(['deal', 'deal', 'deal', 'turn'], 115, 270);
+      return;
+    }
+    const boardAdded = (after.board?.length ?? 0) - (before.board?.length ?? 0);
+    const dealerAdded =
+      (after.dealer?.length ?? 0) - (before.dealer?.length ?? 0);
+    const dealCount = Math.min(5, Math.max(boardAdded, dealerAdded));
+    if (dealCount > 0)
+      this.queueSounds(Array<SfxCue>(dealCount).fill('deal'), 85);
+    if (before.holeHidden && after.holeHidden === false) gameAudio.play('flip');
+    if (
+      row.gameType === 'poker' &&
+      before.step !== 'runout' &&
+      (after.step === 'runout' ||
+        (after.end === 'showdown' && before.end !== 'showdown'))
+    )
+      gameAudio.play('flip');
+    const books = (state: typeof before) =>
+      Object.values(state.books ?? {}).reduce(
+        (count, rows) => count + rows.length,
+        0,
+      );
+    if (row.gameType === 'go_fish' && books(after) > books(before))
+      this.queueSounds(['gather'], 110, 160);
+    if (ownTurn) this.queueSounds(['turn'], 110, dealCount * 85 + 50);
+    if (
+      !row.economyJson &&
+      before.phase !== 'finished' &&
+      after.phase === 'finished'
+    ) {
+      const result = unfundedResultSound(row.gameType, before, after, seat);
+      if (result) gameAudio.result(result);
+    }
+  }
+
   private applySubscribedState(row: {
     id: string;
     gameType: string;
@@ -1100,6 +1267,11 @@ export class GameScene extends ex.Scene {
       });
   }
 
+  soundSoloDeal(): void {
+    gameAudio.play('shuffle');
+    this.queueSounds(['deal', 'deal', 'deal', 'turn'], 115, 270);
+  }
+
   private clearOpeningDeal(): void {
     for (const actor of this.dealActors) actor.kill();
     this.dealActors = [];
@@ -1131,6 +1303,7 @@ export class GameScene extends ex.Scene {
     }
     this.dealActors = cards;
     let elapsed = 0;
+    let landed = 0;
     const stagger = Math.min(70, 520 / cards.length);
     cards[0].on('postupdate', (event) => {
       elapsed += event.elapsed;
@@ -1147,7 +1320,16 @@ export class GameScene extends ex.Scene {
           origin.y + (seat.y - origin.y) * eased,
         );
       }
+      const arrivals = Math.min(
+        cards.length,
+        Math.floor((elapsed - 250) / stagger) + 1,
+      );
+      if (arrivals > landed) {
+        landed = arrivals;
+        gameAudio.play('deal');
+      }
       if (elapsed >= (cards.length - 1) * stagger + 250) {
+        this.queueSounds(['turn'], 110, 100);
         this.clearOpeningDeal();
         this.paintGame();
       }
@@ -1770,21 +1952,38 @@ export class GameScene extends ex.Scene {
 
   private leave(fromWaiting = false): void {
     if (
-      this.leaving ||
       coinDialogOpen(this) ||
       this.howToPlay.isOpen ||
-      (this.tableChat.isOpen && !fromWaiting) ||
-      this.tableId.length === 0
+      (this.tableChat.isOpen && !fromWaiting)
     ) {
       return;
     }
+    this.requestLeave(fromWaiting);
+  }
+
+  private requestLeave(fromWaiting = false): void {
+    if (this.leaving || this.tableId.length === 0) return;
     this.leaving = true;
     const tableId = this.tableId;
     const lobbyMemberId = this.lobbyMemberId;
+    const cashGame = casinoGame(this.gameTypeOfTable());
+    const hadChips =
+      cashGame &&
+      [...this.connection.db.tableFunding.iter()].some(
+        (row) =>
+          row.tableId === tableId &&
+          row.walletId === lobbyMemberId &&
+          row.units > 0n,
+      );
     void this.connection.reducers
       .leaveTable({ tableId, lobbyMemberId })
       .then(() => {
-        if (this.tableId === tableId) this.returnFromTable();
+        if (this.tableId !== tableId) return;
+        const fundsRetained = [...this.connection.db.tableFunding.iter()].some(
+          (row) => row.tableId === tableId && row.walletId === lobbyMemberId,
+        );
+        if (hadChips && !fundsRetained) gameAudio.play('chip_stack');
+        this.returnFromTable();
       })
       .catch((error: unknown) => {
         if (this.tableId !== tableId) return;
@@ -1803,6 +2002,8 @@ export class GameScene extends ex.Scene {
   private returnFromTable(): void {
     if (!this.active || !this.tableId) return;
     this.tableId = '';
+    this.soundQueue = [];
+    gameAudio.play('chair');
     this.onLeft();
   }
 

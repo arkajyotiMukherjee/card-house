@@ -6,39 +6,51 @@ import {
 import {
   FLOOR_COLUMNS,
   FLOOR_STEP_MS,
+  JUKEBOX,
   LOBBY_ROWS,
   LOUNGE_CHAIRS,
   RECEPTION,
   SPAWN,
+  TABLE_APPROACH_RANGE,
   WING_ROWS,
   floorDirectionPath,
   floorPath,
   floorRows,
   floorRowsAt,
+  floorServiceAt,
   floorTable,
   redirectFloorWalk,
+  tableApproachDistance,
   tableEntrance,
   walkable,
   type FloorPoint,
 } from '../../src/shared/casino-floor';
 import {
   avatarSprite,
-  casinoChair,
   CASINO_PALETTE as ink,
-  floorPlant,
-  casinoRug,
-  suitStatue,
-  woodPanel,
   type Direction,
 } from './casino-art';
+import { CasinoJukebox, drawVinylRecord } from './casino-jukebox';
+import { audioSettingsOpen, openAudioSettings } from './audio-settings';
+import { gameAudio } from './game-audio';
+import type { SfxCue } from './sfx-cues';
+import { CASINO_RECORDS, MUSIC_ARTIST, openMusicCredit } from './game-music';
 import {
   drawWalnutChair,
   drawWalnutJukebox,
   drawWalnutLobby,
+  drawWalnutRug,
+  drawWalnutWingDecor,
   JUKEBOX_BASE_Y,
 } from './walnut-lobby-art';
 import { bindCanvasTextField, refreshCanvasTextFields } from './html-field';
 import { isMobileDevice } from './mobile-shell';
+import {
+  FLOOR_TABLE_PLAQUE,
+  FLOOR_TABLE_SURFACE,
+  floorTableChairBounds,
+  floorTableChairs,
+} from './floor-table-layout';
 
 const TILE = 24;
 const W = 960,
@@ -124,6 +136,7 @@ export interface FloorSnapshot {
   code: string;
   self: string;
   chips: string;
+  refill: 'available' | 'funded' | 'committed' | 'unavailable';
   roomNet: string;
   players: FloorPerson[];
   positions: FloorPosition[];
@@ -152,7 +165,7 @@ interface Actions {
   join(id: string): void;
   watch(id: string): void;
   leave(): void;
-  refill(): void;
+  refill(): Promise<void>;
   avatar(): void;
   send(body: string): Promise<void>;
   readChat(): void;
@@ -239,14 +252,26 @@ export class CasinoFloor {
   private selected = '';
   private destination?: FloorPoint;
   private seatTarget = -1;
-  private reception = false;
+  private jukebox = new CasinoJukebox();
+  private musicActive = false;
+  private footfall = -1;
+  private atReception = false;
+  private chair = -1;
+  private rankStamp?: string;
+  private refilling = false;
   private focusPlayer = '';
   private mode: 'floor' | 'tables' | 'ranks' | 'chat' = 'floor';
   private rankOffset = 0;
   private tableOffset = 0;
   private chatOffset = 0;
   private chatLayout?: { key: string; lines: FloorChat[] };
-  private scrollDrag?: { x: number; y: number; last: number; dragged: boolean };
+  private scrollDrag?: {
+    x: number;
+    y: number;
+    last: number;
+    dragged: boolean;
+    pointerId: number;
+  };
   private lastData = 0;
   private quickChat = false;
   private draft = '';
@@ -264,7 +289,7 @@ export class CasinoFloor {
   private readonly reducedMotion = reducedMotion();
 
   constructor(
-    scene: ex.Scene,
+    private readonly scene: ex.Scene,
     private readonly actions: Actions,
   ) {
     this.snapshot = actions.snapshot();
@@ -295,11 +320,13 @@ export class CasinoFloor {
         y: e.worldPos.y,
         last: e.worldPos.y,
         dragged: false,
+        pointerId: e.pointerId,
       };
     });
     this.actor.on('pointermove', (e) => {
       const drag = this.scrollDrag;
-      if (!drag || !this.interactive()) return;
+      if (!drag || drag.pointerId !== e.pointerId || !this.interactive())
+        return;
       const delta = drag.last - e.worldPos.y;
       if (Math.abs(e.worldPos.y - drag.y) > 10) drag.dragged = true;
       if (drag.dragged && Math.abs(delta) > 18) {
@@ -313,7 +340,8 @@ export class CasinoFloor {
       if (!this.interactive()) return;
       const gesture = this.scrollDrag;
       this.scrollDrag = undefined;
-      if (!gesture?.dragged) this.hit(e.worldPos.x, e.worldPos.y);
+      if (gesture && e.pointerId === gesture.pointerId && !gesture.dragged)
+        this.hit(e.worldPos.x, e.worldPos.y, gesture);
     });
     this.actor.on('pointercancel', () => {
       this.scrollDrag = undefined;
@@ -349,6 +377,7 @@ export class CasinoFloor {
     window.addEventListener('blur', () => this.stopKeyboardWalk());
     scene.on('preupdate', () => this.tick());
     scene.on('deactivate', () => {
+      this.stopMusic();
       this.resetWalk();
       this.quickChat = false;
       this.draft = '';
@@ -358,7 +387,11 @@ export class CasinoFloor {
   }
 
   private interactive(): boolean {
-    return this.actions.active() && !this.actions.blocked();
+    return (
+      this.actions.active() &&
+      !this.actions.blocked() &&
+      !audioSettingsOpen(this.scene)
+    );
   }
   invalidate(): void {
     this.lastData = 0;
@@ -371,7 +404,14 @@ export class CasinoFloor {
     const active = this.actions.active();
     this.actor.graphics.isVisible = active;
     this.actor.pointer.useColliderShape = active;
-    if (!active) return;
+    if (!active) {
+      this.footfall = -1;
+      this.atReception = false;
+      this.chair = -1;
+      this.rankStamp = undefined;
+      this.stopMusic();
+      return;
+    }
     const now = Date.now();
     if (now - this.lastData >= 150) {
       this.snapshot = this.actions.snapshot();
@@ -379,8 +419,14 @@ export class CasinoFloor {
     }
     if (this.snapshot.code !== this.code) {
       this.resetWalk();
+      this.atReception = false;
+      this.chair = -1;
+      this.rankStamp = undefined;
       this.code = this.snapshot.code;
+      this.jukebox = new CasinoJukebox();
+      this.syncMusic();
       this.selected = '';
+      this.focusPlayer = '';
       this.destination = undefined;
       this.mode = 'floor';
       this.quickChat = false;
@@ -390,6 +436,7 @@ export class CasinoFloor {
       this.draft = '';
       refreshCanvasTextFields();
     }
+    if (!this.musicActive) this.syncMusic();
     if (
       this.selected &&
       !this.snapshot.tables.some((table) => table.id === this.selected)
@@ -415,6 +462,7 @@ export class CasinoFloor {
         };
       }
     }
+    this.playFloorSounds(now);
     if (this.seatTarget >= 0 && !this.walkAwaiting && !this.self().walked) {
       const current = position(this.selfRow(), now, this.reducedMotion);
       if (current.walked) return;
@@ -425,6 +473,66 @@ export class CasinoFloor {
         void this.move(point, seat);
     }
   }
+  private playFloorSounds(now: number): void {
+    const row = this.selfRow();
+    if (!row) return;
+    const rank = this.snapshot.ranks.find(
+      ({ id }) => id === this.snapshot.self,
+    );
+    const stamp = `${rank?.rank ?? ''}:${this.snapshot.roomNet}`;
+    if (this.rankStamp !== undefined && stamp !== this.rankStamp)
+      gameAudio.play('rank');
+    this.rankStamp = stamp;
+    if (this.mode !== 'floor') {
+      this.footfall = -1;
+      return;
+    }
+    const pose = this.self(now);
+    const step = this.reducedMotion
+      ? Math.floor(now / (2 * FLOOR_STEP_MS))
+      : Math.floor((pose.frame + 1) / 4);
+    if (pose.walked && step !== this.footfall) {
+      const { x, y } = pose;
+      const rug = this.snapshot.tables.some(({ slot }) => {
+        const table = floorTable(slot);
+        return (
+          Math.abs((x - table.x) * TILE) < 92 &&
+          (y - table.y) * TILE >= -55 &&
+          (y - table.y) * TILE < 71
+        );
+      });
+      const runner =
+        y >= LOBBY_ROWS && this.wingHall(Math.round(x), Math.floor(y));
+      // Tile boundaries follow the painted runner and rugs in walnut-club-floor.png.
+      const lobbyCarpet =
+        (x >= 11.5 && x < 19.5 && y >= 1.5 && y < LOBBY_ROWS) ||
+        (x >= 19.5 && x < 30.5 && y >= 3.5 && y < 12.5) ||
+        (x >= 0.5 && x < 10.5 && y >= 2.5 && y < 6.5);
+      gameAudio.play(
+        rug || runner || lobbyCarpet ? 'step_carpet' : 'step_jade',
+      );
+      this.footfall = step;
+    } else if (!pose.walked) {
+      this.footfall = -1;
+    }
+    const reception = this.floorService(now) === 'reception';
+    if (reception && !this.atReception) gameAudio.play('desk_bell');
+    if (!this.walkAwaiting) this.atReception = reception;
+    if (!pose.walked && row.chair >= 0 && this.chair !== row.chair)
+      gameAudio.play('chair');
+    if (row.chair < 0 && this.chair >= 0 && pose.walked)
+      gameAudio.play('chair');
+    if (!pose.walked || row.chair < 0) this.chair = row.chair;
+  }
+
+  private wingHall(x: number, y: number): boolean {
+    return (
+      x === 1 ||
+      x === FLOOR_COLUMNS - 2 ||
+      ((y - LOBBY_ROWS) % WING_ROWS) % 8 < 2
+    );
+  }
+
   private self(now = Date.now()) {
     const pose = position(
       this.localWalk ?? this.selfRow(),
@@ -442,6 +550,18 @@ export class CasinoFloor {
   }
   private selfRow() {
     return this.snapshot.positions.find((row) => row.id === this.snapshot.self);
+  }
+  private floorService(now: number) {
+    const row = this.selfRow();
+    if (
+      this.mode !== 'floor' ||
+      !row ||
+      this.walkAwaiting ||
+      this.self(now).walked
+    )
+      return;
+    const pose = position(row, now, this.reducedMotion);
+    if (!pose.walked) return floorServiceAt(pose);
   }
   private avatarPosition(row: FloorPosition | undefined, now: number) {
     if (row?.id === this.snapshot.self) return this.self(now);
@@ -511,18 +631,21 @@ export class CasinoFloor {
   }
   private selectTable(table: FloorTable): void {
     this.selected = table.id;
-    this.reception = false;
     this.focusPlayer = '';
     this.seatTarget = -1;
-    this.move(tableEntrance(table.slot));
+    if (!this.nearTable(table)) this.move(tableEntrance(table.slot));
+  }
+  private walkToPoint(point: FloorPoint): void {
+    this.selected = '';
+    this.focusPlayer = '';
+    this.seatTarget = -1;
+    void this.move(point);
   }
   private tableDistance(table: FloorTable): number {
-    const { x, y } = this.self();
-    const entrance = tableEntrance(table.slot);
-    return Math.abs(entrance.x - x) + Math.abs(entrance.y - y);
+    return tableApproachDistance(this.self(), table.slot);
   }
   private nearTable(table: FloorTable): boolean {
-    return this.tableDistance(table) <= 2;
+    return this.tableDistance(table) <= TABLE_APPROACH_RANGE;
   }
   private walkToTable(table: FloorTable): void {
     this.changeMode('floor');
@@ -540,6 +663,7 @@ export class CasinoFloor {
     if (!this.interactive() || event.metaKey || event.ctrlKey || event.altKey)
       return;
     if (event.key === 'Escape' && (this.quickChat || this.mode !== 'floor')) {
+      gameAudio.play('back');
       this.changeMode('floor');
       event.preventDefault();
       return;
@@ -551,6 +675,7 @@ export class CasinoFloor {
     )
       return;
     if (event.key === '/' && !isMobileDevice() && this.mode !== 'chat') {
+      gameAudio.play('button');
       this.quickChat = true;
       event.preventDefault();
       refreshCanvasTextFields();
@@ -563,6 +688,8 @@ export class CasinoFloor {
     if (event.repeat) return;
     this.walkingKeys.add(event.code);
     this.seatTarget = -1;
+    this.selected = '';
+    this.focusPlayer = '';
     this.destination = undefined;
     this.keyboardStep(Date.now());
   }
@@ -616,11 +743,13 @@ export class CasinoFloor {
     this.busy = true;
     try {
       await this.actions.send(body);
+      if (this.actions.active()) gameAudio.play('message');
       this.draft = '';
       this.field.sync();
       if (this.quickChat) this.changeMode('floor');
       this.invalidate();
     } catch (error) {
+      if (this.actions.active()) gameAudio.play('blocked');
       this.error =
         error instanceof Error ? error.message : 'Message could not be sent';
     } finally {
@@ -648,10 +777,16 @@ export class CasinoFloor {
         Math.min(this.snapshot.ranks.length - 7, this.rankOffset + steps),
       );
   }
-  private hit(x: number, y: number): void {
+  private hit(x: number, y: number, pressed: FloorPoint): void {
     for (const row of [...this.hits].reverse()) {
       if (x >= row.x && x < row.x + row.w && y >= row.y && y < row.y + row.h) {
-        row.action();
+        if (
+          pressed.x >= row.x &&
+          pressed.x < row.x + row.w &&
+          pressed.y >= row.y &&
+          pressed.y < row.y + row.h
+        )
+          row.action();
         return;
       }
     }
@@ -668,10 +803,7 @@ export class CasinoFloor {
       y: Math.floor(((y - TOP) / this.mapScale + this.camera.y) / TILE),
     };
     if (!walkable(to, this.rows, this.tableSlots)) return;
-    this.seatTarget = -1;
-    this.focusPlayer = '';
-    this.reception = false;
-    void this.move(to);
+    this.walkToPoint(to);
   }
   private button(
     g: CanvasRenderingContext2D,
@@ -679,6 +811,7 @@ export class CasinoFloor {
     text: string,
     action: () => void,
     tone: 'quiet' | 'gold' | 'red' = 'quiet',
+    cue: SfxCue | null = 'button',
   ): void {
     const fill =
       tone === 'gold' ? ink.gold : tone === 'red' ? ink.red : '#164332';
@@ -694,19 +827,26 @@ export class CasinoFloor {
       rect.w - 8,
     );
     g.textAlign = 'left';
-    this.hits.push({ ...rect, action });
+    this.hits.push({
+      ...rect,
+      action: () => {
+        if (cue) gameAudio.play(cue);
+        action();
+      },
+    });
   }
   private draw(g: CanvasRenderingContext2D): void {
     g.imageSmoothingEnabled = false;
     this.hits = [];
     box(g, { x: 0, y: 0, w: W, h: H }, ink.dark);
     const now = Date.now();
-    if (this.mode === 'floor') this.drawMap(g, now);
+    const service = this.floorService(now);
+    if (this.mode === 'floor') this.drawMap(g, now, service === 'reception');
     if (this.mode === 'tables') this.drawTables(g);
     if (this.mode === 'chat') this.drawChat(g);
     else if (this.mode === 'ranks' || !isMobileDevice()) this.drawRanks(g);
     this.drawHeader(g);
-    if (this.mode !== 'chat') this.drawFooter(g);
+    if (this.mode !== 'chat') this.drawFooter(g, now, service);
     if (this.mode === 'chat' || this.quickChat) this.drawComposer(g);
     const notice = this.error || this.snapshot.notice;
     if (notice) {
@@ -749,6 +889,8 @@ export class CasinoFloor {
         ? 'Close chat'
         : `Chat${this.snapshot.unread ? ` (${this.snapshot.unread})` : ''}`,
       () => this.changeMode(this.mode === 'chat' ? 'floor' : 'chat'),
+      'quiet',
+      this.mode === 'chat' ? 'back' : 'button',
     );
     this.button(
       g,
@@ -765,15 +907,14 @@ export class CasinoFloor {
       'red',
     );
   }
-  private drawMap(g: CanvasRenderingContext2D, now: number): void {
+  private drawMap(
+    g: CanvasRenderingContext2D,
+    now: number,
+    reception: boolean,
+  ): void {
     const width = this.mapWidth,
       height = BOTTOM - TOP;
-    const walkToGames = () => {
-      this.focusPlayer = '';
-      this.reception = false;
-      this.seatTarget = -1;
-      void this.move({ x: 10, y: LOBBY_ROWS + 2 });
-    };
+    const walkToGames = () => this.walkToPoint({ x: 10, y: LOBBY_ROWS + 2 });
     const scale = this.mapScale;
     const viewWidth = width / scale,
       viewHeight = height / scale;
@@ -806,41 +947,32 @@ export class CasinoFloor {
     const firstWingRow = Math.max(start, LOBBY_ROWS);
     for (let y = firstWingRow; y < end; y += 1)
       for (let x = 0; x < FLOOR_COLUMNS; x += 1) {
-        const hall = x === 1 || x === 30 || (y - LOBBY_ROWS) % 8 < 2;
+        const hall = this.wingHall(x, y);
         const offset = (x * 31 + y * 19) % 5;
         g.fillStyle = hall
-          ? ['#703840', '#763c43'][offset % 2]
-          : ['#214d3b', '#25523d', '#244e39'][offset % 3];
+          ? ['#713d47', '#6c3944'][offset % 2]
+          : ['#2f4d3c', '#345441'][offset % 2];
         g.fillRect(x * TILE, y * TILE, TILE, TILE);
-        g.fillStyle = hall ? '#b9755044' : '#101f1b50';
+        g.fillStyle = hall ? '#7e454d' : '#284438';
         g.fillRect(x * TILE, y * TILE, TILE, 1);
         g.fillRect(x * TILE, y * TILE + (y % 2) * 8, 1, TILE - (y % 2) * 8);
         if (offset < 2) g.fillRect(x * TILE + 13, y * TILE + 10, 2, 2);
       }
-    if (end > firstWingRow) {
-      const sideHeight = (end - firstWingRow) * TILE + 12;
-      woodPanel(g, 0, firstWingRow * TILE, 17, sideHeight);
-      woodPanel(g, WIDTH - 18, firstWingRow * TILE, 18, sideHeight);
-    }
     if (start < LOBBY_ROWS) {
       drawWalnutLobby(g);
       g.textAlign = 'center';
       label(g, 'RECEPTION', 150, 126, 8, ink.gold, 84, true);
       label(g, 'THE LOUNGE', 612, 235, 12, ink.gold, 172, true);
       g.textAlign = 'left';
-      this.mapHit(66, 58, 170, 89, () => {
-        this.selected = '';
-        this.focusPlayer = '';
-        this.reception = true;
-        this.seatTarget = -1;
-        void this.move(RECEPTION);
-      });
+      this.mapHit(66, 58, 170, 89, () => this.walkToPoint(RECEPTION));
+      this.mapHit(42, JUKEBOX_BASE_Y - 60, 48, 60, () =>
+        this.walkToPoint(JUKEBOX),
+      );
       for (const [i, chair] of LOUNGE_CHAIRS.entries()) {
         const x = (chair.x + 0.5) * TILE,
           y = (chair.y + 0.5) * TILE;
-        drawWalnutChair(g, x, y, loungeChairDirection(i) === 'up');
+        drawWalnutChair(g, x, y, loungeChairDirection(i));
         this.mapHit(x - 13, y - 13, 26, 26, () => {
-          this.reception = false;
           this.focusPlayer = '';
           this.selected = '';
           this.seatTarget = i;
@@ -854,23 +986,20 @@ export class CasinoFloor {
       }
     }
     const firstWing = Math.max(0, Math.floor((start - LOBBY_ROWS) / WING_ROWS));
-    const lastWing = Math.floor((end - LOBBY_ROWS) / WING_ROWS);
+    const lastWing = Math.floor((end - 1 - LOBBY_ROWS) / WING_ROWS);
     for (let wing = firstWing; wing <= lastWing; wing += 1) {
       const y = (LOBBY_ROWS + wing * WING_ROWS) * TILE;
-      casinoRug(g, 24, y + 1, 719, 28, '#6f303b');
+      drawWalnutWingDecor(g, y, WIDTH, WING_ROWS * TILE);
       label(
         g,
         wingNames[wing] ?? 'Gaming wing',
         46,
-        y + 15,
-        16,
+        y + 11,
+        14,
         ink.gold,
         420,
         true,
       );
-      suitStatue(g, 695, y + 22, wing % 2 === 0);
-      floorPlant(g, 38, y + 176);
-      floorPlant(g, 728, y + 284);
     }
     for (const table of this.snapshot.tables)
       this.drawMapTable(g, table, start, end, now);
@@ -972,13 +1101,21 @@ export class CasinoFloor {
         this.mapHit(x - 16, y - 35, 32, 40, () => {
           this.focusPlayer = player.id;
           this.selected = '';
-          this.reception = false;
         });
     }
     if (this.destination && self.walked) {
       const x = (this.destination.x + 0.5) * TILE,
         y = (this.destination.y + 0.5) * TILE;
       box(g, { x: x - 7, y: y - 7, w: 14, h: 14 }, '#f3ca6650', ink.gold);
+    }
+    if (reception) {
+      box(g, { x: 49, y: 23, w: 202, h: 38 }, '#f5dca4', '#573624');
+      box(g, { x: 146, y: 61, w: 8, h: 3 }, '#f5dca4');
+      box(g, { x: 148, y: 64, w: 4, h: 3 }, '#f5dca4');
+      g.textAlign = 'center';
+      label(g, 'I can help you refill chips', 150, 34, 14, '#32251e');
+      label(g, 'if you cannot afford a table.', 150, 50, 14, '#32251e');
+      g.textAlign = 'left';
     }
     g.restore();
     if (isMobileDevice() && self.y < LOBBY_ROWS) {
@@ -1023,56 +1160,66 @@ export class CasinoFloor {
     if (point.y < start - 3 || point.y > end + 3) return;
     const x = (point.x + 0.5) * TILE,
       y = (point.y + 0.5) * TILE;
-    casinoRug(g, x - 79, y - 50, 158, 102, '#244c3c');
+    drawWalnutRug(g, x - 92, y - 55, 184, 126, 'jade');
     if (table.id === this.selected)
-      box(g, { x: x - 71, y: y - 47, w: 142, h: 94 }, '#ffdf6f20', '#f4cf70');
+      box(g, { x: x - 92, y: y - 55, w: 184, h: 126 }, '#ffdf6f20', '#f4cf70');
+
+    const felt = {
+      ...FLOOR_TABLE_SURFACE,
+      x: x + FLOOR_TABLE_SURFACE.x,
+      y: y + FLOOR_TABLE_SURFACE.y,
+    };
+    const select = () => this.selectTable(table);
     if (this.tableArt.complete && this.tableArt.naturalWidth)
-      g.drawImage(this.tableArt, x - 62, y - 36, 124, 76);
-    else box(g, { x: x - 60, y: y - 30, w: 120, h: 60 }, ink.green, ink.wood);
-    for (let index = 0; index < table.capacity; index += 1) {
-      const angle = (2 * Math.PI * index) / table.capacity + 0.25;
-      const chairX = x + Math.round(53 * Math.cos(angle)),
-        chairY = y + Math.round(35 * Math.sin(angle));
-      casinoChair(g, chairX, chairY);
+      g.drawImage(this.tableArt, felt.x, felt.y, felt.w, felt.h);
+    else box(g, felt, ink.green, ink.wood);
+    this.mapHit(felt.x, felt.y, felt.w, felt.h, select);
+
+    for (const [index, chair] of floorTableChairs(table.capacity).entries()) {
+      const chairX = x + chair.x;
+      const chairY = y + chair.y;
+      drawWalnutChair(g, chairX, chairY, chair.direction);
       const member = table.seats.find((seat) => seat.seatIndex === index);
       if (member)
         avatarSprite(
           g,
           chairX - 8,
-          chairY - 20,
+          chairY - 17,
           1,
           member.avatar,
-          Math.abs(chairY - y) < 16
-            ? chairX >= x
-              ? 'left'
-              : 'right'
-            : chairY >= y
-              ? 'up'
-              : 'down',
+          chair.direction,
           0,
           true,
           this.sitProgress(now, member.seatedAt),
         );
+      const bounds = floorTableChairBounds(chair);
+      this.mapHit(x + bounds.x, y + bounds.y, bounds.w, bounds.h, select);
     }
+
+    const plaque = {
+      ...FLOOR_TABLE_PLAQUE,
+      x: x + FLOOR_TABLE_PLAQUE.x,
+      y: y + FLOOR_TABLE_PLAQUE.y,
+    };
     box(
       g,
-      { x: x - 72, y: y - 78, w: 144, h: 35 },
+      plaque,
       '#0b2a22',
       table.id === this.selected ? ink.gold : '#8b7450',
     );
     g.textAlign = 'center';
-    label(g, table.name, x, y - 66, 16, ink.cream, 135);
+    label(g, table.name, x, plaque.y + 8, 14, ink.cream, 135);
     label(
       g,
       `${table.seats.length}/${table.capacity} · ${table.countdown || table.stakes.split(' · ')[0]}`,
       x,
-      y - 51,
-      12,
+      plaque.y + 18,
+      11,
       '#efd2a0',
       136,
     );
     g.textAlign = 'left';
-    this.mapHit(x - 70, y - 78, 140, 122, () => this.selectTable(table));
+    this.mapHit(plaque.x, plaque.y, plaque.w, plaque.h, select);
   }
   private drawRanks(g: CanvasRenderingContext2D): void {
     const x = this.mode === 'ranks' ? 24 : this.mapWidth + 9;
@@ -1173,7 +1320,6 @@ export class CasinoFloor {
           else {
             this.focusPlayer = person.id;
             this.selected = '';
-            this.reception = false;
           }
         },
       });
@@ -1241,6 +1387,8 @@ export class CasinoFloor {
             () => {
               if (this.nearTable(table)) this.actions.join(table.id);
             },
+            'quiet',
+            null,
           );
         this.button(
           g,
@@ -1249,6 +1397,8 @@ export class CasinoFloor {
           () => {
             if (this.nearTable(table)) this.actions.watch(table.id);
           },
+          'quiet',
+          null,
         );
       } else {
         this.button(
@@ -1269,7 +1419,153 @@ export class CasinoFloor {
         '#bfccb6',
       );
   }
-  private drawFooter(g: CanvasRenderingContext2D): void {
+  private drawReception(g: CanvasRenderingContext2D): void {
+    label(g, 'Reception', 330, 474, 22, ink.gold);
+    const status = this.snapshot.refill;
+    const message = this.refilling
+      ? 'Refilling your chips…'
+      : {
+          available: 'Refill to your starting chip balance.',
+          funded: 'Your chip balance is too high to refill.',
+          committed: 'Cash out or finish your game first.',
+          unavailable: 'Your room wallet is unavailable.',
+        }[status];
+    label(g, message, 330, 506, 15, '#c4d3ba', 380);
+    if (this.snapshot.roomVoice)
+      this.button(g, { x: 720, y: 473, w: 94, h: 43 }, 'Voice', () =>
+        window.open(this.snapshot.roomVoice, '_blank', 'noopener,noreferrer'),
+      );
+    if (status === 'available' && !this.refilling)
+      this.button(
+        g,
+        { x: 826, y: 473, w: 120, h: 43 },
+        'Refill chips',
+        () => void this.refillChips(),
+        'gold',
+        null,
+      );
+  }
+
+  private async refillChips(): Promise<void> {
+    if (
+      this.refilling ||
+      this.snapshot.refill !== 'available' ||
+      this.floorService(Date.now()) !== 'reception'
+    )
+      return;
+    this.refilling = true;
+    this.error = '';
+    try {
+      await this.actions.refill();
+      if (this.actions.active()) gameAudio.play('chip_stack');
+      this.invalidate();
+    } catch (error) {
+      if (this.actions.active()) gameAudio.play('blocked');
+      this.error =
+        error instanceof Error ? error.message : 'Could not refill chips';
+    } finally {
+      this.refilling = false;
+    }
+  }
+
+  private syncMusic(needle = false): void {
+    this.musicActive = true;
+    gameAudio.select(
+      'lobby',
+      CASINO_RECORDS[this.jukebox.index].file,
+      this.jukebox.playing,
+      needle,
+    );
+  }
+
+  private stopMusic(): void {
+    if (!this.musicActive) return;
+    this.musicActive = false;
+    gameAudio.stop('lobby');
+  }
+
+  private drawJukebox(g: CanvasRenderingContext2D, now: number): void {
+    const deck = this.jukebox;
+    const playing = gameAudio.isPlaying;
+    label(g, 'Jukebox', 330, 478, 22, ink.gold);
+    label(
+      g,
+      playing ? 'Now playing' : deck.playing ? 'Ready to play' : 'Paused',
+      330,
+      506,
+      15,
+      '#c4d3ba',
+    );
+    this.button(
+      g,
+      { x: 430, y: 470, w: 43, h: 49 },
+      '←',
+      () => {
+        deck.step(-1, Date.now());
+        this.syncMusic(true);
+      },
+      'quiet',
+      'jukebox_switch',
+    );
+    const display = { x: 481, y: 464, w: 286, h: 61 };
+    box(g, display, '#214233', '#68806b');
+    g.save();
+    g.beginPath();
+    g.rect(display.x + 1, display.y + 1, display.w - 2, display.h - 2);
+    g.clip();
+    for (const { index, offset } of deck.slides(now, this.reducedMotion)) {
+      const record = CASINO_RECORDS[index];
+      const x = display.x + Math.round(display.w * offset);
+      drawVinylRecord(g, x + 13, 473, record.color);
+      g.font = '19px "Chakra Petch", sans-serif';
+      const titleSize = Math.min(
+        19,
+        Math.floor((19 * 203) / g.measureText(record.title).width),
+      );
+      label(g, record.title, x + 69, 483, titleSize, ink.cream, 203);
+      const creditWidth = label(g, MUSIC_ARTIST, x + 69, 505, 15, ink.gold);
+      g.fillRect(x + 69, 514, creditWidth, 1);
+    }
+    g.restore();
+    this.hits.push({
+      x: display.x + 65,
+      y: 495,
+      w: 104,
+      h: 24,
+      action: () => {
+        gameAudio.play('button');
+        openMusicCredit();
+      },
+    });
+    this.button(
+      g,
+      { x: 775, y: 470, w: 43, h: 49 },
+      '→',
+      () => {
+        deck.step(1, Date.now());
+        this.syncMusic(true);
+      },
+      'quiet',
+      'jukebox_switch',
+    );
+    this.button(
+      g,
+      { x: 831, y: 470, w: 115, h: 49 },
+      playing ? 'Pause' : 'Play',
+      () => {
+        deck.playing = !playing;
+        this.syncMusic(true);
+      },
+      'quiet',
+      'jukebox_switch',
+    );
+  }
+
+  private drawFooter(
+    g: CanvasRenderingContext2D,
+    now: number,
+    service: ReturnType<typeof floorServiceAt>,
+  ): void {
     box(g, { x: 0, y: BOTTOM, w: W, h: H - BOTTOM }, '#0c3024', '#977b51');
     const me = this.snapshot.players.find(
       (player) => player.id === this.snapshot.self,
@@ -1289,11 +1585,16 @@ export class CasinoFloor {
     this.button(g, { x: 214, y: 466, w: 97, h: 34 }, 'Edit avatar', () =>
       this.actions.avatar(),
     );
+    this.button(g, { x: 214, y: 504, w: 97, h: 31 }, 'Settings', () =>
+      openAudioSettings(this.scene),
+    );
+    if (service === 'reception') return this.drawReception(g);
+    if (service === 'jukebox') return this.drawJukebox(g, now);
     const selected = this.snapshot.tables.find(
       (value) => value.id === this.selected,
     );
     const nearby =
-      this.mode === 'floor' && !this.focusPlayer && !this.reception
+      this.mode === 'floor' && !this.focusPlayer
         ? this.snapshot.tables
             .filter((table) => this.nearTable(table))
             .sort((a, b) => this.tableDistance(a) - this.tableDistance(b))[0]
@@ -1328,10 +1629,18 @@ export class CasinoFloor {
               if (this.nearTable(table)) this.actions.join(table.id);
             },
             'gold',
+            null,
           );
-        this.button(g, { x: 861, y: 473, w: 85, h: 43 }, 'Watch', () => {
-          if (this.nearTable(table)) this.actions.watch(table.id);
-        });
+        this.button(
+          g,
+          { x: 861, y: 473, w: 85, h: 43 },
+          'Watch',
+          () => {
+            if (this.nearTable(table)) this.actions.watch(table.id);
+          },
+          'quiet',
+          null,
+        );
       }
     } else if (friend) {
       avatarSprite(g, 334, 463, 2, friend.avatar);
@@ -1348,11 +1657,7 @@ export class CasinoFloor {
     } else {
       label(
         g,
-        this.reception
-          ? 'Reception'
-          : this.snapshot.tier === 'pro'
-            ? 'Pro room'
-            : 'Casino floor',
+        this.snapshot.tier === 'pro' ? 'Pro room' : 'Casino floor',
         330,
         474,
         22,
@@ -1361,23 +1666,14 @@ export class CasinoFloor {
       );
       label(
         g,
-        this.reception
-          ? 'Room wallet · Refill if eligible'
-          : isMobileDevice()
-            ? 'Tap the floor to walk · Tap a table for details'
-            : 'Click to walk · Arrow keys or WASD · / to chat',
+        isMobileDevice()
+          ? 'Tap the floor to walk · Tap a table for details'
+          : 'Click to walk · Arrow keys or WASD · / to chat',
         330,
         506,
         15,
         '#c4d3ba',
         510,
-      );
-      if (this.reception && this.snapshot.roomVoice)
-        this.button(g, { x: 720, y: 473, w: 94, h: 43 }, 'Voice', () =>
-          window.open(this.snapshot.roomVoice, '_blank', 'noopener,noreferrer'),
-        );
-      this.button(g, { x: 826, y: 473, w: 120, h: 43 }, 'Refill chips', () =>
-        this.actions.refill(),
       );
     }
   }
@@ -1484,6 +1780,7 @@ export class CasinoFloor {
       this.busy ? 'Sending…' : 'Send',
       () => void this.send(),
       'gold',
+      null,
     );
   }
 }

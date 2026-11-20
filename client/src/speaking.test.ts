@@ -110,7 +110,7 @@ describe('client voice boundary', () => {
     .filter((name) => name.endsWith('.ts') && !name.endsWith('.test.ts'))
     .filter((name) => !name.startsWith('module_bindings'));
 
-  it('does not call Discord or touch audio', () => {
+  it('keeps Discord voice and audio capture outside the client', () => {
     const banned = [
       /discord\.com/i,
       /discordapp/i,
@@ -118,21 +118,28 @@ describe('client voice boundary', () => {
       /XMLHttpRequest/,
       /getUserMedia/,
       /RTCPeerConnection/,
-      /AudioContext/,
       /MediaRecorder/,
-      /new Audio\b/,
       /SpeechRecognition/,
     ];
+    // Only the game audio service can play the local soundtrack and effects.
+    const playback = [/AudioContext/, /new Audio\b/];
     // Default-name lookup asks the local bot. Speaking still does not fetch.
     const fetchAllowed = new Set(['discord-join.ts']);
     expect(files.length).toBeGreaterThan(10);
     for (const name of files) {
-      const source = readFileSync(join(root, name), 'utf8').replace(
+      let source = readFileSync(join(root, name), 'utf8').replace(
         // An explicit user click opens the native voice channel URL.
         'https://discord.com/channels/',
         'voice-channel-link/',
       );
-      for (const pattern of banned) {
+      if (name === 'game-audio.ts')
+        source = source.replace(
+          /fetch\(\s*`\$\{import\.meta\.env\.BASE_URL\}assets\/sfx\/walnut-club\.wav`,?\s*\)/,
+          'loadLocalEffects',
+        );
+      for (const pattern of name === 'game-audio.ts'
+        ? banned
+        : [...banned, ...playback]) {
         if (fetchAllowed.has(name) && pattern.source === '\\bfetch\\s*\\(') {
           continue;
         }

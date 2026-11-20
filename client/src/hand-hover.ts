@@ -2,6 +2,7 @@ import * as ex from 'excalibur';
 import { CARD_DRAW, HOVER_LIFT } from './bluff-layout';
 import { isMobileDevice } from './mobile-shell';
 import { handCardScale } from './card-sizing';
+import { gameAudio } from './game-audio';
 
 /** How fast the drawn lift chases the curve. A short move is not a full pop. */
 export const HOVER_EASE_MS = 110;
@@ -235,6 +236,8 @@ export class HandHover {
   readonly touch = new CardTouchGesture(() => this.release());
   private pointerX: number | null = null;
   private focusedId: string | null = null;
+  private audibleFocus: string | null = null;
+  private focusElapsed = 0;
   private ids: readonly string[] = [];
   private centers: readonly number[] = [];
   private readonly drawn = new Map<string, number>();
@@ -267,6 +270,8 @@ export class HandHover {
   release(): void {
     this.pointerX = null;
     this.focusedId = null;
+    this.audibleFocus = null;
+    this.focusElapsed = 0;
   }
 
   current(cardId: string): number {
@@ -307,6 +312,13 @@ export class HandHover {
     this.ids = ids;
     this.centers = centers;
     this.focusedId = this.focusAtPointer();
+    if (this.audibleFocus !== this.focusedId) {
+      this.audibleFocus = this.focusedId;
+      this.focusElapsed = 0;
+    } else if (this.focusedId && this.focusElapsed < 90) {
+      this.focusElapsed += elapsedMs;
+      if (this.focusElapsed >= 90) gameAudio.play('lift');
+    }
     if (this.touch.active && this.pointerX !== null) {
       // A finger inspects one card; mouse hover retains the neighboring dock curve.
       targets.fill(0);

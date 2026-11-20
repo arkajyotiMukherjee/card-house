@@ -289,6 +289,29 @@ try {
     40_000n,
   );
   record('poker-cashout', { conservation: true, seatsReleased: true });
+  for (const startRound of [false, true]) {
+    const before = wallet(alice);
+    const table = await create('blackjack', { minBet: 20, buyIn: 200 });
+    assert.equal(wallet(alice).available, before.available - 400n);
+    if (startRound) await intent(alice, table.id, { type: 'start_game' });
+    await alice.connection.reducers.leaveTable({
+      tableId: table.id,
+      lobbyMemberId: memberId(alice),
+    });
+    assert.deepEqual(wallet(alice), before);
+    assert.ok(
+      ![...db.tableFunding.iter()].some((row) => row.tableId === table.id),
+    );
+    assert.ok(
+      ![...db.gameSettlement.iter()].some((row) => row.tableId === table.id),
+    );
+    await alice.connection.reducers.removeGameTable({ tableId: table.id });
+  }
+  record('blackjack-unwagered-buy-in-return', {
+    beforeStart: true,
+    afterStart: true,
+    netProfitChange: 0,
+  });
   const blackjack = await create('blackjack', {
     maxPlayers: 2,
     minBet: 25,

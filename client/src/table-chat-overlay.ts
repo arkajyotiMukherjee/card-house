@@ -6,6 +6,7 @@ import {
   TABLE_BACKDROP_LEFT,
 } from './table-viewport';
 import { bindButtonPress } from './button-press';
+import { gameAudio } from './game-audio';
 import * as ex from 'excalibur';
 import {
   BUTTON_PRESS_SHIFT,
@@ -229,8 +230,10 @@ export class TableChatOverlay {
   toggle(): void {
     if (this.waiting) return;
     if (this.opened) {
+      gameAudio.play('back');
       this.close();
-    } else {
+    } else if (this.chatAvailable) {
+      gameAudio.play('button');
       this.open();
     }
   }
@@ -328,7 +331,7 @@ export class TableChatOverlay {
       return true;
     }
     if (evt.key === ex.Keys.Escape) {
-      if (!this.waiting) this.close();
+      if (!this.waiting) this.toggle();
       return true;
     }
     if (evt.originalEvent?.ctrlKey || evt.originalEvent?.metaKey) {
@@ -368,6 +371,7 @@ export class TableChatOverlay {
         this.composer.sync();
       })
       .catch((error: unknown) => {
+        if (this.tableId !== tableId) return;
         this.showError(
           error instanceof Error ? error.message : 'Could not send',
         );
@@ -395,6 +399,7 @@ export class TableChatOverlay {
   }
 
   showError(message: string, color = DANGER): void {
+    if (message) gameAudio.play(color === DANGER ? 'blocked' : 'confirm');
     if (this.errorText) {
       this.errorText.color = color;
       this.errorText.text = wrapText(message, TABLE_CHAT_TEXT.columns)
@@ -637,7 +642,7 @@ export class TableChatOverlay {
         this.waiting ? 'Leave' : 'Close',
         () => {
           if (this.waiting) this.waiting.leave();
-          else this.close();
+          else this.toggle();
         },
       ),
     );

@@ -1,3 +1,4 @@
+import { gameAudio } from './game-audio';
 import { anchorTableActor, tableGutter } from './table-viewport';
 import { bindButtonPress } from './button-press';
 import { isMobileDevice } from './mobile-shell';
@@ -293,6 +294,7 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
     }
     if (event.type === 'pointerup') {
       const previous = this.onlySelected();
+      gameAudio.play('lift');
       if (this.selected.has(event.target)) {
         this.selected.delete(event.target);
       } else {
@@ -303,6 +305,8 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
         this.namedSuit = null;
         this.syncLabels(state, ctx);
       }
+      if (this.onlySelected() && rankOfCard(event.target) === '8')
+        gameAudio.play('turn');
       this.handHover.clear();
       this.applyLift(event.target, state, ctx);
       this.syncStock(state, ctx);
@@ -389,6 +393,7 @@ export class CrazyEightsDriver implements GameDriver<CrazyEightsState> {
     if (!card || rankOfCard(card) !== '8') {
       return;
     }
+    if (raw !== this.namedSuit) gameAudio.play('selector');
     this.namedSuit = raw;
     if (this.state && this.ctx) this.syncLabels(this.state, this.ctx);
   }

@@ -149,39 +149,6 @@ export function woodPanel(
   }
 }
 
-export function casinoChair(
-  g: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-): void {
-  g.fillStyle = '#2a1b1b';
-  g.fillRect(x - 11, y - 10, 22, 19);
-  g.fillStyle = '#885036';
-  g.fillRect(x - 9, y - 8, 18, 15);
-  g.fillStyle = '#ad5961';
-  g.fillRect(x - 7, y - 7, 14, 4);
-  g.fillStyle = '#703542';
-  g.fillRect(x - 7, y - 2, 14, 7);
-}
-
-export function suitStatue(
-  g: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  diamond: boolean,
-): void {
-  woodPanel(g, x - 9, y + 1, 18, 14);
-  g.fillStyle = '#d69e51';
-  for (let row = -14; row < 1; row += 2) {
-    const w = diamond
-      ? 8 - Math.abs(row + 7)
-      : Math.max(2, 8 - Math.abs(row + 4));
-    g.fillRect(x - w, y + row, w * 2, 2);
-  }
-  g.fillStyle = '#f2ca7d';
-  g.fillRect(x - 2, y - 5, 4, 6);
-}
-
 export function floorLamp(
   g: CanvasRenderingContext2D,
   x: number,
@@ -197,62 +164,6 @@ export function floorLamp(
   g.fillRect(x - 6, y - 12, 12, 8);
   g.fillStyle = '#ffe4a4';
   g.fillRect(x - 4, y - 10, 8, 5);
-}
-
-export function floorPlant(
-  g: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-): void {
-  g.fillStyle = '#181e1f90';
-  g.fillRect(x - 12, y - 8, 27, 11);
-  g.fillStyle = '#623923';
-  g.fillRect(x - 8, y - 15, 17, 15);
-  g.fillStyle = '#ab7646';
-  g.fillRect(x - 10, y - 17, 21, 5);
-  g.fillStyle = '#c99351';
-  g.fillRect(x - 5, y - 11, 3, 9);
-  for (const [dx, dy, w, h] of [
-    [-2, -36, 5, 24],
-    [-16, -29, 12, 6],
-    [-14, -26, 9, 8],
-    [6, -31, 12, 7],
-    [4, -26, 9, 8],
-    [-15, -20, 8, 4],
-    [8, -21, 8, 4],
-  ]) {
-    g.fillStyle = '#173e2b';
-    g.fillRect(x + dx, y + dy, w + 2, h + 1);
-    g.fillStyle = '#479550';
-    g.fillRect(x + dx + 1, y + dy + 1, w, h - 1);
-    g.fillStyle = '#85af56';
-    g.fillRect(x + dx + 1, y + dy + 1, Math.max(2, w / 2), 2);
-  }
-}
-
-export function casinoRug(
-  g: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  color: string,
-): void {
-  g.fillStyle = '#1b2620';
-  g.fillRect(x + 2, y + 4, w, h);
-  g.fillStyle = color;
-  g.fillRect(x, y, w, h);
-  g.strokeStyle = '#b98555';
-  g.strokeRect(x + 1.5, y + 1.5, w - 3, h - 3);
-  g.strokeStyle = '#b985556d';
-  g.strokeRect(x + 6.5, y + 6.5, w - 13, h - 13);
-  g.fillStyle = '#e8ac6b30';
-  for (let row = 0; 12 + row * 12 < h - 10; row += 1) {
-    for (let col = 12 + (row % 2) * 6; col < w - 10; col += 12) {
-      g.fillRect(x + col, y + 12 + row * 12, 2, 4);
-      g.fillRect(x + col - 1, y + 13 + row * 12, 4, 2);
-    }
-  }
 }
 
 /** A face-size version of the floor avatar for table labels. */

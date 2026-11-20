@@ -2,6 +2,7 @@ import { anchorTableActor, tableGutter } from './table-viewport';
 import { bindButtonPress } from './button-press';
 import { isMobileDevice } from './mobile-shell';
 import * as ex from 'excalibur';
+import { gameAudio } from './game-audio';
 import {
   HEARTS_GAME_TYPE,
   type HeartsState,
@@ -319,6 +320,7 @@ export class HeartsDriver implements GameDriver<HeartsState> {
       return;
     }
     if (event.type === 'pointerup') {
+      gameAudio.play('lift');
       if (state.phase === 'play') {
         if (this.selected.has(event.target) && this.selected.size === 1)
           this.selected.clear();

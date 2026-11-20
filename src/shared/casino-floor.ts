@@ -6,9 +6,25 @@ export interface FloorPoint {
 export const FLOOR_COLUMNS = 32;
 export const LOBBY_ROWS = 16;
 export const WING_ROWS = 17;
-export const TABLES_PER_WING = 6;
+const TABLE_COLUMNS = [6, 15, 24];
+const TABLE_ROW_OFFSETS = [4, 11];
+const TABLE_HALF_WIDTH = 3;
+const TABLE_HALF_HEIGHT = 2;
+export const TABLE_APPROACH_RANGE = 2;
+export const TABLES_PER_WING = TABLE_COLUMNS.length * TABLE_ROW_OFFSETS.length;
 export const SPAWN: FloorPoint = { x: 15, y: 8 };
 export const RECEPTION: FloorPoint = { x: 6, y: 6 };
+export const JUKEBOX: FloorPoint = { x: 2, y: 13 };
+
+export function floorServiceAt(
+  point: FloorPoint,
+): 'reception' | 'jukebox' | undefined {
+  if (point.y === RECEPTION.y && Math.abs(point.x - RECEPTION.x) <= 2)
+    return 'reception';
+  if (Math.abs(point.x - JUKEBOX.x) + Math.abs(point.y - JUKEBOX.y) <= 1)
+    return 'jukebox';
+}
+
 export const LOUNGE_CHAIRS: readonly FloorPoint[] = [
   { x: 22, y: 5 },
   { x: 25, y: 5 },
@@ -87,16 +103,25 @@ export function floorRowsAt(y: number): number {
 export function floorTable(slot: number): FloorPoint {
   const wing = Math.floor(slot / TABLES_PER_WING);
   const spot = slot % TABLES_PER_WING;
-  const columns = wing % 2 ? [7, 16, 25, 6, 15, 24] : [6, 15, 24, 8, 18, 26];
+  const row = Math.floor(spot / TABLE_COLUMNS.length);
   return {
-    x: columns[spot],
-    y: LOBBY_ROWS + wing * WING_ROWS + (spot < 3 ? 4 : 11) + (spot % 2),
+    x: TABLE_COLUMNS[spot % TABLE_COLUMNS.length],
+    y: LOBBY_ROWS + wing * WING_ROWS + TABLE_ROW_OFFSETS[row],
   };
 }
 
 export function tableEntrance(slot: number): FloorPoint {
   const { x, y } = floorTable(slot);
   return { x, y: y + 2 };
+}
+
+/** Distance to the approach around the table, in tiles. */
+export function tableApproachDistance(point: FloorPoint, slot: number): number {
+  const center = floorTable(slot);
+  return (
+    Math.max(0, Math.abs(point.x - center.x) - TABLE_HALF_WIDTH) +
+    Math.max(0, Math.abs(point.y - center.y) - TABLE_HALF_HEIGHT)
+  );
 }
 
 function tableDepth(
@@ -110,8 +135,8 @@ function tableDepth(
     if (!tableSlots.has(slot)) continue;
     const center = floorTable(slot);
     const depth = Math.min(
-      3 - Math.abs(point.x - center.x),
-      2 - Math.abs(point.y - center.y),
+      TABLE_HALF_WIDTH - Math.abs(point.x - center.x),
+      TABLE_HALF_HEIGHT - Math.abs(point.y - center.y),
     );
     if (depth > 0) return depth;
   }

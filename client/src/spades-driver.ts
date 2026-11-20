@@ -1,3 +1,4 @@
+import { gameAudio } from './game-audio';
 import { anchorTableActor, tableGutter } from './table-viewport';
 import { bindButtonPress } from './button-press';
 import { isMobileDevice } from './mobile-shell';
@@ -318,6 +319,7 @@ export class SpadesDriver implements GameDriver<SpadesState> {
     }
     if (event.type === 'pointerup') {
       const previous = this.selected;
+      gameAudio.play('lift');
       this.selected = this.selected === event.target ? null : event.target;
       if (previous !== null && previous !== event.target) {
         this.applyLift(previous, state, ctx);

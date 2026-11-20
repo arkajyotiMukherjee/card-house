@@ -37,7 +37,6 @@ import {
   TABLE_LIST,
   CREATE_TABLE,
   LOBBY_PANEL,
-  REFILL_CHIPS_BUTTON,
   WALLET_SUMMARY,
   tableGroups,
   tableLines,
@@ -654,10 +653,7 @@ describe('Launched from Discord badge', () => {
 
 it('keeps wallet controls separated and Create Table inside its panel', () => {
   const lastValueBottom = WALLET_SUMMARY.y + 7 * WALLET_SUMMARY.rowHeight + 16;
-  expect(REFILL_CHIPS_BUTTON.y - lastValueBottom).toBeGreaterThanOrEqual(12);
-  expect(
-    392 - (REFILL_CHIPS_BUTTON.y + REFILL_CHIPS_BUTTON.h),
-  ).toBeGreaterThanOrEqual(16);
+  expect(392 - lastValueBottom).toBeGreaterThanOrEqual(16);
   expect(LOBBY_PANEL.renameField.y).toBeGreaterThan(392 + 12);
   expect(
     TABLE_LIST.panel.x +

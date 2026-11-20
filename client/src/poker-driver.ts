@@ -1,5 +1,6 @@
 import { hasPokerPotLayers } from './poker-pots';
 import * as ex from 'excalibur';
+import { gameAudio } from './game-audio';
 import {
   POKER_GAME_TYPE,
   pokerBetRange,
@@ -302,6 +303,7 @@ export class PokerDriver implements GameDriver<PokerState> {
     )
       return;
     event.preventDefault();
+    const previous = this.stake.amount;
     this.stake.amount =
       event.key === 'Home'
         ? range.min
@@ -314,6 +316,7 @@ export class PokerDriver implements GameDriver<PokerState> {
               range.min,
               range.max,
             );
+    if (this.stake.amount !== previous) gameAudio.play('selector');
     this.placeButtons(this.state, this.ctx);
   };
 
@@ -379,6 +382,7 @@ export class PokerDriver implements GameDriver<PokerState> {
     if (event.target === 'bet' || event.target === 'raise') {
       const range = stakeRange(state, seatIndex, event.target);
       if (range) {
+        gameAudio.play('button');
         this.stake = { kind: event.target, amount: range.min };
         this.placeButtons(state, ctx);
       }
@@ -601,6 +605,7 @@ export class PokerDriver implements GameDriver<PokerState> {
         this.stake.kind,
       );
       if (!range) return;
+      const previous = this.stake.amount;
       this.stake.amount = sliderStake(
         (event.worldPos.x - STAKE_SLIDER.x - tableGutter() - 10) /
           (STAKE_SLIDER.w - 20),
@@ -608,6 +613,7 @@ export class PokerDriver implements GameDriver<PokerState> {
         range.max,
         stakeStep(this.state, this.stake.kind),
       );
+      if (this.stake.amount !== previous) gameAudio.play('selector');
       this.placeButtons(this.state, this.ctx);
     };
     this.slider.on('pointerdown', (event) => {

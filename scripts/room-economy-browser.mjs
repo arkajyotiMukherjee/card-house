@@ -2,6 +2,7 @@
 import { chromium } from 'playwright';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import assert from 'node:assert/strict';
+import { FLOOR_STEP_MS, RECEPTION } from '../src/shared/casino-floor.ts';
 // First run room-economy.live.ts against an isolated local test database.
 const fixture = JSON.parse(
   readFileSync(
@@ -442,11 +443,19 @@ const loserId = await alice.page.evaluate(
 );
 const loser = loserId === alice.actor.clientId ? alice : bob;
 await loser.page.evaluate(
-  async ({ lobbyId, clientId }) => {
+  async ({ lobbyId, clientId, tableId, reception, stepMs }) => {
     const db = window.proofDb;
+    const lobbyMemberId = `member_${lobbyId}_${clientId}`;
     const before = [...db.db.roomWallet.iter()].find(
       (row) => row.lobbyId === lobbyId && row.clientId === clientId,
     ).profit;
+    await db.reducers.leaveTable({ tableId, lobbyMemberId });
+    await db.reducers.enterCasinoFloor({ lobbyId });
+    await db.reducers.moveCasinoAvatar({ lobbyId, ...reception, chair: -1 });
+    const walk = db.db.casinoPresence.id.find(lobbyMemberId);
+    await new Promise((resolve) =>
+      window.setTimeout(resolve, JSON.parse(walk.pathJson).length * stepMs),
+    );
     await db.reducers.refillRoomCoins({ lobbyId, clientId });
     const wallet = [...db.db.roomWallet.iter()].find(
       (row) => row.lobbyId === lobbyId && row.clientId === clientId,
@@ -458,7 +467,13 @@ await loser.page.evaluate(
     )
       throw new Error('Refill changed profit or grants incorrectly');
   },
-  { lobbyId: refillRoom.id, clientId: loser.actor.clientId },
+  {
+    lobbyId: refillRoom.id,
+    clientId: loser.actor.clientId,
+    tableId: refillTable,
+    reception: RECEPTION,
+    stepMs: FLOOR_STEP_MS,
+  },
 );
 for (const person of [alice, bob]) {
   await person.page.evaluate(

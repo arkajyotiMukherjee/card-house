@@ -57,6 +57,11 @@ const natural = act(
 );
 assert.equal(natural.seats['0'].chips, 237.5);
 assert.equal(readBlackjackState(natural).seats['0'].chips, 237.5);
+const push = act(state({ 0: player(['10S', '7H'], 20, 180) }), {
+  type: 'stand',
+});
+assert.deepEqual(push.seats['0'].results, ['push']);
+assert.equal(push.seats['0'].chips, 200);
 const surrendered = act(state({ 0: player(['10S', '6C']) }), {
   type: 'surrender',
 });

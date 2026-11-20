@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
 import { writeFileSync } from 'node:fs';
 import { DbConnection } from '../client/src/module_bindings/index.ts';
+import { FLOOR_STEP_MS, RECEPTION } from '../src/shared/casino-floor.ts';
 import { strategyFor } from '../src/shared/games/bots/registry.ts';
-const host = 'http://127.0.0.1:3000';
+const host = process.env.SPACETIMEDB_HOST ?? 'http://127.0.0.1:3000';
 const database = process.env.SPACETIMEDB_DB ?? 'room-economy-test';
-if (!database.startsWith('room-economy-'))
+if (
+  !database.startsWith('room-economy-') ||
+  !/^http:\/\/127\.0\.0\.1:\d+$/.test(host)
+)
   throw Error('Isolated local test database required');
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 async function until(check: () => boolean, message: string, timeout = 15_000) {
@@ -267,6 +271,7 @@ try {
       lobbyId: room.id,
       clientId: a.clientId,
     }),
+    /Cash out or finish/,
   );
   await intent(a, broke.id, { type: 'start_game' });
   const strategy = strategyFor('bluff')!;
@@ -280,6 +285,23 @@ try {
   const loser = wallet(a).available === 0n ? a : b;
   assert.equal(wallet(loser).available, 0n);
   const profit = wallet(loser).profit;
+  await leave(loser, broke.id);
+  await loser.connection.reducers.enterCasinoFloor({ lobbyId: room.id });
+  await assert.rejects(
+    loser.connection.reducers.refillRoomCoins({
+      lobbyId: room.id,
+      clientId: loser.clientId,
+    }),
+    /Visit reception/,
+  );
+  assert.equal(wallet(loser).available, 0n);
+  await loser.connection.reducers.moveCasinoAvatar({
+    lobbyId: room.id,
+    ...RECEPTION,
+    chair: -1,
+  });
+  const walk = loser.connection.db.casinoPresence.id.find(member(loser))!;
+  await delay(JSON.parse(walk.pathJson).length * FLOOR_STEP_MS);
   await loser.connection.reducers.refillRoomCoins({
     lobbyId: room.id,
     clientId: loser.clientId,
@@ -292,12 +314,14 @@ try {
       lobbyId: room.id,
       clientId: loser.clientId,
     }),
+    /cannot afford a table/,
   );
   record('refill-and-rank', {
     availableCoins: 200,
     totalGrants: 400,
     profitUnits: profit,
     blockedWhileCommitted: true,
+    blockedOutsideReception: true,
     repeatedRefillRejected: true,
   });
   console.log('LIFECYCLE CHECKS PASSED');

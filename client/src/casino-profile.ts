@@ -21,6 +21,8 @@ import {
   showFieldCaret,
 } from './canvas-ui';
 import { bindButtonPress } from './button-press';
+import { gameAudio } from './game-audio';
+import type { SfxCue } from './sfx-cues';
 import {
   cardroomBotUrl,
   discordLinkAvailable,
@@ -216,6 +218,7 @@ export function openCasinoAvatarEditor(
     w: number,
     caption: string,
     action: () => void,
+    cue: SfxCue | null = 'button',
   ) => {
     const actor = add(
       x,
@@ -237,6 +240,7 @@ export function openCasinoAvatarEditor(
     actor.addChild(child);
     bindButtonPress(actor, undefined, undefined, (event) => {
       event.cancel();
+      if (cue) gameAudio.play(cue);
       action();
     });
     return actor;
@@ -255,8 +259,8 @@ export function openCasinoAvatarEditor(
     refreshAvatarLabels.push(() => {
       value.text = variants[look[field]];
     });
-    button(525, y, 38, '‹', () => cycle(-1));
-    button(741, y, 38, '›', () => cycle(1));
+    button(525, y, 38, '‹', () => cycle(-1), 'selector');
+    button(741, y, 38, '›', () => cycle(1), 'selector');
   }
   const botUrl = cardroomBotUrl();
   const refreshLinkedCaption = (): void => {
@@ -375,6 +379,7 @@ export function openCasinoAvatarEditor(
         : undefined;
     const name = discord?.username ?? customPlayerName(customName);
     if (!name) {
+      gameAudio.play('blocked');
       status.text = 'Enter a display name';
       return;
     }
@@ -401,9 +406,11 @@ export function openCasinoAvatarEditor(
       .then(() => {
         rememberPlayerNamePreference(clientId, namePreference);
         localStorage.setItem(AVATAR_STORAGE, avatar);
+        gameAudio.play('confirm');
         close();
       })
       .catch((error) => {
+        gameAudio.play('blocked');
         status.text =
           error instanceof Error ? error.message : 'Avatar could not be saved';
         busy = false;
@@ -526,6 +533,6 @@ export function openCasinoAvatarEditor(
   }
   if (profile()) refreshLinkedCaption();
   else paintNameMode();
-  button(544, 434, 113, 'Cancel', close);
-  button(667, 434, 112, 'Save', save);
+  button(544, 434, 113, 'Cancel', close, 'back');
+  button(667, 434, 112, 'Save', save, null);
 }

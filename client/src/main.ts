@@ -37,6 +37,7 @@ import {
 import { LobbyScene } from './lobby-scene';
 import { mountLobbyPanel, type LobbyPanel } from './lobby-panel';
 import { MenuScene } from './menu-scene';
+import { gameAudio } from './game-audio';
 import { findSoloSeat, hasOwnMembership } from './solo-room';
 import type { DbConnection } from './module_bindings';
 import { isCanvasFieldFocused, refreshCanvasTextFields } from './html-field';
@@ -180,6 +181,7 @@ applyContainScale();
 mountMobileShell({ onChange: applyContainScale });
 installGameGestureGuard();
 installTouchTargets(engine);
+gameAudio.initialize();
 engine.on('postframe', () => {
   const tableActive = engine.currentScene instanceof GameScene;
   const insets = readSafeInsets();
@@ -223,8 +225,17 @@ void engine.start(loader).then(() => {
   let lobbyScene: LobbyScene | undefined;
   let game: GameScene | undefined;
   let rejoinAfterReconnect = (): void => {};
+  let previousPhase = '';
   connectCardroom({
     onPhase: (phase) => {
+      if (
+        phase !== previousPhase &&
+        (phase === 'error' ||
+          phase === 'reconnecting' ||
+          phase === 'disconnected')
+      )
+        gameAudio.play('blocked');
+      previousPhase = phase;
       menu.setConnectionPhase(phase);
       const line = linkStatusLine(phase);
       lobbyScene?.setLinkStatus(line);
@@ -382,7 +393,9 @@ void engine.start(loader).then(() => {
         if (!ready) {
           return 'Could not open the table';
         }
+        gameAudio.play('chair');
         openSeatedTable(seat.tableId, seat.lobbyMemberId);
+        tableScene.soundSoloDeal();
         return undefined;
       });
       menu.connectLook((look) => {

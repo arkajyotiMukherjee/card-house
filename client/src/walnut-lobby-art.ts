@@ -1,4 +1,5 @@
 import * as ex from 'excalibur';
+import type { Direction } from './casino-art';
 
 const nearest = { filtering: ex.ImageFiltering.Pixel };
 const floor = new ex.ImageSource('/assets/walnut-club-floor.png', nearest);
@@ -28,6 +29,7 @@ function sprite(
   name: keyof typeof cells,
   x: number,
   y: number,
+  scale = 2,
 ): void {
   const [left, top, width, height] = cells[name];
   g.drawImage(
@@ -38,8 +40,8 @@ function sprite(
     height,
     x,
     y,
-    width * 2,
-    height * 2,
+    width * scale,
+    height * scale,
   );
 }
 
@@ -65,9 +67,77 @@ export function drawWalnutChair(
   g: CanvasRenderingContext2D,
   x: number,
   y: number,
-  facesUp: boolean,
+  direction: Direction,
 ): void {
-  sprite(g, facesUp ? 'chairBack' : 'chairFront', x - 16, y - 12);
+  if (direction === 'left' || direction === 'right') {
+    g.save();
+    g.translate(x, y);
+    g.rotate(direction === 'right' ? -Math.PI / 2 : Math.PI / 2);
+    sprite(g, 'chairFront', -16, -13);
+    g.restore();
+    return;
+  }
+  sprite(g, direction === 'up' ? 'chairBack' : 'chairFront', x - 16, y - 12);
+}
+
+export function drawWalnutRug(
+  g: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  style: 'jade' | 'oxblood',
+): void {
+  const edge = style === 'jade' ? '#547054' : '#a06059';
+  g.fillStyle = '#172621';
+  g.fillRect(x + 4, y, width - 8, height);
+  g.fillRect(x, y + 4, width, height - 8);
+  g.fillRect(x + 2, y + 2, width - 4, height - 4);
+  g.fillStyle = edge;
+  g.fillRect(x + 4, y + 2, width - 8, height - 4);
+  g.fillRect(x + 2, y + 4, width - 4, height - 8);
+  g.fillStyle = style === 'jade' ? '#385343' : '#713d47';
+  g.fillRect(x + 6, y + 4, width - 12, height - 8);
+  g.fillRect(x + 4, y + 6, width - 8, height - 12);
+}
+
+export function drawWalnutWingDecor(
+  g: CanvasRenderingContext2D,
+  y: number,
+  width: number,
+  height: number,
+): void {
+  drawWalnutRug(g, 24, y + 1, width - 48, 20, 'oxblood');
+  sprite(g, 'crest', width - 58, y + 1, 1);
+
+  for (const left of [true, false]) {
+    const wallX = left ? 0 : width - 24;
+    g.fillStyle = '#372b29';
+    g.fillRect(wallX, y, 24, height);
+    g.fillStyle = '#483330';
+    g.fillRect(wallX + 3, y, 18, height);
+    g.fillStyle = '#78503c';
+    g.fillRect(wallX + 2, y, 2, height);
+    g.fillRect(wallX + 20, y, 2, height);
+
+    const mountX = wallX + 12;
+    for (const offset of [62, 190, 318]) {
+      g.save();
+      g.translate(mountX, y + offset);
+      // Turn the sill toward the room on each side wall.
+      g.rotate(left ? -Math.PI / 2 : Math.PI / 2);
+      sprite(g, 'window', -16, -11, 1);
+      g.restore();
+    }
+    for (const offset of [116, 244, 372]) {
+      sprite(g, 'sconce', mountX - 9, y + offset);
+    }
+  }
+
+  sprite(g, 'lion', 23, y + 84);
+  sprite(g, 'muse', width - 67, y + 132);
+  sprite(g, 'palm', 23, y + 174);
+  sprite(g, 'monstera', width - 67, y + 354);
 }
 
 export const JUKEBOX_BASE_Y = 300;

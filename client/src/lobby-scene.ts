@@ -17,6 +17,7 @@ import {
 import {
   casinoGame,
   formatCoins,
+  roomRefillLimit,
   tableEconomy,
   type TableEconomy,
 } from '../../src/shared/economy';
@@ -36,6 +37,7 @@ import { anchorTableActor, tableGutter } from './table-viewport';
 import * as ex from 'excalibur';
 import { LoadingScreen } from './loading-screen';
 import { bindButtonPress } from './button-press';
+import { gameAudio } from './game-audio';
 import { isMobileDevice } from './mobile-shell';
 import {
   BUTTON_FONT_SIZE,
@@ -75,7 +77,6 @@ import {
   CHAT_BODY_MAX,
   CHAT_PANEL,
   CHAT_TOGGLE,
-  REFILL_CHIPS_BUTTON,
   LEAVE_CONFIRM,
   LEAVE_ROOM,
   leaveConfirmHit,
@@ -515,7 +516,8 @@ export class LobbyScene {
     if (openId.length === 0) {
       return false;
     }
-    if (this.memberSeatedHere(openId, member.id)) void this.joinTable(openId);
+    if (this.memberSeatedHere(openId, member.id))
+      void this.joinTable(openId, false, true);
     else this.onSeated(openId, member.id);
     return true;
   }
@@ -600,11 +602,6 @@ export class LobbyScene {
     anchorTableActor(chatToggle, 'right', CHAT_TOGGLE.x);
     this.chatToggle = chatToggle;
     this.setChatVisible();
-    this.button(REFILL_CHIPS_BUTTON, 'Refill chips', () => {
-      void this.connection.reducers
-        .refillRoomCoins({ lobbyId: this.lobbyId, clientId: this.clientId })
-        .catch((error) => this.setError(errorMessage(error)));
-    });
     this.buildLeaveRoom();
     this.floor = new CasinoFloor(this.scene, {
       snapshot: () => this.casinoSnapshot(),
@@ -630,9 +627,10 @@ export class LobbyScene {
       watch: (id) => void this.spectateTable(id),
       leave: () => this.openLeaveConfirm(),
       refill: () =>
-        void this.connection.reducers
-          .refillRoomCoins({ lobbyId: this.lobbyId, clientId: this.clientId })
-          .catch((error) => this.setError(errorMessage(error))),
+        this.connection.reducers.refillRoomCoins({
+          lobbyId: this.lobbyId,
+          clientId: this.clientId,
+        }),
       avatar: () =>
         openCasinoAvatarEditor(this.scene, this.connection, this.lobbyId),
       send: (body) =>
@@ -1107,6 +1105,7 @@ export class LobbyScene {
       return;
     }
     this.returnedToMenu = true;
+    if (this.leavingRoom) gameAudio.play('door');
     this.leavingRoom = false;
     this.closeLeaveConfirm();
     if (this.tableScope && !this.tableScope.isEnded())
@@ -1232,6 +1231,7 @@ export class LobbyScene {
         clientId: this.clientId,
         body: body.slice(0, CHAT_BODY_MAX),
       });
+      if (this.engine.currentScene === this.scene) gameAudio.play('message');
       this.chatBody = '';
       this.paintChatField();
       this.chatField?.sync();
@@ -1243,6 +1243,8 @@ export class LobbyScene {
   }
 
   private setChatError(message: string): void {
+    if (message && this.engine.currentScene === this.scene)
+      gameAudio.play('blocked');
     if (this.chatErrorText) {
       this.chatErrorText.text = message;
     }
@@ -1687,6 +1689,7 @@ export class LobbyScene {
     if (!this.creating) {
       return;
     }
+    gameAudio.play('selector');
     this.gameIndex += delta;
     const game = gameOption(this.gameIndex);
     this.maxPlayers = game.maxPlayers;
@@ -1698,7 +1701,9 @@ export class LobbyScene {
       return;
     }
     const game = gameOption(this.gameIndex);
-    this.maxPlayers = clampPlayerCount(game, this.maxPlayers + delta);
+    const next = clampPlayerCount(game, this.maxPlayers + delta);
+    if (next !== this.maxPlayers) gameAudio.play('selector');
+    this.maxPlayers = next;
     this.paintChoice();
   }
 
@@ -1709,6 +1714,7 @@ export class LobbyScene {
     ) {
       return;
     }
+    gameAudio.play('selector');
     const count = POKER_VARIATIONS.length;
     this.variationIndex = (this.variationIndex + delta + count) % count;
     this.paintChoice();
@@ -1863,7 +1869,10 @@ export class LobbyScene {
           (row) => row.lobbyMemberId === member.id,
         )
       : undefined;
-    if (seat && member) this.onSeated(seat.tableId, member.id);
+    if (seat && member) {
+      gameAudio.play('table_ready');
+      this.onSeated(seat.tableId, member.id);
+    }
   }
 
   async followTableLink(code: string): Promise<boolean> {
@@ -1877,7 +1886,11 @@ export class LobbyScene {
     return this.joinTable(table.id, true);
   }
 
-  private async joinTable(tableId: string, fromLink = false): Promise<boolean> {
+  private async joinTable(
+    tableId: string,
+    fromLink = false,
+    quiet = false,
+  ): Promise<boolean> {
     if (this.busy || this.lobbyId.length === 0) {
       return false;
     }
@@ -1909,6 +1922,7 @@ export class LobbyScene {
     if (table?.gameType === 'poker' && table.status.tag === 'Finished')
       return this.spectateTable(tableId);
     let buyIn: number | undefined;
+    let paid = false;
     if (table?.economyJson && !this.memberSeatedHere(tableId, member.id)) {
       this.fundingDialog = true;
       const settings = JSON.parse(table.economyJson) as TableEconomy;
@@ -1934,6 +1948,7 @@ export class LobbyScene {
       this.fundingDialog = false;
       if (!selected) return false;
       buyIn = selected.buyIn;
+      paid = true;
     }
     this.busy = true;
     this.setError('');
@@ -1956,6 +1971,7 @@ export class LobbyScene {
         message === 'Already seated' &&
         this.memberSeatedHere(tableId, member.id)
       ) {
+        if (!quiet) gameAudio.play('chair');
         this.onSeated(tableId, member.id);
         return true;
       }
@@ -1965,6 +1981,7 @@ export class LobbyScene {
       this.busy = false;
     }
     this.render();
+    if (!quiet) gameAudio.play(paid ? 'chip_stack' : 'chair');
     this.onSeated(tableId, member.id);
     return true;
   }
@@ -1995,6 +2012,7 @@ export class LobbyScene {
         message === 'Already watching' &&
         this.memberWatchingHere(tableId, member.id)
       ) {
+        gameAudio.play('chair');
         this.onSeated(tableId, member.id);
         return true;
       }
@@ -2004,6 +2022,7 @@ export class LobbyScene {
       this.busy = false;
     }
     this.render();
+    gameAudio.play('chair');
     this.onSeated(tableId, member.id);
     return true;
   }
@@ -2426,6 +2445,18 @@ export class LobbyScene {
       );
     const lobby = [...db.lobby.iter()].find((row) => row.id === this.lobbyId);
     const myWallet = wallets.find((wallet) => wallet.id === me?.id);
+    const refill =
+      !lobby || !myWallet
+        ? 'unavailable'
+        : fundingByWallet.has(myWallet.id)
+          ? 'committed'
+          : myWallet.available <
+              roomRefillLimit(
+                lobby.startingCoins,
+                games.filter((game) => game.status.tag !== 'Finished'),
+              )
+            ? 'available'
+            : 'funded';
     const profit = myWallet?.profit ?? 0n;
     return {
       code: this.lobbyCode,
@@ -2435,6 +2466,7 @@ export class LobbyScene {
           (row) => row.lobbyId === this.lobbyId,
         )?.tier ?? 'free',
       chips: formatCoins(myWallet?.available ?? 0n),
+      refill,
       roomNet: `${profit > 0n ? '+' : ''}${formatCoins(profit)}`,
       roomVoice:
         lobby?.discordLobbyVoiceChannelId && lobby.discordGuildId
@@ -2547,6 +2579,8 @@ export class LobbyScene {
   }
 
   private setError(message: string): void {
+    if (message && this.engine.currentScene === this.scene)
+      gameAudio.play('blocked');
     this.floorError = message;
     this.floor?.invalidate();
     if (this.errorText) {
@@ -2655,17 +2689,29 @@ export class LobbyScene {
       face.color = BUTTON;
       captionActor.pos = ex.vec(rest.x, rest.y);
     });
-    actor.on('pointerdown', (event) => {
-      claimEvent(event);
-      face.color = BUTTON_DOWN;
-      captionActor.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
-    });
-    actor.on('pointerup', (event) => {
-      claimEvent(event);
-      face.color = BUTTON;
-      captionActor.pos = ex.vec(rest.x, rest.y);
-      onPress();
-    });
+    bindButtonPress(
+      actor,
+      (event) => {
+        claimEvent(event);
+        face.color = BUTTON_DOWN;
+        captionActor.pos = ex.vec(rest.x, rest.y + BUTTON_PRESS_SHIFT);
+      },
+      () => {
+        face.color = BUTTON;
+        captionActor.pos = ex.vec(rest.x, rest.y);
+      },
+      (event) => {
+        claimEvent(event);
+        if (caption === 'Cancel') gameAudio.play('back');
+        else if (
+          caption === 'Chat' ||
+          caption === 'Create Table' ||
+          caption === 'Leave Room'
+        )
+          gameAudio.play('button');
+        onPress();
+      },
+    );
     if (parent) {
       actor.pos = ex.vec(box.x - parent.pos.x, box.y - parent.pos.y);
       parent.addChild(actor);

@@ -4,6 +4,7 @@ import {
   coinUnits,
   coinSetting,
   formatCoins,
+  roomRefillLimit,
   splitPool,
   tableEconomy,
 } from '../../src/shared/economy.ts';
@@ -16,6 +17,21 @@ assert.throws(() => tableEconomy('poker', { smallBlind: 100, bigBlind: 20 }));
 assert.throws(() => tableEconomy('blackjack', { minBet: 100, maxBet: 20 }));
 assert.throws(() => tableEconomy('poker', { minBuyIn: 1000, maxBuyIn: 100 }));
 assert.equal(tableEconomy('poker', { bigBlind: 100 }).minBuyIn, 2000);
+assert.equal(roomRefillLimit(100, []), 40n);
+assert.equal(roomRefillLimit(10, []), 20n);
+assert.equal(
+  roomRefillLimit(100, [
+    {
+      gameType: 'poker',
+      economyJson: JSON.stringify(tableEconomy('poker', { entryFee: 1 })),
+    },
+    {
+      gameType: 'bluff',
+      economyJson: JSON.stringify(tableEconomy('bluff', { entryFee: 37 })),
+    },
+  ]),
+  74n,
+);
 assert.deepEqual(
   [...splitPool(101n, [3, 1, 1])],
   [
