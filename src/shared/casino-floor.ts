@@ -4,6 +4,7 @@ export interface FloorPoint {
   y: number;
 }
 export const FLOOR_COLUMNS = 32;
+export const FLOOR_TILE_SIZE = 24;
 export const LOBBY_ROWS = 16;
 export const WING_ROWS = 17;
 const TABLE_COLUMNS = [6, 15, 24];
@@ -14,14 +15,36 @@ export const TABLE_APPROACH_RANGE = 2;
 export const TABLES_PER_WING = TABLE_COLUMNS.length * TABLE_ROW_OFFSETS.length;
 export const SPAWN: FloorPoint = { x: 15, y: 8 };
 export const RECEPTION: FloorPoint = { x: 6, y: 6 };
-export const JUKEBOX: FloorPoint = { x: 2, y: 13 };
+const JUKEBOX_FOOTPRINT = { x: 2, y: 10, w: 2, h: 3 };
+const JUKEBOX_CONTROL_RADIUS = 2;
+export const JUKEBOX: FloorPoint = {
+  x: JUKEBOX_FOOTPRINT.x,
+  y: JUKEBOX_FOOTPRINT.y + JUKEBOX_FOOTPRINT.h,
+};
+export const JUKEBOX_CABINET = {
+  x: JUKEBOX_FOOTPRINT.x * FLOOR_TILE_SIZE - 6,
+  y: JUKEBOX_FOOTPRINT.y * FLOOR_TILE_SIZE,
+  w: 48,
+  h: 64,
+  baseY: (JUKEBOX.y - 0.5) * FLOOR_TILE_SIZE,
+};
+
+function jukeboxDistanceSquared(point: FloorPoint): number {
+  const { x, y, w, h } = JUKEBOX_FOOTPRINT;
+  const dx = Math.max(x - point.x, point.x - (x + w - 1), 0);
+  const dy = Math.max(y - point.y, point.y - (y + h - 1), 0);
+  return dx ** 2 + dy ** 2;
+}
 
 export function floorServiceAt(
   point: FloorPoint,
 ): 'reception' | 'jukebox' | undefined {
   if (point.y === RECEPTION.y && Math.abs(point.x - RECEPTION.x) <= 2)
     return 'reception';
-  if (Math.abs(point.x - JUKEBOX.x) + Math.abs(point.y - JUKEBOX.y) <= 1)
+  if (
+    jukeboxDistanceSquared(point) <= JUKEBOX_CONTROL_RADIUS ** 2 &&
+    walkable(point, floorRows(0))
+  )
     return 'jukebox';
 }
 
@@ -161,7 +184,7 @@ export function walkable(
   const desk = point.x >= 3 && point.x <= 9 && point.y >= 3 && point.y <= 5;
   const loungeTable =
     point.x >= 22 && point.x <= 28 && point.y >= 7 && point.y <= 9;
-  return !desk && !loungeTable;
+  return !desk && !loungeTable && jukeboxDistanceSquared(point) > 0;
 }
 
 export function floorStepAllowed(
@@ -183,9 +206,16 @@ export function floorPath(
   rows: number,
   tableSlots: ReadonlySet<number> = NO_TABLES,
 ): FloorPoint[] {
+  if (!walkable(to, rows, tableSlots)) return [];
+  // A position saved before cabinet collision was added can still walk out.
+  const leavingJukebox =
+    Number.isInteger(from.x) &&
+    Number.isInteger(from.y) &&
+    jukeboxDistanceSquared(from) === 0;
   if (
-    (!walkable(from, rows, tableSlots) && !tableDepth(from, tableSlots)) ||
-    !walkable(to, rows, tableSlots)
+    !walkable(from, rows, tableSlots) &&
+    !tableDepth(from, tableSlots) &&
+    !leavingJukebox
   )
     return [];
   const key = (point: FloorPoint) => point.y * FLOOR_COLUMNS + point.x;

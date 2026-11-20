@@ -6,7 +6,9 @@ import {
 import {
   FLOOR_COLUMNS,
   FLOOR_STEP_MS,
+  FLOOR_TILE_SIZE as TILE,
   JUKEBOX,
+  JUKEBOX_CABINET,
   LOBBY_ROWS,
   LOUNGE_CHAIRS,
   RECEPTION,
@@ -41,7 +43,6 @@ import {
   drawWalnutLobby,
   drawWalnutRug,
   drawWalnutWingDecor,
-  JUKEBOX_BASE_Y,
 } from './walnut-lobby-art';
 import { bindCanvasTextField, refreshCanvasTextFields } from './html-field';
 import { isMobileDevice } from './mobile-shell';
@@ -52,7 +53,6 @@ import {
   floorTableChairs,
 } from './floor-table-layout';
 
-const TILE = 24;
 const W = 960,
   H = 540,
   TOP = 48,
@@ -965,9 +965,8 @@ export class CasinoFloor {
       label(g, 'THE LOUNGE', 612, 235, 12, ink.gold, 172, true);
       g.textAlign = 'left';
       this.mapHit(66, 58, 170, 89, () => this.walkToPoint(RECEPTION));
-      this.mapHit(42, JUKEBOX_BASE_Y - 60, 48, 60, () =>
-        this.walkToPoint(JUKEBOX),
-      );
+      const { x, y, w, h } = JUKEBOX_CABINET;
+      this.mapHit(x, y, w, h, () => this.walkToPoint(JUKEBOX));
       for (const [i, chair] of LOUNGE_CHAIRS.entries()) {
         const x = (chair.x + 0.5) * TILE,
           y = (chair.y + 0.5) * TILE;
@@ -1043,7 +1042,7 @@ export class CasinoFloor {
     for (const { player, pose, row } of drawnPlayers) {
       const x = (pose.x + 0.5) * TILE,
         y = (pose.y + 0.5) * TILE;
-      if (!jukeboxDrawn && y >= JUKEBOX_BASE_Y) {
+      if (!jukeboxDrawn && y >= JUKEBOX_CABINET.baseY) {
         drawWalnutJukebox(g);
         jukeboxDrawn = true;
       }
@@ -1487,6 +1486,12 @@ export class CasinoFloor {
   private drawJukebox(g: CanvasRenderingContext2D, now: number): void {
     const deck = this.jukebox;
     const playing = gameAudio.isPlaying;
+    const control = (change: () => void) => () => {
+      if (this.floorService(Date.now()) !== 'jukebox') return;
+      gameAudio.play('jukebox_switch');
+      change();
+      this.syncMusic(true);
+    };
     label(g, 'Jukebox', 330, 478, 22, ink.gold);
     label(
       g,
@@ -1500,12 +1505,9 @@ export class CasinoFloor {
       g,
       { x: 430, y: 470, w: 43, h: 49 },
       '←',
-      () => {
-        deck.step(-1, Date.now());
-        this.syncMusic(true);
-      },
+      control(() => deck.step(-1, Date.now())),
       'quiet',
-      'jukebox_switch',
+      null,
     );
     const display = { x: 481, y: 464, w: 286, h: 61 };
     box(g, display, '#214233', '#68806b');
@@ -1541,23 +1543,19 @@ export class CasinoFloor {
       g,
       { x: 775, y: 470, w: 43, h: 49 },
       '→',
-      () => {
-        deck.step(1, Date.now());
-        this.syncMusic(true);
-      },
+      control(() => deck.step(1, Date.now())),
       'quiet',
-      'jukebox_switch',
+      null,
     );
     this.button(
       g,
       { x: 831, y: 470, w: 115, h: 49 },
       playing ? 'Pause' : 'Play',
-      () => {
-        deck.playing = !playing;
-        this.syncMusic(true);
-      },
+      control(() => {
+        deck.playing = !gameAudio.isPlaying;
+      }),
       'quiet',
-      'jukebox_switch',
+      null,
     );
   }
 

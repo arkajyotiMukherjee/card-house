@@ -1,4 +1,5 @@
 import * as ex from 'excalibur';
+import { JUKEBOX_CABINET } from '../../src/shared/casino-floor';
 import type { Direction } from './casino-art';
 
 const nearest = { filtering: ex.ImageFiltering.Pixel };
@@ -140,8 +141,6 @@ export function drawWalnutWingDecor(
   sprite(g, 'monstera', width - 67, y + 354);
 }
 
-export const JUKEBOX_BASE_Y = 300;
-
 export function drawWalnutJukebox(g: CanvasRenderingContext2D): void {
-  sprite(g, 'jukebox', 42, JUKEBOX_BASE_Y - 60);
+  sprite(g, 'jukebox', JUKEBOX_CABINET.x, JUKEBOX_CABINET.y);
 }
