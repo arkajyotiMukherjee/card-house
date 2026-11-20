@@ -3,7 +3,7 @@ import type { PokerState } from '../../src/shared/games/poker';
 import { PokerDriver } from './poker-driver';
 import type { CardAtlas } from './card-atlas';
 import type { RenderContext } from './game-driver';
-import { Rectangle, Scene } from 'excalibur';
+import { Actor, Rectangle, Scene, Text } from 'excalibur';
 
 function seat(
   chips: number,
@@ -71,6 +71,47 @@ function context(
     },
     inputBlocked: () => blocked,
   };
+}
+
+function renderContext(seatIndex: number): RenderContext {
+  const createElement = vi
+    .spyOn(document, 'createElement')
+    .mockImplementation(() => {
+      const canvas = { width: 0, height: 0 };
+      return {
+        ...canvas,
+        setAttribute() {},
+        getContext: () => ({
+          canvas,
+          clearRect() {},
+          fillRect() {},
+          strokeRect() {},
+          save() {},
+          restore() {},
+          setLineDash() {},
+          getLineDash: () => [],
+          resetTransform() {},
+          translate() {},
+          scale() {},
+          measureText: (text: string) => ({
+            actualBoundingBoxLeft: 0,
+            actualBoundingBoxRight: text.length * 8,
+            actualBoundingBoxAscent: 8,
+            actualBoundingBoxDescent: 0,
+          }),
+        }),
+      } as unknown as HTMLElement;
+    });
+  onTestFinished(() => {
+    createElement.mockRestore();
+  });
+  const ctx = context([], seatIndex);
+  const graphic = () => new Rectangle({ width: 64, height: 64 });
+  const atlas = { back: graphic, sprite: graphic } as unknown as CardAtlas;
+  ctx.scene = new Scene();
+  ctx.cards = atlas;
+  ctx.myCards = atlas;
+  return ctx;
 }
 
 describe('PokerDriver input', () => {
@@ -235,44 +276,8 @@ describe('PokerDriver input', () => {
   });
 
   it('shows the Drop marker only while the hovered card can be discarded', () => {
-    const createElement = vi
-      .spyOn(document, 'createElement')
-      .mockImplementation(() => {
-        const canvas = { width: 0, height: 0 };
-        return {
-          ...canvas,
-          setAttribute() {},
-          getContext: () => ({
-            canvas,
-            clearRect() {},
-            fillRect() {},
-            strokeRect() {},
-            save() {},
-            restore() {},
-            setLineDash() {},
-            getLineDash: () => [],
-            resetTransform() {},
-            translate() {},
-            scale() {},
-            measureText: (text: string) => ({
-              actualBoundingBoxLeft: 0,
-              actualBoundingBoxRight: text.length * 8,
-              actualBoundingBoxAscent: 8,
-              actualBoundingBoxDescent: 0,
-            }),
-          }),
-        } as unknown as HTMLElement;
-      });
-    onTestFinished(() => {
-      createElement.mockRestore();
-    });
     const driver = new PokerDriver();
-    const ctx = context([], 0);
-    const graphic = () => new Rectangle({ width: 64, height: 64 });
-    const atlas = { back: graphic, sprite: graphic } as unknown as CardAtlas;
-    ctx.scene = new Scene();
-    ctx.cards = atlas;
-    ctx.myCards = atlas;
+    const ctx = renderContext(0);
 
     const holdEm = state({ pot: 0 });
     driver.render(holdEm, ctx);
@@ -339,4 +344,67 @@ describe('PokerDriver input', () => {
     );
     expect(sent).toEqual([]);
   });
+});
+
+describe('PokerDriver results', () => {
+  it.each([
+    { end: 'fold', detail: 'Uncalled hand', cards: 0, caption: undefined },
+    {
+      end: 'showdown',
+      detail: 'Flush',
+      cards: 4,
+      caption: 'Winning hand · Flush',
+    },
+  ] as const)(
+    'renders the correct Omaha result after $end',
+    ({ end, detail, cards, caption }) => {
+      const ctx = renderContext(0);
+      const add = vi.spyOn(ctx.scene, 'add');
+      const board = ['2C', '3D', '4C', '7C', '8S'];
+      const afterFold = end === 'fold';
+      new PokerDriver().render(
+        state({
+          phase: 'finished',
+          variation: 'omaha',
+          street: 'river',
+          turnSeatIndex: null,
+          end,
+          board,
+          pots: [{ amount: 40, eligible: afterFold ? [1] : [0, 1] }],
+          winnerSeatIndexes: [1],
+          seats: {
+            '0': {
+              ...seat(980, ['AS', 'KD', 'JS', '9H'], 0),
+              folded: afterFold,
+            },
+            '1': seat(1020, ['QC', 'JC', '7D', '5H'], 0),
+          },
+          hands: afterFold
+            ? {}
+            : {
+                '1': {
+                  name: 'flush',
+                  score: [5],
+                  cards: ['QC', 'JC', '7C', '4C', '2C'],
+                },
+              },
+        }),
+        ctx,
+      );
+
+      const actors = add.mock.calls
+        .map(([entity]) => entity)
+        .filter((entity) => entity instanceof Actor);
+      const label = (name: string) => {
+        const graphic = actors.find((actor) => actor.name === name)?.graphics
+          .current;
+        return graphic instanceof Text ? graphic.text : undefined;
+      };
+      expect(
+        actors.filter((actor) => actor.name === 'winner-focus-card'),
+      ).toHaveLength(cards);
+      expect(label('winner-focus-caption')).toBe(caption);
+      expect(label('poker-panel-detail')).toContain(detail);
+    },
+  );
 });

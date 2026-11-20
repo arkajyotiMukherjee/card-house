@@ -35,6 +35,12 @@ import { pokerPotWinners } from '../../src/shared/games/poker';
 export const POKER_CENTER = { x: 244, y: 222, w: 472, h: 200 } as const;
 export const pokerSeatPanels = classicSeats;
 
+function showdownHandName(state: PokerState, seat: number): string | undefined {
+  if (state.end !== 'showdown') return undefined;
+  const name = state.hands[String(seat)]?.name;
+  return name ? name.charAt(0).toUpperCase() + name.slice(1) : undefined;
+}
+
 export function pokerPanelCopy(
   state: PokerState,
   seat: number | null,
@@ -54,7 +60,7 @@ export function pokerPanelCopy(
     const rank =
       state.end === 'fold'
         ? 'Uncalled hand'
-        : (state.hands[String(winners[0])]?.name ?? 'Hand complete');
+        : (showdownHandName(state, winners[0]) ?? 'Hand complete');
     return {
       title:
         winners.length > 1
@@ -67,7 +73,7 @@ export function pokerPanelCopy(
           : ownWin
             ? 'You win'
             : `${winner} wins`,
-      detail: rank.charAt(0).toUpperCase() + rank.slice(1),
+      detail: rank,
       highlight: ownWin,
     };
   }
@@ -332,13 +338,15 @@ export class PokerTableUi {
       this.handNumber = state.handNumber;
       this.selectedHand = -1;
     }
-    if (!eligible.includes(this.selectedHand))
+    if (!eligible.includes(this.selectedHand)) {
+      const mainPot = state.pots[0];
+      const mainWinners =
+        mainPot && eligible.length ? pokerPotWinners(state, mainPot) : [];
       this.selectedHand =
-        (state.pots[0]
-          ? pokerPotWinners(state, state.pots[0])[0]
-          : undefined) ??
+        mainWinners.find((seat) => eligible.includes(seat)) ??
         eligible[0] ??
         -1;
+    }
     this.reviewSeat = this.selectedHand < 0 ? undefined : this.selectedHand;
     for (const box of classicSeats(ctx.seats)) {
       const index = box.seat.seatIndex,
@@ -461,44 +469,42 @@ export class PokerTableUi {
         add(card);
       }
     }
-    if (finished) {
-      const winner = this.selectedHand;
+    const winner = this.reviewSeat;
+    if (winner !== undefined) {
       const row = state.seats[String(winner)];
-      const owner =
-        ctx.seats.find((seat) => seat.seatIndex === winner)?.name ?? '';
+      const owner = ctx.seats.find((seat) => seat.seatIndex === winner)?.name;
+      const title = (eligible.length > 1 && owner) || 'Winning hand';
+      const rank = showdownHandName(state, winner);
       label(
         { x: 244, y: 130, w: 472, h: 32 },
-        row
-          ? `${eligible.length > 1 ? owner : 'Winning hand'} · ${state.hands[String(winner)]?.name ?? ''}`
-          : 'Uncalled hand · Private cards stay hidden',
+        rank ? `${title} · ${rank}` : title,
         20,
         CLASSIC.cream,
         undefined,
         'winner-focus-caption',
       );
-      if (row)
-        for (const [index, id] of row.hole.entries()) {
-          const face = faceForPokerCard(id);
-          if (!face) continue;
-          const card = new ex.Actor({
-            name: 'winner-focus-card',
-            pos: ex.vec(480 + (index - (row.hole.length - 1) / 2) * 90, 218),
-            z: 15,
-          });
-          card.graphics.use(ctx.cards.sprite(face));
-          card.scale = ex.vec(1.8, 1.8);
-          card.addTag(`seat-${winner}`);
-          card.pointer.useGraphicsBounds = false;
-          card.pointer.useColliderShape = false;
-          add(card);
-        }
+      for (const [index, id] of row.hole.entries()) {
+        const face = faceForPokerCard(id);
+        if (!face) continue;
+        const card = new ex.Actor({
+          name: 'winner-focus-card',
+          pos: ex.vec(480 + (index - (row.hole.length - 1) / 2) * 90, 218),
+          z: 15,
+        });
+        card.graphics.use(ctx.cards.sprite(face));
+        card.scale = ex.vec(1.8, 1.8);
+        card.addTag(`seat-${winner}`);
+        card.pointer.useGraphicsBounds = false;
+        card.pointer.useColliderShape = false;
+        add(card);
+      }
       if (eligible.length > 1)
         button({ x: 688, y: 192, w: 72, h: 38 }, 'Next', () => {
           this.selectedHand =
             eligible[(eligible.indexOf(winner) + 1) % eligible.length];
           _rerender();
         });
-    } else if (!hasPokerPotLayers(state)) {
+    } else if (!finished && !hasPokerPotLayers(state)) {
       const pot = CLASSIC.pot;
       frame(
         pot.x,
