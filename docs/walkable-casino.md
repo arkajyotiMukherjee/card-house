@@ -2,6 +2,8 @@
 
 The approved [casino concept](lobby-casino-concepts/B-walkable-casino.png) establishes the visual direction. The playable floor uses original sprites, walnut fixtures, patterned rugs, and brass trim. The entrance and table scenes share those materials. Card play, chip actions, and table themes keep their existing controls.
 
+The Walnut Club lobby uses a shared pixel grid for the jade tilework, oxblood runner, walnut fixtures, and sprites. A decorative jukebox sits southwest of reception. The customizable characters use the same palette in the avatar editor, while walking, and in their lounge and map-table sitting poses.
+
 ## Floor and table flows
 
 - Reception is the starting point. The wallet and chip refill use the existing room economy. Clicking a lounge chair walks to it and claims it on arrival. Walking away, losing the connection, or opening a table releases it.

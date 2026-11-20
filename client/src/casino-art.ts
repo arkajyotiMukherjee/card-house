@@ -14,9 +14,10 @@ export const CASINO_PALETTE = {
   green: '#235f45',
   red: '#672f37',
 };
-const skin = ['#edc3a3', '#cf9170', '#a86c50', '#76503d'];
-const hair = ['#2b262c', '#643828', '#daa55b', '#bbbdc6', '#785075'];
-const clothes = ['#38817a', '#a54753', '#b38843', '#555c91', '#bb677b'];
+const skin = ['#edc3a3', '#bf8462', '#a86c50', '#76503d'];
+const skinShade = ['#bf8462', '#925c4c', '#76503d', '#573b32'];
+const hair = ['#302725', '#634238', '#c39658', '#b6b8b3', '#785075'];
+const clothes = ['#3e7368', '#8d4854', '#b38843', '#555c91', '#bb677b'];
 const pants = [
   ['#211b23', '#211b23'],
   ['#626c79', '#3c444e'],
@@ -27,7 +28,7 @@ const pants = [
 ];
 export type Direction = 'up' | 'down' | 'left' | 'right';
 
-/** A layered 16×24 sprite. Shapes use integer pixel clusters and a shared silhouette. */
+/** Walnut Club silhouettes on the shared 16×24 grid, with recolorable layers. */
 export function avatarSprite(
   g: CanvasRenderingContext2D,
   x: number,
@@ -37,6 +38,7 @@ export function avatarSprite(
   direction: Direction = 'down',
   frame = 0,
   seated = false,
+  sitProgress = 1,
 ): void {
   g.save();
   g.translate(Math.round(x), Math.round(y));
@@ -46,52 +48,83 @@ export function avatarSprite(
     g.scale(-1, 1);
   }
   const side = direction === 'left' || direction === 'right';
-  const fill = (color: string, x: number, y: number, w: number, h: number) => {
-    g.fillStyle = color;
-    g.fillRect(x, y, w, h);
-  };
-  const walking = frame > 0 && !seated;
-  const stride = walking ? [0, -1, 0, 1][frame % 4] : 0;
-  const bob = walking && stride === 0 ? 1 : 0;
-  const hem = 20 + bob;
   const facingBack = direction === 'up';
-  const outline = '#211b23';
-  fill('#221a24a0', 2, 22, 12, 2);
-  fill(outline, 3, hem - 8, 10, 8);
-  fill(clothes[look.color], look.body ? 5 : 4, 13 + bob, look.body ? 6 : 8, 6);
-  fill('#ffffff38', 5, 13 + bob, 5, 1);
-  const swing = facingBack ? -stride : stride;
-  fill(skin[look.skin], 3 + (side ? swing : 0), 17 + bob + swing, 2, 2);
-  fill(skin[look.skin], 11 - (side ? swing : 0), 17 + bob - swing, 2, 2);
-  if (!facingBack && look.outfit === 0) fill('#fff0c5', 7, 13 + bob, 2, 4);
-  if (!facingBack && look.outfit === 1) fill('#352a32', 7, 14 + bob, 2, 5);
+  const outline = '#172621';
+  const shirt = clothes[look.color];
+  const complexion = skin[look.skin];
+  const shade = skinShade[look.skin];
   const [trouser, shoe] = pants[look.pantsColor];
-  const legTop = seated ? 19 : hem;
-  const shoeY = seated ? 21 : 22;
-  const leg = (x: number, foot: number) => {
-    fill(trouser, x, legTop, 3, foot - legTop);
-    fill(shoe, x, foot, 3, 1);
+  const fill = (
+    color: string,
+    px: number,
+    py: number,
+    w: number,
+    h: number,
+  ) => {
+    g.fillStyle = color;
+    g.fillRect(px, py, w, h);
   };
-  leg(side ? 5 - stride * 2 : 4, shoeY + (side ? 0 : swing));
-  leg(side ? 8 + stride * 2 : 9, shoeY - (side ? 0 : swing));
+  const stride = frame > 0 && !seated ? [0, -1, 0, 1][frame % 4] : 0;
+  const bob = frame > 0 && !seated && stride === 0 ? 1 : 0;
+  const lowering = seated ? Math.round(3 * sitProgress) : 0;
+  const drop = bob + lowering;
+  const swing = facingBack ? -stride : stride;
+
+  const shoulder = 13 + drop;
+  const torsoX = side ? 5 : look.body ? 5 : 4;
+  const torsoW = side ? (look.body ? 4 : 5) : look.body ? 6 : 8;
+  fill(outline, torsoX - 1, shoulder, torsoW + 2, 7);
+  fill(shirt, torsoX, shoulder + 1, torsoW, 5);
+  if (!facingBack && look.outfit !== 2) {
+    fill(look.outfit === 0 ? '#ecd29a' : outline, 7, shoulder + 1, 2, 4);
+  }
+  if (!side) fill(complexion, 3, shoulder + 4 + swing, 2, 2);
+  fill(complexion, side ? 9 - swing : 11, shoulder + 4 - swing, 2, 2);
+
+  if (lowering >= 2) {
+    if (side) {
+      fill(outline, 5, 20, 9, 3);
+      fill(trouser, 6, 20, 7, 2);
+      fill(shoe, 11, 22, 3, 1);
+    } else {
+      const knees = facingBack ? [5, 9] : [3, 10];
+      for (const knee of knees) {
+        fill(outline, knee, 20, 3, 4);
+        fill(trouser, knee, 20, 3, 2);
+        fill(shoe, knee, 22, 3, 1);
+      }
+    }
+  } else {
+    const leg = (px: number, foot: number) => {
+      fill(trouser, px, 19 + bob, 3, foot - 19 - bob);
+      fill(shoe, px, foot, 3, 1);
+    };
+    leg(side ? 5 - stride * 2 : 4, 22 + (side ? 0 : swing));
+    leg(side ? 7 + stride * 2 : 9, 22 - (side ? 0 : swing));
+  }
+
   const bald = look.hair === NO_AVATAR_HAIR;
-  const headColor = bald ? skin[look.skin] : hair[look.hairColor];
-  fill(outline, 3, (bald ? 4 : 3) + bob, 10, bald ? 9 : 10);
-  fill(headColor, 4, (bald ? 4 : 2) + bob, 8, 7);
-  if (!bald) fill('#ffffff28', 5, 3 + bob, 6, 1);
-  if (direction === 'up') fill(headColor, 4, 5 + bob, 8, 7);
-  else {
-    fill(skin[look.skin], side ? 7 : 4, 6 + bob, side ? 6 : 8, 6);
-    fill(outline, side ? 11 : 6, 8 + bob, 1, 2);
-    if (!side) fill(outline, 10, 8 + bob, 1, 2);
-    fill('#f9b58a', side ? 11 : 7, 10 + bob, 2, 1);
+  const headColor = bald ? complexion : hair[look.hairColor];
+  const headX = side ? 3 : 4;
+  fill(outline, headX + 1, 3 + drop, 6, 1);
+  fill(outline, headX, 4 + drop, 8, 8);
+  fill(outline, headX + 1, 12 + drop, 6, 1);
+  fill(headColor, headX + 1, 4 + drop, 6, 7);
+  if (!facingBack) {
+    fill(complexion, side ? 7 : 5, 7 + drop, side ? 4 : 6, 4);
+    fill(shade, side ? 8 : 6, 11 + drop, side ? 3 : 4, 1);
+    fill(outline, side ? 10 : 6, 8 + drop, 1, 1);
+    if (!side) fill(outline, 9, 8 + drop, 1, 1);
   }
-  if (look.hair === 1) fill(hair[look.hairColor], 4, 5 + bob, 3, 3);
+  if (look.hair === 1) fill(headColor, headX + 1, 6 + drop, 3, 2);
   if (look.hair === 2) {
-    fill(hair[look.hairColor], 2, 5 + bob, 3, 10);
-    if (!side) fill(hair[look.hairColor], 12, 5 + bob, 2, 9);
+    fill(headColor, headX, 6 + drop, 2, 7);
+    if (!side) fill(headColor, 11, 6 + drop, 2, 7);
   }
-  if (look.hair === 3) fill(hair[look.hairColor], 5, bob, 6, 3);
+  if (look.hair === 3) {
+    fill(outline, headX + 2, 1 + drop, 4, 3);
+    fill(headColor, headX + 2, 2 + drop, 3, 2);
+  }
   g.restore();
 }
 

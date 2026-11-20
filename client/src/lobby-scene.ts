@@ -2491,17 +2491,18 @@ export class LobbyScene {
                   : game.gameType === 'blackjack'
                     ? `Wagers ${settings.minBet}–${settings.maxBet} chips`
                     : `Entry ${settings.entryFee} chips`,
-              seats: seated.map(
-                (row) =>
-                  playerById.get(row.lobbyMemberId) ?? {
-                    id: row.lobbyMemberId,
-                    name: 'CPU',
-                    state: 'Playing',
-                    connected: false,
-                    voice: false,
-                    speaking: false,
-                  },
-              ),
+              seats: seated.map((row) => ({
+                ...(playerById.get(row.lobbyMemberId) ?? {
+                  id: row.lobbyMemberId,
+                  name: 'CPU',
+                  state: 'Playing',
+                  connected: false,
+                  voice: false,
+                  speaking: false,
+                }),
+                seatIndex: row.seatIndex,
+                seatedAt: Number(row.joinedAt.microsSinceUnixEpoch / 1000n),
+              })),
               countdown:
                 game.startsAt === undefined
                   ? ''

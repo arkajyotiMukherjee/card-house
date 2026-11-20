@@ -8,6 +8,7 @@ import {
 import { CardAtlas } from './card-atlas';
 import { ChipAtlas } from './chip-atlas';
 import { TABLE_SCALE } from './sheets';
+import { walnutLobbyImages } from './walnut-lobby-art';
 import { TABLE_STYLES, TableAtlas, type TableStyle } from './table-atlas';
 
 const nearest = { filtering: ex.ImageFiltering.Pixel };
@@ -155,6 +156,7 @@ export const casinoEntrance = new ex.ImageSource('/assets/casino-entrance.png');
 
 export const demoImages = [
   casinoEntrance,
+  ...walnutLobbyImages,
   heartsImage,
   diamondsImage,
   clubsImage,

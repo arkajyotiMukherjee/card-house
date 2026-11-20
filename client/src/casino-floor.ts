@@ -1,6 +1,5 @@
 import * as ex from 'excalibur';
 import {
-  DEFAULT_AVATAR,
   readCasinoAvatar,
   type CasinoAvatar,
 } from '../../src/shared/casino-avatar';
@@ -26,13 +25,18 @@ import {
   avatarSprite,
   casinoChair,
   CASINO_PALETTE as ink,
-  floorLamp,
   floorPlant,
   casinoRug,
   suitStatue,
   woodPanel,
   type Direction,
 } from './casino-art';
+import {
+  drawWalnutChair,
+  drawWalnutJukebox,
+  drawWalnutLobby,
+  JUKEBOX_BASE_Y,
+} from './walnut-lobby-art';
 import { bindCanvasTextField, refreshCanvasTextFields } from './html-field';
 import { isMobileDevice } from './mobile-shell';
 
@@ -54,6 +58,7 @@ const reducedMotion = () =>
   window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const KEYBOARD_INTERVAL_MS = FLOOR_STEP_MS * 2;
 const REMOTE_RENDER_DELAY_MS = 80;
+const SIT_MS = 160;
 const WALK_DIRECTIONS: Partial<Record<string, FloorPoint>> = {
   ArrowLeft: { x: -1, y: 0 },
   KeyA: { x: -1, y: 0 },
@@ -89,6 +94,10 @@ export interface FloorPosition extends FloorPoint {
   path: FloorPoint[];
   chair: number;
 }
+interface FloorSeat extends FloorPerson {
+  seatIndex: number;
+  seatedAt: number;
+}
 export interface FloorTable {
   id: string;
   name: string;
@@ -96,7 +105,7 @@ export interface FloorTable {
   game: string;
   status: string;
   stakes: string;
-  seats: FloorPerson[];
+  seats: FloorSeat[];
   capacity: number;
   host: string;
   join: boolean;
@@ -215,6 +224,10 @@ function position(
             ? 'up'
             : 'down',
   };
+}
+
+function loungeChairDirection(index: number): Direction {
+  return LOUNGE_CHAIRS[index]?.y === LOUNGE_CHAIRS[0].y ? 'down' : 'up';
 }
 
 export class CasinoFloor {
@@ -790,12 +803,10 @@ export class CasinoFloor {
     g.scale(scale, scale);
     const start = Math.max(0, Math.floor(this.camera.y / TILE));
     const end = Math.min(this.rows, start + Math.ceil(viewHeight / TILE) + 2);
-    for (let y = start; y < end; y += 1)
+    const firstWingRow = Math.max(start, LOBBY_ROWS);
+    for (let y = firstWingRow; y < end; y += 1)
       for (let x = 0; x < FLOOR_COLUMNS; x += 1) {
-        const hall =
-          (x >= 12 && x <= 19 && y < LOBBY_ROWS) ||
-          (y >= LOBBY_ROWS &&
-            (x === 1 || x === 30 || (y - LOBBY_ROWS) % 8 < 2));
+        const hall = x === 1 || x === 30 || (y - LOBBY_ROWS) % 8 < 2;
         const offset = (x * 31 + y * 19) % 5;
         g.fillStyle = hall
           ? ['#703840', '#763c43'][offset % 2]
@@ -806,44 +817,28 @@ export class CasinoFloor {
         g.fillRect(x * TILE, y * TILE + (y % 2) * 8, 1, TILE - (y % 2) * 8);
         if (offset < 2) g.fillRect(x * TILE + 13, y * TILE + 10, 2, 2);
       }
-    woodPanel(g, 0, start * TILE, 17, (end - start) * TILE + 12);
-    woodPanel(g, WIDTH - 18, start * TILE, 18, (end - start) * TILE + 12);
+    if (end > firstWingRow) {
+      const sideHeight = (end - firstWingRow) * TILE + 12;
+      woodPanel(g, 0, firstWingRow * TILE, 17, sideHeight);
+      woodPanel(g, WIDTH - 18, firstWingRow * TILE, 18, sideHeight);
+    }
     if (start < LOBBY_ROWS) {
-      casinoRug(g, 287, 34, 194, 375, '#6f303b');
-      casinoRug(g, 37, 62, 231, 98, '#284c3a');
-      woodPanel(g, 18, 0, WIDTH - 36, 42);
-      for (const x of [55, 266, 474, 682]) {
-        box(g, { x, y: 3, w: 57, h: 33 }, '#5d3925', '#b57b4e');
-        box(g, { x: x + 7, y: 7, w: 43, h: 24 }, '#132b38', '#b4864f');
-        g.fillStyle = '#46718a';
-        g.fillRect(x + 11, 9, 14, 8);
-        g.fillRect(x + 29, 9, 16, 8);
-        g.fillStyle = '#b18655';
-        g.fillRect(x + 27, 7, 2, 24);
-        g.fillRect(x + 7, 18, 43, 2);
-      }
-      floorPlant(g, 54, 146);
-      floorPlant(g, 248, 146);
-      floorPlant(g, 536, 310);
-      floorPlant(g, 701, 86);
-      suitStatue(g, 212, 281, true);
-      woodPanel(g, 70, 75, 170, 64);
-      label(g, 'RECEPTION', 89, 107, 13, ink.gold, 150, true);
-      avatarSprite(g, 126, 49, 2, { ...DEFAULT_AVATAR, outfit: 1 });
-      this.mapHit(70, 58, 170, 85, () => {
+      drawWalnutLobby(g);
+      g.textAlign = 'center';
+      label(g, 'RECEPTION', 150, 126, 8, ink.gold, 84, true);
+      label(g, 'THE LOUNGE', 612, 235, 12, ink.gold, 172, true);
+      g.textAlign = 'left';
+      this.mapHit(66, 58, 170, 89, () => {
         this.selected = '';
         this.focusPlayer = '';
         this.reception = true;
         this.seatTarget = -1;
         void this.move(RECEPTION);
       });
-      casinoRug(g, 491, 96, 238, 205, '#6b2f3c');
-      woodPanel(g, 523, 177, 174, 42);
-      label(g, 'THE LOUNGE', 541, 196, 14, ink.gold, 146, true);
       for (const [i, chair] of LOUNGE_CHAIRS.entries()) {
         const x = (chair.x + 0.5) * TILE,
           y = (chair.y + 0.5) * TILE;
-        casinoChair(g, x, y);
+        drawWalnutChair(g, x, y, loungeChairDirection(i) === 'up');
         this.mapHit(x - 13, y - 13, 26, 26, () => {
           this.reception = false;
           this.focusPlayer = '';
@@ -852,19 +847,6 @@ export class CasinoFloor {
           void this.move(chair);
         });
       }
-      suitStatue(g, 60, 298, false);
-      suitStatue(g, 708, 320, true);
-      const glow = this.reducedMotion
-        ? 0.18
-        : 0.16 + Math.sin(now / 450) * 0.04;
-      for (const [x, y] of [
-        [42, 48],
-        [260, 70],
-        [472, 90],
-        [733, 73],
-        [463, 281],
-      ])
-        floorLamp(g, x, y, glow);
       if (!isMobileDevice()) {
         box(g, { x: 286, y: 316, w: 195, h: 40 }, '#183831', ink.gold);
         label(g, 'Gaming floor ↓', 310, 338, 21, ink.gold);
@@ -891,7 +873,7 @@ export class CasinoFloor {
       floorPlant(g, 728, y + 284);
     }
     for (const table of this.snapshot.tables)
-      this.drawMapTable(g, table, start, end);
+      this.drawMapTable(g, table, start, end, now);
     const route = this.localWalk ?? this.selfRow();
     if (route && self.walked && this.destination) {
       const index = Math.max(
@@ -928,20 +910,34 @@ export class CasinoFloor {
     const placards = this.snapshot.tables.map((table) =>
       floorTable(table.slot),
     );
+    let jukeboxDrawn = start >= LOBBY_ROWS;
     for (const { player, pose, row } of drawnPlayers) {
       const x = (pose.x + 0.5) * TILE,
         y = (pose.y + 0.5) * TILE;
+      if (!jukeboxDrawn && y >= JUKEBOX_BASE_Y) {
+        drawWalnutJukebox(g);
+        jukeboxDrawn = true;
+      }
       const me = player.id === this.snapshot.self;
+      const seat = me ? (this.localWalk ?? row) : row;
+      const seated = !!seat && seat.chair >= 0 && !pose.walked;
       avatarSprite(
         g,
         x - 16,
         y - 35,
         2,
         player.avatar,
-        pose.direction,
+        seated ? loungeChairDirection(seat.chair) : pose.direction,
         pose.frame,
-        ((me ? (this.localWalk ?? row) : row)?.chair ?? -1) >= 0,
+        seated,
+        seated ? this.sitProgress(now, seat.started) : 1,
       );
+    }
+    if (!jukeboxDrawn) drawWalnutJukebox(g);
+    for (const { player, pose } of drawnPlayers) {
+      const x = (pose.x + 0.5) * TILE,
+        y = (pose.y + 0.5) * TILE;
+      const me = player.id === this.snapshot.self;
       if (player.speaking) {
         box(g, { x: x + 13, y: y - 36, w: 28, h: 18 }, '#143e2f', '#9cd9af');
         label(g, '•••', x + 16, y - 27, 14, '#b8efbd', 24);
@@ -1011,11 +1007,17 @@ export class CasinoFloor {
     if (x0 < x1 && y0 < y1)
       this.hits.push({ x: x0, y: y0, w: x1 - x0, h: y1 - y0, action });
   }
+  private sitProgress(now: number, started: number): number {
+    return this.reducedMotion
+      ? 1
+      : Math.min(1, Math.max(0, (now - started) / SIT_MS));
+  }
   private drawMapTable(
     g: CanvasRenderingContext2D,
     table: FloorTable,
     start: number,
     end: number,
+    now: number,
   ): void {
     const point = floorTable(table.slot);
     if (point.y < start - 3 || point.y > end + 3) return;
@@ -1032,7 +1034,7 @@ export class CasinoFloor {
       const chairX = x + Math.round(53 * Math.cos(angle)),
         chairY = y + Math.round(35 * Math.sin(angle));
       casinoChair(g, chairX, chairY);
-      const member = table.seats[index];
+      const member = table.seats.find((seat) => seat.seatIndex === index);
       if (member)
         avatarSprite(
           g,
@@ -1040,9 +1042,16 @@ export class CasinoFloor {
           chairY - 20,
           1,
           member.avatar,
-          chairY >= y ? 'up' : 'down',
+          Math.abs(chairY - y) < 16
+            ? chairX >= x
+              ? 'left'
+              : 'right'
+            : chairY >= y
+              ? 'up'
+              : 'down',
           0,
           true,
+          this.sitProgress(now, member.seatedAt),
         );
     }
     box(
