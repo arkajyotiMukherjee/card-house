@@ -15,6 +15,7 @@ export const CASINO_RECORDS = [
   { title: '7pm', file: '7pm', color: '#b98152' },
   { title: 'Between The Dunes', file: 'between-the-dunes', color: '#b86571' },
   { title: "Bird's Song", file: 'birds-song', color: '#73a18a' },
+  { ...MENU_TRACK, color: '#a89b72' },
   {
     title: 'Lo-Fi Beats To Ride Dragons With',
     file: 'lo-fi-beats-to-ride-dragons-with',
