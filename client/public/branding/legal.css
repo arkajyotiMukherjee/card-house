@@ -1,0 +1,109 @@
+:root {
+  color-scheme: dark;
+  font:
+    100% / 1.65 system-ui,
+    sans-serif;
+  color: #fff0ce;
+  background: #0b211b;
+}
+
+body {
+  margin: 0;
+}
+
+.site-header {
+  background: #10392a;
+  border-bottom: 1px solid #317458;
+}
+
+.site-nav,
+main {
+  box-sizing: border-box;
+  width: min(100%, 48rem);
+  margin-inline: auto;
+  padding-inline: clamp(1rem, 5vw, 2.5rem);
+}
+
+.site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem 1.25rem;
+  padding-block: 0.5rem;
+}
+
+.site-nav img {
+  display: block;
+  width: 10rem;
+  max-width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+}
+
+.policy-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1.25rem;
+}
+
+.policy-links a {
+  padding-block: 0.5rem;
+}
+
+main {
+  padding-block: clamp(2rem, 6vw, 4rem) 4rem;
+  overflow-wrap: anywhere;
+}
+
+h1,
+h2 {
+  font-family: Georgia, serif;
+  line-height: 1.2;
+  color: #fff0ce;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(2rem, 1.4rem + 2.5vw, 3.25rem);
+}
+
+h2 {
+  margin-block: 0 0.75rem;
+  font-size: 1.5rem;
+}
+
+p,
+ul {
+  margin-block: 0 1rem;
+}
+
+section {
+  border-top: 1px solid #317458;
+  margin-block-start: 1.75rem;
+  padding-block-start: 1.5rem;
+}
+
+li + li {
+  margin-block-start: 0.5rem;
+}
+
+.policy-date {
+  margin-block: 0.75rem 1.25rem;
+  color: #dfcba6;
+}
+
+a {
+  color: #f6d48c;
+  text-underline-offset: 0.2em;
+}
+
+a[aria-current='page'] {
+  color: #fff0ce;
+  font-weight: 700;
+}
+
+a:focus-visible {
+  outline: 2px solid #f6d48c;
+  outline-offset: 3px;
+}

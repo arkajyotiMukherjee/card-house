@@ -12,8 +12,10 @@ Style and asset rules: [../repo-conventions.md](../repo-conventions.md). Source 
 - `tsconfig.json` — strict TypeScript, `include` is `src` only.
 - `vite.config.ts` — `0.0.0.0:5173`, `envDir` the repo root, `__SPACETIMEDB_HOST__`, `__SPACETIMEDB_DB__`, and `__CARDROOM_BOT_URL__`.
 - `vitest.config.ts` — Node environment, `src/**/*.test.ts`, setup `src/test-setup.ts`.
-- `index.html` — `#app` and one canvas. Page background `--cardhouse-bg`, default `#145c38`, so the bars around the frame are the saved background (green until the player changes Theme). The viewport meta has `viewport-fit=cover`, and `html, body` set `touch-action: manipulation` and `overscroll-behavior: none`. On every browser `main.ts` fits the whole frame inside the visible area and safe insets. `main.ts` uses a 2× backing canvas and `image-rendering: auto` for readable table text; image sources keep pixel filtering. The tab icon is the classic Ace of Spades (`/favicon.ico` and `/favicon-32x32.png`). The title stays Card House.
-- `public/assets/` — the sheets, tables, Press Start 2P menu/input font, and locally hosted Chakra Petch and Bree Serif table fonts the client loads. Paths are `/assets/...`. `public/favicon.ico` and `public/favicon-32x32.png` are that Ace, cropped from `cards-spades.png`.
+- `index.html` — `#app` and one canvas. Page background `--cardhouse-bg`, default `#145c38`, so the bars around the frame are the saved background (green until the player changes Theme). The viewport meta has `viewport-fit=cover`, and `html, body` set `touch-action: manipulation` and `overscroll-behavior: none`. On every browser `main.ts` fits the whole frame inside the visible area and safe insets. `main.ts` uses a 2× backing canvas and `image-rendering: auto` for readable table text; image sources keep pixel filtering. The title stays Card House.
+- `public/assets/` — the sheets, tables, Press Start 2P menu/input font, and locally hosted Chakra Petch and Bree Serif table fonts the client loads. Paths are `/assets/...`.
+- `public/branding/` — the PixelLab Ace of Spades Discord icon and Cardhouse wordmark. The favicon and install icons at the root of `public/` use the same Ace artwork.
+- `privacy/index.html` and `terms/index.html` — standalone Vite pages for the Discord app and web game, served at `/privacy/` and `/terms/`.
 
 ## Changes
 
