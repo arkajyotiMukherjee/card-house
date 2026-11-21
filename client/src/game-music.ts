@@ -1,6 +1,5 @@
 export const MUSIC_ARTIST = 'flowerhead';
-export const MUSIC_ARTIST_URL =
-  'https://www.youtube.com/channel/UCXb6QLCaLxjvucwNlQuS2gg';
+export const MUSIC_ARTIST_URL = 'https://flowerheadmusic.com/';
 
 export function openMusicCredit(): void {
   window.open(MUSIC_ARTIST_URL, '_blank', 'noopener,noreferrer');
